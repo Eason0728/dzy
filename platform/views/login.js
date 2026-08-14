@@ -40,23 +40,33 @@ import { esc } from '../fmt.js';
 const THROTTLE_AFTER_FAILURES = 3;
 const THROTTLE_COOLDOWN_SEC = 30;
 
-/** 手機一次只顯示一張品牌照片，依日期輪替——每天固定同一張，不會每次重整都跳，但長期三個品牌輪得到 */
-const HERO_BRANDS = ['mala', 'mzt', 'yakiniku'];
+/**
+ * 三個品牌的照片，每次載入隨機挑一個（Eason 2026-08-14 指定「三種背景隨機使用」）。
+ * 背景（模糊）與卡片左半（清晰）用同一張——隨機才有意義，不是兩張不相干的圖並置。
+ */
+const HERO_BRANDS = [
+  { key: 'mala', name: '麻的小辛辣', sub: '麻辣干鍋' },
+  { key: 'mzt', name: '墨竹亭燃麵本家', sub: '燃麵・茶飲' },
+  { key: 'yakiniku', name: '一悟燒肉', sub: 'YIWU YAKINIKU' }
+];
 
-function pickHero(today = new Date()) {
-  const dayIndex = Math.floor(today.getTime() / 86400000);
-  return HERO_BRANDS[((dayIndex % HERO_BRANDS.length) + HERO_BRANDS.length) % HERO_BRANDS.length];
+function pickHero() {
+  return HERO_BRANDS[Math.floor(Math.random() * HERO_BRANDS.length)];
 }
 
 export function render(el, app) {
+  const hero = pickHero();
   el.innerHTML = `
-    <div class="login-bg" data-hero="${esc(pickHero())}">
-      <div class="login-bg-panes" aria-hidden="true">
-        <div class="login-bg-pane login-bg-pane--mala"></div>
-        <div class="login-bg-pane login-bg-pane--mzt"></div>
-        <div class="login-bg-pane login-bg-pane--yakiniku"></div>
-      </div>
-    <div class="page">
+    <div class="login-bg" data-hero="${esc(hero.key)}">
+      <div class="login-blur" aria-hidden="true"></div>
+      <div class="login-card">
+        <div class="login-card-visual">
+          <div class="login-card-brand">
+            <h2>${esc(hero.name)}</h2>
+            <p>${esc(hero.sub)}</p>
+          </div>
+        </div>
+        <div class="login-card-form">
       <div class="card">
         <h1 class="card-title">${esc(APP_NAME)}</h1>
         <div class="toast toast-danger" data-role="error" hidden></div>
@@ -75,7 +85,8 @@ export function render(el, app) {
           <p class="field-hint" data-role="hint"></p>
         </form>
       </div>
-    </div>
+        </div>
+      </div>
     </div>
   `;
 

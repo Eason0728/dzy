@@ -446,7 +446,7 @@ textarea.input:disabled {
 }
 
 .loading-overlay .spinner {
-  border-color: rgba(255, 255, 255, .35);
+  border-color: var(--line-on-dark);
   border-top-color: var(--ink-inverse);
 }
 
@@ -504,11 +504,11 @@ textarea.input:disabled {
 }
 
 /* ============================================================
-   登入頁背景（2026-08-14 加）
-   桌機：三個品牌照片橫向三等分，一眼看到集團全貌
-   手機：只顯示一張（依日期輪替），375px 塞三張會糊成一團
-   照片上一律壓深色遮罩：既讓白卡片讀得清楚，也把三張照片的
-   調性拉近（墨竹亭是亮灰底、另外兩張深色，不壓會像貼補丁）
+   登入頁（2026-08-14 改版，參考 Eason 提供的版型）
+   整片模糊背景 ＋ 中央卡片；卡片左半是清晰照片＋品牌名，右半是表單。
+   背景與卡片左半用「同一個品牌」的照片，每次載入隨機挑一個——
+   隨機才有意義，不是兩張不相干的圖並置。
+   手機沒有左右並排的空間：只留表單那半，背景照片仍在。
    ============================================================ */
 
 .login-bg {
@@ -519,104 +519,113 @@ textarea.input:disabled {
   align-items: center;
   justify-content: center;
   padding: var(--space-4, 16px);
-}
-
-.login-bg-panes {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  grid-template-columns: 1fr;
   overflow: hidden;
 }
 
-.login-bg-pane {
+/* 全幅背景：同一張照片，模糊＋壓暗，只當氛圍不搶焦點 */
+.login-blur {
+  position: absolute;
+  inset: -40px;               /* 外擴，避免模糊後邊緣露出底色 */
   background-size: cover;
   background-position: center;
-  display: none;
+  filter: blur(18px) saturate(.85) brightness(.55);
 }
 
-/* 手機：只顯示 data-hero 指定的那一張 */
-.login-bg[data-hero="mala"] .login-bg-pane--mala,
-.login-bg[data-hero="mzt"] .login-bg-pane--mzt,
-.login-bg[data-hero="yakiniku"] .login-bg-pane--yakiniku {
-  display: block;
-}
-
-.login-bg-pane--mala { background-image: url("../../assets/brand-photos/mala.jpg"); }
-.login-bg-pane--mzt { background-image: url("../../assets/brand-photos/mzt.jpg"); }
-.login-bg-pane--yakiniku { background-image: url("../../assets/brand-photos/yakiniku.jpg"); }
-
-/* 遮罩蓋在照片上、卡片下 */
-.login-bg-panes::after {
+.login-bg::after {
   content: "";
   position: absolute;
   inset: 0;
   background: var(--hero-scrim);
 }
 
-/* 卡片浮在遮罩之上 */
-.login-bg > .page {
+/* 中央卡片 */
+.login-card {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 420px;
+  max-width: 880px;
+  display: grid;
+  grid-template-columns: 1fr;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+}
+
+/* 卡片左半：清晰照片＋品牌名 */
+.login-card-visual {
+  display: none;
+  position: relative;
+  min-height: 420px;
+  background-size: cover;
+  background-position: center;
+}
+
+.login-card-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--hero-caption-gradient);
+}
+
+.login-card-brand {
+  position: absolute;
+  z-index: 1;
+  left: var(--space-5, 24px);
+  right: var(--space-5, 24px);
+  bottom: var(--space-5, 24px);
+  color: var(--ink-inverse);
+}
+
+.login-card-brand h2 {
+  margin: 0;
+  font-size: var(--fs-xl, 24px);
+  font-weight: var(--fw-bold, 700);
+  letter-spacing: .02em;
+}
+
+.login-card-brand p {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm, 14px);
+  opacity: .85;
+}
+
+/* 卡片右半：表單 */
+.login-card-form {
+  padding: var(--space-6, 32px) var(--space-5, 24px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* 卡片裡不需要再套一層 .card 的邊框與陰影，那會變成框中框 */
+.login-card-form .card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 
 @media (min-width: 768px) {
-  .login-bg-panes { grid-template-columns: repeat(3, 1fr); }
-  .login-bg-pane { display: block; }
-  .login-bg-panes::after { background: var(--hero-scrim-strong); }
+  .login-card { grid-template-columns: 1fr 1fr; }
+  .login-card-visual { display: block; }
+  .login-card-form { padding: var(--space-7, 40px) var(--space-6, 32px); }
 }
 
-/* 逐張微調（2026-08-14 實際看圖後修）：
-   - 燒肉原圖是 2.5:1 寬幅、品牌 logo 壓在正中央，裁成窄條會變成半個放大的 logo。
-     裁切點往左移，取「只有肉」的那段。
-   - 墨竹亭原圖是亮灰底，跟另外兩張深色照片並排會像貼補丁，單獨再壓暗一點。 */
-.login-bg-pane--yakiniku { background-position: 20% center; }
-.login-bg-pane--mala { background-position: 68% center; }
-.login-bg-pane--mzt { filter: brightness(.62) saturate(.85); }
-.login-bg-pane--mala,
-.login-bg-pane--yakiniku { filter: saturate(.9); }
-
-/* 桌機改成「左面板＋右照片」（2026-08-14 修）：
-   原本卡片壓在正中央，等於把三張照片從中間切開，兩邊都不完整、質感被破壞。
-   改成表單獨立在左側乾淨面板，右側三張照片完整不被遮擋。
-   手機維持單張照片＋置中卡片——小螢幕沒有左右分欄的空間，置中才是對的。 */
-@media (min-width: 768px) {
-  .login-bg {
-    display: grid;
-    grid-template-columns: minmax(380px, 36%) 1fr;
-    align-items: stretch;
-    padding: 0;
-  }
-
-  .login-bg-panes {
-    position: relative;
-    inset: auto;
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  /* 照片上沒有文字了，遮罩可以放輕，讓菜色看得更清楚 */
-  .login-bg-panes::after { background: var(--hero-scrim); }
-
-  .login-bg > .page {
-    grid-column: 1;
-    grid-row: 1;
-    max-width: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg);
-    padding: var(--space-6, 32px);
-  }
-
-  /* 左側已經是獨立面板，卡片不需要再有邊框與陰影，那會變成「框中框」 */
-  .login-bg > .page .card {
-    width: 100%;
-    max-width: 360px;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-  }
+/* 三個品牌各自的照片：背景與卡片左半共用同一張 */
+.login-bg[data-hero="mala"] .login-blur,
+.login-bg[data-hero="mala"] .login-card-visual {
+  background-image: url("../../assets/brand-photos/mala.jpg");
 }
+.login-bg[data-hero="mzt"] .login-blur,
+.login-bg[data-hero="mzt"] .login-card-visual {
+  background-image: url("../../assets/brand-photos/mzt.jpg");
+}
+.login-bg[data-hero="yakiniku"] .login-blur,
+.login-bg[data-hero="yakiniku"] .login-card-visual {
+  background-image: url("../../assets/brand-photos/yakiniku.jpg");
+}
+
+/* 逐張裁切微調已不需要：三張圖的品牌 logo 已在 assets 端裁掉
+   （原圖 logo 在左上或正中央，近正方形的裁切框怎麼移都會吃到半截 logo，
+   靠 background-position 救不回來，正解是裁圖檔本身）。*/
