@@ -1,0 +1,129 @@
+/* ============================================================
+   鼎兆元管理系統｜基礎樣式
+   reset、排版基礎、body 背景、中文字型。
+   手機優先：以下規則先寫手機版，桌機用 @media (min-width:768px) 疊加。
+   顏色一律取自 tokens.css，本檔不得出現色碼。
+   ============================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-normal);
+  line-height: var(--lh-base);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0 0 var(--space-3);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  color: var(--ink);
+}
+
+h1 { font-size: var(--fs-2xl); }
+h2 { font-size: var(--fs-xl); }
+h3 { font-size: var(--fs-lg); }
+h4, h5, h6 { font-size: var(--fs-md); }
+
+p {
+  margin: 0 0 var(--space-3);
+}
+p:last-child { margin-bottom: 0; }
+
+small, .text-muted {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none;
+}
+a:hover, a:focus-visible {
+  text-decoration: underline;
+}
+
+ul, ol {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-5);
+}
+
+img, svg {
+  max-width: 100%;
+  display: block;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: var(--space-4) 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* 任何寬內容（表格等）都在自己的容器內捲動，頁面本身永不橫向捲動 */
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---- 版面容器：手機優先，單欄、留白足夠 ---- */
+.page {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.section {
+  margin-bottom: var(--space-5);
+}
+.section:last-child { margin-bottom: 0; }
+
+.section-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--muted);
+  letter-spacing: .02em;
+  margin-bottom: var(--space-2);
+}
+
+.stack > * + * {
+  margin-top: var(--gap);
+}
+
+@media (min-width: 768px) {
+  body {
+    font-size: var(--fs-md);
+  }
+
+  .page {
+    max-width: 960px;
+    padding: var(--space-6);
+  }
+}

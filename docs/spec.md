@@ -88,6 +88,12 @@
 > 為什麼要拆出 `ns` 與 `backend`：Eason 2026-08-14 指定稽核在首頁要顯示**兩張卡片**（營運稽核表、月初盤點抽查），
 > 但它們共用同一支後端與同一組權限。若強制「權限碼前綴＝moduleId」，就會被迫把權限與通行碼複製兩份。
 
+**約束（2026-08-14 補，實作 §5.2 時發現的地雷）**：`backend` 必須等於 `ns`。
+理由：後端下發通行碼時，是拿 `backend_id` 當前綴去查使用者有沒有 `<backend_id>.write` ／ `<backend_id>.read`。
+兩者一旦不同，查到的權限碼永遠不存在，結果是**安靜地不發碼**——模組看起來載入正常，只有呼叫後端時才失敗，很難查。
+本期三個模組都符合（`audit`／`audit`／`dorm`）。`manifest-check.js` 會對 `backend !== ns` 發出警告。
+真的需要兩者不同時，要先改 §5.2 的下發邏輯並在 `module_secrets` 加對照欄，不要只改 manifest。
+
 ### 4.2 權限碼 `perm`
 
 - 格式：`^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*){1,2}$`（兩段或三段，點分隔）
@@ -224,6 +230,37 @@ ctx = {
 - 範例：`#/audit/stock?node=sxl-gf&month=8`、`#/dorm/list`、`#/home`（首頁）
 - 路由不合法、或權限不足 → 導回 `#/home` 並 toast「沒有權限」。
 
+### 4.10 `ctx.ui` 與 `ctx.fmt` 的逐字元簽章
+
+多個平行任務都會用到這兩組，所以簽章寫死在這裡，任何一方都不得自行加參數或改回傳型別。
+
+```js
+ui.toast(message, type)        // type: 'ok' | 'warn' | 'danger' | 'info'（預設 'info'）→ void
+ui.loading(on)                 // on: boolean → void。可重入，內部是計數器：
+                               // 呼叫 N 次 true，就要呼叫 N 次 false 才真的關閉。
+                               // 理由：兩支非同步請求同時進行時，先回來的那支不該把畫面的載入中關掉。
+                               // （2026-08-14 修正：本行原本寫成「兩次 true 一次 false 就關」，語意與計數器相反，
+                               //   由 T1-3 執行者回報矛盾後更正。）
+ui.confirm(message)            // → Promise<boolean>（取消為 false）
+ui.dialog({ title, body, actions })
+                               // body: 字串（自動轉義）或 DOM 元素（原樣放入，可含輸入欄位）
+                               //   ——2026-08-14 補：原本只吃字串，做不出「帶表單的對話框」，
+                               //   模組只好自己刻彈窗，正是本專案要消滅的重複。
+                               //   放 DOM 元素時，裡面的使用者資料要由呼叫端自己先 esc()。
+                               // actions: [{ label, value, variant }]，variant: 'primary'|'secondary'|'danger'
+                               // → Promise<value>；使用者關掉或按 Esc → Promise<null>
+ui.signaturePad(canvasEl)      // → { isEmpty(): boolean, toDataURL(): string, clear(): void }
+
+fmt.date(d)                    // → 'YYYY-MM-DD'
+fmt.datetime(d)                // → 'YYYY-MM-DD HH:mm:ss'
+fmt.roc(d)                     // → '民國 YYY 年 M 月 D 日'
+fmt.esc(s)                     // → HTML 轉義字串
+fmt.money(n)                   // → 千分位字串，例 '1,234'
+```
+
+共同規則：**輸入無效（null／undefined／空字串／非法值）一律回空字串或安全的預設值，絕不拋例外、絕不顯示 `Invalid Date`。**
+UI 元件一律使用 `platform/css/components.css` 既有的 class，不得自行內嵌樣式或新增色碼。
+
 ## 5. 平台後端（新增，`apps-script/platform/`）
 
 ### 5.1 試算表「鼎兆元管理系統｜帳號權限」
@@ -253,7 +290,10 @@ ctx = {
 - `secrets`：以 `backend_id` 為鍵，只回傳「這個使用者有權限的後端」的通行碼，例 `{"audit":"5678"}`。沒權限的後端不下發。
 - **一律下發符合其權限的最低一級通行碼**：有 `<ns>.write` 才給 `level=write` 的碼，只有 `read`／`read.own` 一律給 `level=read` 的碼。
   實際效果：店長與部門主管拿到的是稽核的「主管唯讀碼」，就算拿去開舊網址也**只能看、不能填不能改**。
-- 登入失敗 5 次 → 該 `username` 鎖 15 分鐘，回 `{"ok":false,"error":"嘗試次數過多，請 15 分鐘後再試"}`。
+- 登入失敗 **3 次** → 該 `username` 鎖 15 分鐘，回 `{"ok":false,"error":"嘗試次數過多，請 15 分鐘後再試"}`。
+  （Eason 2026-08-14 指定「給連續輸入三次錯誤的機會」，門檻由 5 改為 3。
+  前端 `platform/views/login.js` 的 `THROTTLE_AFTER_FAILURES` 必須同步，兩邊不一致會出現
+  「畫面還讓你按、後端已經鎖了」的錯亂。）
 
 ### 5.3 token 格式（逐字元）
 

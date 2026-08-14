@@ -15,10 +15,15 @@
 | 編輯器網址 | https://script.google.com/d/10kayP1WmFO3VDNOM0rVJT-110e4Dvx4ehE8IeNiOcU1vTN_xGzDC65O7/edit |
 | 擁有帳號 | madesiaosinla@gmail.com（與既有九支系統同帳號） |
 | 本機路徑 | `~/dzy/apps-script/platform`（`.clasp.json` 已 gitignore） |
-| 時區 | Asia/Taipei（clasp 預設是 America/New_York，已改） |
-| 部署 ID | 尚未部署 |
+| 時區 | 腳本 Asia/Taipei ＋ **試算表本身也要另外設** Asia/Taipei（兩個是獨立設定，見記憶庫 apps-script-clasp-deploy-gotchas 第 15 條） |
+| **部署 ID** | `AKfycbww4w5qrdEqFA1UwOxDeZQKzoVahqJPrRDJ9mVUqUSb9-BcWqoHYLyAPN5O35QjX4Rs`（@1，2026-08-14 首次部署） |
+| **正式網址** | https://script.google.com/macros/s/AKfycbww4w5qrdEqFA1UwOxDeZQKzoVahqJPrRDJ9mVUqUSb9-BcWqoHYLyAPN5O35QjX4Rs/exec |
+| 存取設定 | `ANYONE_ANONYMOUS`／`USER_DEPLOYING`（GitHub Pages 前端呼叫必需） |
 
-**狀態**：程式已推送，**尚未授權、尚未部署**。
+**狀態**：已授權、已部署、端點實測正常。
+
+⚠ **之後改後端一律 `clasp create-version` ＋ `clasp update-deployment -V <版號> <上面的部署 ID>`。
+絕不再 `create-deployment`**——那會產生新網址，前端就斷線了。首次部署是唯一的例外，已經用掉了。
 
 ## 沿用既有、本專案不得更動
 

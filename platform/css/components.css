@@ -1,0 +1,622 @@
+/* ============================================================
+   鼎兆元管理系統｜共用元件樣式
+   卡片・按鈕・表單・表格・狀態標籤・導覽（底部列／側邊欄）・
+   toast・載入中・對話框。
+   顏色一律取自 tokens.css，本檔不得出現色碼。
+   ============================================================ */
+
+/* ---------------------------------------------------------- */
+/* 卡片                                                        */
+/* ---------------------------------------------------------- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-4);
+}
+
+.card + .card {
+  margin-top: var(--gap);
+}
+
+.card-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+  margin: 0 0 var(--space-2);
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* 可點擊的入口卡片（例如首頁的模組卡片） */
+.card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+.card-link:hover, .card-link:focus-visible {
+  box-shadow: var(--shadow-lift);
+  text-decoration: none;
+}
+.card-link:active {
+  transform: translateY(1px);
+}
+
+/* ---------------------------------------------------------- */
+/* 按鈕：主要／次要／危險                                       */
+/* ---------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color .15s ease, border-color .15s ease, opacity .15s ease;
+}
+
+.btn-block {
+  display: flex;
+  width: 100%;
+}
+
+.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--ink-inverse);
+}
+.btn-primary:hover:not(:disabled) { background: var(--brand-dark); border-color: var(--brand-dark); }
+
+.btn-secondary {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--ink);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--bg); }
+
+/* 危險動作預設「安靜」：白底灰框紅字，只有 hover／focus 才轉實色，
+   避免與主要動作（紅底白字）在同一排長得太像而誤觸 */
+.btn-danger {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--danger);
+}
+.btn-danger:hover:not(:disabled),
+.btn-danger:focus-visible:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--ink-inverse);
+}
+
+/* disabled 一律中性灰，不因底色變體（primary/danger）而顯出淡色調。
+   `.btn:disabled` 的特異性（0,2,0）高於單一變體 class（0,1,0），故必贏。 */
+.btn:disabled {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--muted);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------- */
+/* 表單元件：input / select / textarea / checkbox              */
+/* ---------------------------------------------------------- */
+
+.field {
+  display: block;
+  margin-bottom: var(--space-4);
+}
+.field:last-child { margin-bottom: 0; }
+
+.field-label {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--muted);
+  margin-bottom: var(--space-2);
+}
+
+.field-hint {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  margin-top: var(--space-1);
+}
+
+.input,
+select.input,
+textarea.input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+textarea.input {
+  min-height: 96px;
+  resize: vertical;
+}
+
+select.input {
+  appearance: auto;
+  -webkit-appearance: menulist;
+}
+
+.input:focus,
+select.input:focus,
+textarea.input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-light);
+}
+
+.input:disabled,
+select.input:disabled,
+textarea.input:disabled {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.input.is-invalid {
+  border-color: var(--danger);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--brand);
+  flex-shrink: 0;
+}
+
+.checkbox-row label {
+  font-size: var(--fs-base);
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------- */
+/* 表格：本身不橫向撐開頁面，寬內容在容器內捲動                  */
+/* ---------------------------------------------------------- */
+
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  background: var(--card);
+  font-size: var(--fs-sm);
+}
+
+.table th,
+.table td {
+  padding: var(--space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.table th {
+  color: var(--muted);
+  font-weight: var(--fw-medium);
+  background: var(--bg);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: var(--bg);
+}
+
+/* ---------------------------------------------------------- */
+/* 狀態標籤：合格／異常／未完成                                  */
+/* ---------------------------------------------------------- */
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  line-height: 1.8;
+  white-space: nowrap;
+}
+
+.tag-ok {
+  color: var(--ok);
+  background: var(--ok-light);
+}
+
+.tag-danger {
+  color: var(--danger);
+  background: var(--danger-light);
+}
+
+.tag-warn {
+  color: var(--warn);
+  background: var(--warn-light);
+}
+
+/* ---------------------------------------------------------- */
+/* 導覽：手機底部列／桌機側邊欄                                  */
+/* ---------------------------------------------------------- */
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-main {
+  padding-bottom: var(--bottom-nav-h);
+}
+
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-nav);
+  display: flex;
+  height: var(--bottom-nav-h);
+  background: var(--card);
+  border-top: 1px solid var(--line);
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.nav-item.is-active {
+  color: var(--brand);
+  font-weight: var(--fw-medium);
+}
+
+.sidebar {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .bottom-nav {
+    display: none;
+  }
+
+  .app-main {
+    padding-bottom: 0;
+    margin-left: var(--sidebar-w);
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-w);
+    padding: var(--space-5) var(--space-3);
+    background: var(--card);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+  }
+
+  .sidebar .nav-item {
+    flex: none;              /* 覆蓋 .nav-item 基底的 flex:1，否則在 flex-column 側邊欄裡會被撐滿垂直空間 */
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--space-2);
+    width: 100%;
+    height: 44px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-base);
+  }
+
+  .sidebar .nav-item.is-active {
+    background: var(--brand-light);
+  }
+}
+
+/* ---------------------------------------------------------- */
+/* Toast                                                       */
+/* ---------------------------------------------------------- */
+
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bottom-nav-h) + var(--space-4));
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: calc(100% - var(--space-6));
+  max-width: 420px;
+}
+
+/* 輕量小卡片，不是實色警示橫幅：白底／極淡同色底＋左側色條，文字用深色 */
+.toast {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  border-left: 4px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+
+.toast-ok {
+  background: var(--ok-light);
+  border-left-color: var(--ok);
+  color: var(--ok);
+}
+.toast-warn {
+  background: var(--warn-light);
+  border-left-color: var(--warn);
+  color: var(--warn);
+}
+.toast-danger {
+  background: var(--danger-light);
+  border-left-color: var(--danger);
+  color: var(--danger);
+}
+
+@media (min-width: 768px) {
+  .toast-stack {
+    left: auto;
+    right: var(--space-5);
+    bottom: var(--space-5);
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------- */
+/* 載入中                                                       */
+/* ---------------------------------------------------------- */
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay);
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--line);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+.loading-overlay .spinner {
+  border-color: rgba(255, 255, 255, .35);
+  border-top-color: var(--ink-inverse);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------------------------------------------------------- */
+/* 對話框                                                       */
+/* ---------------------------------------------------------- */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--overlay);
+  padding: var(--space-4);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+  padding: var(--space-5);
+}
+
+.dialog-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+  margin: 0 0 var(--space-2);
+}
+
+.dialog-body {
+  color: var(--muted);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  margin-bottom: var(--space-5);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (min-width: 768px) {
+  .dialog-overlay {
+    align-items: center;
+  }
+}
+
+/* ============================================================
+   登入頁背景（2026-08-14 加）
+   桌機：三個品牌照片橫向三等分，一眼看到集團全貌
+   手機：只顯示一張（依日期輪替），375px 塞三張會糊成一團
+   照片上一律壓深色遮罩：既讓白卡片讀得清楚，也把三張照片的
+   調性拉近（墨竹亭是亮灰底、另外兩張深色，不壓會像貼補丁）
+   ============================================================ */
+
+.login-bg {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4, 16px);
+}
+
+.login-bg-panes {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  overflow: hidden;
+}
+
+.login-bg-pane {
+  background-size: cover;
+  background-position: center;
+  display: none;
+}
+
+/* 手機：只顯示 data-hero 指定的那一張 */
+.login-bg[data-hero="mala"] .login-bg-pane--mala,
+.login-bg[data-hero="mzt"] .login-bg-pane--mzt,
+.login-bg[data-hero="yakiniku"] .login-bg-pane--yakiniku {
+  display: block;
+}
+
+.login-bg-pane--mala { background-image: url("../../assets/brand-photos/mala.jpg"); }
+.login-bg-pane--mzt { background-image: url("../../assets/brand-photos/mzt.jpg"); }
+.login-bg-pane--yakiniku { background-image: url("../../assets/brand-photos/yakiniku.jpg"); }
+
+/* 遮罩蓋在照片上、卡片下 */
+.login-bg-panes::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--hero-scrim);
+}
+
+/* 卡片浮在遮罩之上 */
+.login-bg > .page {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+}
+
+@media (min-width: 768px) {
+  .login-bg-panes { grid-template-columns: repeat(3, 1fr); }
+  .login-bg-pane { display: block; }
+  .login-bg-panes::after { background: var(--hero-scrim-strong); }
+}
+
+/* 逐張微調（2026-08-14 實際看圖後修）：
+   - 燒肉原圖是 2.5:1 寬幅、品牌 logo 壓在正中央，裁成窄條會變成半個放大的 logo。
+     裁切點往左移，取「只有肉」的那段。
+   - 墨竹亭原圖是亮灰底，跟另外兩張深色照片並排會像貼補丁，單獨再壓暗一點。 */
+.login-bg-pane--yakiniku { background-position: 20% center; }
+.login-bg-pane--mala { background-position: 68% center; }
+.login-bg-pane--mzt { filter: brightness(.62) saturate(.85); }
+.login-bg-pane--mala,
+.login-bg-pane--yakiniku { filter: saturate(.9); }
+
+/* 桌機改成「左面板＋右照片」（2026-08-14 修）：
+   原本卡片壓在正中央，等於把三張照片從中間切開，兩邊都不完整、質感被破壞。
+   改成表單獨立在左側乾淨面板，右側三張照片完整不被遮擋。
+   手機維持單張照片＋置中卡片——小螢幕沒有左右分欄的空間，置中才是對的。 */
+@media (min-width: 768px) {
+  .login-bg {
+    display: grid;
+    grid-template-columns: minmax(380px, 36%) 1fr;
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .login-bg-panes {
+    position: relative;
+    inset: auto;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  /* 照片上沒有文字了，遮罩可以放輕，讓菜色看得更清楚 */
+  .login-bg-panes::after { background: var(--hero-scrim); }
+
+  .login-bg > .page {
+    grid-column: 1;
+    grid-row: 1;
+    max-width: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    padding: var(--space-6, 32px);
+  }
+
+  /* 左側已經是獨立面板，卡片不需要再有邊框與陰影，那會變成「框中框」 */
+  .login-bg > .page .card {
+    width: 100%;
+    max-width: 360px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+}

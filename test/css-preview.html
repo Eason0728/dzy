@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CSS 樣式預覽｜鼎兆元管理系統</title>
+<link rel="stylesheet" href="../platform/css/tokens.css">
+<link rel="stylesheet" href="../platform/css/base.css">
+<link rel="stylesheet" href="../platform/css/components.css">
+<style>
+  /* 僅預覽頁本身使用，不算平台元件樣式 */
+  .preview-block { margin-bottom: var(--space-7); }
+  .swatch-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+  .swatch {
+    width: 96px;
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line);
+    font-size: var(--fs-xs);
+    text-align: center;
+    background: var(--card);
+  }
+  .swatch-fill { height: 40px; border-radius: var(--radius-sm); margin-bottom: var(--space-1); }
+  .btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .tag-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+
+    <nav class="sidebar" aria-label="桌機側邊欄">
+      <a class="nav-item is-active" href="#">總覽</a>
+      <a class="nav-item" href="#">稽核</a>
+      <a class="nav-item" href="#">宿舍合約</a>
+      <a class="nav-item" href="#">人員管理</a>
+    </nav>
+
+    <main class="app-main">
+      <div class="page stack">
+
+        <header class="section">
+          <h1>CSS 樣式預覽</h1>
+          <p class="text-muted">T1-1 驗收頁：確認繁體中文顯示正常、375px 無橫向捲動、1280px 版面正常。</p>
+        </header>
+
+        <!-- 色票 -->
+        <section class="preview-block section">
+          <div class="section-title">色票</div>
+          <div class="swatch-row">
+            <div class="swatch"><div class="swatch-fill" style="background:var(--brand)"></div>主色 brand</div>
+            <div class="swatch"><div class="swatch-fill" style="background:var(--ink)"></div>文字 ink</div>
+            <div class="swatch"><div class="swatch-fill" style="background:var(--muted)"></div>次要 muted</div>
+            <div class="swatch"><div class="swatch-fill" style="background:var(--line)"></div>邊框 line</div>
+            <div class="swatch"><div class="swatch-fill" style="background:var(--bg)"></div>背景 bg</div>
+            <div class="swatch"><div class="swatch-fill" style="background:var(--ok)"></div>成功 ok</div>
+            <div class="swatch"><div class="swatch-fill" style="background:var(--warn)"></div>警示 warn</div>
+            <div class="swatch"><div class="swatch-fill" style="background:var(--danger)"></div>危險 danger</div>
+          </div>
+        </section>
+
+        <!-- 卡片 -->
+        <section class="preview-block section">
+          <div class="section-title">卡片</div>
+          <div class="card">
+            <div class="card-title">月初盤點抽查</div>
+            <p class="text-muted">新竹光復店・2026 年 8 月</p>
+            <div class="card-row">
+              <span>合格率 92%</span>
+              <span class="tag tag-ok">合格</span>
+            </div>
+          </div>
+          <a class="card card-link" href="#">
+            <div class="card-title">營運稽核表</div>
+            <p class="text-muted">消防安全／營運／環境清潔／食安，共 19 項</p>
+          </a>
+        </section>
+
+        <!-- 按鈕 -->
+        <section class="preview-block section">
+          <div class="section-title">按鈕</div>
+          <div class="btn-row">
+            <button class="btn btn-primary">送出稽核</button>
+            <button class="btn btn-secondary">儲存草稿</button>
+            <button class="btn btn-danger">刪除紀錄</button>
+            <button class="btn btn-primary" disabled>已鎖定</button>
+          </div>
+        </section>
+
+        <!-- 表單 -->
+        <section class="preview-block section">
+          <div class="section-title">表單元件</div>
+          <div class="card">
+            <div class="field">
+              <label class="field-label" for="p-name">品項名稱</label>
+              <input class="input" id="p-name" type="text" placeholder="例：黃金鴨掌">
+            </div>
+            <div class="field">
+              <label class="field-label" for="p-node">所屬節點</label>
+              <select class="input" id="p-node">
+                <option>新竹光復（sxl-gf）</option>
+                <option>台中美村（sxl-mc）</option>
+                <option>員林南昌（sxl-nc）</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="p-note">異常原因</label>
+              <textarea class="input" id="p-note" placeholder="說明異常原因與處理方式"></textarea>
+            </div>
+            <div class="field">
+              <div class="checkbox-row">
+                <input type="checkbox" id="p-confirm" checked>
+                <label for="p-confirm">已完成複盤確認</label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 表格 -->
+        <section class="preview-block section">
+          <div class="section-title">表格</div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>品項</th>
+                  <th>抽查結果</th>
+                  <th>異常原因</th>
+                  <th>覆核人</th>
+                  <th>覆核時間</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>醋溜木耳</td>
+                  <td><span class="tag tag-ok">合格</span></td>
+                  <td>—</td>
+                  <td>王督導</td>
+                  <td>2026-08-14 10:20</td>
+                </tr>
+                <tr>
+                  <td>黃金鴨掌</td>
+                  <td><span class="tag tag-danger">異常</span></td>
+                  <td>單位標示不符</td>
+                  <td>王督導</td>
+                  <td>2026-08-14 10:24</td>
+                </tr>
+                <tr>
+                  <td>煙燻豬頭皮</td>
+                  <td><span class="tag tag-warn">未完成</span></td>
+                  <td>店長尚未回覆</td>
+                  <td>—</td>
+                  <td>—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 狀態標籤 -->
+        <section class="preview-block section">
+          <div class="section-title">狀態標籤</div>
+          <div class="tag-row">
+            <span class="tag tag-ok">合格</span>
+            <span class="tag tag-danger">異常</span>
+            <span class="tag tag-warn">未完成</span>
+          </div>
+        </section>
+
+        <!-- 對話框（靜態展示） -->
+        <section class="preview-block section">
+          <div class="section-title">對話框</div>
+          <div class="dialog" style="max-width:420px;">
+            <div class="dialog-title">確認送出？</div>
+            <div class="dialog-body">送出後將無法修改本次稽核紀錄，請確認所有品項皆已填寫完成。</div>
+            <div class="dialog-actions">
+              <button class="btn btn-secondary">取消</button>
+              <button class="btn btn-primary">確認送出</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 載入中（靜態展示） -->
+        <section class="preview-block section">
+          <div class="section-title">載入中</div>
+          <div class="card" style="display:flex; align-items:center; gap:var(--space-3);">
+            <div class="spinner"></div>
+            <span class="text-muted">資料載入中，請稍候…</span>
+          </div>
+        </section>
+
+        <!-- Toast（靜態展示） -->
+        <section class="preview-block section">
+          <div class="section-title">Toast</div>
+          <div class="stack" style="max-width:420px;">
+            <div class="toast toast-ok">已成功送出稽核紀錄</div>
+            <div class="toast toast-danger">缺少單位，請補齊後再送出</div>
+            <div class="toast toast-warn">尚有 3 項未完成</div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <nav class="bottom-nav" aria-label="手機底部導覽">
+      <a class="nav-item is-active" href="#">總覽</a>
+      <a class="nav-item" href="#">稽核</a>
+      <a class="nav-item" href="#">宿舍</a>
+      <a class="nav-item" href="#">我的</a>
+    </nav>
+
+  </div>
+</body>
+</html>

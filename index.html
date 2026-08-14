@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>鼎兆元餐飲集團｜管理系統</title>
+  <link rel="stylesheet" href="platform/css/tokens.css">
+  <link rel="stylesheet" href="platform/css/base.css">
+  <link rel="stylesheet" href="platform/css/components.css">
+</head>
+<body>
+  <!--
+    平台唯一入口。這裡刻意只有一個容器與一支 script：
+    畫面全部由 platform/shell.js 依身分與模組清單產生。
+    ⚠ 新增模組時不要動這個檔——只改 platform/registry.js（見 docs/spec.md §6.1）。
+  -->
+  <div id="app"></div>
+  <noscript>
+    <p style="padding:1rem">這個系統需要 JavaScript 才能運作，請開啟後重新整理。</p>
+  </noscript>
+  <script type="module" src="platform/shell.js"></script>
+</body>
+</html>

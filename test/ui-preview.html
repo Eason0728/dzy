@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI 元件手動驗收頁｜鼎兆元管理系統</title>
+<link rel="stylesheet" href="../platform/css/tokens.css">
+<link rel="stylesheet" href="../platform/css/base.css">
+<link rel="stylesheet" href="../platform/css/components.css">
+<style>
+  /* 僅預覽頁本身使用，不算平台元件樣式（同 css-preview.html 的做法） */
+  .preview-block { margin-bottom: var(--space-7); }
+  .btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .status {
+    margin-top: var(--space-2);
+    font-size: var(--fs-sm);
+    color: var(--muted);
+  }
+  .status strong { color: var(--ink); }
+  #pad {
+    display: block;
+    width: 100%;
+    max-width: 420px;
+    height: 180px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    touch-action: none;
+  }
+  /* loading-overlay 蓋滿全螢幕（z-dialog），本頁自己的驗收控制按鈕要疊在它上面才點得到 */
+  #loading-controls {
+    position: relative;
+    z-index: calc(var(--z-dialog) + 1);
+  }
+</style>
+</head>
+<body>
+  <div class="page stack">
+
+    <header class="section">
+      <h1>UI 元件手動驗收頁</h1>
+      <p class="text-muted">T1-3：ctx.ui（toast／loading／confirm／dialog／signaturePad），逐項對照 docs/spec.md §4.10。</p>
+    </header>
+
+    <!-- Toast -->
+    <section class="preview-block section">
+      <div class="section-title">toast(message, type)</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="toast-ok">顯示成功 toast</button>
+        <button class="btn btn-secondary" id="toast-warn">顯示警告 toast</button>
+        <button class="btn btn-danger" id="toast-danger">顯示危險 toast</button>
+        <button class="btn btn-secondary" id="toast-info">顯示 info toast</button>
+        <button class="btn btn-primary" id="toast-three">連開三個 toast</button>
+        <button class="btn btn-secondary" id="toast-xss">顯示含 &lt;script&gt; 的 toast（測試轉義）</button>
+      </div>
+    </section>
+
+    <!-- 載入中 -->
+    <section class="preview-block section">
+      <div class="section-title">loading(on) — 可重入計數器</div>
+      <div id="loading-controls">
+        <div class="btn-row">
+          <button class="btn btn-primary" id="loading-on">顯示載入中</button>
+          <button class="btn btn-secondary" id="loading-off">關閉</button>
+        </div>
+        <p class="status">目前狀態：<strong id="loading-status">未顯示</strong>（畫面上有無 .loading-overlay）</p>
+      </div>
+    </section>
+
+    <!-- 對話框 -->
+    <section class="preview-block section">
+      <div class="section-title">dialog({ title, body, actions })</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="dialog-open">開啟對話框</button>
+      </div>
+      <p class="status">上次結果：<strong id="dialog-status">（尚未開啟）</strong></p>
+    </section>
+
+    <!-- confirm -->
+    <section class="preview-block section">
+      <div class="section-title">confirm(message)</div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="confirm-open">詢問確認</button>
+      </div>
+      <p class="status">上次結果：<strong id="confirm-status">（尚未詢問）</strong></p>
+    </section>
+
+    <!-- 簽名板 -->
+    <section class="preview-block section">
+      <div class="section-title">signaturePad(canvasEl)</div>
+      <p class="text-muted">用滑鼠拖曳或手指觸控在下方框內畫一筆。</p>
+      <canvas id="pad"></canvas>
+      <div class="btn-row" style="margin-top:var(--space-3)">
+        <button class="btn btn-danger" id="pad-clear">清除重簽</button>
+      </div>
+      <p class="status">isEmpty()：<strong id="pad-status">true</strong></p>
+    </section>
+
+  </div>
+
+  <script type="module">
+    import { toast, loading, confirm, dialog, signaturePad } from '../platform/ui.js';
+
+    // ---- toast ----
+    document.getElementById('toast-ok').addEventListener('click', () => toast('已成功送出稽核紀錄', 'ok'));
+    document.getElementById('toast-warn').addEventListener('click', () => toast('尚有 3 項未完成', 'warn'));
+    document.getElementById('toast-danger').addEventListener('click', () => toast('缺少單位，請補齊後再送出', 'danger'));
+    document.getElementById('toast-info').addEventListener('click', () => toast('這是一則一般訊息', 'info'));
+    document.getElementById('toast-three').addEventListener('click', () => {
+      toast('第一則：已儲存草稿', 'ok');
+      toast('第二則：尚有欄位未填', 'warn');
+      toast('第三則：連線逾時，請重試', 'danger');
+    });
+    document.getElementById('toast-xss').addEventListener('click', () => {
+      toast('<scri' + 'pt>alert(1)<\/scri' + 'pt> & "quoted"', 'danger');
+    });
+
+    // ---- loading ----
+    const loadingStatus = document.getElementById('loading-status');
+    function refreshLoadingStatus() {
+      const on = !!document.querySelector('.loading-overlay');
+      loadingStatus.textContent = on ? '顯示中' : '未顯示';
+    }
+    document.getElementById('loading-on').addEventListener('click', () => {
+      loading(true);
+      refreshLoadingStatus();
+    });
+    document.getElementById('loading-off').addEventListener('click', () => {
+      loading(false);
+      refreshLoadingStatus();
+    });
+    refreshLoadingStatus();
+
+    // ---- dialog ----
+    document.getElementById('dialog-open').addEventListener('click', async () => {
+      const value = await dialog({
+        title: '確認送出？',
+        body: '送出後將無法修改本次稽核紀錄，請確認所有品項皆已填寫完成。',
+        actions: [
+          { label: '取消', value: 'cancel', variant: 'secondary' },
+          { label: '刪除', value: 'delete', variant: 'danger' },
+          { label: '確認送出', value: 'submit', variant: 'primary' }
+        ]
+      });
+      document.getElementById('dialog-status').textContent = JSON.stringify(value);
+    });
+
+    // ---- confirm ----
+    document.getElementById('confirm-open').addEventListener('click', async () => {
+      const ok = await confirm('確定要刪除這筆紀錄嗎？');
+      document.getElementById('confirm-status').textContent = String(ok);
+    });
+
+    // ---- signaturePad ----
+    const canvas = document.getElementById('pad');
+    const pad = signaturePad(canvas);
+    const padStatus = document.getElementById('pad-status');
+    function refreshPadStatus() {
+      padStatus.textContent = String(pad.isEmpty());
+    }
+    canvas.addEventListener('mouseup', refreshPadStatus);
+    canvas.addEventListener('touchend', refreshPadStatus);
+    document.getElementById('pad-clear').addEventListener('click', () => {
+      pad.clear();
+      refreshPadStatus();
+    });
+    refreshPadStatus();
+  </script>
+</body>
+</html>
