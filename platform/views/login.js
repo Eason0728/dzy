@@ -60,8 +60,14 @@ export function render(el, app) {
     <div class="login-bg" data-hero="${esc(hero.key)}">
       <div class="login-blur" aria-hidden="true"></div>
       <div class="login-card">
-        <!-- 照片本身就帶著品牌 logo（原圖不裁切），這裡不再重複寫一次品牌名 -->
-        <div class="login-card-visual" role="img" aria-label="${esc(hero.name)}"></div>
+        <!-- 左半：照片＋大標題（照參考版型，標題在左上）。
+             系統名放這裡之後，右半就是純表單，不再重複一次標題。 -->
+        <div class="login-card-visual" role="img" aria-label="${esc(hero.name)}">
+          <div class="login-card-heading">
+            <h2>鼎兆元餐飲集團</h2>
+            <p>內部管理系統</p>
+          </div>
+        </div>
         <div class="login-card-form">
       <div class="card">
         <h1 class="card-title">${esc(APP_NAME)}</h1>

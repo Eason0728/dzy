@@ -525,10 +525,14 @@ textarea.input:disabled {
 /* 全幅背景：同一張照片，模糊＋壓暗，只當氛圍不搶焦點 */
 .login-blur {
   position: absolute;
-  inset: -40px;               /* 外擴，避免模糊後邊緣露出底色 */
+  inset: 0;
   background-size: cover;
   background-position: center;
-  filter: blur(6px) saturate(.9) brightness(.6);
+  /* 跟卡片左半用同一個座標系（都是 fixed，對齊視窗），
+     這樣兩處顯示的是同一張照片的同一個位置，看起來就是「一張圖」，
+     不是兩份大小不同的拷貝。 */
+  background-attachment: fixed;
+  filter: saturate(.95) brightness(.82);
 }
 
 .login-bg::after {
@@ -547,7 +551,7 @@ textarea.input:disabled {
   display: grid;
   grid-template-columns: 1fr;
   background: var(--card);
-  border-radius: var(--radius);
+  border-radius: 0;            /* 範例是直角，視覺上更正式、更像企業系統 */
   box-shadow: var(--shadow-float);
   overflow: hidden;
 }
@@ -557,13 +561,13 @@ textarea.input:disabled {
   display: none;
   position: relative;
   min-height: 420px;
-  /* 就是原圖本身（跟背景同一個檔），不另外裁切或另存一份；
-     差別只在這一塊沒有模糊，而且壓的是「提亮的色塊」而不是壓暗的遮罩——
-     所以它會從暗背景裡浮出來。做法照 Eason 提供的參考版型。 */
+  /* 這裡不是第二張圖，是背景那張圖「透出來」的一塊：
+     跟 .login-blur 用完全相同的 cover／center／fixed 幾何，
+     所以照片是連續的一張，只是這一塊沒被壓暗、另外壓一層提亮色塊。
+     這正是參考版型的層次關係（Eason 2026-08-14 指正：範例只呈現一張圖）。 */
   background-size: cover;
-  /* 靠左對齊：三張原圖的品牌 logo 都在左側（燒肉在中央），
-     用 center 會把左上角的 logo 切掉一個字。靠左裁掉的是右側背景，代價小得多。 */
-  background-position: left center;
+  background-position: center;
+  background-attachment: fixed;
 }
 
 .login-card-visual::after {
@@ -634,3 +638,33 @@ textarea.input:disabled {
 /* 逐張裁切微調已不需要：三張圖的品牌 logo 已在 assets 端裁掉
    （原圖 logo 在左上或正中央，近正方形的裁切框怎麼移都會吃到半截 logo，
    靠 background-position 救不回來，正解是裁圖檔本身）。*/
+
+/* 左半的大標題（照參考版型，置於左上） */
+.login-card-heading {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-6, 32px);
+  left: var(--space-6, 32px);
+  right: var(--space-5, 24px);
+  color: var(--ink-inverse);
+  text-shadow: 0 1px 12px var(--hero-scrim-strong);
+}
+
+.login-card-heading h2 {
+  margin: 0;
+  font-size: var(--fs-2xl, 30px);
+  line-height: 1.25;
+  font-weight: var(--fw-bold, 700);
+  letter-spacing: .01em;
+}
+
+.login-card-heading p {
+  margin: 6px 0 0;
+  font-size: var(--fs-md, 16px);
+  opacity: .9;
+}
+
+/* 標題已經在左半，右半是純表單，桌機不再重複一次系統名 */
+@media (min-width: 768px) {
+  .login-card-form .card-title { display: none; }
+}
