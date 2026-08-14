@@ -60,12 +60,8 @@ export function render(el, app) {
     <div class="login-bg" data-hero="${esc(hero.key)}">
       <div class="login-blur" aria-hidden="true"></div>
       <div class="login-card">
-        <div class="login-card-visual">
-          <div class="login-card-brand">
-            <h2>${esc(hero.name)}</h2>
-            <p>${esc(hero.sub)}</p>
-          </div>
-        </div>
+        <!-- 照片本身就帶著品牌 logo（原圖不裁切），這裡不再重複寫一次品牌名 -->
+        <div class="login-card-visual" role="img" aria-label="${esc(hero.name)}"></div>
         <div class="login-card-form">
       <div class="card">
         <h1 class="card-title">${esc(APP_NAME)}</h1>

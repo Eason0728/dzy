@@ -528,7 +528,7 @@ textarea.input:disabled {
   inset: -40px;               /* 外擴，避免模糊後邊緣露出底色 */
   background-size: cover;
   background-position: center;
-  filter: blur(18px) saturate(.85) brightness(.55);
+  filter: blur(6px) saturate(.9) brightness(.6);
 }
 
 .login-bg::after {
@@ -557,15 +557,20 @@ textarea.input:disabled {
   display: none;
   position: relative;
   min-height: 420px;
+  /* 就是原圖本身（跟背景同一個檔），不另外裁切或另存一份；
+     差別只在這一塊沒有模糊，而且壓的是「提亮的色塊」而不是壓暗的遮罩——
+     所以它會從暗背景裡浮出來。做法照 Eason 提供的參考版型。 */
   background-size: cover;
-  background-position: center;
+  /* 靠左對齊：三張原圖的品牌 logo 都在左側（燒肉在中央），
+     用 center 會把左上角的 logo 切掉一個字。靠左裁掉的是右側背景，代價小得多。 */
+  background-position: left center;
 }
 
 .login-card-visual::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: var(--hero-caption-gradient);
+  background: var(--hero-tint);
 }
 
 .login-card-brand {
