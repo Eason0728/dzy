@@ -72,11 +72,17 @@ function buildRequestBody_(backendId, action, payload) {
   // audit／dorm：既有後端的真實格式，欄位與 action 同層扁平展開，通行碼用各自的參數名，
   // 一律用 getSecret() 自動帶，不採信呼叫端 payload 裡可能夾帶的同名欄位（安全考量：
   // 通行碼只認目前登入身分下發的那一份，不給呼叫端覆寫的機會）。
-  const body = { action, ...p };
+  // 2026-08-15 對抗審查修正：原本是 `{ action, ...p }`——展開順序讓呼叫端能用
+  // payload 裡的同名欄位把 action 蓋掉，等於模組可以自己決定去打後端的哪個動作。
+  // 通行碼因為是在後面才寫入所以擋得住，action 擋不住。
+  // 改成：先清掉 payload 裡的保留欄位，最後才寫入平台決定的值。
+  const body = { ...p };
+  delete body.action;
   const secretField = LEGACY_SECRET_FIELD[backendId];
-  if (secretField) {
-    body[secretField] = getSecret(backendId);
-  }
+  if (secretField) delete body[secretField];
+
+  body.action = action;
+  if (secretField) body[secretField] = getSecret(backendId);
   return body;
 }
 
@@ -106,11 +112,7 @@ function filterOwnNode_(data, node) {
   const out = {};
   for (const key of Object.keys(data)) {
     const val = data[key];
-    if (Array.isArray(val) && val.length > 0 && val.every((row) => row && typeof row === 'object' && 'store' in row)) {
-      out[key] = val.filter((row) => row.store === node);
-    } else {
-      out[key] = val;
-    }
+    out[key] = isStoreRowArray_(val) ? val.filter((row) => row.store === node) : val;
   }
   return out;
 }
@@ -128,8 +130,38 @@ function maybeFilterOwnNode_(backendId, data) {
   if (hasFull || !hasOwn) return data;
   const user = getUser();
   const node = user && user.node;
-  if (!node) return data; // 理論上不會發生：有 read.own 的人一定有 node
+
+  // 2026-08-15 對抗審查修正：原本這裡是 `if (!node) return data;`，
+  // 註解寫「理論上不會發生」——但它一旦發生，回傳的是**全部節點的資料**，
+  // 也就是這個防呆是往「開」的方向失敗的。
+  // 只要有人在人員管理建了一個「店長 + 所屬節點留空」的帳號，隔離就整個消失。
+  // 改成往「關」的方向失敗：拿不到節點就一列都不給，並在 console 留下可查的訊息。
+  if (!node) {
+    console.error(
+      `[api] 使用者 ${user && user.id} 只有 ${backendId}.read.own 卻沒有所屬節點，` +
+      '無法判斷該看哪一店，已回傳空資料。請到人員管理補上他的所屬節點。'
+    );
+    return emptyRows_(data);
+  }
+
   return filterOwnNode_(data, node);
+}
+
+/** 把所有「一列一店」的陣列清空，其餘欄位（設定、對照表）保留——用於裁切失敗時的保守回傳 */
+function emptyRows_(data) {
+  if (!data || typeof data !== 'object') return data;
+  const out = {};
+  for (const key of Object.keys(data)) {
+    const val = data[key];
+    out[key] = isStoreRowArray_(val) ? [] : val;
+  }
+  return out;
+}
+
+/** 判斷一個值是不是「一列一店」的資料陣列（每一列都帶 store 欄位） */
+function isStoreRowArray_(val) {
+  return Array.isArray(val) && val.length > 0
+    && val.every((row) => row && typeof row === 'object' && 'store' in row);
 }
 
 /** 轉接只在這一處做（spec §4.8）：依 backendId 決定既有回傳長怎樣、要怎麼包進 data。 */

@@ -91,7 +91,9 @@
 **約束（2026-08-14 補，實作 §5.2 時發現的地雷）**：`backend` 必須等於 `ns`。
 理由：後端下發通行碼時，是拿 `backend_id` 當前綴去查使用者有沒有 `<backend_id>.write` ／ `<backend_id>.read`。
 兩者一旦不同，查到的權限碼永遠不存在，結果是**安靜地不發碼**——模組看起來載入正常，只有呼叫後端時才失敗，很難查。
-本期三個模組都符合（`audit`／`audit`／`dorm`）。`manifest-check.js` 會對 `backend !== ns` 發出警告。
+本期三個模組都符合（`audit`／`audit`／`dorm`）。`manifest-check.js` 對 `backend !== ns` 一律判為
+**驗證錯誤、該模組不上架**（2026-08-15 對抗審查後由「只發警告」改成錯誤——只警告等於允許違規上線，
+而失敗長相是「模組載入正常、只有呼叫後端才失敗」，最難查的那一種）。
 真的需要兩者不同時，要先改 §5.2 的下發邏輯並在 `module_secrets` 加對照欄，不要只改 manifest。
 
 ### 4.2 權限碼 `perm`
@@ -180,13 +182,24 @@ export default {
 export default {
   mount(el, ctx)   { /* 畫進 el；回傳 unmount 函式或 undefined */ },
   unmount()        { /* 選填：清事件、清計時器 */ },
-  badge(ctx)       { /* 選填：回 Promise<number|null>，首頁卡片的待辦數字 */ }
+  badge(ctx)       { /* 選填：回 Promise<number|null>，首頁卡片的待辦數字 */ },
+  onRoute(ctx)      { /* 選填：同一個模組內分頁或 params 變動時，殼呼叫一次 */ }
 };
 ```
 
 - `badge()` **必須由模組自己算**，平台層不得內建任何業務邏輯（這是分層成不成立的判準）。
 - `badge()` 回 `null` 或拋錯 → 卡片不顯示數字，不得讓首頁壞掉。
 - `badge()` 逾時上限 5 秒，逾時視同 `null`。
+- `onRoute(ctx)`（2026-08-15 對抗審查後新增，修正原本「同模組換分頁，模組收不到通知」的缺陷）：
+  同一個模組內切分頁或 query 改變時（例如稽核模組四到五個分頁互切），殼會先原地更新這個
+  模組已經拿到的那個 `ctx` 物件（見 §4.7 的 `viewId`／`params`），再——如果模組有實作這個
+  選填方法——呼叫一次 `onRoute(ctx)`，讓模組知道現在在哪個分頁、不必自己去讀
+  `location.hash`（那等於繞過平台介面）。
+  - 首次掛載（`mount()`）本身不會額外觸發 `onRoute()`；`onRoute()` 只在「模組已經掛著、
+    使用者在模組內切換」時才呼叫。
+  - `onRoute()` 拋錯只記到 console，不影響殼、不會把首頁弄壞。
+  - 沒有實作 `onRoute()` 的既有模組（例如本期 T1 已完成的 `modules/users`）行為完全不變——
+    殼只是「有實作才呼叫」，不是每個模組都得補這個方法。
 
 ### 4.7 `ctx`（平台交給模組的唯一介面，模組不得碰 ctx 以外的平台內部）
 
@@ -198,11 +211,26 @@ ctx = {
   ui:     { toast, loading, confirm, dialog, signaturePad },
   fmt:    { date, datetime, roc, esc, money },
   nav:    (viewId, params) => void,             // 模組內換分頁
+  viewId: 'overview',                           // 目前分頁 id；見下方說明
   params: { }                                   // 由路由 query 帶入
 }
 ```
 
 `user.id` 格式：`^u[0-9]{3,6}$`，範例 `u001`。
+
+**`viewId`（2026-08-15 對抗審查後新增）**：目前分頁的 `id`（格式同 §4.1）。修正的缺陷是：
+原本 `ctx` 完全沒有分頁狀態，同模組內換分頁時模組拿不到通知，只能自己去讀
+`location.hash`——那等於繞過平台介面，分層從另一個方向破掉；Phase 2 稽核模組有四到五個
+分頁，這個洞一開工就會撞上。
+
+- `mount(el, ctx)` 拿到的 `ctx.viewId` 是掛載當下那一頁。
+- 同一個模組內換分頁或 query 改變時，殼會**原地更新同一個 `ctx` 物件**的 `viewId` 與
+  `params`——**不是換一個新物件**：模組可能已經把 `ctx` 存起來（例如存進閉包或模組內的
+  狀態變數），換新物件會讓模組手上那份變成過期的舊資料。同一次變動之後，若模組有實作
+  §4.6 的 `onRoute(ctx)`，殼會呼叫它一次；沒實作就只是這個物件的欄位悄悄改了值，模組下次
+  自己讀 `ctx.viewId`（例如某個使用者互動觸發時）會看到新值。
+- `badge(ctx)` 呼叫時不對應任何已掛載的分頁（首頁卡片載入 badge 時，模組根本還沒 mount），
+  這種情況下 `ctx.viewId` 固定是 `null`。
 
 ### 4.8 後端呼叫與回傳（三支後端一律長這樣）
 
@@ -286,6 +314,20 @@ UI 元件一律使用 `platform/css/components.css` 既有的 class，不得自�
 | `saveUser` | `{id?, username, name, role, node}` | `{id}` | `platform.users` |
 | `setActive` | `{id, active}` | `{}` | `platform.users` |
 | `resetPassword` | `{id, newPassword}` | `{}` | `platform.users` |
+| `listRoles` | `{}` | `{roles:[{role, name_zh, perms:[...]}]}` | `platform.users` |
+
+> `listRoles` 是 2026-08-15 對抗審查後新增的：角色清單原本硬編碼在人員管理模組裡，
+> 與「roles 分頁可設定、加角色不改程式」互相矛盾——在試算表加一個角色，UI 認不得。
+> 角色一律由後端讀 `roles` 分頁回傳。**節點代號不同**：那是 spec §4.4 定死的五個，
+> 前端硬編碼是正確的，不要一併改掉。
+
+**密碼長度規則（2026-08-15 補）**：`saveUser` 新增帳號與 `resetPassword` **都**必須檢查
+`newPassword`／`password` 至少 8 個字元。原本只有 `resetPassword` 檢查，
+直接呼叫 API 就能繞過前端建立一位數密碼的帳號——**前端驗證不是安全機制**。
+
+**錯誤訊息規則（2026-08-15 補）**：`doPost` 捕捉到未預期例外時，回前端一律是通用訊息
+（例「系統忙碌中，請稍後再試」），細節只寫進伺服器端記錄。原本把 `err.message` 原文送出去，
+會洩漏分頁名、函式名這類內部結構。
 
 - `secrets`：以 `backend_id` 為鍵，只回傳「這個使用者有權限的後端」的通行碼，例 `{"audit":"5678"}`。沒權限的後端不下發。
 - **一律下發符合其權限的最低一級通行碼**：有 `<ns>.write` 才給 `level=write` 的碼，只有 `read`／`read.own` 一律給 `level=read` 的碼。

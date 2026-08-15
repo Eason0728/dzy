@@ -249,10 +249,28 @@ class FakeDocument extends withEvents(Object) {
   }
 }
 
+// location.hash 用 getter/setter 模擬真實瀏覽器的行為：設成「不同的值」才會觸發
+// hashchange；設成「目前這個值」不會（這正是 shell.js 的 navigateTo() 修正①要依賴的
+// 前提——見 platform/shell.js 檔頭「導覽只跑一次路由」那段說明，以及 T1-8 缺陷①的修法）。
+// 真實瀏覽器的 hashchange 是非同步（下一個 task）才觸發，這裡簡化成同步觸發：shell.js
+// 的 navigateTo() 本身不假設「同步或非同步」，只看「hash 到底有沒有變」，所以同步觸發
+// 不影響它的正確性，卻讓測試不必引入假的巨集任務排程就能斷言呼叫次數。
 class FakeWindow extends withEvents(Object) {
   constructor() {
     super();
-    this.location = { hash: '' };
+    let hashValue = '';
+    const self = this;
+    this.location = {
+      get hash() {
+        return hashValue;
+      },
+      set hash(v) {
+        const next = String(v === undefined || v === null ? '' : v);
+        if (next === hashValue) return; // 同真實瀏覽器：設成同一個值不觸發 hashchange
+        hashValue = next;
+        self.dispatchEvent(makeEvent('hashchange', { bubbles: false }));
+      }
+    };
     this.devicePixelRatio = 1;
   }
 }
@@ -460,8 +478,9 @@ await at('未登入時：boot 顯示登入頁；手動改 hash 仍停在登入�
   assert.ok(appEl.querySelector('#login-username'), '開機後應該顯示登入表單（帳號欄位存在）');
   assert.equal(appEl.querySelector('[data-role="nav-mobile"]'), null, '未登入時不該出現殼的導覽列');
 
+  // 模擬「手動改網址列的 hash」：真實瀏覽器會在 hash 真的變動時自動觸發 hashchange，
+  // FakeWindow.location 的 setter（見上方定義）已經模擬了這個行為，不必再手動 dispatch。
   fakeWindow.location.hash = '#/anything/x';
-  fakeWindow.dispatchEvent(makeEvent('hashchange'));
   await flush();
 
   assert.ok(appEl.querySelector('#login-username'), '手動改 hash 之後仍然是登入表單');
@@ -644,23 +663,21 @@ await at('非法路由：模組不存在／分頁不存在／權限不足 → �
   await freshShellImport();
   await flush();
 
-  // 案例一：模組不存在
+  // 案例一：模組不存在（直接改 hash 模擬手動改網址列；FakeWindow.location 的 setter
+  // 在 hash 真的變動時會自動觸發 hashchange，不必再手動 dispatch）
   fakeWindow.location.hash = '#/no-such-module/overview';
-  fakeWindow.dispatchEvent(makeEvent('hashchange'));
   await flush();
   assert.equal(fakeWindow.location.hash, '#/home', '模組不存在應導回 #/home');
   assertLatestToast('沒有權限', 'warn');
 
   // 案例二：分頁不存在
   fakeWindow.location.hash = '#/demo-x/no-such-view';
-  fakeWindow.dispatchEvent(makeEvent('hashchange'));
   await flush();
   assert.equal(fakeWindow.location.hash, '#/home', '分頁不存在應導回 #/home');
   assertLatestToast('沒有權限', 'warn');
 
   // 案例三：權限不足（有 demo-x 模組權限，但沒有 priv 分頁需要的 demox.write）
   fakeWindow.location.hash = '#/demo-x/priv';
-  fakeWindow.dispatchEvent(makeEvent('hashchange'));
   await flush();
   assert.equal(fakeWindow.location.hash, '#/home', '權限不足應導回 #/home');
   assertLatestToast('沒有權限', 'warn');
@@ -781,6 +798,253 @@ await at("ctx.api.call('假模組id', ...) 會轉成用該 manifest 的 backend 
   assert.ok(capturedCall, 'ctx.api.call 應該真的送出了一次請求');
   assert.equal(capturedCall.url, BACKENDS.dorm, 'ctx.api.call("demo-target",...) 應該查到 demo-target 的 manifest.backend=dorm，打對網址（不是呼叫端自己的 backend）');
   assert.equal(capturedCall.body.action, 'ping', '送出的 action 正確帶到');
+});
+
+// ============================================================
+// 測試 8：缺陷①——一次導覽只會讓模組 mount 一次
+//
+// 修法前：navigateTo() 先 window.location.hash = hash 再立刻呼叫 route()，但檔案最後也
+// 註冊了 hashchange 監聽器會再呼叫一次 route()。hash 真的改變時，兩邊都會跑，模組被
+// mount 兩次。FakeWindow.location 的 setter（見上方定義）在 hash 真的變動時會自動觸發
+// hashchange，如同真實瀏覽器，所以這裡不必手動 dispatch 就能驗證這件事。
+// ============================================================
+
+await at('缺陷①：一次導覽（點卡片進模組）只會讓模組 mount 一次', async () => {
+  resetGlobalState();
+
+  let mountCalls = 0;
+  const manifestOnce = makeManifest({
+    id: 'demo-once',
+    ns: 'demoonce',
+    requires: ['demoonce.read'],
+    views: [{ id: 'overview', name: '總覽', requires: [] }],
+    body: {
+      mount: async () => {
+        mountCalls += 1;
+      }
+    }
+  });
+  MODULES.push({ load: () => Promise.resolve({ default: manifestOnce }) });
+  seedSession({ id: 'u200', name: '測試員', role: 'manager', node: '' }, ['demoonce.read']);
+
+  await freshShellImport();
+  await flush();
+
+  const appEl = getAppEl();
+  const card = findDescendant(
+    appEl,
+    (n) => n.getAttribute && n.getAttribute('data-module') === 'demo-once' && n.getAttribute('data-role') === 'module-card'
+  );
+  dispatchClick(card); // 這一次點擊＝一次導覽：hash 從 '' 變成 '#/demo-once/overview'
+  await flush();
+
+  assert.equal(fakeWindow.location.hash, '#/demo-once/overview', '確實導到目標路由');
+  assert.equal(
+    mountCalls,
+    1,
+    '一次導覽只應該讓模組 mount 一次（不是被 hashchange 監聽器與 navigateTo 內部各觸發一次、掛載兩次）'
+  );
+});
+
+// ============================================================
+// 測試 9：缺陷①——hash 沒有變化時（點目前已經在的那一頁）仍然會正確重跑一次路由
+// ============================================================
+
+await at('缺陷①：hash 沒有變化（點目前已經在的那一頁）仍然會正確重跑一次路由', async () => {
+  resetGlobalState();
+
+  let mountCalls = 0;
+  const onRouteLog = [];
+  const manifestSame = makeManifest({
+    id: 'demo-same',
+    ns: 'demosame',
+    requires: ['demosame.read'],
+    views: [{ id: 'overview', name: '總覽', requires: [] }],
+    body: {
+      mount: async () => {
+        mountCalls += 1;
+      },
+      onRoute: (ctx) => {
+        onRouteLog.push(ctx.viewId);
+      }
+    }
+  });
+  MODULES.push({ load: () => Promise.resolve({ default: manifestSame }) });
+  seedSession({ id: 'u201', name: '測試員', role: 'manager', node: '' }, ['demosame.read']);
+
+  await freshShellImport();
+  await flush();
+
+  const appEl = getAppEl();
+  const card = findDescendant(
+    appEl,
+    (n) => n.getAttribute && n.getAttribute('data-module') === 'demo-same' && n.getAttribute('data-role') === 'module-card'
+  );
+  dispatchClick(card);
+  await flush();
+
+  assert.equal(mountCalls, 1, '第一次進模組，mount 一次');
+  assert.equal(onRouteLog.length, 0, '第一次掛載本身不該額外觸發 onRoute()（spec §4.6）');
+
+  // 點目前已經在的那個分頁按鈕：hash 會被設成跟目前一模一樣的值，瀏覽器不會觸發
+  // hashchange，必須由 navigateTo() 自己補呼叫一次 route()，否則畫面卡死、不會重跑路由。
+  const viewNav = appEl.querySelector('[data-role="view-nav"]');
+  const overviewBtn = findDescendant(viewNav, (n) => n.getAttribute && n.getAttribute('data-view') === 'overview');
+  assert.ok(overviewBtn, '應該有 overview 分頁按鈕');
+  dispatchClick(overviewBtn);
+  await flush();
+
+  assert.equal(fakeWindow.location.hash, '#/demo-same/overview', 'hash 沒有改變');
+  assert.equal(mountCalls, 1, '同一個分頁再點一次，不該重新 mount（模組已經掛著）');
+  assert.equal(onRouteLog.length, 1, '路由確實有重跑一次：模組的 onRoute() 應該被呼叫了一次');
+  assert.equal(onRouteLog[0], 'overview', 'onRoute() 拿到的 viewId 正確');
+});
+
+// ============================================================
+// 測試 10：缺陷②——同模組從 A 分頁切到 B 分頁 → 模組手上那個 ctx 的 viewId 變成 B、
+// params 同步更新（原地更新同一個物件，不是換一個新物件——模組可能已經把 ctx 存起來）
+// ============================================================
+
+await at('缺陷②：同模組換分頁 → 模組手上那個 ctx 物件的 viewId／params 原地更新', async () => {
+  resetGlobalState();
+
+  let capturedCtx = null;
+  const manifestTabs = makeManifest({
+    id: 'demo-tabs',
+    ns: 'demotabs',
+    requires: ['demotabs.read'],
+    views: [
+      { id: 'tab-a', name: 'Ａ分頁', requires: [] },
+      { id: 'tab-b', name: 'Ｂ分頁', requires: [] }
+    ],
+    body: {
+      mount: async (mountEl, ctx) => {
+        capturedCtx = ctx; // 模組把 ctx 存起來，之後不該再拿到一個新的
+      }
+    }
+  });
+  MODULES.push({ load: () => Promise.resolve({ default: manifestTabs }) });
+  seedSession({ id: 'u202', name: '測試員', role: 'manager', node: '' }, ['demotabs.read']);
+
+  await freshShellImport();
+  await flush();
+
+  const appEl = getAppEl();
+  const card = findDescendant(
+    appEl,
+    (n) => n.getAttribute && n.getAttribute('data-module') === 'demo-tabs' && n.getAttribute('data-role') === 'module-card'
+  );
+  dispatchClick(card);
+  await flush();
+
+  assert.ok(capturedCtx, '模組應該已經拿到 ctx');
+  assert.equal(capturedCtx.viewId, 'tab-a', 'mount 當下 ctx.viewId 是掛載的那一頁');
+  assert.deepEqual(capturedCtx.params, {}, '掛載當下沒有 query，params 是空物件');
+  const ctxRefBeforeSwitch = capturedCtx;
+
+  // 換分頁＋帶 query（模擬使用者手動改網址列，或模組呼叫 ctx.nav 之後瀏覽器觸發 hashchange）
+  fakeWindow.location.hash = '#/demo-tabs/tab-b?month=8';
+  await flush();
+
+  assert.equal(capturedCtx, ctxRefBeforeSwitch, '模組手上那個 ctx 應該還是同一個物件（沒有被換掉）');
+  assert.equal(capturedCtx.viewId, 'tab-b', '同一個物件的 viewId 應該被原地更新成 B');
+  assert.deepEqual(capturedCtx.params, { month: '8' }, '同一個物件的 params 應該同步更新');
+});
+
+// ============================================================
+// 測試 11：缺陷②——模組有實作 onRoute → 切分頁時被呼叫且拿到新的 viewId
+// ============================================================
+
+await at('缺陷②：模組有實作 onRoute(ctx) → 換分頁時被呼叫一次，拿到新的 viewId', async () => {
+  resetGlobalState();
+
+  const onRouteCalls = [];
+  const manifestTabs = makeManifest({
+    id: 'demo-onroute',
+    ns: 'demoonroute',
+    requires: ['demoonroute.read'],
+    views: [
+      { id: 'tab-a', name: 'Ａ分頁', requires: [] },
+      { id: 'tab-b', name: 'Ｂ分頁', requires: [] }
+    ],
+    body: {
+      mount: async () => undefined,
+      onRoute: (ctx) => {
+        onRouteCalls.push({ viewId: ctx.viewId, params: { ...ctx.params } });
+      }
+    }
+  });
+  MODULES.push({ load: () => Promise.resolve({ default: manifestTabs }) });
+  seedSession({ id: 'u203', name: '測試員', role: 'manager', node: '' }, ['demoonroute.read']);
+
+  await freshShellImport();
+  await flush();
+
+  const appEl = getAppEl();
+  const card = findDescendant(
+    appEl,
+    (n) => n.getAttribute && n.getAttribute('data-module') === 'demo-onroute' && n.getAttribute('data-role') === 'module-card'
+  );
+  dispatchClick(card);
+  await flush();
+
+  assert.equal(onRouteCalls.length, 0, '第一次掛載不該觸發 onRoute()');
+
+  fakeWindow.location.hash = '#/demo-onroute/tab-b?x=1';
+  await flush();
+
+  assert.equal(onRouteCalls.length, 1, '換分頁應該讓 onRoute() 被呼叫一次');
+  assert.equal(onRouteCalls[0].viewId, 'tab-b', 'onRoute() 拿到的 ctx.viewId 是新的分頁');
+  assert.deepEqual(onRouteCalls[0].params, { x: '1' }, 'onRoute() 拿到的 ctx.params 是新的 query');
+});
+
+// ============================================================
+// 測試 12：缺陷②——模組沒有實作 onRoute → 切分頁不會拋錯（向後相容）
+// ============================================================
+
+await at('缺陷②：模組沒有實作 onRoute → 切分頁不會拋錯，行為不變（向後相容）', async () => {
+  resetGlobalState();
+
+  let mountCalls = 0;
+  const manifestNoOnRoute = makeManifest({
+    id: 'demo-no-onroute',
+    ns: 'demonoonroute',
+    requires: ['demonoonroute.read'],
+    views: [
+      { id: 'tab-a', name: 'Ａ分頁', requires: [] },
+      { id: 'tab-b', name: 'Ｂ分頁', requires: [] }
+    ],
+    body: {
+      // 刻意不實作 onRoute，模擬既有模組（例如目前的 modules/users）
+      mount: async () => {
+        mountCalls += 1;
+      }
+    }
+  });
+  MODULES.push({ load: () => Promise.resolve({ default: manifestNoOnRoute }) });
+  seedSession({ id: 'u204', name: '測試員', role: 'manager', node: '' }, ['demonoonroute.read']);
+
+  await freshShellImport();
+  await flush();
+
+  const appEl = getAppEl();
+  const card = findDescendant(
+    appEl,
+    (n) => n.getAttribute && n.getAttribute('data-module') === 'demo-no-onroute' && n.getAttribute('data-role') === 'module-card'
+  );
+  dispatchClick(card);
+  await flush();
+
+  // 換分頁：模組沒有 onRoute，殼只是「有實作才呼叫」，不該拋錯、也不該把畫面弄壞
+  fakeWindow.location.hash = '#/demo-no-onroute/tab-b';
+  await flush();
+
+  assert.equal(fakeWindow.location.hash, '#/demo-no-onroute/tab-b', '路由確實切到 tabB');
+  assert.equal(mountCalls, 1, '同模組換分頁不會重新 mount');
+
+  const viewNav = appEl.querySelector('[data-role="view-nav"]');
+  const activeBtn = findDescendant(viewNav, (n) => n.classList && n.classList.contains('is-active'));
+  assert.equal(activeBtn && activeBtn.getAttribute('data-view'), 'tab-b', '第二層導覽的 active 狀態正確切到 tabB');
 });
 
 // ============================================================

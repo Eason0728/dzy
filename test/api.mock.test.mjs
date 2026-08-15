@@ -481,6 +481,64 @@ await (async function test12() {
 })();
 
 // ============================================================
+// 14. 呼叫端不得用 payload 覆寫 action 或通行碼（2026-08-15 對抗審查補）
+//     原本 buildRequestBody_ 寫成 `{ action, ...p }`，展開順序讓 payload 裡的同名欄位
+//     蓋掉平台指定的 action——模組因此能自己決定去打後端的哪個動作。
+//     通行碼因為在後面才寫入所以擋得住，action 擋不住。
+// ============================================================
+await (async function test14() {
+  await loginAs({
+    token: 'tok-acct-9',
+    user: { id: 'u090', name: '會計', role: 'accountant', node: '' },
+    perms: ['audit.read', 'audit.write'],
+    secrets: { audit: 'real-secret-014' }
+  });
+
+  const mock = makeFetchMock({ getAll: () => buildAuditGetAllResponse() });
+  globalThis.fetch = mock;
+
+  await call('audit', 'getAll', {
+    year: '2026',
+    action: 'submitAudit',          // 想把動作換掉
+    code: 'attacker-supplied-code'  // 想把通行碼換掉
+  });
+
+  const sent = mock.calls[0].body;
+  assertEqual(sent.action, 'getAll', '14a: payload 裡的 action 不得覆寫平台指定的 action');
+  assertEqual(sent.code, 'real-secret-014', '14b: payload 裡的 code 不得覆寫平台下發的通行碼');
+  assertEqual(sent.year, '2026', '14c: 一般業務欄位照常帶上');
+  logout();
+})();
+
+// ============================================================
+// 15. 裁切要往「關」的方向失敗（2026-08-15 對抗審查補）
+//     原本：只有 read.own 但 node 空白時 `return data` —— 回傳全部節點的資料。
+//     只要有人建了「店長＋所屬節點留空」的帳號，隔離就整個消失。
+// ============================================================
+await (async function test15() {
+  await loginAs({
+    token: 'tok-lead-9',
+    user: { id: 'u091', name: '沒有節點的店長', role: 'storelead', node: '' },
+    perms: ['audit.read.own'],
+    secrets: { audit: 'secret-015' }
+  });
+
+  const mock = makeFetchMock({ getAll: () => buildAuditGetAllResponse() });
+  globalThis.fetch = mock;
+
+  const res = await call('audit', 'getAll', {});
+  assertTrue(res.ok === true, '15a: 仍然正常回應，不是拋錯');
+  assertEqual(res.data.records.length, 0, '15b: 拿不到所屬節點時一列都不給（不是給全部）');
+  assertEqual(res.data.items.length, 0, '15c: items 同樣清空');
+  assertEqual(res.data.details.length, 0, '15d: details 同樣清空');
+  assertTrue(
+    Array.isArray(res.data.config && res.data.config.stores) && res.data.config.stores.length > 0,
+    '15e: 設定與對照表（config.stores）保留，只清「一列一店」的資料'
+  );
+  logout();
+})();
+
+// ============================================================
 // 最終檢查：全程沒有任何一次真實網路請求打到守衛哨兵函式
 // ============================================================
 assertEqual(realNetworkCalls, [], '13: 全程沒有任何一次呼叫落到未被 mock 的真實 fetch');

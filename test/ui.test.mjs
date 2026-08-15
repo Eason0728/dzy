@@ -519,6 +519,54 @@ t('signaturePad: toDataURL() 回傳字串', () => {
   assert.equal(pad.toDataURL().startsWith('data:image/png'), true);
 });
 
+// ── 2026-08-15 對抗審查補的兩條 ──────────────────────────
+
+t('signaturePad: destroy() 之後畫布與 window 上的監聽都解除', () => {
+  const canvas = fakeDocument.createElement('canvas');
+  const pad = signaturePad(canvas);
+  // 沒有 destroy() 的話，宿舍模組每進出一次簽名畫面就多累積一組監聽，
+  // 其中 mouseup 還是掛在 window 上，模組自己的 unmount 帶不走。
+  assert.equal(typeof pad.destroy, 'function', 'destroy() 必須存在');
+
+  pad.destroy();
+
+  fireMouse(canvas, 'mousedown', 10, 10);
+  fireMouse(canvas, 'mousemove', 20, 20);
+  fakeWindow.dispatchEvent(new Event('mouseup'));
+  assert.equal(pad.isEmpty(), true, 'destroy() 之後的滑鼠事件不該再畫進畫布');
+});
+
+// ⚠ 非同步測試一定要用 await at(...)，不能用 t(...)。
+// t() 的 try/catch 接不到 Promise 的 rejection，async 函式傳進去會「永遠通過」——
+// 2026-08-15 我自己就這樣寫錯過一次，變異測試把修正拿掉了測試還是全綠，
+// 追下去才發現是測試本身沒在跑。這行註解留著提醒下一個人。
+await at('dialog: 可以從外部 close() 強制關閉（模組 unmount 用）', async () => {
+  const p = dialog({
+    title: '測試',
+    body: '內容',
+    actions: [{ label: '確定', value: 'yes', variant: 'primary' }]
+  });
+  // 沒有 close() 把手，模組卸載時就關不掉開著的對話框——
+  // 那會逼每個模組自己刻一套彈窗，共用元件形同虛設。
+  assert.equal(typeof p.close, 'function', 'dialog() 回傳的 Promise 必須帶 close()');
+
+  const before = fakeDocument.body.children.filter(
+    (n) => n.classList && n.classList.contains('dialog-overlay')
+  ).length;
+  assert.equal(before, 1, '對話框應該已經掛上');
+
+  p.close(null);
+  const result = await p;
+  assert.equal(result, null, '從外部關閉應 resolve 成 null');
+
+  const after = fakeDocument.body.children.filter(
+    (n) => n.classList && n.classList.contains('dialog-overlay')
+  ).length;
+  assert.equal(after, 0, '關閉後 overlay 應從 document 移除');
+
+  p.close(null); // 重複呼叫要安全，不得重複 resolve 或拋錯
+});
+
 // ── 收尾：印出結果 ──────────────────────────────────────
 if (failed > 0) {
   console.error('\n失敗清單：');

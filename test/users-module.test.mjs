@@ -10,15 +10,22 @@
 // ctx.ui／ctx.api 則照任務指示「自己造假的 ctx」：toast/loading/confirm 只記錄呼叫，
 // api.call 記錄 action/payload 並回傳測試指定的假回應——全程不打真實網路、不依賴後端。
 //
-// 這份測試也順便釘住兩個在實作時發現、但依規定不能動 platform/ 的落差，
+// 這份測試也順便釘住幾個在實作時發現、但依規定不能動 platform/ 的落差，
 // 讓它們不會被日後的修改悄悄改掉行為（詳見 modules/users/views/list.js 檔頭與
 // displayDatetime() 的註解）：
-//   1) ctx.ui.dialog() 的 body 只吃純文字，塞不進表單欄位，所以新增／修改／
-//      重設密碼一律用模組自己組的彈窗（沿用 components.css 既有 class），
-//      不呼叫 ctx.ui.dialog()——下面用一個「呼叫就丟例外」的假 dialog() 當哨兵。
+//   1) ctx.ui.dialog() 現在的 body 雖然已經接受 DOM 元素，但它回傳單純一個
+//      Promise，沒有任何管道讓呼叫端從外部強制關掉一個已經開著的對話框
+//      （沒有回傳 close() 把手，也不接受 AbortSignal）。unmount() 要能把開著的
+//      彈窗真的關掉，需要自己掌控 close()，所以新增／修改／重設密碼一律還是用
+//      模組自己組的彈窗（沿用 components.css 既有 class），不呼叫 ctx.ui.dialog()
+//      ——下面用一個「呼叫就丟例外」的假 dialog() 當哨兵。
 //   2) ctx.fmt.datetime() 解析不了後端已經回傳的 'YYYY-MM-DD HH:mm:ss' 完整字串
 //      （platform/fmt.js 的 toDate() 只認純日期），所以 displayDatetime() 需要
 //      在 datetime() 回空字串時退回顯示原始字串。
+//   3) 2026-08-15 對抗審查修正：①開著的彈窗會活過模組卸載（unmount 現在要一併
+//      關掉）；②角色清單改成呼叫後端 listRoles（spec §5.2）動態取得，不再是
+//      寫死在 list.js 裡的 ROLE_OPTIONS——見下面 makeFakeCtx() 的 DEFAULT_ROLES
+//      預設回應，以及區塊 I／J 的新增測試。
 
 'use strict';
 
@@ -228,6 +235,17 @@ function flush(rounds = 8) {
 //    （任務指示：「自己造假的 ctx，不要依賴真實後端」）
 // ============================================================
 
+// spec §4.3「本期五個角色」——用來當 listRoles 沒被個別測試 mock 時的預設回應，
+// 讓原本就假設「角色欄顯示中文」的既有測試情境維持成立（那些情境模擬的是
+// listRoles 正常運作的情況；listRoles 本身失敗或回傳新角色的情境，見區塊 I／J）。
+const DEFAULT_ROLES = [
+  { role: 'admin', name_zh: '系統管理者', perms: ['*'] },
+  { role: 'manager', name_zh: '部門主管', perms: ['audit.read', 'dorm.read', 'dorm.write'] },
+  { role: 'accountant', name_zh: '會計', perms: ['audit.read', 'audit.write'] },
+  { role: 'storelead', name_zh: '店長', perms: ['audit.read.own'] },
+  { role: 'staff', name_zh: '員工', perms: [] }
+];
+
 function makeFakeCtx() {
   const state = {
     apiCalls: [],
@@ -247,6 +265,8 @@ function makeFakeCtx() {
         const handler = state.apiHandlers[action];
         if (typeof handler === 'function') return handler(payload);
         if (handler !== undefined) return handler;
+        // listRoles 沒被個別測試 mock 時，預設模擬「後端正常運作」，見上面 DEFAULT_ROLES。
+        if (action === 'listRoles') return { ok: true, data: { roles: DEFAULT_ROLES } };
         return { ok: true, data: {} };
       }
     },
@@ -261,10 +281,11 @@ function makeFakeCtx() {
         state.confirmCalls.push(message);
         return typeof state.nextConfirm === 'function' ? state.nextConfirm() : state.nextConfirm;
       },
-      // 哨兵：人員管理模組不該呼叫 ctx.ui.dialog()——它的 body 只吃純文字塞不進表單，
-      // 見 modules/users/views/list.js 檔頭設計說明。呼叫到這裡代表設計被誤改了。
+      // 哨兵：人員管理模組不該呼叫 ctx.ui.dialog()——它沒有辦法讓呼叫端從外部強制
+      // 關掉一個已經開著的對話框（unmount 需要這個能力），見
+      // modules/users/views/list.js 檔頭設計說明。呼叫到這裡代表設計被誤改了。
       dialog: () => {
-        throw new Error('不該呼叫 ctx.ui.dialog()：body 只接受純文字，塞不下表單欄位');
+        throw new Error('不該呼叫 ctx.ui.dialog()：它無法從外部強制關閉，unmount 沒辦法把彈窗真的關掉');
       }
     },
     fmt: { esc, datetime, date, roc, money },
@@ -772,13 +793,150 @@ await at('setActive 呼叫例外（ctx.api.call 拋錯）：不會讓畫面炸�
 // H. ctx.ui.dialog() 不該被呼叫；不得自行碰 fetch/localStorage（見檔頭哨兵設計）
 // ============================================================
 
-t('模組全程沒有呼叫 ctx.ui.dialog()（body 只吃純文字，設計上一律走自組表單彈窗）', () => {
+t('模組全程沒有呼叫 ctx.ui.dialog()（它無法從外部強制關閉，設計上一律走自組表單彈窗）', () => {
   // 前面所有情境都跑過 ctx.ui.dialog 的哨兵版本（呼叫就拋例外），
   // 整份測試檔沒有任何一個情境失敗於這個哨兵，等於間接證明了這件事；
   // 這裡再補一個直接的行為型驗證：openUserFormDialog／openPasswordDialog
   // 用的是 document.body 上一個新的 .dialog-overlay 節點，不是 ctx.ui 給的任何東西。
   const { ctx } = makeFakeCtx();
   assert.throws(() => ctx.ui.dialog({ body: 'x' }), /不該呼叫/);
+});
+
+// ============================================================
+// I. 缺陷①：開著的彈窗不能活過模組卸載——unmount() 要一併關掉
+// ============================================================
+
+await at('unmount：開著的新增使用者彈窗要被關閉，document 上不再有該 overlay 節點', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [] } });
+
+  const unmount = mountList(root, ctx);
+  await flush();
+  fireClick(byRole(root, 'add-user'));
+  await flush();
+
+  const overlay = byRole(fakeDocument.body, 'user-form-overlay');
+  assert.ok(overlay, '應該先開出新增使用者彈窗');
+  assert.equal(fakeDocument.body.contains(overlay), true, '彈窗此時應該還開著（模擬使用者不關它就切模組）');
+
+  unmount();
+  await flush();
+
+  assert.equal(fakeDocument.body.contains(overlay), false, 'unmount 之後彈窗要被關閉，document 上不該再有這個節點');
+});
+
+await at('unmount：開著的重設密碼彈窗也要被關閉，且拿掉 document 上的 keydown 監聽', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [makeUser({ id: 'u001' })] } });
+
+  const beforeCount = ((fakeDocument._listeners && fakeDocument._listeners.keydown) || []).length;
+
+  const unmount = mountList(root, ctx);
+  await flush();
+  fireClick(byAction(root, 'reset-password'));
+  await flush();
+
+  const overlay = byRole(fakeDocument.body, 'password-form-overlay');
+  assert.ok(overlay, '應該先開出重設密碼彈窗');
+  const afterOpenCount = ((fakeDocument._listeners && fakeDocument._listeners.keydown) || []).length;
+  assert.equal(afterOpenCount, beforeCount + 1, '開啟彈窗應該註冊一個 document keydown 監聽（Esc 關閉用）');
+
+  unmount();
+  await flush();
+
+  assert.equal(fakeDocument.body.contains(overlay), false, 'unmount 之後彈窗要被關閉');
+  const afterUnmountCount = ((fakeDocument._listeners && fakeDocument._listeners.keydown) || []).length;
+  assert.equal(afterUnmountCount, beforeCount, 'unmount 應該拿掉彈窗註冊的 document keydown 監聽，不能留著');
+});
+
+await at('unmount：沒有開著任何彈窗時，unmount 一樣正常運作（不會因為空集合而出錯）', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [] } });
+
+  const unmount = mountList(root, ctx);
+  await flush();
+  assert.doesNotThrow(() => unmount(), 'openDialogHandles 是空集合時 unmount 也要能正常跑完');
+});
+
+// ============================================================
+// J. 缺陷②：角色清單改由後端 listRoles 動態取得，不再寫死在 list.js
+// ============================================================
+
+await at('角色清單：listRoles 回傳的新角色會出現在新增使用者表單的角色選項裡（roles 分頁加角色不用改程式）', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [] } });
+  state.apiHandlers.listRoles = () => ({
+    ok: true,
+    data: {
+      roles: DEFAULT_ROLES.concat([
+        { role: 'supervisor', name_zh: '主任', perms: ['audit.read', 'dorm.read'] } // 試算表新加的角色
+      ])
+    }
+  });
+
+  const unmount = mountList(root, ctx);
+  await flush();
+  fireClick(byRole(root, 'add-user'));
+  await flush();
+
+  const overlay = byRole(fakeDocument.body, 'user-form-overlay');
+  const roleSelect = byField(overlay, 'role');
+  assert.ok(roleSelect, '應該有角色下拉欄位');
+  const options = findAllDescendants(roleSelect, (n) => n.tagName === 'OPTION');
+  const supervisorOption = options.find((o) => o.getAttribute('value') === 'supervisor');
+  assert.ok(supervisorOption, '試算表新加的角色應該出現在選項裡，不需要改程式');
+  assert.equal(supervisorOption.textContent, '主任', '選項顯示名應該是 name_zh');
+
+  fireClick(byRole(overlay, 'cancel'));
+  await flush();
+  unmount();
+});
+
+await at('角色清單退路：listRoles 回 {ok:false} 時畫面不崩潰，角色欄改顯示原始代號', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listRoles = () => ({ ok: false, error: '沒有權限' });
+  state.apiHandlers.listUsers = () => ({
+    ok: true,
+    data: { users: [makeUser({ id: 'u001', role: 'accountant' })] }
+  });
+
+  const unmount = mountList(root, ctx);
+  await flush();
+
+  const rows = findAllDescendants(root, (n) => n.getAttribute && n.getAttribute('data-role') === 'user-row');
+  assert.equal(rows.length, 1, '就算角色清單抓不到，使用者清單還是要正常畫出來，不能整個崩潰');
+  const cellsOf = (row) => findAllDescendants(row, (n) => n.tagName === 'TD');
+  assert.equal(
+    cellsOf(rows[0])[3].innerHTML,
+    'accountant',
+    'listRoles 失敗時角色欄要退回顯示原始代號，不能空白或壞掉'
+  );
+
+  unmount();
+});
+
+await at('角色清單退路：listRoles 失敗時，新增使用者表單仍能開啟（角色下拉沒有選項但不拋錯）', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listRoles = () => ({ ok: false, error: '沒有權限' });
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [] } });
+
+  const unmount = mountList(root, ctx);
+  await flush();
+  assert.doesNotThrow(() => fireClick(byRole(root, 'add-user')));
+  await flush();
+
+  const overlay = byRole(fakeDocument.body, 'user-form-overlay');
+  assert.ok(overlay, 'listRoles 失敗不該讓新增使用者表單開不出來');
+
+  fireClick(byRole(overlay, 'cancel'));
+  await flush();
+  unmount();
 });
 
 // ── 收尾 ──────────────────────────────────────

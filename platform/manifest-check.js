@@ -48,12 +48,15 @@ export function validateManifest(m) {
   checkPermList(m.requires, 'requires', m.ns, errors, { allowEmpty: false });
   checkViews(m.views, m.ns, errors);
 
-  // backend 與 ns 不同會讓後端「安靜地不下發通行碼」（spec.md §4.1 的約束），
-  // 這種失敗長相是「模組載入正常、呼叫後端才失敗」，很難查，所以在這裡先喊一聲。
+  // backend 與 ns 不同會讓後端「安靜地不下發通行碼」（spec.md §4.1 的約束）。
+  // 2026-08-15 對抗審查修正：原本這裡只發警告、模組照樣上架——但 spec 寫的是
+  // 「backend 必須等於 ns」，只警告等於允許違規上線，而失敗長相是
+  // 「模組載入正常、只有呼叫後端才失敗」，最難查的那一種。改成驗證錯誤，直接擋下來。
   if (typeof m.backend === 'string' && typeof m.ns === 'string' && m.backend !== m.ns) {
-    warnings.push(
-      `manifest.backend「${m.backend}」與 manifest.ns「${m.ns}」不同：` +
-      '通行碼下發是拿 backend 當權限前綴查的，兩者不同會導致不發碼。除非已同步改過 spec §5.2，否則請設成一樣'
+    errors.push(
+      `manifest.backend「${m.backend}」必須等於 manifest.ns「${m.ns}」（spec §4.1）：` +
+      '通行碼下發是拿 backend 當權限前綴去查權限的，兩者不同會導致安靜地不發碼。' +
+      '真的需要兩者不同，要先改 spec §5.2 的下發邏輯，不能只改 manifest'
     );
   }
 

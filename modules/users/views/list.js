@@ -1,40 +1,55 @@
 /**
- * modules/users/views/list.js — 人員清單畫面（T1-11）
+ * modules/users/views/list.js — 人員清單畫面（T1-11；2026-08-15 對抗審查後修正兩個缺陷）
  *
- * 正本規格：docs/spec.md §4.3（角色→中文對照）、§4.4（節點代號→中文對照）、
- * §4.7（ctx 逐字元形狀）、§4.10（ctx.ui／ctx.fmt 簽章）、§5.2（四個 action 的
- * payload／回傳）。
+ * 正本規格：docs/spec.md §4.3（角色→中文對照，2026-08-15 起改由後端 listRoles 動態
+ * 回傳，不再是這個檔案裡的常數）、§4.4（節點代號→中文對照，節點仍是 spec 定死的
+ * 五個，前端硬編碼是正確的，不隨角色一起動態化）、§4.7（ctx 逐字元形狀）、
+ * §4.10（ctx.ui／ctx.fmt 簽章——dialog() 的 body 已在 2026-08-14 改成同時接受
+ * 字串與 DOM 元素）、§5.2（listRoles 是 2026-08-15 新增的 action，
+ * 回傳 {roles:[{role, name_zh, perms}]}}）。
  *
- * 設計說明（給下一個維護者）：
- * platform/ui.js 的 ctx.ui.dialog({title, body, actions}) 的 body 只接受純文字
- * （內部固定 `bodyEl.innerHTML = esc(body)`，見 platform/ui.js 與
- * test/ui.test.mjs 的斷言），沒有辦法塞進真正的 <input> 表單欄位。
- * 新增／修改使用者、重設密碼都需要收使用者輸入的文字（帳號、姓名、密碼），
- * 純文字訊息框做不到。
+ * 表單彈窗為什麼還是模組自己刻（取代舊版「body 只吃純文字」的理由——
+ * 那個理由 2026-08-14 已經不成立，ctx.ui.dialog() 的 body 現在可以塞真正的 DOM 節點，
+ * 已經試過改用它，結論記錄如下）：
  *
- * 因此這裡「新增／修改」「重設密碼」用的表單彈窗是這個模組自己組的 DOM，
- * 但完全沿用 platform/css/components.css 既有的 class（.dialog-overlay／
- * .dialog／.dialog-title／.dialog-body／.dialog-actions／.field／
- * .field-label／.field-hint／.input／.btn／.btn-primary／.btn-secondary），
- * 不新增任何 class、不內嵌樣式、不碰 platform/ 一個字——單純是「表單彈窗」
- * 而非呼叫 ctx.ui.dialog() 這個函式本身。真正的是非二選一確認（停用／啟用、
- * 重設密碼前的二次確認）一律照規格用 ctx.ui.confirm()。
- * 這不是繞過平台層，而是平台層目前提供的 ui.dialog 本來就只設計給「訊息 + 按鈕」
- * 用，表單是模組自己的事——如果之後有更多模組也需要表單彈窗，才值得回頭跟平台
- * 提議加一個共用的表單彈窗原語。
+ * 新增／修改使用者、重設密碼這兩個表單彈窗，繼續是模組自己組的 DOM
+ *（沿用 platform/css/components.css 既有的 class：.dialog-overlay／.dialog／
+ * .dialog-title／.dialog-body／.dialog-actions／.field／.field-label／
+ * .field-hint／.input／.btn／.btn-primary／.btn-secondary，不新增任何 class、
+ * 不內嵌樣式、不碰 platform/ 一個字）。原因不是 body 塞不下表單（那已經解決了），
+ * 而是另一個更根本、目前 ctx.ui.dialog() 還做不到的缺口：
+ *
+ *   ctx.ui.dialog() 回傳單純一個 Promise<value>；它內部的 close() 是自己的閉包，
+ *   沒有任何管道讓呼叫端「從外部」把一個已經開著的對話框強制關掉——沒有回傳
+ *   { close() } 這樣的把手，也不接受 AbortSignal 之類的取消訊號。
+ *
+ *   而這次要修的缺陷①正是「unmount() 要能把開著的彈窗真的關掉（含拿掉
+ *   document 上的 keydown 監聽）」。如果表單彈窗改用 ctx.ui.dialog()，
+ *   unmount() 就完全沒有辦法叫它關閉——使用者切模組時彈窗一樣會留在畫面上、
+ *   一樣能按送出，等於把要修的 bug 原封不動地搬進「共用元件」裡，缺陷沒修好。
+ *   所以這裡繼續用模組自己刻的彈窗，靠自己持有的 close() 做到「unmount 時強制
+ *   關閉」；下面的 openUserFormDialog／openPasswordDialog 都多了一個 handle
+ *   參數，讓呼叫端（mountList 的 unmount）能拿到 close() 的參照。
+ *
+ *   真正的是非二選一確認（停用／啟用、重設密碼前的二次確認）仍照規格用
+ *   ctx.ui.confirm()——那是一次性、不需要被模組從外部取消的互動，沒有這個缺口。
+ *
+ *   要讓以後的表單彈窗真的能改用共用元件，platform/ui.js 的 dialog() 需要多回傳
+ *   一個外部可呼叫的 close(value)（或接受 AbortSignal）；這是平台層變更，本次
+ *   任務規定不准動 platform/，因此只記錄在這裡、不動手實作。
+ *
+ * 角色下拉選單（2026-08-15 修正掉的另一個缺陷）：
+ * 原本 ROLE_OPTIONS 把五個角色寫死在這個檔案裡，跟「roles 分頁可設定、加角色
+ * 不改程式」互相矛盾——在試算表加一個角色，UI 認不得也指派不了。現在改成掛載
+ * 時呼叫 ctx.api.call('users', 'listRoles', {})（spec §5.2），用回傳的 name_zh
+ * 當顯示名、role 當選項值。listRoles 失敗或格式不符時不讓畫面壞掉：roleLabel()
+ * 退回顯示原始代號（角色欄不會空白／不會炸），表單的角色下拉退回顯示手上已有的
+ * 資料（見下面 loadRoles()／roleLabel() 的註解）。節點代號（NODE_OPTIONS）維持
+ * 硬編碼——那是 spec §4.4 定死的五個，不受這次修正影響，不要跟著角色一起改掉。
  */
 'use strict';
 
-// ── §4.3 角色 → 中文 ──────────────────────────────────────
-const ROLE_OPTIONS = [
-  { value: 'admin', label: '系統管理者' },
-  { value: 'manager', label: '部門主管' },
-  { value: 'accountant', label: '會計' },
-  { value: 'storelead', label: '店長' },
-  { value: 'staff', label: '員工' }
-];
-
-// ── §4.4 節點代號 → 中文 ──────────────────────────────────
+// ── §4.4 節點代號 → 中文（spec 定死的五個 + 空字串，前端硬編碼是正確的）──
 const NODE_OPTIONS = [
   { value: '', label: '不限節點' },
   { value: 'sxl-gf', label: '麻的小辛辣 光復店' },
@@ -44,15 +59,18 @@ const NODE_OPTIONS = [
   { value: 'mzt-lzl', label: '墨竹亭 六張犁店' }
 ];
 
-const ROLE_LABEL = {};
-ROLE_OPTIONS.forEach((o) => { ROLE_LABEL[o.value] = o.label; });
 const NODE_LABEL = {};
 NODE_OPTIONS.forEach((o) => { NODE_LABEL[o.value] = o.label; });
 
 const MIN_PASSWORD_LEN = 8;
 
-function roleLabel(role) {
-  return ROLE_LABEL[role] || role || '';
+/**
+ * 角色顯示名。roleMap 由 loadRoles()（呼叫 spec §5.2 的 listRoles）動態填入，
+ * 找不到對應項目（角色清單還沒載入完成、listRoles 失敗、或試算表刪掉了這個角色）
+ * 就退回顯示原始代號，不讓表格空白或整個畫面壞掉。
+ */
+function roleLabel(role, roleMap) {
+  return (roleMap && roleMap[role]) || role || '';
 }
 
 function nodeLabel(node) {
@@ -138,10 +156,21 @@ function makeSelectField(container, { label, options, value, name }) {
 /**
  * 新增／修改使用者表單彈窗。
  * @param {object|null} existingUser 修改時傳現有使用者物件；新增傳 null
- * @returns {Promise<{username, name, role, node, password?}|null>} 取消回 null
+ * @param {Array<{value:string,label:string}>} roleOptions 目前的角色選項（來自 listRoles，
+ *   可能是空陣列——例如 listRoles 還沒回來或失敗，這時下拉會沒有選項可選，但不會拋錯）
+ * @param {object} [handle] 呼叫端（mountList 的 unmount）用來強制關閉這個彈窗的把手，
+ *   會被設成 handle.close = close（見檔頭「為什麼還是模組自己刻」的說明）
+ * @returns {Promise<{username, name, role, node, password?}|null>} 取消或被強制關閉回 null
  */
-function openUserFormDialog(existingUser) {
+function openUserFormDialog(existingUser, roleOptions, handle) {
   const isEdit = !!existingUser;
+  const options = Array.isArray(roleOptions) ? roleOptions : [];
+  // 修改時，就算目前使用者的角色代號已經不在最新的角色清單裡（試算表刪掉了這個角色、
+  // 或 listRoles 剛好失敗），下拉選單也要保留這個人現在的角色可以被選到，不然畫面上
+  // 會變成「選了一個看不見的值」。新增沒有這個問題（新增本來就沒有既有角色）。
+  const formRoleOptions = (isEdit && existingUser.role && !options.some((o) => o.value === existingUser.role))
+    ? options.concat([{ value: existingUser.role, label: existingUser.role }])
+    : options;
 
   return new Promise((resolve) => {
     const errorEl = el('div', { class: 'field-hint', 'data-role': 'form-error' });
@@ -162,8 +191,8 @@ function openUserFormDialog(existingUser) {
       });
     }
     const roleSelect = makeSelectField(bodyEl, {
-      label: '角色', options: ROLE_OPTIONS, name: 'role',
-      value: isEdit ? existingUser.role : ROLE_OPTIONS[0].value
+      label: '角色', options: formRoleOptions, name: 'role',
+      value: isEdit ? existingUser.role : (formRoleOptions[0] ? formRoleOptions[0].value : '')
     });
     const nodeSelect = makeSelectField(bodyEl, {
       label: '所屬節點', options: NODE_OPTIONS, name: 'node',
@@ -193,6 +222,9 @@ function openUserFormDialog(existingUser) {
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       resolve(value);
     }
+    // 讓外部（目前只有 mountList 的 unmount()）能強制關掉這個還開著的彈窗——
+    // ctx.ui.dialog() 現在做不到這件事，見檔頭「為什麼還是模組自己刻」的說明。
+    if (handle) handle.close = close;
 
     function onKeydown(e) {
       if (e.key === 'Escape' || e.key === 'Esc') {
@@ -232,11 +264,12 @@ function openUserFormDialog(existingUser) {
 /**
  * 重設密碼表單彈窗——少於 8 字元前端就先擋下（送出時檢查，太短不關窗，
  * 只顯示錯誤訊息，不會 resolve），resolve 的一定是已通過長度檢查的新密碼；
- * 取消／Esc／點背景 → resolve(null)。
+ * 取消／Esc／點背景／被 handle.close() 強制關閉 → resolve(null)。
  * @param {object} user
+ * @param {object} [handle] 同 openUserFormDialog 的 handle，用來讓外部強制關閉
  * @returns {Promise<string|null>}
  */
-function openPasswordDialog(user) {
+function openPasswordDialog(user, handle) {
   return new Promise((resolve) => {
     const errorEl = el('div', { class: 'field-hint', 'data-role': 'form-error' });
     const bodyEl = el('div', { class: 'dialog-body' });
@@ -265,6 +298,7 @@ function openPasswordDialog(user) {
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       resolve(value);
     }
+    if (handle) handle.close = close;
 
     function onKeydown(e) {
       if (e.key === 'Escape' || e.key === 'Esc') {
@@ -305,6 +339,19 @@ const COLUMNS = ['ID', '帳號', '姓名', '角色', '所屬節點', '狀態', '
 export function mountList(root, ctx) {
   let destroyed = false;
   let users = [];
+  let roleOptions = []; // [{value, label}]，由 loadRoles() 動態填入（spec §5.2 listRoles）
+  let roleMap = {};     // role -> name_zh，同上；找不到就在 roleLabel() 退回顯示原始代號
+
+  // 目前開著、由這個模組自己刻的彈窗（user-form-overlay／password-form-overlay）的
+  // close() 把手集合。unmount() 時要把裡面每一個都強制關掉——見檔頭「缺陷①」說明。
+  const openDialogHandles = new Set();
+
+  function trackDialog(openFn, ...args) {
+    const handle = {};
+    const promise = openFn(...args, handle);
+    openDialogHandles.add(handle);
+    return promise.finally(() => { openDialogHandles.delete(handle); });
+  }
 
   const addBtn = el('button', {
     type: 'button', class: 'btn btn-primary', 'data-role': 'add-user', text: '新增使用者'
@@ -353,7 +400,7 @@ export function mountList(root, ctx) {
       tr.appendChild(textCell(u.id));
       tr.appendChild(textCell(u.username));
       tr.appendChild(textCell(u.name));
-      tr.appendChild(textCell(roleLabel(u.role)));
+      tr.appendChild(textCell(roleLabel(u.role, roleMap)));
       tr.appendChild(textCell(nodeLabel(u.node)));
       tr.appendChild(statusCell(u.active));
       tr.appendChild(textCell(displayDatetime(ctx, u.created_at)));
@@ -386,6 +433,24 @@ export function mountList(root, ctx) {
     }
   }
 
+  /**
+   * 角色清單：呼叫 spec §5.2 的 listRoles，取代原本寫死在這個檔案裡的 ROLE_OPTIONS。
+   * 失敗或回傳形狀不對時「維持原樣」（初始是空陣列／空物件）而不是清空已經抓到的
+   * 資料或拋錯——roleLabel() 會自動退回顯示原始代號，角色下拉會退回顯示手上已有
+   * 的選項，畫面不會壞掉（任務指示的退路要求）。
+   */
+  async function loadRoles() {
+    const res = await callBackend('listRoles', {});
+    if (destroyed) return;
+    if (res && res.data && Array.isArray(res.data.roles)) {
+      const roles = res.data.roles;
+      roleOptions = roles.map((r) => ({ value: r.role, label: (r && r.name_zh) || r.role }));
+      const map = {};
+      for (const r of roles) map[r.role] = (r && r.name_zh) || r.role;
+      roleMap = map;
+    }
+  }
+
   async function loadUsers() {
     ctx.ui.loading(true);
     try {
@@ -399,7 +464,7 @@ export function mountList(root, ctx) {
   }
 
   async function onAddClick() {
-    const payload = await openUserFormDialog(null);
+    const payload = await trackDialog(openUserFormDialog, null, roleOptions);
     if (!payload) return;
     ctx.ui.loading(true);
     try {
@@ -413,7 +478,7 @@ export function mountList(root, ctx) {
   }
 
   async function onEditClick(user) {
-    const payload = await openUserFormDialog(user);
+    const payload = await trackDialog(openUserFormDialog, user, roleOptions);
     if (!payload) return;
     ctx.ui.loading(true);
     try {
@@ -443,7 +508,7 @@ export function mountList(root, ctx) {
   }
 
   async function onResetPassword(user) {
-    const newPassword = await openPasswordDialog(user); // 太短已在彈窗裡被擋下，這裡拿到的一定是合格長度或 null
+    const newPassword = await trackDialog(openPasswordDialog, user); // 太短已在彈窗裡被擋下，這裡拿到的一定是合格長度或 null
     if (newPassword === null) return;
     const confirmed = await ctx.ui.confirm(`確定要重設「${user.name}」的密碼嗎？`);
     if (!confirmed) return;
@@ -472,10 +537,20 @@ export function mountList(root, ctx) {
   addBtn.addEventListener('click', onAddClick);
   tbody.addEventListener('click', onRowClick);
 
-  loadUsers();
+  (async function bootstrap() {
+    await loadRoles();
+    if (destroyed) return;
+    await loadUsers();
+  })();
 
   return function unmount() {
     destroyed = true;
+    // 缺陷①：開著的彈窗（新增／修改使用者、重設密碼）要一併關掉，不能留在畫面上
+    // 繼續浮著、繼續能按送出。close(null) 會順便拿掉 document 上的 keydown 監聽。
+    for (const handle of openDialogHandles) {
+      if (handle && typeof handle.close === 'function') handle.close(null);
+    }
+    openDialogHandles.clear();
     addBtn.removeEventListener('click', onAddClick);
     tbody.removeEventListener('click', onRowClick);
     if (card.parentNode) card.parentNode.removeChild(card);

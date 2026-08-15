@@ -15,8 +15,17 @@
  *     mount(el, ctx)；mount() 若回傳函式，那個函式也視同 unmount，一併記錄、
  *     切走時一併呼叫。
  *   - 同一個模組內部切分頁，不重新 mount/unmount 整個模組——第二層分頁列（依
- *     manifest.views 動態產生）只是路由跳轉的觸發器，模組本體怎麼因應分頁切換是
- *     模組自己的事（ctx 沒有帶 viewId 這個欄位，殼也不該替模組決定這件事）。
+ *     manifest.views 動態產生）只是路由跳轉的觸發器。殼會「原地」更新模組已經拿到
+ *     的那個 ctx 物件的 viewId／params（不是換一個新物件，模組可能已經把 ctx 存起來），
+ *     並在模組有實作選填的 onRoute(ctx) 時呼叫它一次；沒實作的模組行為不變
+ *     （spec §4.6／§4.7，2026-08-15 對抗審查後補的契約，修正原本 ctx 沒有分頁狀態的缺陷）。
+ *
+ * 導覽只跑一次路由（2026-08-15 對抗審查後修正）：navigateTo(hash) 只改 window.location.hash，
+ * 真的改變時完全依賴瀏覽器隨後觸發的 hashchange 事件去跑 route()，不在這裡再直接呼叫一次
+ * ——原本「改 hash 又立刻呼叫 route()」在 hash 真的變動時會讓 hashchange 事件重複觸發一次
+ * route()，模組因此被掛載兩次。只有「設成目前這個值」這種瀏覽器不會觸發 hashchange 的情況
+ * （例如點目前已經在的那一頁），才由 navigateTo 自己補呼叫一次 route()，維持「點下去一定會
+ * 重新走一次路由」的行為。
  *
  * 開機（spec §6.1）：restore() 成功 → 進首頁；失敗 → 顯示登入頁（platform/views/login.js，
  * 已完成、不改）。登入成功時 login.js 會呼叫 app.onSuccess()，這裡接手往下走。
@@ -61,6 +70,9 @@ let currentView = null;
 let currentModuleBody = null;
 /** 目前掛載呼叫 mount() 時回傳的函式（若有），視同額外一個 unmount，切走時也要呼叫 */
 let currentMountUnmount = null;
+/** 目前掛載模組拿到的那個 ctx 物件（spec §4.7）——同模組內換分頁／params 改變時，
+ *  要原地更新這個物件本身的 viewId／params，不能換一個新物件（模組可能已經存起來）。 */
+let currentCtx = null;
 
 // ============================================================
 // 小工具：DOM 建構（不用 innerHTML 塞結構——需要能被查、能被點的節點一律用
@@ -151,10 +163,20 @@ function buildQueryString(params) {
   return has ? `?${usp.toString()}` : '';
 }
 
-/** 內部一律走這支：設定 hash 並立刻同步跑一次路由，不倚賴瀏覽器非同步觸發 hashchange。 */
+/**
+ * 內部一律走這支：改 window.location.hash。
+ * hash 真的變了 → 只依賴瀏覽器隨後觸發的 hashchange 事件去跑 route()，這裡不再直接呼叫，
+ * 避免 route() 在同一次導覽裡跑兩次（模組被掛載兩次／unmount-mount 與 manifest.entry()
+ * 的非同步載入互相競態，見檔頭說明）。
+ * hash 沒有變（設成目前這個值，瀏覽器不會觸發 hashchange）→ 自己補呼叫一次 route()，
+ * 讓「點目前已經在的那一頁」仍然正確重跑一次路由。
+ */
 function navigateTo(hash) {
+  const previousHash = window.location.hash;
   window.location.hash = hash;
-  route();
+  if (window.location.hash === previousHash) {
+    route();
+  }
 }
 
 // ============================================================
@@ -173,7 +195,7 @@ function isViewPermitted(view) {
 }
 
 // ============================================================
-// ctx（spec §4.7，逐字元只准這 7 個欄位）
+// ctx（spec §4.7，逐字元只准這 8 個欄位——2026-08-15 對抗審查後多了 viewId）
 // ============================================================
 
 function callModuleBackend(moduleId, action, payload) {
@@ -186,14 +208,20 @@ function callModuleBackend(moduleId, action, payload) {
 
 const sharedApi = { call: callModuleBackend };
 
-function buildCtx(manifest, params) {
+/**
+ * @param {object} manifest
+ * @param {string|null} viewId 目前分頁 id；badge() 不對應任何已掛載的分頁，固定傳 null（spec §4.7）
+ * @param {object} params
+ */
+function buildCtx(manifest, viewId, params) {
   return {
     user: auth.getUser(),
     can: auth.can,
     api: sharedApi,
     ui,
     fmt,
-    nav: (viewId, navParams) => navigateTo(`#/${manifest.id}/${viewId}${buildQueryString(navParams)}`),
+    nav: (targetViewId, navParams) => navigateTo(`#/${manifest.id}/${targetViewId}${buildQueryString(navParams)}`),
+    viewId,
     params: params || {}
   };
 }
@@ -238,7 +266,7 @@ async function loadBadge(manifest) {
   }
   if (!body || typeof body.badge !== 'function') return;
 
-  const ctx = buildCtx(manifest, {});
+  const ctx = buildCtx(manifest, null, {});
   let raw;
   try {
     raw = body.badge(ctx);
@@ -280,6 +308,7 @@ async function teardownCurrent() {
   currentMountUnmount = null;
   currentModule = null;
   currentView = null;
+  currentCtx = null;
 }
 
 // ============================================================
@@ -429,7 +458,7 @@ async function mountModuleView(manifest, view, params) {
   renderViewNav(manifest);
   clearChildren(viewContentEl);
 
-  const ctx = buildCtx(manifest, params);
+  const ctx = buildCtx(manifest, view.id, params);
 
   let body;
   try {
@@ -457,6 +486,8 @@ async function mountModuleView(manifest, view, params) {
 
   currentModuleBody = body;
   currentMountUnmount = typeof maybeUnmount === 'function' ? maybeUnmount : null;
+  // 記住這個 ctx 物件本身：同模組內換分頁時要原地更新它，不能換一個新物件（spec §4.7）。
+  currentCtx = ctx;
 }
 
 function goHomeWithWarning() {
@@ -491,11 +522,25 @@ function route() {
   }
 
   if (currentModule && currentModule.id === manifest.id) {
-    // 同一模組內切分頁：模組本體已經掛著，殼只更新導覽狀態，不重新 mount/unmount
-    // （ctx 沒有 viewId 欄位，模組本體自己決定怎麼因應分頁切換）
+    // 同一模組內切分頁／query 改變：模組本體已經掛著，殼只更新導覽狀態，不重新 mount/unmount。
+    // 但模組要能知道「現在在哪個分頁」，所以原地更新模組手上那個 ctx 物件的 viewId／params
+    // （不是換一個新物件——模組可能已經把 ctx 存起來），並在模組有實作選填的 onRoute(ctx)
+    // 時呼叫它一次；沒實作的模組行為不變（spec §4.6／§4.7）。
     currentView = view.id;
     renderTopNav();
     renderViewNav(manifest);
+
+    if (currentCtx) {
+      currentCtx.viewId = view.id;
+      currentCtx.params = params || {};
+    }
+    if (currentModuleBody && typeof currentModuleBody.onRoute === 'function') {
+      try {
+        currentModuleBody.onRoute(currentCtx);
+      } catch (err) {
+        console.error(`[shell] 模組 onRoute() 拋錯：${manifest.id}`, err);
+      }
+    }
     return;
   }
 

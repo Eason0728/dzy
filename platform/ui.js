@@ -124,7 +124,13 @@ function focusableEls(container) {
 export function dialog(options) {
   const { title, body, actions } = options || {};
 
-  return new Promise((resolve) => {
+  // 2026-08-15 對抗審查補：對外暴露 close()。
+  // 原本 close() 只是內部閉包，呼叫端拿不到——結果是「模組卸載時要能關掉開著的對話框」
+  // 這件事用共用元件反而做不到，模組只好自己刻一套彈窗，共用元件形同虛設。
+  // 回傳值仍然是可以 await 的 Promise（簽章沒變），只是多掛一個 close(value) 方法。
+  let closeHandle = null;
+
+  const promise = new Promise((resolve) => {
     const previousActive = document.activeElement;
 
     const overlay = document.createElement('div');
@@ -214,6 +220,7 @@ export function dialog(options) {
       }
       resolve(value === undefined ? null : value);
     }
+    closeHandle = close;
 
     overlay.addEventListener('click', onOverlayClick);
     document.addEventListener('keydown', onKeydown, true);
@@ -223,6 +230,10 @@ export function dialog(options) {
     const firstFocusable = focusableEls(box)[0];
     (firstFocusable || box).focus();
   });
+
+  /** 從外部強制關閉（模組 unmount 時用）。已經關掉再呼叫是安全的，不會重複 resolve。 */
+  promise.close = (value) => { if (closeHandle) closeHandle(value); };
+  return promise;
 }
 
 /**
@@ -327,9 +338,27 @@ export function signaturePad(canvasEl) {
     dirty = false;
   }
 
+  /**
+   * 解除所有監聽（2026-08-15 對抗審查補）。
+   * 原本只回傳三個方法，沒有解除的路——但這支掛了七個監聽，其中
+   * `window` 上的 mouseup 是掛在全域的。宿舍模組會反覆進出簽名畫面，
+   * 每進一次就多累積一組，模組 unmount 也帶不走。
+   * 模組在 unmount 時必須呼叫這支。
+   */
+  function destroy() {
+    canvasEl.removeEventListener('mousedown', start);
+    canvasEl.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', end);
+    canvasEl.removeEventListener('touchstart', start);
+    canvasEl.removeEventListener('touchmove', move);
+    canvasEl.removeEventListener('touchend', end);
+    canvasEl.removeEventListener('touchcancel', end);
+  }
+
   return {
     isEmpty: () => !dirty,
     toDataURL: () => canvasEl.toDataURL('image/png'),
-    clear
+    clear,
+    destroy
   };
 }

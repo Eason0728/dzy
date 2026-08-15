@@ -1,6 +1,6 @@
 /**
  * 鼎兆元管理系統｜平台後端 — 人員管理（T1-5）
- * 對應 docs/spec.md §4.4 節點代號／§5.1 試算表欄位／§5.2 API actions（listUsers／saveUser／setActive／resetPassword）。
+ * 對應 docs/spec.md §4.4 節點代號／§5.1 試算表欄位／§5.2 API actions（listUsers／saveUser／setActive／resetPassword／listRoles）。
  *
  * 本檔依賴 Auth.gs 已提供的 handleMe_ / verifyToken_ / hasPerm_ / getRolePerms_ / hashPassword_，
  * 直接呼叫即可（同一個 Apps Script 專案共用全域範疇，不需要 import）。
@@ -32,7 +32,6 @@ var USR_MSG_ROLE_REQUIRED = '角色不得為空';
 var USR_MSG_ROLE_NOT_FOUND = '角色不存在';
 var USR_MSG_NODE_INVALID = '節點代號不合法';
 var USR_MSG_USERNAME_TAKEN = '帳號已存在';
-var USR_MSG_PASSWORD_REQUIRED = '密碼不得為空';
 var USR_MSG_ID_REQUIRED = 'id 不得為空';
 var USR_MSG_ACTIVE_INVALID = 'active 格式錯誤';
 var USR_MSG_PASSWORD_TOO_SHORT = '密碼至少需要 8 個字元';
@@ -178,7 +177,7 @@ function handleSaveUser_(token, payload) {
   var name = String(payload.name || '').trim();
   var role = String(payload.role || '').trim();
   var node = (payload.node === undefined || payload.node === null) ? '' : String(payload.node).trim();
-  var password = payload.password;
+  var password = (payload.password === undefined || payload.password === null) ? '' : String(payload.password);
   var isInsert = !id;
 
   // ── 驗證（全部通過才寫）──────────────────────────────────
@@ -193,7 +192,9 @@ function handleSaveUser_(token, payload) {
 
   if (isInsert) {
     if (existingByUsername) return { ok: false, error: USR_MSG_USERNAME_TAKEN };
-    if (!password) return { ok: false, error: USR_MSG_PASSWORD_REQUIRED };
+    // 新增帳號密碼長度規則須與 resetPassword 一致（spec §5.2 2026-08-15 補）：
+    // 沿用 resetPassword 已有的 USR_MSG_PASSWORD_TOO_SHORT，不另造訊息常數。
+    if (password.length < 8) return { ok: false, error: USR_MSG_PASSWORD_TOO_SHORT };
   } else {
     existingById = findUsrRowById_(id);
     if (!existingById) return { ok: false, error: USR_MSG_NOT_FOUND };
@@ -206,7 +207,7 @@ function handleSaveUser_(token, payload) {
   if (isInsert) {
     var newId = generateNextUserId_();
     var salt = Utilities.getUuid();
-    var hash = hashPassword_(String(password), salt);
+    var hash = hashPassword_(password, salt);
     var createdAt = usrFormatTaipeiDatetime_(new Date());
 
     var row = [];
@@ -285,4 +286,28 @@ function handleResetPassword_(token, payload) {
   sheet.getRange(found.row, USR_COL.salt + 1, 1, 2).setValues([[newSalt, newHash]]);
 
   return { ok: true, data: {} };
+}
+
+// ============================================================
+// 6. listRoles（spec §5.2，2026-08-15 新增）—— 角色清單一律由 roles 分頁回傳，
+//    不得在前端／人員管理模組硬編碼角色清單。perms 用 Auth.gs 已有的 getRolePerms_
+//    展開成陣列（逗號分隔字串；'*' 展開成 ['*']），與 handleLogin_/handleMe_ 的邏輯保持同一份正本。
+// ============================================================
+
+function handleListRoles_(token) {
+  var auth = requirePlatformUsers_(token);
+  if (!auth.ok) return auth;
+
+  var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_ROLES);
+  if (!sheet) return { ok: true, data: { roles: [] } };
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok: true, data: { roles: [] } };
+
+  var rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); // role, name_zh（perms 欄改用 getRolePerms_ 查）
+  var roles = rows.map(function (r) {
+    var role = String(r[0]);
+    return { role: role, name_zh: r[1], perms: getRolePerms_(role) };
+  });
+
+  return { ok: true, data: { roles: roles } };
 }

@@ -108,6 +108,17 @@ failsWith(
 // ---- 不是物件 ----
 failsWith(null, 'export default', 'null manifest 要提示可能忘了 export default');
 
+// ---- backend 必須等於 ns（2026-08-15 對抗審查：原本只警告，等於允許違規上線）----
+failsWith(
+  { ...valid(), ns: 'audit', backend: 'dorm' },
+  '必須等於',
+  'backend 與 ns 不同要是「錯誤」而不是警告——只警告等於放行，而失敗長相是「模組載入正常、只有呼叫後端才失敗」'
+);
+{
+  const r = validateManifest({ ...valid(), ns: 'audit', backend: 'audit' });
+  ok(r.ok, `backend 等於 ns 時應通過，實際 errors=${JSON.stringify(r.errors)}`);
+}
+
 // ---- 未知欄位是警告不是錯誤 ----
 {
   const r = validateManifest({ ...valid(), 顏色偏好: 'red' });

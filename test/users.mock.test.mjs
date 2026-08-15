@@ -539,6 +539,119 @@ function loginToken(sandbox, username, password) {
 })();
 
 // ============================================================
+// I. saveUser 新增帳號：密碼長度規則須與 resetPassword 一致（spec §5.2 2026-08-15 補）
+//    對抗審查抓到的缺陷①：原本只檢查 !password，一位數密碼也能直接建帳號。
+// ============================================================
+(() => {
+  const { sandbox, sheets } = freshApp();
+  const adminToken = loginToken(sandbox, 'admin1', PW.admin1);
+  const beforeCount = sheets.users._rows().length;
+
+  const shortRes = callDoPost(sandbox, {
+    action: 'saveUser', token: adminToken,
+    payload: { username: 'onedigit', name: '一位數密碼', role: 'staff', node: '', password: 'x' }
+  });
+  assertTrue(shortRes.ok === false, 'I1: 新增帳號密碼只有 1 個字元被拒');
+  assertEqual(
+    shortRes.error, '密碼至少需要 8 個字元',
+    'I1b: 錯誤訊息沿用 resetPassword 既有的 USR_MSG_PASSWORD_TOO_SHORT，不是另造的訊息'
+  );
+
+  const sevenRes = callDoPost(sandbox, {
+    action: 'saveUser', token: adminToken,
+    payload: { username: 'sevenchar', name: '七字元密碼', role: 'staff', node: '', password: 'short7x' }
+  });
+  assertTrue(sevenRes.ok === false, 'I2: 新增帳號密碼 7 個字元（差一個字元）被拒');
+
+  const emptyRes = callDoPost(sandbox, {
+    action: 'saveUser', token: adminToken,
+    payload: { username: 'nopw', name: '沒帶密碼', role: 'staff', node: '' } // 完全不帶 password 欄
+  });
+  assertTrue(emptyRes.ok === false, 'I3: 新增帳號完全不帶 password 欄位被拒');
+
+  const afterCount = sheets.users._rows().length;
+  assertEqual(afterCount, beforeCount, 'I4: 三次密碼過短的嘗試都沒有寫入任何一列');
+
+  // 邊界：剛好 8 個字元要能通過
+  const eightRes = callDoPost(sandbox, {
+    action: 'saveUser', token: adminToken,
+    payload: { username: 'eightchar', name: '八字元密碼', role: 'staff', node: '', password: 'exact8ch' }
+  });
+  assertTrue(eightRes.ok === true, 'I5: 新增帳號密碼剛好 8 個字元可以成功（邊界）');
+})();
+
+// ============================================================
+// J. doPost：被 catch 的未預期例外一律換成通用訊息；handler 正常 return 的業務訊息原樣保留
+//    對抗審查抓到的缺陷②：原本 catch(err){ error: err.message } 會把內部結構原文送給前端。
+// ============================================================
+(() => {
+  const { sandbox } = freshApp();
+  const adminToken = loginToken(sandbox, 'admin1', PW.admin1);
+
+  // 讓一個 handler 真的拋出例外（模擬未預期的內部錯誤），走完整 doPost → dispatch_ 路徑
+  sandbox.handleListUsers_ = function () {
+    throw new Error('內部錯誤：找不到工作表 secret_internal_sheet_name，函式 handleListUsers_ 第 42 行');
+  };
+
+  const res = callDoPost(sandbox, { action: 'listUsers', token: adminToken, payload: {} });
+  assertTrue(res.ok === false, 'J1: 被 catch 的未預期例外仍回 ok:false（不讓例外變成 500）');
+  assertEqual(res.error, '系統忙碌中，請稍後再試', 'J2: 前端拿到的是通用訊息，不是例外原文');
+  assertTrue(
+    res.error.indexOf('secret_internal_sheet_name') === -1 && res.error.indexOf('handleListUsers_') === -1,
+    'J3: 通用訊息完全不含原始例外訊息的分頁名／函式名（沒有洩漏內部結構）'
+  );
+})();
+
+(() => {
+  // 對照組（這條最容易改壞）：handler 自己正常 return 的業務錯誤訊息，不是例外，不能被①的通用化規則誤吃
+  const { sandbox } = freshApp();
+
+  const loginRes = callDoPost(sandbox, { action: 'login', payload: { username: 'acc1', password: 'totally-wrong-password' } });
+  assertTrue(loginRes.ok === false, 'J4: 密碼錯誤的登入失敗');
+  assertEqual(loginRes.error, '帳號或密碼錯誤', 'J5: 業務錯誤訊息原樣保留，沒有被換成通用訊息');
+
+  const accToken = loginToken(sandbox, 'acc1', PW.acc1);
+  const noPermRes = callDoPost(sandbox, { action: 'listUsers', token: accToken, payload: {} });
+  assertEqual(noPermRes.error, '沒有權限', 'J6: 「沒有權限」這類業務訊息也原樣保留');
+})();
+
+// ============================================================
+// K. listRoles（spec §5.2 2026-08-15 新增）—— 對抗審查抓到的缺陷③：角色清單不得硬編碼
+// ============================================================
+(() => {
+  const { sandbox } = freshApp();
+  const accToken = loginToken(sandbox, 'acc1', PW.acc1); // accountant 沒有 platform.users
+
+  const noPermRes = callDoPost(sandbox, { action: 'listRoles', token: accToken, payload: {} });
+  assertEqual(noPermRes, { ok: false, error: '沒有權限' }, 'K1: 沒有 platform.users 權限呼叫 listRoles 被拒');
+})();
+
+(() => {
+  const { sandbox } = freshApp();
+  const adminToken = loginToken(sandbox, 'admin1', PW.admin1);
+
+  const res = callDoPost(sandbox, { action: 'listRoles', token: adminToken, payload: {} });
+  assertTrue(res.ok === true, 'K2: 有權限的帳號呼叫 listRoles 成功');
+  assertTrue(Array.isArray(res.data.roles) && res.data.roles.length === 5, 'K3: 回傳五個角色（roles 分頁種子筆數）');
+
+  assertEqual(
+    res.data.roles,
+    [
+      { role: 'admin', name_zh: '系統管理者', perms: ['*'] },
+      { role: 'manager', name_zh: '部門主管', perms: ['audit.read', 'dorm.read', 'dorm.write'] },
+      { role: 'accountant', name_zh: '會計', perms: ['audit.read', 'audit.write'] },
+      { role: 'storelead', name_zh: '店長', perms: ['audit.read.own'] },
+      { role: 'staff', name_zh: '員工', perms: [] }
+    ],
+    'K4: 五個角色的 role/name_zh/perms 都正確，perms 已展開成陣列（* 展開成 [\'*\']，空字串展開成 []）'
+  );
+
+  res.data.roles.forEach((r) => {
+    assertTrue(Array.isArray(r.perms), 'K5.' + r.role + ': perms 欄一定是陣列型別');
+  });
+})();
+
+// ============================================================
 if (failed > 0) {
   console.error('\n' + failed + ' 項測試失敗（共 ' + (passed + failed) + ' 項）');
   process.exit(1);
