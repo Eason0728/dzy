@@ -28,12 +28,32 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         if args and str(args[1]).startswith(('4', '5')):
             super().log_message(fmt, *args)
 
+    def send_head(self):
+        # 瀏覽器只需要 index.html／platform／modules／assets／sign.html。
+        # 其餘一律擋掉——開放到區網給手機看時，沒必要把後端原始碼、設計文件、
+        # .clasp.json、.git 一起端出去。
+        rel = self.path.split('?', 1)[0].split('#', 1)[0].lstrip('/')
+        first = rel.split('/', 1)[0]
+        if first in DENY_TOP_LEVEL or first.startswith('.'):
+            self.send_error(403, 'Forbidden')
+            return None
+        return super().send_head()
+
+
+# 不對外提供的目錄／檔案（開放區網時的最低限度防護）
+DENY_TOP_LEVEL = {'apps-script', 'docs', 'test', 'tools', '.git', '.gitignore'}
+
 
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8777
+    # 綁 0.0.0.0 才能讓同一個 Wi-Fi 的手機連進來看。
+    # 這是開發伺服器，只在需要時開著；上線版本走 GitHub Pages，不是這支。
+    host = '0.0.0.0'
     handler = partial(NoCacheHandler, directory=str(ROOT))
-    with ThreadingHTTPServer(('127.0.0.1', port), handler) as httpd:
-        print(f'開發伺服器啟動：http://localhost:{port}/　（根目錄 {ROOT}，一律不快取）')
+    with ThreadingHTTPServer((host, port), handler) as httpd:
+        print(f'開發伺服器啟動：http://localhost:{port}/（本機）')
+        print(f'　同一 Wi-Fi 的手機可連：http://<這台Mac的區網IP>:{port}/')
+        print(f'　根目錄 {ROOT}；一律不快取；已擋下 {sorted(DENY_TOP_LEVEL)}')
         httpd.serve_forever()
 
 

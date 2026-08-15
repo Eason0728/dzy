@@ -1,34 +1,32 @@
 /**
- * modules/audit-stock/index.js — 月初盤點抽查模組本體（T2-2）
+ * modules/audit-ops/index.js — 營運稽核表模組本體（T2-5）
  *
  * 正本規格：docs/spec.md §4.6（模組本體 mount/unmount/badge/onRoute）、§4.7（ctx，
  * 含 viewId／同一個 ctx 物件原地更新的規則）。
  *
- * 本模組五個分頁（overview／fill／report／analysis／my，見 manifest.js）共用同一次
- * mount()：殼只在「換模組」時呼叫 mount/unmount，同模組內切分頁改叫 onRoute(ctx)
- * （spec §4.6／shell.js route() 的實際行為），所以這裡用 ctx.viewId 分派到對應分頁的
- * mount 函式，並在 onRoute() 時換掉目前掛著的那個分頁。
+ * 做法逐字元照抄 modules/audit-stock/index.js（T2-2 已驗收的範本）：本模組四個分頁
+ * （overview／fill／report／my，見 manifest.js）共用同一次 mount()：殼只在「換模組」時
+ * 呼叫 mount/unmount，同模組內切分頁改叫 onRoute(ctx)（spec §4.6／shell.js route() 的
+ * 實際行為），所以這裡用 ctx.viewId 分派到對應分頁的 mount 函式，並在 onRoute() 時
+ * 換掉目前掛著的那個分頁。
  *
- * T2-2（overview）之後補上 fill（T2-3，稽核填寫），這次再補上 report／analysis
- * （T2-4，報告與異常分析）。my 是後續任務（T2-6），屆時只需要在 VIEW_MOUNTERS 補一行
- * 對應項目，這支檔案的分派邏輯不必再動。尚未實作的分頁先顯示「尚未完成」提示，不讓
- * 畫面壞掉。
+ * T2-5 補上 overview／fill／report 三個分頁。my（我的門市）是後續任務（T2-6），
+ * 屆時只需要在 VIEW_MOUNTERS 補一行對應項目，這支檔案的分派邏輯不必再動。尚未實作的
+ * 分頁先顯示「尚未完成」提示，不讓畫面壞掉。
  *
- * badge() 固定回 null：真正的待辦數字等 T2-8 才做（任務指示明載）。
+ * badge() 固定回 null：同 audit-stock，真正的待辦數字是後續任務的事。
  */
 'use strict';
 
 import { mountOverview } from './views/overview.js';
 import { mountFill } from './views/fill.js';
 import { mountReport } from './views/report.js';
-import { mountAnalysis } from './views/analysis.js';
 
 const VIEW_MOUNTERS = {
   overview: mountOverview,
   fill: mountFill,
-  report: mountReport,
-  analysis: mountAnalysis
-  // my：後續任務補上
+  report: mountReport
+  // my：後續任務（T2-6）補上
 };
 
 let currentEl = null;
@@ -39,7 +37,7 @@ function teardownCurrentView() {
     try {
       currentViewUnmount();
     } catch (err) {
-      console.error('[audit-stock] 分頁 unmount 失敗', err);
+      console.error('[audit-ops] 分頁 unmount 失敗', err);
     }
   }
   currentViewUnmount = null;

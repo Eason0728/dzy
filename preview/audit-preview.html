@@ -1,0 +1,4070 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>月初盤點抽查預覽</title>
+<link rel="icon" href="data:,">
+<style>
+/* ============================================================
+   platform/css/tokens.css — 原樣內嵌
+   ============================================================ */
+/* ============================================================
+   鼎兆元管理系統｜設計 Token — 唯一色票來源（spec.md §8）
+   全系統顏色、字級、字重、行高、間距、圓角、陰影一律從這裡取值。
+   模組與其他 CSS 檔不得自訂顏色常數，一律使用下列變數。
+   ============================================================ */
+
+:root {
+  /* ---- 色彩：逐字元照 spec §8 抄，值不可改 ---- */
+  --brand: #c8402c;    /* 鼎兆元紅：全系統唯一強調色 */
+  --ink: #1c1a19;       /* 主要文字 */
+  --muted: #6f665f;     /* 次要文字、說明文字 */
+  --line: #e2dbd4;      /* 邊框、分隔線 */
+  --bg: #f7f4f1;        /* 頁面背景 */
+  --card: #fff;         /* 卡片、輸入框背景 */
+  --ok: #2f6b3a;        /* 合格、成功 */
+  --warn: #b8860b;      /* 待處理、警示 */
+  --danger: #b3261e;    /* 異常、危險、刪除 */
+
+  --radius: 10px;
+  --gap: 12px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .06);
+
+  /* ---- 色彩：衍生（hover／淺底／邊框用，仍集中管理於本檔） ---- */
+  --brand-dark: #a8331f;
+  --brand-light: #fbe9e6;
+  --ok-light: #e8f2ea;
+  --warn-light: #faf1de;
+  --danger-light: #fbe9e7;
+  --ink-inverse: #fff;
+  --overlay: rgba(28, 26, 25, .5);   /* 對話框遮罩，取自 --ink 加透明度 */
+  /* 登入頁背景照片上的遮罩：壓暗＋降飽和，把三個品牌照片的調性拉近
+     （墨竹亭是亮灰底、另外兩張是深色，不壓會像貼了塊白補丁），
+     同時確保白色登入卡片在任何一張照片上都讀得清楚 */
+  --hero-scrim: rgba(24, 20, 18, .34);
+  --hero-scrim-strong: rgba(24, 20, 18, .48);
+  /* 卡片左半壓的色塊：**提亮**而不是壓暗。整頁背景已經壓暗＋輕微模糊，
+     這一塊提亮才會從背景裡浮出來（參考版型就是這個層次關係）。 */
+  --hero-tint: rgba(247, 244, 241, .26);
+  /* 登入卡片浮在照片上，需要比一般卡片更深的陰影才立得起來 */
+  --shadow-float: 0 18px 48px rgba(24, 20, 18, .28);
+  /* 深色底上的淡邊框（例如載入中的圓圈） */
+  --line-on-dark: rgba(255, 255, 255, .35);
+
+  /* ---- 圓角階梯 ---- */
+  --radius-sm: 6px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* ---- 陰影階梯 ---- */
+  --shadow-lift: 0 4px 16px rgba(0, 0, 0, .10);
+
+  /* ---- 間距階梯 ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* ---- 字型：中文優先堆疊，確保繁體中文正常顯示 ---- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang TC", "Heiti TC",
+    "Microsoft JhengHei", "Noto Sans TC", "Segoe UI", sans-serif;
+
+  /* ---- 字級階梯 ---- */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 15px;
+  --fs-md: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+
+  /* ---- 字重 ---- */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-bold: 700;
+
+  /* ---- 行高 ---- */
+  --lh-tight: 1.25;
+  --lh-base: 1.5;
+  --lh-loose: 1.7;
+
+  /* ---- 版面尺寸：底部導覽列（手機）／側邊欄（桌機） ---- */
+  --header-h: 56px;
+  --bottom-nav-h: 56px;
+  --sidebar-w: 220px;
+
+  /* ---- 層級 ---- */
+  --z-header: 100;
+  --z-nav: 100;
+  --z-toast: 200;
+  --z-dialog: 300;
+}
+
+
+/* ============================================================
+   platform/css/base.css — 原樣內嵌
+   ============================================================ */
+/* ============================================================
+   鼎兆元管理系統｜基礎樣式
+   reset、排版基礎、body 背景、中文字型。
+   手機優先：以下規則先寫手機版，桌機用 @media (min-width:768px) 疊加。
+   顏色一律取自 tokens.css，本檔不得出現色碼。
+   ============================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-normal);
+  line-height: var(--lh-base);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0 0 var(--space-3);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  color: var(--ink);
+}
+
+h1 { font-size: var(--fs-2xl); }
+h2 { font-size: var(--fs-xl); }
+h3 { font-size: var(--fs-lg); }
+h4, h5, h6 { font-size: var(--fs-md); }
+
+p {
+  margin: 0 0 var(--space-3);
+}
+p:last-child { margin-bottom: 0; }
+
+small, .text-muted {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none;
+}
+a:hover, a:focus-visible {
+  text-decoration: underline;
+}
+
+ul, ol {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-5);
+}
+
+img, svg {
+  max-width: 100%;
+  display: block;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: var(--space-4) 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* 任何寬內容（表格等）都在自己的容器內捲動，頁面本身永不橫向捲動 */
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---- 版面容器：手機優先，單欄、留白足夠 ---- */
+.page {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.section {
+  margin-bottom: var(--space-5);
+}
+.section:last-child { margin-bottom: 0; }
+
+.section-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--muted);
+  letter-spacing: .02em;
+  margin-bottom: var(--space-2);
+}
+
+.stack > * + * {
+  margin-top: var(--gap);
+}
+
+@media (min-width: 768px) {
+  body {
+    font-size: var(--fs-md);
+  }
+
+  .page {
+    max-width: 960px;
+    padding: var(--space-6);
+  }
+}
+
+
+/* ============================================================
+   platform/css/components.css — 原樣內嵌
+   （登入頁背景圖片規則已改成純色，其餘原樣，見任務指示第 1 點）
+   ============================================================ */
+/* ============================================================
+   鼎兆元管理系統｜共用元件樣式
+   卡片・按鈕・表單・表格・狀態標籤・導覽（底部列／側邊欄）・
+   toast・載入中・對話框。
+   顏色一律取自 tokens.css，本檔不得出現色碼。
+   ============================================================ */
+
+/* ---------------------------------------------------------- */
+/* 卡片                                                        */
+/* ---------------------------------------------------------- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-4);
+}
+
+.card + .card {
+  margin-top: var(--gap);
+}
+
+.card-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+  margin: 0 0 var(--space-2);
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* 可點擊的入口卡片（例如首頁的模組卡片） */
+.card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+.card-link:hover, .card-link:focus-visible {
+  box-shadow: var(--shadow-lift);
+  text-decoration: none;
+}
+.card-link:active {
+  transform: translateY(1px);
+}
+
+/* ---------------------------------------------------------- */
+/* 按鈕：主要／次要／危險                                       */
+/* ---------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color .15s ease, border-color .15s ease, opacity .15s ease;
+}
+
+.btn-block {
+  display: flex;
+  width: 100%;
+}
+
+.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--ink-inverse);
+}
+.btn-primary:hover:not(:disabled) { background: var(--brand-dark); border-color: var(--brand-dark); }
+
+.btn-secondary {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--ink);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--bg); }
+
+/* 危險動作預設「安靜」：白底灰框紅字，只有 hover／focus 才轉實色，
+   避免與主要動作（紅底白字）在同一排長得太像而誤觸 */
+.btn-danger {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--danger);
+}
+.btn-danger:hover:not(:disabled),
+.btn-danger:focus-visible:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--ink-inverse);
+}
+
+/* disabled 一律中性灰，不因底色變體（primary/danger）而顯出淡色調。
+   `.btn:disabled` 的特異性（0,2,0）高於單一變體 class（0,1,0），故必贏。 */
+.btn:disabled {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--muted);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------- */
+/* 表單元件：input / select / textarea / checkbox              */
+/* ---------------------------------------------------------- */
+
+.field {
+  display: block;
+  margin-bottom: var(--space-4);
+}
+.field:last-child { margin-bottom: 0; }
+
+.field-label {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--muted);
+  margin-bottom: var(--space-2);
+}
+
+.field-hint {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  margin-top: var(--space-1);
+}
+
+.input,
+select.input,
+textarea.input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+textarea.input {
+  min-height: 96px;
+  resize: vertical;
+}
+
+select.input {
+  appearance: auto;
+  -webkit-appearance: menulist;
+}
+
+.input:focus,
+select.input:focus,
+textarea.input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-light);
+}
+
+.input:disabled,
+select.input:disabled,
+textarea.input:disabled {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.input.is-invalid {
+  border-color: var(--danger);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--brand);
+  flex-shrink: 0;
+}
+
+.checkbox-row label {
+  font-size: var(--fs-base);
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------- */
+/* 表格：本身不橫向撐開頁面，寬內容在容器內捲動                  */
+/* ---------------------------------------------------------- */
+
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  background: var(--card);
+  font-size: var(--fs-sm);
+}
+
+.table th,
+.table td {
+  padding: var(--space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.table th {
+  color: var(--muted);
+  font-weight: var(--fw-medium);
+  background: var(--bg);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: var(--bg);
+}
+
+/* ---------------------------------------------------------- */
+/* 狀態標籤：合格／異常／未完成                                  */
+/* ---------------------------------------------------------- */
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  line-height: 1.8;
+  white-space: nowrap;
+}
+
+.tag-ok {
+  color: var(--ok);
+  background: var(--ok-light);
+}
+
+.tag-danger {
+  color: var(--danger);
+  background: var(--danger-light);
+}
+
+.tag-warn {
+  color: var(--warn);
+  background: var(--warn-light);
+}
+
+/* ---------------------------------------------------------- */
+/* 導覽：手機底部列／桌機側邊欄                                  */
+/* ---------------------------------------------------------- */
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-main {
+  padding-bottom: var(--bottom-nav-h);
+}
+
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-nav);
+  display: flex;
+  height: var(--bottom-nav-h);
+  background: var(--card);
+  border-top: 1px solid var(--line);
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.nav-item.is-active {
+  color: var(--brand);
+  font-weight: var(--fw-medium);
+}
+
+.sidebar {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .bottom-nav {
+    display: none;
+  }
+
+  .app-main {
+    padding-bottom: 0;
+    margin-left: var(--sidebar-w);
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-w);
+    padding: var(--space-5) var(--space-3);
+    background: var(--card);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+  }
+
+  .sidebar .nav-item {
+    flex: none;              /* 覆蓋 .nav-item 基底的 flex:1，否則在 flex-column 側邊欄裡會被撐滿垂直空間 */
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--space-2);
+    width: 100%;
+    height: 44px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-base);
+  }
+
+  .sidebar .nav-item.is-active {
+    background: var(--brand-light);
+  }
+}
+
+/* ---------------------------------------------------------- */
+/* Toast                                                       */
+/* ---------------------------------------------------------- */
+
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bottom-nav-h) + var(--space-4));
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: calc(100% - var(--space-6));
+  max-width: 420px;
+}
+
+/* 輕量小卡片，不是實色警示橫幅：白底／極淡同色底＋左側色條，文字用深色 */
+.toast {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  border-left: 4px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+
+.toast-ok {
+  background: var(--ok-light);
+  border-left-color: var(--ok);
+  color: var(--ok);
+}
+.toast-warn {
+  background: var(--warn-light);
+  border-left-color: var(--warn);
+  color: var(--warn);
+}
+.toast-danger {
+  background: var(--danger-light);
+  border-left-color: var(--danger);
+  color: var(--danger);
+}
+
+@media (min-width: 768px) {
+  .toast-stack {
+    left: auto;
+    right: var(--space-5);
+    bottom: var(--space-5);
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------- */
+/* 載入中                                                       */
+/* ---------------------------------------------------------- */
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay);
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--line);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+.loading-overlay .spinner {
+  border-color: var(--line-on-dark);
+  border-top-color: var(--ink-inverse);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------------------------------------------------------- */
+/* 對話框                                                       */
+/* ---------------------------------------------------------- */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--overlay);
+  padding: var(--space-4);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+  padding: var(--space-5);
+}
+
+.dialog-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+  margin: 0 0 var(--space-2);
+}
+
+.dialog-body {
+  color: var(--muted);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  margin-bottom: var(--space-5);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (min-width: 768px) {
+  .dialog-overlay {
+    align-items: center;
+  }
+}
+
+/* ============================================================
+   登入頁（2026-08-14 改版，參考 Eason 提供的版型）
+   整片模糊背景 ＋ 中央卡片；卡片左半是清晰照片＋品牌名，右半是表單。
+   背景與卡片左半用「同一個品牌」的照片，每次載入隨機挑一個——
+   隨機才有意義，不是兩張不相干的圖並置。
+   手機沒有左右並排的空間：只留表單那半，背景照片仍在。
+   ============================================================ */
+
+.login-bg {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4, 16px);
+  overflow: hidden;
+}
+
+/* 全幅背景：同一張照片，模糊＋壓暗，只當氛圍不搶焦點 */
+.login-blur {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  /* 跟卡片左半用同一個座標系（都是 fixed，對齊視窗），
+     這樣兩處顯示的是同一張照片的同一個位置，看起來就是「一張圖」，
+     不是兩份大小不同的拷貝。 */
+  background-attachment: fixed;
+  filter: saturate(.95) brightness(.82);
+}
+
+.login-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--hero-scrim);
+}
+
+/* 中央卡片 */
+.login-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 880px;
+  display: grid;
+  grid-template-columns: 1fr;
+  background: var(--card);
+  border-radius: 0;            /* 範例是直角，視覺上更正式、更像企業系統 */
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+}
+
+/* 卡片左半：清晰照片＋品牌名 */
+.login-card-visual {
+  display: none;
+  position: relative;
+  min-height: 420px;
+  /* 這裡不是第二張圖，是背景那張圖「透出來」的一塊：
+     跟 .login-blur 用完全相同的 cover／center／fixed 幾何，
+     所以照片是連續的一張，只是這一塊沒被壓暗、另外壓一層提亮色塊。
+     這正是參考版型的層次關係（Eason 2026-08-14 指正：範例只呈現一張圖）。 */
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+.login-card-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--hero-tint);
+}
+
+.login-card-brand {
+  position: absolute;
+  z-index: 1;
+  left: var(--space-5, 24px);
+  right: var(--space-5, 24px);
+  bottom: var(--space-5, 24px);
+  color: var(--ink-inverse);
+}
+
+.login-card-brand h2 {
+  margin: 0;
+  font-size: var(--fs-xl, 24px);
+  font-weight: var(--fw-bold, 700);
+  letter-spacing: .02em;
+}
+
+.login-card-brand p {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm, 14px);
+  opacity: .85;
+}
+
+/* 卡片右半：表單 */
+.login-card-form {
+  padding: var(--space-6, 32px) var(--space-5, 24px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* 卡片裡不需要再套一層 .card 的邊框與陰影，那會變成框中框 */
+.login-card-form .card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+@media (min-width: 768px) {
+  .login-card { grid-template-columns: 1fr 1fr; }
+  .login-card-visual { display: block; }
+  .login-card-form { padding: var(--space-7, 40px) var(--space-6, 32px); }
+}
+
+/* 三個品牌各自的照片：背景與卡片左半共用同一張 */
+.login-bg[data-hero="mala"] .login-blur,
+.login-bg[data-hero="mala"] .login-card-visual {
+  background-color: var(--ink); /* 預覽版拿掉外部圖片，改純色（不會用到這頁） */
+}
+.login-bg[data-hero="mzt"] .login-blur,
+.login-bg[data-hero="mzt"] .login-card-visual {
+  background-color: var(--ink); /* 預覽版拿掉外部圖片，改純色（不會用到這頁） */
+}
+.login-bg[data-hero="yakiniku"] .login-blur,
+.login-bg[data-hero="yakiniku"] .login-card-visual {
+  background-color: var(--ink); /* 預覽版拿掉外部圖片，改純色（不會用到這頁） */
+}
+
+/* 逐張裁切微調已不需要：三張圖的品牌 logo 已在 assets 端裁掉
+   （原圖 logo 在左上或正中央，近正方形的裁切框怎麼移都會吃到半截 logo，
+   靠 background-position 救不回來，正解是裁圖檔本身）。*/
+
+/* 左半的大標題（照參考版型，置於左上） */
+.login-card-heading {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-6, 32px);
+  left: var(--space-6, 32px);
+  right: var(--space-5, 24px);
+  color: var(--ink-inverse);
+  text-shadow: 0 1px 12px var(--hero-scrim-strong);
+}
+
+.login-card-heading h2 {
+  margin: 0;
+  font-size: var(--fs-2xl, 30px);
+  line-height: 1.25;
+  font-weight: var(--fw-bold, 700);
+  letter-spacing: .01em;
+}
+
+.login-card-heading p {
+  margin: 6px 0 0;
+  font-size: var(--fs-md, 16px);
+  opacity: .9;
+}
+
+/* 標題已經在左半，右半是純表單，桌機不再重複一次系統名 */
+@media (min-width: 768px) {
+  .login-card-form .card-title { display: none; }
+}
+
+
+/* ============================================================
+   單頁殼專用樣式（不屬於任何模組，只負責預覽版外框）
+   ============================================================ */
+.preview-banner {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
+  background: var(--warn-light);
+  color: var(--warn);
+  border-bottom: 1px solid var(--line);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  text-align: center;
+  letter-spacing: .02em;
+}
+
+.preview-summary pre {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: var(--lh-base);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 42vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.preview-summary p {
+  text-align: left;
+}
+
+.preview-boot-error {
+  margin: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--danger-light);
+  color: var(--danger);
+  white-space: pre-wrap;
+  font-size: var(--fs-sm);
+}
+</style>
+</head>
+<body>
+
+<script>
+  // 全站唯一的網路守門：這份預覽檔不打任何外部服務。
+  // 覆寫 window.fetch，任何呼叫一律攔下並計數，不放行到真正的網路層。
+  window.__fetchCalls = 0;
+  window.fetch = function () {
+    window.__fetchCalls += 1;
+    console.error('[預覽版] 攔下一次不該發生的 fetch：', arguments && arguments[0]);
+    return Promise.reject(new Error('預覽版已停用網路請求'));
+  };
+</script>
+
+<div class="preview-banner">預覽版 · 假資料 · 送出不會真的送出</div>
+
+<div class="app-shell">
+  <main class="app-main">
+    <div class="page" id="view-root"></div>
+  </main>
+  <nav class="bottom-nav" id="preview-tabs">
+    <button type="button" class="nav-item is-active" data-view="overview">總覽</button>
+    <button type="button" class="nav-item" data-view="fill">稽核填寫</button>
+  </nav>
+</div>
+
+<!-- ============================================================
+     以下每個 <script type="text/plain"> 都是「原樣搬進來」的模組原始碼，
+     type 特意設成 text/plain：瀏覽器不會執行它，只當純文字存著，
+     下面的 <script type="module"> 會取出文字、只改寫 import 路徑指到
+     blob URL（畫面邏輯一個字元都沒有被改寫），再各自組成 Blob 動態載入。
+     ============================================================ -->
+
+<script type="text/plain" id="src-fmt">
+/**
+ * 全系統唯一一份格式化純函式 —— date / datetime / roc / esc / money
+ *
+ * 正本規格：docs/spec.md §4.7（ctx.fmt 介面）、§2（檔案結構）。
+ * 每個模組一律透過 ctx.fmt 拿到這五個函式，不得自己再刻一份
+ * （教訓來源：宿舍合約系統把 esc() 複製了三份、稽核系統又有自己一份）。
+ *
+ * 時區規則：一律以 Asia/Taipei（UTC+8，無日光節約）呈現。
+ * 這裡全程用 Intl.DateTimeFormat 明確指定 timeZone，不用
+ * Date.prototype.getDate()／getHours() 這類會反映「執行環境當地時區」的方法——
+ * 這個專案的資料是台灣營運資料，機器（尤其 CI，常見 UTC）時區不是台北時，
+ * 用本機方法算出來的日期會整個錯位、跨午夜差一天，不能省。
+ *
+ * 錯誤處理規則：null／undefined／空字串／非法輸入一律回傳空字串 ''，
+ * 絕不回傳 'Invalid Date'，也絕不拋例外——呼叫方（各模組 view）不必自己再判一次。
+ */
+
+const TZ = 'Asia/Taipei';
+
+/** 只接受這個格式的日期字串，其餘一律視為非法（含缺零補位、帶時間等） */
+/**
+ * 接受的字串格式（2026-08-14 補齊；原本只認純日期，導致後端寫出去的時間前端讀不回來）：
+ *   2026-08-01                  純日期
+ *   2026-08-01 09:30:00         後端 login_log／created_at 寫入試算表的格式
+ *   2026-08-01T09:30:00         ISO 但沒有時區標記
+ *   秒數可省略：2026-08-01 09:30
+ *
+ * 這幾種一律視為「台北時間的牆上時鐘」——它們本來就是台灣的營運資料，
+ * 沒有帶時區資訊，當成 UTC 解析會整批偏移八小時（原本 '2026-08-01' 會變成 08:00:00）。
+ * 帶 Z 或 ±hh:mm 的字串是真正的時間點，交給 Date 內建解析器處理，不走這裡。
+ */
+const LOCAL_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+const HAS_TZ_RE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/** 台北是 UTC+8 且不實施日光節約，所以固定偏移是安全的 */
+const TAIPEI_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/**
+ * 把任意輸入正規化成一個代表確切時刻的 Date，或 null（代表無法解析／空值）。
+ * 支援：Date 物件、'YYYY-MM-DD' 字串、Unix 毫秒數字。
+ */
+function toDate(input) {
+  if (input === null || input === undefined || input === '') return null;
+
+  if (input instanceof Date) {
+    return Number.isNaN(input.getTime()) ? null : input;
+  }
+
+  if (typeof input === 'number') {
+    if (!Number.isFinite(input)) return null;
+    const d = new Date(input);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  if (typeof input === 'string') {
+    const s = input.trim();
+    if (s === '') return null;
+    // 帶時區標記的字串是明確的時間點，交給內建解析器（例 2026-08-01T01:30:00Z）
+    if (HAS_TZ_RE.test(s)) {
+      const d = new Date(s);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    const m = LOCAL_DATETIME_RE.exec(s);
+    if (!m) return null;
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    const hour = m[4] === undefined ? 0 : Number(m[4]);
+    const minute = m[5] === undefined ? 0 : Number(m[5]);
+    const second = m[6] === undefined ? 0 : Number(m[6]);
+    if (month < 1 || month > 12) return null;
+    // 用 UTC day-0 技巧算該月天數（含閏年 2 月），避免自己刻一份月曆規則
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (day < 1 || day > daysInMonth) return null;
+    if (hour > 23 || minute > 59 || second > 59) return null;
+    // 明確用 Date.UTC 建構再扣掉台北偏移，不透過 new Date(string) 的內建解析器——
+    // 那個解析器對「沒帶時區的字串」的行為在不同引擎下不一致（有的當本地、有的當 UTC）。
+    return new Date(Date.UTC(year, month - 1, day, hour, minute, second) - TAIPEI_OFFSET_MS);
+  }
+
+  return null;
+}
+
+/** 明確指定 Asia/Taipei，一次取出年/月/日/時/分/秒，不受 process.env.TZ 或作業系統時區影響 */
+const PARTS_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: TZ,
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit'
+});
+
+function taipeiParts(d) {
+  const parts = {};
+  for (const { type, value } of PARTS_FORMATTER.formatToParts(d)) {
+    parts[type] = value;
+  }
+  let hour = Number(parts.hour);
+  if (hour === 24) hour = 0; // 少數 ICU 版本 h23 午夜會印成 24，夾回 0
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour,
+    minute: Number(parts.minute),
+    second: Number(parts.second)
+  };
+}
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+/** 'YYYY-MM-DD'（台北時區） */
+export function date(d) {
+  const dt = toDate(d);
+  if (!dt) return '';
+  const p = taipeiParts(dt);
+  return `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
+}
+
+/** 'YYYY-MM-DD HH:mm:ss'（台北時區） */
+export function datetime(d) {
+  const dt = toDate(d);
+  if (!dt) return '';
+  const p = taipeiParts(dt);
+  return `${p.year}-${pad2(p.month)}-${pad2(p.day)} ${pad2(p.hour)}:${pad2(p.minute)}:${pad2(p.second)}`;
+}
+
+/** '民國 YYY 年 M 月 D 日'（台北時區；民國年＝西元年-1911；月日不補零） */
+export function roc(d) {
+  const dt = toDate(d);
+  if (!dt) return '';
+  const p = taipeiParts(dt);
+  return `民國 ${p.year - 1911} 年 ${p.month} 月 ${p.day} 日`;
+}
+
+const ESC_MAP = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;'
+};
+
+/** HTML 轉義：& < > " ' 五個字元 */
+export function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, (ch) => ESC_MAP[ch]);
+}
+
+/** 千分位金額，例 1234567 → '1,234,567'；-1234 → '-1,234' */
+export function money(n) {
+  if (n === null || n === undefined || n === '') return '';
+  const num = typeof n === 'number' ? n : Number(n);
+  if (!Number.isFinite(num)) return '';
+
+  const negative = num < 0;
+  const abs = Math.abs(num);
+  const [intPart, fracPart] = String(abs).split('.');
+  const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const result = fracPart ? `${withCommas}.${fracPart}` : withCommas;
+  return negative ? `-${result}` : result;
+}
+
+</script>
+
+<script type="text/plain" id="src-ui">
+/**
+ * 全系統唯一一份共用 UI 元件 —— toast / loading / confirm / dialog / signaturePad
+ *
+ * 正本規格：docs/spec.md §4.10（ctx.ui 的逐字元簽章）、§8（樣式系統）。
+ * 每個模組一律透過 ctx.ui 拿到這五個函式，不得自己再刻一份
+ * （教訓來源：宿舍合約系統把簽名板複製了兩份、esc() 複製了三份）。
+ *
+ * 規則：
+ *   - 只能用 platform/css/components.css 既有的 class，不內嵌樣式、不新增色碼。
+ *     簽名板需要的顏色一律用 getComputedStyle 讀 tokens.css 的 CSS 變數，不寫死色碼。
+ *   - 訊息一律經過 fmt.js 的 esc() 轉義，這裡不重刻一份。
+ *   - 本檔預期執行在瀏覽器環境（用到全域 document / window / getComputedStyle）。
+ */
+
+import { esc } from './fmt.js';
+
+/* ============================================================
+   toast(message, type)
+   ============================================================ */
+
+const TOAST_TYPES = new Set(['ok', 'warn', 'danger', 'info']);
+const TOAST_DURATION_MS = 3200;
+
+let toastStackEl = null;
+
+function ensureToastStack() {
+  if (toastStackEl && document.body.contains(toastStackEl)) return toastStackEl;
+  toastStackEl = document.createElement('div');
+  toastStackEl.className = 'toast-stack';
+  document.body.appendChild(toastStackEl);
+  return toastStackEl;
+}
+
+/**
+ * type: 'ok' | 'warn' | 'danger' | 'info'（預設 'info'）→ void
+ * 同時多則會疊在同一個 .toast-stack 裡（components.css 已用 flex+gap 排開，
+ * 不會互相蓋住），每則數秒後自動移除。
+ */
+export function toast(message, type) {
+  const t = TOAST_TYPES.has(type) ? type : 'info';
+  const stack = ensureToastStack();
+
+  const el = document.createElement('div');
+  el.className = t === 'info' ? 'toast' : `toast toast-${t}`;
+  el.innerHTML = esc(message);
+  stack.appendChild(el);
+
+  setTimeout(() => {
+    if (el.parentNode) el.parentNode.removeChild(el);
+  }, TOAST_DURATION_MS);
+}
+
+/* ============================================================
+   loading(on)
+   ============================================================ */
+
+// 可重入計數器：兩支非同步請求同時進行時，先回來的那支不該把畫面的
+// 載入中關掉，所以要連呼叫兩次 loading(true) 之後、連呼叫兩次
+// loading(false) 才真的關閉。
+let loadingCount = 0;
+let loadingOverlayEl = null;
+
+function showLoadingOverlay() {
+  if (loadingOverlayEl) return;
+  loadingOverlayEl = document.createElement('div');
+  loadingOverlayEl.className = 'loading-overlay';
+
+  const spinner = document.createElement('div');
+  spinner.className = 'spinner';
+  loadingOverlayEl.appendChild(spinner);
+
+  document.body.appendChild(loadingOverlayEl);
+}
+
+function hideLoadingOverlay() {
+  if (loadingOverlayEl && loadingOverlayEl.parentNode) {
+    loadingOverlayEl.parentNode.removeChild(loadingOverlayEl);
+  }
+  loadingOverlayEl = null;
+}
+
+/** on: boolean → void。可重入（內部計數器）。 */
+export function loading(on) {
+  if (on) {
+    loadingCount += 1;
+    if (loadingCount === 1) showLoadingOverlay();
+    return;
+  }
+
+  if (loadingCount === 0) return; // 沒有對應的 true，忽略多餘的 false
+  loadingCount -= 1;
+  if (loadingCount === 0) hideLoadingOverlay();
+}
+
+/* ============================================================
+   dialog({ title, body, actions }) → Promise<value>
+   ============================================================ */
+
+const VARIANT_CLASS = {
+  primary: 'btn-primary',
+  secondary: 'btn-secondary',
+  danger: 'btn-danger'
+};
+
+function focusableEls(container) {
+  const candidates = [];
+  const walk = (node) => {
+    for (const child of node.children || []) {
+      if (child.tagName === 'BUTTON' && !child.hasAttribute?.('disabled')) {
+        candidates.push(child);
+      }
+      walk(child);
+    }
+  };
+  walk(container);
+  return candidates;
+}
+
+/**
+ * actions: [{ label, value, variant }]，variant: 'primary'|'secondary'|'danger'
+ * → Promise<value>；使用者按 Esc 或點背景遮罩關閉 → Promise<null>。
+ * 開啟時焦點進入對話框，關閉後焦點還給開啟前的元素。
+ */
+export function dialog(options) {
+  const { title, body, actions } = options || {};
+
+  // 2026-08-15 對抗審查補：對外暴露 close()。
+  // 原本 close() 只是內部閉包，呼叫端拿不到——結果是「模組卸載時要能關掉開著的對話框」
+  // 這件事用共用元件反而做不到，模組只好自己刻一套彈窗，共用元件形同虛設。
+  // 回傳值仍然是可以 await 的 Promise（簽章沒變），只是多掛一個 close(value) 方法。
+  let closeHandle = null;
+
+  const promise = new Promise((resolve) => {
+    const previousActive = document.activeElement;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'dialog-overlay';
+
+    const box = document.createElement('div');
+    box.className = 'dialog';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.setAttribute('tabindex', '-1');
+
+    if (title) {
+      const titleEl = document.createElement('div');
+      titleEl.className = 'dialog-title';
+      titleEl.innerHTML = esc(title);
+      box.appendChild(titleEl);
+    }
+
+    if (body) {
+      const bodyEl = document.createElement('div');
+      bodyEl.className = 'dialog-body';
+      // body 可以是字串（一律轉義，防注入）或已經建好的 DOM 節點（原樣放進去）。
+      // 支援 DOM 節點是 2026-08-14 補的：原本只吃純文字，導致「要放輸入欄的對話框」
+      // 做不出來，人員管理模組只好自己刻一套彈窗——那正是這個專案要消滅的重複。
+      // 放節點的責任在呼叫端：節點裡的使用者資料要自己先經過 esc()。
+      if (typeof body === 'string') {
+        bodyEl.innerHTML = esc(body);
+      } else if (body && typeof body === 'object' && body.nodeType === 1) {
+        bodyEl.appendChild(body);
+      } else {
+        bodyEl.innerHTML = esc(String(body));
+      }
+      box.appendChild(bodyEl);
+    }
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'dialog-actions';
+
+    const list = Array.isArray(actions) ? actions : [];
+    for (const action of list) {
+      const variantClass = VARIANT_CLASS[action && action.variant] || VARIANT_CLASS.secondary;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `btn ${variantClass}`;
+      btn.innerHTML = esc(action && action.label);
+      btn.addEventListener('click', () => close(action ? action.value : null));
+      actionsEl.appendChild(btn);
+    }
+    box.appendChild(actionsEl);
+    overlay.appendChild(box);
+
+    function onKeydown(e) {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        e.preventDefault?.();
+        close(null);
+        return;
+      }
+      // 簡單 focus trap：Tab／Shift+Tab 只在對話框內的按鈕之間循環
+      if (e.key === 'Tab') {
+        const items = focusableEls(box);
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault?.();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault?.();
+          first.focus();
+        }
+      }
+    }
+
+    function onOverlayClick(e) {
+      if (e.target === overlay) close(null);
+    }
+
+    let closed = false;
+    function close(value) {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener('keydown', onKeydown, true);
+      overlay.removeEventListener('click', onOverlayClick);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (previousActive && typeof previousActive.focus === 'function') {
+        previousActive.focus();
+      }
+      resolve(value === undefined ? null : value);
+    }
+    closeHandle = close;
+
+    overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeydown, true);
+
+    document.body.appendChild(overlay);
+
+    const firstFocusable = focusableEls(box)[0];
+    (firstFocusable || box).focus();
+  });
+
+  /** 從外部強制關閉（模組 unmount 時用）。已經關掉再呼叫是安全的，不會重複 resolve。 */
+  promise.close = (value) => { if (closeHandle) closeHandle(value); };
+  return promise;
+}
+
+/**
+ * message → Promise<boolean>（取消為 false，確定為 true）。
+ * 直接用 dialog() 實作，不另寫一套。
+ */
+export function confirm(message) {
+  return dialog({
+    body: message,
+    actions: [
+      { label: '取消', value: false, variant: 'secondary' },
+      { label: '確定', value: true, variant: 'primary' }
+    ]
+  }).then((value) => value === true);
+}
+
+/* ============================================================
+   signaturePad(canvasEl) → { isEmpty(), toDataURL(), clear() }
+   ============================================================ */
+
+/** 從 tokens.css 讀 CSS 變數，不在 JS 裡寫死色碼 */
+function cssVar(name) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return value ? value.trim() : '';
+}
+
+function pointerPos(canvasEl, e) {
+  const rect = canvasEl.getBoundingClientRect();
+  const point = e.touches && e.touches.length ? e.touches[0] : e;
+  return { x: point.clientX - rect.left, y: point.clientY - rect.top };
+}
+
+/**
+ * 手機觸控與桌機滑鼠都可簽名；處理 devicePixelRatio 讓高解析螢幕不糊。
+ * clear() 之後 isEmpty() 必為 true。
+ */
+export function signaturePad(canvasEl) {
+  const ctx = canvasEl.getContext('2d');
+
+  // 依目前版面尺寸（乘上 devicePixelRatio）設定畫布解析度；設定 canvasEl.width/height
+  // 會重置整個 2D context 狀態，所以每次真的改尺寸後都要重新套用線條樣式。
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvasEl.getBoundingClientRect();
+    const w = Math.round(rect.width * dpr);
+    const h = Math.round(rect.height * dpr);
+    // 版面尚未就緒時 rect 會是 0（例如畫布剛插入 DOM、樣式表還沒套用完），
+    // 這時候先不要把畫布釘死在 1px 解析度，等下一輪畫面更新後再試一次。
+    if (w < 2 || h < 2) return false;
+    canvasEl.width = w;
+    canvasEl.height = h;
+    ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2.6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = cssVar('--ink');
+    return true;
+  }
+
+  if (!resize() && typeof requestAnimationFrame === 'function') {
+    // 這麼早（下一次畫面更新之前）使用者不可能已經簽了名，補一次量測是安全的。
+    requestAnimationFrame(resize);
+  }
+
+  let drawing = false;
+  let dirty = false;
+  let last = null;
+
+  function start(e) {
+    e.preventDefault?.();
+    drawing = true;
+    last = pointerPos(canvasEl, e);
+  }
+
+  function move(e) {
+    if (!drawing) return;
+    e.preventDefault?.();
+    const p = pointerPos(canvasEl, e);
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    last = p;
+    dirty = true;
+  }
+
+  function end() {
+    drawing = false;
+    last = null;
+  }
+
+  canvasEl.addEventListener('mousedown', start);
+  canvasEl.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  canvasEl.addEventListener('touchstart', start, { passive: false });
+  canvasEl.addEventListener('touchmove', move, { passive: false });
+  canvasEl.addEventListener('touchend', end);
+  canvasEl.addEventListener('touchcancel', end);
+
+  function clear() {
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    dirty = false;
+  }
+
+  /**
+   * 解除所有監聽（2026-08-15 對抗審查補）。
+   * 原本只回傳三個方法，沒有解除的路——但這支掛了七個監聽，其中
+   * `window` 上的 mouseup 是掛在全域的。宿舍模組會反覆進出簽名畫面，
+   * 每進一次就多累積一組，模組 unmount 也帶不走。
+   * 模組在 unmount 時必須呼叫這支。
+   */
+  function destroy() {
+    canvasEl.removeEventListener('mousedown', start);
+    canvasEl.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', end);
+    canvasEl.removeEventListener('touchstart', start);
+    canvasEl.removeEventListener('touchmove', move);
+    canvasEl.removeEventListener('touchend', end);
+    canvasEl.removeEventListener('touchcancel', end);
+  }
+
+  return {
+    isEmpty: () => !dirty,
+    toDataURL: () => canvasEl.toDataURL('image/png'),
+    clear,
+    destroy
+  };
+}
+
+</script>
+
+<script type="text/plain" id="src-format">
+// 稽核系統共用格式化純函式（spec.md §5 逐字元契約）
+// 同時支援瀏覽器（掛 window.Format）與 node（module.exports）
+
+(function (root) {
+  'use strict';
+
+  var MONTH_LABELS = {
+    '01': '一月', '02': '二月', '03': '三月', '04': '四月',
+    '05': '五月', '06': '六月', '07': '七月', '08': '八月',
+    '09': '九月', '10': '十月', '11': '十一月', '12': '十二月'
+  };
+
+  // recordKey('sxl-gf', '2026-08') → 'sxl-gf_2026-08'
+  function recordKey(store, month) {
+    return store + '_' + month;
+  }
+
+  // monthLabel('2026-08') → '八月'
+  function monthLabel(month) {
+    var mm = String(month).split('-')[1];
+    return MONTH_LABELS[mm] || '';
+  }
+
+  // correctRate(19, 20) → 95（四捨五入整數）
+  function correctRate(correct, total) {
+    if (!total) return 0;
+    return Math.round((correct / total) * 100);
+  }
+
+  // anomalyOnlyCounts(異常項數, 標準項數) → {sample_count, correct_count, correct_rate}
+  // 「只填異常項」模式用：會計只輸入異常的品項，其餘視同正確，
+  // 分母固定＝標準項數（預設 20），所以 1 項異常 → 19/20 → 95。
+  // 異常項數超過標準項數時 correct_count 夾在 0（不產生負數），由前端另外擋下送出。
+  function anomalyOnlyCounts(anomalyCount, sampleSize) {
+    var total = Number(sampleSize) > 0 ? Number(sampleSize) : 20;
+    var anomalies = Math.max(0, Number(anomalyCount) || 0);
+    var correct = Math.max(0, total - anomalies);
+    return {
+      sample_count: total,
+      correct_count: correct,
+      correct_rate: correctRate(correct, total)
+    };
+  }
+
+  // buildAnomalyText(details) → 只取 verdict==='異常' 的項，依傳入順序編號
+  // 格式：{序號}.{品項}:盤點{盤點數}{單位}，覆盤{複盤數}{單位}，多筆以 '\n' 連接
+  function buildAnomalyText(details) {
+    var list = (details || []).filter(function (d) {
+      return d.verdict === '異常';
+    });
+    var lines = list.map(function (d, i) {
+      return (i + 1) + '.' + d.item + ':盤點' + d.book_qty + d.unit +
+        '，覆盤' + d.recount_qty + d.unit;
+    });
+    return lines.join('\n');
+  }
+
+  // ── 營運稽核表（2026-08-11 新增；與上面的月初盤點抽查是兩套獨立統計）──────────
+
+  // opsCounts(details, total) → {total, pass, fail, pending, track, pass_rate}
+  // details: [{verdict:'合格'|'未完成'|'未檢查', track:bool}]，total＝檢查表細項總數。
+  // 合格率分母固定＝total（細項總數），**未檢查的項目算在分母裡**——
+  // 沒檢查完的稽核不該顯示 100%，這是刻意的（跟盤點那套「只填異常項」的固定分母同精神）。
+  function opsCounts(details, total) {
+    var list = details || [];
+    var denom = Number(total) > 0 ? Number(total) : list.length;
+    var pass = 0, fail = 0, track = 0;
+    list.forEach(function (d) {
+      if (d.verdict === '合格') pass++;
+      else if (d.verdict === '未完成') fail++;
+      if (d.track) track++;
+    });
+    return {
+      total: denom,
+      pass: pass,
+      fail: fail,
+      pending: Math.max(0, denom - pass - fail),
+      track: track,
+      pass_rate: correctRate(pass, denom)
+    };
+  }
+
+  // buildOpsSummary(details) → 只取 verdict==='未完成' 的項，依傳入順序編號
+  // 格式：{序號}.{群組}－{檢查項目}:{說明}，多筆以 '\n' 連接（冒號半形，同 buildAnomalyText）
+  // 沒填說明就只到項目名為止，不留一個孤零零的冒號。
+  function buildOpsSummary(details) {
+    var list = (details || []).filter(function (d) {
+      return d.verdict === '未完成';
+    });
+    var lines = list.map(function (d, i) {
+      var head = (i + 1) + '.' + (d.group || '') + '－' + (d.text || '');
+      var note = (d.note || '').trim();
+      return note ? head + ':' + note : head;
+    });
+    return lines.join('\n');
+  }
+
+  var Format = {
+    recordKey: recordKey,
+    monthLabel: monthLabel,
+    correctRate: correctRate,
+    anomalyOnlyCounts: anomalyOnlyCounts,
+    buildAnomalyText: buildAnomalyText,
+    opsCounts: opsCounts,
+    buildOpsSummary: buildOpsSummary
+  };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Format;
+  } else {
+    root.Format = Format;
+  }
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+
+<script type="text/plain" id="src-sampling">
+// 抽樣純函式：drawSample / redrawOne（spec.md §3 畫面3、task.md 共用介面契約）
+// 同時支援瀏覽器（掛 window.Sampling）與 node（module.exports）
+//
+// 純隨機、不排除抽過的品項——記憶只參考、系統不干涉（Eason 明確要求，見 requirements §4.1）。
+//
+// drawSample(storeItems, storeDetails, n)
+//   storeItems   = 該店品項庫（呼叫端已篩選僅 active 的項目；本檔仍會保守過濾 active!==false）
+//   storeDetails = 該店歷史抽查明細列陣列（{item, month, ...}，跨年份全量）
+//   n            = 欲抽數量；不足 n（品項庫 <= n）→ 全給
+//   回傳         = [{name, unit, lastDrawn}]，lastDrawn = 該品項在 storeDetails 出現過的最近月份
+//                  ('YYYY-MM'，字典序即可比較大小)，沒抽過 = null；同一次抽出不重複。
+//
+// redrawOne(currentNames, storeItems, storeDetails)
+//   currentNames = 目前清單中的品項名稱陣列（換掉的那項也算在內，避免換成自己）
+//   回傳一個不在 currentNames 裡的 {name, unit, lastDrawn}；沒得換回 null。
+//
+// lastDrawnOf(name, storeDetails)
+//   單獨查某品項的歷史標記，給「手動加入品項」用（自訂品項不在品項庫、抽不出來）。
+
+(function (root) {
+  'use strict';
+
+  // 找品項名稱在 storeDetails 裡最近一次出現的月份；沒出現過回 null
+  function findLastDrawn(name, storeDetails) {
+    var last = null;
+    (storeDetails || []).forEach(function (d) {
+      if (d && d.item === name && d.month) {
+        if (last === null || d.month > last) {
+          last = d.month;
+        }
+      }
+    });
+    return last;
+  }
+
+  // Fisher-Yates 洗牌，回傳新陣列（不改動原陣列）
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i];
+      a[i] = a[j];
+      a[j] = tmp;
+    }
+    return a;
+  }
+
+  function activeOnly(storeItems) {
+    return (storeItems || []).filter(function (it) {
+      return it && it.active !== false;
+    });
+  }
+
+  function toSampleItem(item, storeDetails) {
+    return {
+      name: item.name,
+      unit: item.unit,
+      lastDrawn: findLastDrawn(item.name, storeDetails)
+    };
+  }
+
+  function drawSample(storeItems, storeDetails, n) {
+    var pool = activeOnly(storeItems);
+    var count = Math.max(0, n || 0);
+    var picked = shuffle(pool).slice(0, count);
+    return picked.map(function (it) {
+      return toSampleItem(it, storeDetails);
+    });
+  }
+
+  function redrawOne(currentNames, storeItems, storeDetails) {
+    var used = {};
+    (currentNames || []).forEach(function (name) {
+      used[name] = true;
+    });
+    var pool = activeOnly(storeItems).filter(function (it) {
+      return !used[it.name];
+    });
+    if (pool.length === 0) return null;
+    var idx = Math.floor(Math.random() * pool.length);
+    return toSampleItem(pool[idx], storeDetails);
+  }
+
+  var Sampling = {
+    drawSample: drawSample,
+    redrawOne: redrawOne,
+    // 手動加入品項時要單獨查歷史標記——加入的品項可能不在品項庫（自訂品項），
+    // 沒有候選池可抽，只能直接查明細。
+    lastDrawnOf: findLastDrawn
+  };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Sampling;
+  } else {
+    root.Sampling = Sampling;
+  }
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+
+<script type="text/plain" id="src-mockdata">
+// 種子資料：五店品項庫＋1–7 月歷史 records/details（真 sheet 摘錄，reason 一律「未分類」）
+// 同時支援瀏覽器（掛 window.MockData）與 node（module.exports）
+
+(function (root) {
+  'use strict';
+
+  // 通行碼（僅 mock 用；內部常數，不出現在 Api.getAll 回傳的 config 內）
+  var PASSCODES = {
+    accountant: '1234', // 會計
+    viewer: '5678'      // 主管
+  };
+
+  var CONFIG = {
+    reasons: ['盤點錯誤（門市盤錯）', '損耗未記', '單位混淆', '進出貨未入帳', '其他'],
+    change_fund_std: 10000,
+    petty_cash_std: 10000,
+    stores: [
+      { code: 'sxl-gf', name: '小辛辣光復', order: 1 },
+      { code: 'ck', name: '央廚', order: 2 },
+      { code: 'mzt-gf', name: '墨竹亭光復', order: 3 },
+      { code: 'mzt-js', name: '墨竹亭金山', order: 4 },
+      { code: 'mzt-lzl', name: '墨竹亭六張犁', order: 5 }
+    ],
+    accountant_ok: true
+  };
+
+  // ---- 品項庫：{store, name, unit, active} ----
+  function buildItems(store, pairs) {
+    return pairs.map(function (p) {
+      return { store: store, name: p[0], unit: p[1], active: true };
+    });
+  }
+
+  var SXL_GF_PAIRS = [
+    ['牛肉片', '公斤'], ['鴨血', '盒'], ['煙燻豬頭皮', '包'], ['感熱貼紙', '捲'],
+    ['雞豚高湯', '包'], ['902碗', '條'], ['滷牛肚', '包'], ['米血', '包'],
+    ['香菜', 'kg'], ['水蓮', '包'], ['外袋602碗', '條'], ['肉燥', '包'],
+    ['豬血糕', '包'], ['王子麵', '包'], ['冬粉', '把'], ['大陸妹', '斤'],
+    ['高麗菜', '顆'], ['玉米筍', '包'], ['金針菇', '包'], ['豬肉片', '公斤'],
+    ['雞胸肉', '公斤'], ['蝦餃', '包'], ['燕餃', '包'], ['貢丸', '包'],
+    ['豆皮', '包'], ['老油條', '包'], ['凍豆腐', '包'], ['娃娃菜', '顆'],
+    ['杏鮑菇', '包'], ['麻辣湯底', '包'], ['花椒粒', '包'], ['辣椒粉', '包'],
+    ['打包盒', '個'], ['塑膠袋', '包'], ['餐巾紙', '包'], ['免洗筷', '包'],
+    ['收據紙捲', '捲'],
+    // 單位刻意留空：真實品項庫有 58 項當初從庫存 PDF 解析時沒印單位。
+    // 2026-08-07 實查到後果——sxl-gf 八月異常說明印成「盤點2.8，覆盤2」少了單位。
+    // 假資料保留這種項目，缺單位的驗證才測得到。
+    ['台灣白芝麻粒（1斤/包）', '']
+  ];
+
+  var CK_PAIRS = [
+    ['麻辣湯底', '桶'], ['白湯湯底', '桶'], ['花椒油', '瓶'], ['辣椒油', '瓶'],
+    ['沙茶醬', '罐'], ['蒜蓉醬', '罐'], ['打拋醬', '包'], ['蟹黃醬', '包'],
+    ['柚子醬', '罐'], ['肉燥', '包'], ['滷牛肚', '包'], ['牛肉片', '公斤'],
+    ['豬肉片', '公斤'], ['雞胸肉', '公斤'], ['鴨血', '盒'], ['米血', '包'],
+    ['豆皮', '包'], ['貢丸', '包'], ['燕餃', '包'], ['蝦餃', '包'],
+    ['凍豆腐', '包'], ['豬頭皮', '包'], ['芽菜', '包'], ['高麗菜', '顆'],
+    ['大陸妹', '斤'], ['蔥', '斤'], ['蒜仁', '斤'], ['香菜', 'kg'],
+    ['打包盒', '個'], ['塑膠袋', '包'], ['感熱貼紙', '捲'], ['LOGO袋3斤', '包'],
+    ['免洗筷', '包'], ['餐巾紙', '包']
+  ];
+
+  var MZT_JS_PAIRS = [
+    ['打拋醬', '包'], ['LOGO袋3斤', '包'], ['貢丸', '包'], ['蟹黃醬', '包'],
+    ['蔥', '斤'], ['鴨血', '盒'], ['米血', '包'], ['豆皮', '包'],
+    ['燕餃', '包'], ['蝦餃', '包'], ['凍豆腐', '包'], ['豬頭皮', '包'],
+    ['芽菜', '包'], ['高麗菜', '顆'], ['大陸妹', '斤'], ['中蒜仁', '斤'],
+    ['香菜', 'kg'], ['水蓮', '包'], ['娃娃菜', '顆'], ['杏鮑菇', '包'],
+    ['金針菇', '包'], ['玉米筍', '包'], ['牛肉片', '公斤'], ['豬肉片', '公斤'],
+    ['雞胸肉', '公斤'], ['滷牛肚', '包'], ['肉燥', '包'], ['麻辣湯底', '包'],
+    ['沙茶醬', '罐'], ['柚子醬', '罐'], ['打包盒', '個'], ['塑膠袋', '包'],
+    ['感熱貼紙', '捲'], ['免洗筷', '包'], ['餐巾紙', '包']
+  ];
+
+  var MZT_GF_PAIRS = [
+    ['豬頭皮', '包'], ['芽菜', '包'], ['花雕雞肉', '包'], ['大陸妹', '斤'],
+    ['柚子醬', '罐'], ['鴨血', '盒'], ['米血', '包'], ['豆皮', '包'],
+    ['燕餃', '包'], ['蝦餃', '包'], ['貢丸', '包'], ['凍豆腐', '包'],
+    ['高麗菜', '顆'], ['蔥', '斤'], ['中蒜仁', '斤'], ['香菜', 'kg'],
+    ['水蓮', '包'], ['娃娃菜', '顆'], ['杏鮑菇', '包'], ['金針菇', '包'],
+    ['玉米筍', '包'], ['牛肉片', '公斤'], ['豬肉片', '公斤'], ['雞胸肉', '公斤'],
+    ['滷牛肚', '包'], ['肉燥', '包'], ['打拋醬', '包'], ['蟹黃醬', '包'],
+    ['麻辣湯底', '包'], ['沙茶醬', '罐'], ['打包盒', '個'], ['塑膠袋', '包'],
+    ['感熱貼紙', '捲'], ['免洗筷', '包'], ['餐巾紙', '包']
+  ];
+
+  var MZT_LZL_PAIRS = [
+    ['打拋醬', '包'], ['中蒜仁', '斤'], ['米血', '條'], ['鴨血', '盒'],
+    ['雞肉絲', '包'], ['豆皮', '包'], ['燕餃', '包'], ['蝦餃', '包'],
+    ['貢丸', '包'], ['凍豆腐', '包'], ['豬頭皮', '包'], ['芽菜', '包'],
+    ['高麗菜', '顆'], ['大陸妹', '斤'], ['蔥', '斤'], ['香菜', 'kg'],
+    ['水蓮', '包'], ['娃娃菜', '顆'], ['杏鮑菇', '包'], ['金針菇', '包'],
+    ['玉米筍', '包'], ['牛肉片', '公斤'], ['豬肉片', '公斤'], ['雞胸肉', '公斤'],
+    ['滷牛肚', '包'], ['肉燥', '包'], ['蟹黃醬', '包'], ['柚子醬', '罐'],
+    ['麻辣湯底', '包'], ['沙茶醬', '罐'], ['打包盒', '個'], ['塑膠袋', '包'],
+    ['感熱貼紙', '捲'], ['免洗筷', '包'], ['餐巾紙', '包']
+  ];
+
+  var ITEMS = [].concat(
+    buildItems('sxl-gf', SXL_GF_PAIRS),
+    buildItems('ck', CK_PAIRS),
+    buildItems('mzt-gf', MZT_GF_PAIRS),
+    buildItems('mzt-js', MZT_JS_PAIRS),
+    buildItems('mzt-lzl', MZT_LZL_PAIRS)
+  );
+
+  // ---- 1–7 月歷史紀錄：records ＋ 異常 details ----
+
+  // anomaly 清單：{item, unit, book, recount}
+  function anomalyText(list) {
+    return list.map(function (d, i) {
+      return (i + 1) + '.' + d.item + ':盤點' + d.book + d.unit +
+        '，覆盤' + d.recount + d.unit;
+    }).join('\n');
+  }
+
+  function toDetails(store, month, list) {
+    var key = store + '_' + month;
+    return list.map(function (d) {
+      return {
+        record_key: key,
+        store: store,
+        month: month,
+        item: d.item,
+        unit: d.unit,
+        book_qty: d.book,
+        recount_qty: d.recount,
+        verdict: '異常',
+        reason: '未分類',
+        note: ''
+      };
+    });
+  }
+
+  function auditedRecord(store, month, correct, total, changeFund, pettyCash, tip, tipMatch, anomalies) {
+    return {
+      record_key: store + '_' + month,
+      store: store,
+      month: month,
+      status: '已稽核',
+      audit_date: month + '-05',
+      sample_count: total,
+      correct_count: correct,
+      correct_rate: Math.round((correct / total) * 100),
+      change_fund: changeFund,
+      petty_cash: pettyCash,
+      tip_amount: tip,
+      tip_match: tipMatch,
+      anomaly_text: anomalyText(anomalies),
+      note: '',
+      submitted_at: month + '-05T10:00:00+08:00'
+    };
+  }
+
+  function restRecord(store, month) {
+    return {
+      record_key: store + '_' + month,
+      store: store,
+      month: month,
+      status: '輪休',
+      audit_date: month + '-05',
+      sample_count: '',
+      correct_count: '',
+      correct_rate: '',
+      change_fund: '',
+      petty_cash: '',
+      tip_amount: '',
+      tip_match: '',
+      anomaly_text: '',
+      note: '',
+      submitted_at: month + '-05T10:00:00+08:00'
+    };
+  }
+
+  var RECORDS = [];
+  var DETAILS = [];
+
+  function addAudited(store, month, correct, total, changeFund, pettyCash, tip, tipMatch, anomalies) {
+    RECORDS.push(auditedRecord(store, month, correct, total, changeFund, pettyCash, tip, tipMatch, anomalies));
+    DETAILS = DETAILS.concat(toDetails(store, month, anomalies));
+  }
+
+  function addRest(store, month) {
+    RECORDS.push(restRecord(store, month));
+  }
+
+  // ---- sxl-gf 小辛辣光復（金庫 1–7 月零找金/零用金/小費比對皆正確/相符）----
+  addAudited('sxl-gf', '2026-01', 16, 20, '正確', '正確', 457, '相符', [
+    { item: '牛肉片', unit: '公斤', book: 26.5, recount: 29.4 },
+    { item: '鴨血', unit: '盒', book: 27, recount: 32 },
+    { item: '煙燻豬頭皮', unit: '包', book: 5.75, recount: 6.5 },
+    { item: '感熱貼紙', unit: '捲', book: 5, recount: 15 }
+  ]);
+  addAudited('sxl-gf', '2026-02', 18, 20, '正確', '正確', 542, '相符', [
+    { item: '雞豚高湯', unit: '包', book: 1.5, recount: 0.76 },
+    { item: '902碗', unit: '條', book: 44.8, recount: 43.8 }
+  ]);
+  addAudited('sxl-gf', '2026-03', 20, 20, '正確', '正確', 542, '相符', []);
+  addAudited('sxl-gf', '2026-04', 19, 20, '正確', '正確', 642, '相符', [
+    { item: '滷牛肚', unit: '包', book: 8.1, recount: 9 }
+  ]);
+  addAudited('sxl-gf', '2026-05', 17, 20, '正確', '正確', 742, '相符', [
+    { item: '米血', unit: '包', book: 9, recount: 8 },
+    { item: '香菜', unit: 'kg', book: 1, recount: 0.7 },
+    { item: '水蓮', unit: '包', book: 6.07, recount: 5.7 }
+  ]);
+  addAudited('sxl-gf', '2026-06', 19, 20, '正確', '正確', 792, '相符', [
+    { item: '外袋602碗', unit: '條', book: 20, recount: 19 }
+  ]);
+  addAudited('sxl-gf', '2026-07', 19, 20, '正確', '正確', 1792, '相符', [
+    { item: '肉燥', unit: '包', book: 10, recount: 9 }
+  ]);
+
+  // ---- ck 央廚（1–3 月已稽核 20/20；4–7 月輪休；歷史金庫欄未記錄）----
+  addAudited('ck', '2026-01', 20, 20, '', '', '', '', []);
+  addAudited('ck', '2026-02', 20, 20, '', '', '', '', []);
+  addAudited('ck', '2026-03', 20, 20, '', '', '', '', []);
+  addRest('ck', '2026-04');
+  addRest('ck', '2026-05');
+  addRest('ck', '2026-06');
+  addRest('ck', '2026-07');
+
+  // ---- mzt-js 金山店（歷史金庫欄未記錄）----
+  addRest('mzt-js', '2026-01');
+  addAudited('mzt-js', '2026-02', 18, 20, '', '', '', '', [
+    { item: '打拋醬', unit: '包', book: 6.1, recount: 7.2 },
+    { item: 'LOGO袋3斤', unit: '包', book: 2.8, recount: 2.3 }
+  ]);
+  addRest('mzt-js', '2026-03');
+  addRest('mzt-js', '2026-04');
+  addRest('mzt-js', '2026-05');
+  addRest('mzt-js', '2026-06');
+  addAudited('mzt-js', '2026-07', 17, 20, '', '', '', '', [
+    { item: '貢丸', unit: '包', book: 16.8, recount: 17.8 },
+    { item: '蟹黃醬', unit: '包', book: 19.4, recount: 24.5 },
+    { item: '蔥', unit: '斤', book: 5, recount: 6 }
+  ]);
+
+  // ---- mzt-gf 光復店（歷史金庫欄未記錄）----
+  addAudited('mzt-gf', '2026-01', 20, 20, '', '', '', '', []);
+  addRest('mzt-gf', '2026-02');
+  addAudited('mzt-gf', '2026-03', 16, 20, '', '', '', '', [
+    { item: '豬頭皮', unit: '包', book: 4.4, recount: 2.4 },
+    { item: '芽菜', unit: '包', book: 6, recount: 5 },
+    { item: '花雕雞肉', unit: '包', book: 14, recount: 15 },
+    { item: '大陸妹', unit: '斤', book: 2.5, recount: 25 }
+  ]);
+  addRest('mzt-gf', '2026-04');
+  addAudited('mzt-gf', '2026-05', 19, 20, '', '', '', '', [
+    { item: '柚子醬', unit: '罐', book: 5, recount: 4 }
+  ]);
+  addRest('mzt-gf', '2026-06');
+  addRest('mzt-gf', '2026-07');
+
+  // ---- mzt-lzl 六張犁店（歷史金庫欄未記錄；7 月未記錄＝不建 record）----
+  addRest('mzt-lzl', '2026-01');
+  addAudited('mzt-lzl', '2026-02', 18, 20, '', '', '', '', [
+    { item: '打拋醬', unit: '包', book: 7, recount: 8 },
+    { item: '中蒜仁', unit: '斤', book: 3.5, recount: 4.5 }
+  ]);
+  addRest('mzt-lzl', '2026-03');
+  addRest('mzt-lzl', '2026-04');
+  addRest('mzt-lzl', '2026-05');
+  addAudited('mzt-lzl', '2026-06', 17, 20, '', '', '', '', [
+    { item: '米血', unit: '條', book: 21, recount: 23 },
+    { item: '鴨血', unit: '盒', book: 35, recount: 34 },
+    { item: '雞肉絲', unit: '包', book: 6, recount: 7 }
+  ]);
+  // 2026-07：未記錄，不建 record
+
+  var MockData = {
+    passcodes: PASSCODES,
+    config: CONFIG,
+    items: ITEMS,
+    records: RECORDS,
+    details: DETAILS
+  };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = MockData;
+  } else {
+    root.MockData = MockData;
+  }
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+
+<script type="text/plain" id="src-opschecklist">
+// 營運稽核表檢查項目（來源：2026 營運稽核表，Eason 2026-08-11 指定參照
+// https://clever-gelato-bff2d9.netlify.app/ 的「營運管理」＋「品牌形象」兩大類）
+//
+// ⚠ 項目 id 是「大類序×群組序×項目序」算出來的（c0g0i0），**位置就是身分**。
+// 在中間插入或刪除項目會讓其後所有項目的 id 位移，歷史明細對不回原本的項目。
+// 要加項目一律**加在該群組最後面**；真的要刪就把它留著改文字，或另開 SCHEMA_VERSION。
+// 明細列同時存了大類／群組／項目全文，所以就算 id 位移，試算表本身仍看得懂。
+//
+// 同時支援瀏覽器（掛 window.OpsChecklist）與 node（module.exports）
+
+(function (root) {
+  'use strict';
+
+  var SCHEMA_VERSION = '2026-08';
+
+  var CATEGORIES = [
+    {
+      cat: '營運管理',
+      groups: [
+        {
+          name: '消防安全',
+          items: [
+            '一家店至少兩支滅火器',
+            '廚區〈爐火旁〉一支、客席區一支是否設置滅火器',
+            '滅火器壓力、有效期限是否正常',
+            '有後門之門市，出入是否暢通',
+            '瓦斯桶是否固定（不傾斜）',
+            '瓦斯桶是否張貼警語',
+            '新進同仁是否進行新進同仁教育訓練、一般安全教育訓練，簽名留檔'
+          ]
+        },
+        {
+          name: '營運',
+          items: [
+            '營運表單填寫是否正確〈日報表〉',
+            '文宣露出是否依規範執行'
+          ]
+        }
+      ]
+    },
+    {
+      cat: '品牌形象',
+      groups: [
+        {
+          name: '環境清潔',
+          items: [
+            '是否保持各項對外文宣張貼應乾淨無髒污',
+            '無張貼自製文宣品',
+            '保持餐廳外圍環境清潔〈招牌、LOGO、DM 架〉，清潔包含天、地、壁',
+            '保持餐廳內「客席區」環境清潔，包含天、地、壁',
+            '保持餐廳內「化妝室」環境清潔，包含天、地、壁',
+            '保持餐廳內「廚區」環境清潔，包含天、地、壁'
+          ]
+        },
+        {
+          name: '食安',
+          items: [
+            '任一商品保存是否在有效日期內（架上或庫存）※退貨商品已明確標示且區隔者不受此限',
+            '洗滌區清潔用品標示是否明確，放置區域依規範執行',
+            '洗手區域是否設置酒精瓶、酒精、擦手紙、洗手步驟',
+            '濾心日期是否定期更換'
+          ]
+        }
+      ]
+    }
+  ];
+
+  // 攤平成 [{id, cat, group, text, order}]，順序＝畫面順序＝明細列順序
+  var FLAT = [];
+  CATEGORIES.forEach(function (c, ci) {
+    c.groups.forEach(function (g, gi) {
+      g.items.forEach(function (text, ii) {
+        FLAT.push({
+          id: 'c' + ci + 'g' + gi + 'i' + ii,
+          cat: c.cat,
+          group: g.name,
+          text: text,
+          order: FLAT.length + 1
+        });
+      });
+    });
+  });
+
+  var BY_ID = {};
+  FLAT.forEach(function (it) { BY_ID[it.id] = it; });
+
+  var OpsChecklist = {
+    SCHEMA_VERSION: SCHEMA_VERSION,
+    categories: CATEGORIES,
+    flat: FLAT,
+    byId: function (id) { return BY_ID[id] || null; },
+    total: FLAT.length
+  };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = OpsChecklist;
+  } else {
+    root.OpsChecklist = OpsChecklist;
+  }
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+
+<script type="text/plain" id="src-umdbridge">
+/**
+ * UMD → ESM 轉接層（docs/plan.md「既有測試怎麼搬」那一節指定的做法）
+ *
+ * 為什麼需要這一層：
+ * 從稽核系統原樣搬過來的 format.js／sampling.js／mock-data.js／ops-checklist.js
+ * 是 UMD 寫法——node 裡走 `module.exports`，瀏覽器裡掛到 `window.Xxx`。
+ * 它們**刻意不改寫成 ESM**，因為既有測試要用 `require()` 載入它們，
+ * 改寫暴露方式等於在搬遷的同時改行為（plan.md 有寫，那是這類工程最典型的翻車點）。
+ *
+ * 但模組本體是 ES module，`import Format from './format.js'` 在瀏覽器裡會直接失敗：
+ *   SyntaxError: The requested module does not provide an export named 'default'
+ *
+ * 這一層就是那道橋：先 `import` 那些檔讓它們執行（副作用是掛上 window.Xxx），
+ * 再把全域上的東西轉成具名匯出給模組用。
+ *
+ * ⚠ 2026-08-15 踩到的教訓：這個問題**node 測試抓不到**。
+ * node 把 .js 當 CommonJS，`require()` 一路正常，15 支測試全綠；
+ * 只有真的在瀏覽器打開才會爆。跨執行環境的接縫，一定要在真環境點一次。
+ */
+
+import './format.js';
+import './sampling.js';
+import './mock-data.js';
+import './ops-checklist.js';
+
+/**
+ * 兩個執行環境走的是 UMD 裡不同的分支，所以要兩邊都撐住：
+ *
+ * - **瀏覽器**：上面的 `import './format.js'` 把它當 ES module 執行（那個檔沒有
+ *   import/export，是合法的 module），`module` 是 undefined → 走 `root.Format = ...`
+ *   分支，掛到 window 上。所以直接從全域取得。
+ * - **node**：`.js` 被當成 CommonJS，走 `module.exports` 分支，**全域上什麼都沒有**。
+ *   所以退而用動態 import 取它的 default（node 對 CJS 的互通就是包成 default）。
+ *
+ * 2026-08-15 踩到的教訓：第一版只寫了瀏覽器那半，node 測試全爆；
+ * 而更早之前只寫了 node 那半（模組直接 `import Format from './format.js'`），
+ * 15 支測試全綠、瀏覽器一開就爆。**跨環境的接縫，兩邊都要真的跑過一次。**
+ */
+const g = typeof window !== 'undefined' ? window : globalThis;
+
+async function resolve(name, path) {
+  if (g && g[name]) return g[name];
+  const mod = await import(path);
+  const value = mod.default || mod[name];
+  if (!value) {
+    throw new Error(
+      `[umd-bridge] 取不到 ${name}（試過全域與 ${path} 的 default）——` +
+      '那支 UMD 檔可能沒載入成功，或它的暴露名稱改了'
+    );
+  }
+  return value;
+}
+
+export const Format = await resolve('Format', './format.js');
+export const Sampling = await resolve('Sampling', './sampling.js');
+export const MockData = await resolve('MockData', './mock-data.js');
+export const OpsChecklist = await resolve('OpsChecklist', './ops-checklist.js');
+
+</script>
+
+<script type="text/plain" id="src-api">
+/**
+ * modules/audit-shared/api.js — 稽核共用資料層（T2-1）
+ *
+ * 正本規格：docs/spec.md §4.7（ctx）、§4.8（後端呼叫與回傳格式）、
+ * §6.4（兩張稽核卡片、一次後端呼叫——這支就是那一節在講的東西）、
+ * §7（店長節點裁切，已經在平台層 platform/api.js 做掉了，這裡不重做）。
+ *
+ * audit-ops（營運稽核表）與 audit-stock（月初盤點抽查）是首頁兩張獨立模組／卡片，
+ * 但共用同一支稽核後端（manifest.backend='audit'，spec §4.1 已約束 backend 必須等於 ns，
+ * 兩個模組的 ns 都是 'audit'）。若兩個模組各自呼叫 getAll，同一份資料會被抓兩次；
+ * 這支檔案就是它們共用的資料提供者：記憶體快取（TTL 60 秒）＋同時發起的呼叫合併成一次請求。
+ *
+ * 這一層刻意「薄」，只做資料存取，不做業務邏輯：
+ * - 不做節點裁切——平台層 platform/api.js 的 transformResponse_/maybeFilterOwnNode_
+ *   已經做過一次（spec §7）。這裡若重做會出現「裁兩次」的難查問題：兩邊過濾邏輯
+ *   稍有出入，就會變成「有時候看得到、有時候看不到別店資料」，比完全不裁切更難查。
+ * - 不自己發網路請求、不自己組網址——一律透過 ctx.api.call(backendId, action, payload)
+ *   （spec §4.7 ctx.api 的簽章、§4.8 的送出格式）。backendId 固定寫死 'audit'：
+ *   audit-ops／audit-stock 兩個模組的 manifest.backend 都是 'audit'（spec §4.1／§4.5），
+ *   而 ctx 本身不帶 moduleId（spec §4.7 沒有這個欄位），所以「呼叫端該打哪支後端」
+ *   在這支共用層裡是固定的，不是從 ctx 動態讀出來的。
+ *
+ * 快取策略：
+ * - getAll(ctx)：快取命中且未過期 → 直接回傳快取值；否則，若已經有一個 in-flight 的
+ *   請求在跑（另一個模組的 badge() 或 mount() 幾乎同時觸發），重複使用同一個 Promise，
+ *   不再多發一次請求，兩邊等到的是同一份結果；都沒有的話才真的發一次新請求。
+ *   只有 {ok:true} 的結果會被存進快取，{ok:false} 絕不快取——否則後端恢復正常之後，
+ *   畫面會因為吃到快取住的失敗結果而繼續顯示壞掉的樣子。
+ * - invalidate()：清掉快取與 in-flight 標記，下次 getAll() 一定重抓。
+ * - submit(ctx, action, payload)：包裝「送出類」action（submitAudit／markRest／
+ *   submitOpsAudit……，見 ~/mala-audit/apps-script/Code.gs 的 ACTIONS 清單），
+ *   成功後自動 invalidate()，讓下一次 getAll() 看到最新資料；失敗則原樣回傳，不動快取。
+ *
+ * 時鐘可注入（見 __setClock），測試不必真的等 60 秒。
+ */
+
+'use strict';
+
+const BACKEND_ID = 'audit';
+const GET_ALL_ACTION = 'getAll';
+const TTL_MS = 60 * 1000;
+
+let cache = null;     // { result, expiresAt } —— result 一定是成功的 {ok:true,...}
+let inFlight = null;  // 目前進行中的 getAll() Promise；同時發起的呼叫共用它，不重複發請求
+let now_ = () => Date.now();
+
+/**
+ * 測試用：注入可控時鐘。傳入一個回傳毫秒數的函式，覆寫「現在時間」的來源；
+ * 傳非函式（含不傳、傳 null）還原成真實的 Date.now。
+ */
+export function __setClock(fn) {
+  now_ = (typeof fn === 'function') ? fn : () => Date.now();
+}
+
+/**
+ * 取得稽核後端的全部資料。
+ * 回傳形狀已由 platform/api.js 轉接過（spec §4.8）：
+ * {ok:true, data:{config, items, records, details, ops_records, ops_details}} | {ok:false, error}
+ *
+ * @param {object} ctx  平台交給模組的 ctx（spec §4.7），這裡只用到 ctx.api.call
+ * @returns {Promise<{ok:true,data:object}|{ok:false,error:string}>}
+ */
+export async function getAll(ctx) {
+  const nowMs = now_();
+  if (cache && nowMs < cache.expiresAt) {
+    return cache.result;
+  }
+  if (inFlight) {
+    return inFlight;
+  }
+
+  inFlight = (async () => {
+    try {
+      const res = await ctx.api.call(BACKEND_ID, GET_ALL_ACTION, {});
+      if (res && res.ok === true) {
+        cache = { result: res, expiresAt: now_() + TTL_MS };
+      }
+      // {ok:false} 不進快取（任務指示第 4 點）：這裡不動 cache，維持它原本的狀態
+      // （會走到這裡代表舊快取本來就已經過期或不存在，效果上就是「沒有快取可用」）。
+      return res;
+    } finally {
+      inFlight = null;
+    }
+  })();
+
+  return inFlight;
+}
+
+/** 清掉快取與 in-flight 標記，下次 getAll() 一定重抓。 */
+export function invalidate() {
+  cache = null;
+  inFlight = null;
+}
+
+/**
+ * 送出類動作的封裝（submitAudit／markRest／submitOpsAudit……）。
+ * 成功後自動 invalidate()，讓下一次 getAll() 重抓最新資料；失敗則原樣回傳，不動快取。
+ *
+ * @param {object} ctx
+ * @param {string} action
+ * @param {object} payload
+ * @returns {Promise<{ok:true,data:object}|{ok:false,error:string}>}
+ */
+export async function submit(ctx, action, payload) {
+  // 試跑模式（網址加 ?dryrun=1）：讀取照常走真實後端，但**寫入一律攔下不送出**。
+  // 存在的理由：稽核後端接的是會計每個月實際在用的正式試算表。
+  // 要請人實際點過一輪給意見時，不能讓「試按一下送出」變成一筆假資料寫進正式資料。
+  // 這不是測試替身，是給真人試用時的安全閥——所以它留在正式程式碼裡，只靠網址開關。
+  if (isDryRun()) {
+    console.warn('[試跑模式] 攔下一次寫入，未送出到後端：', action, payload);
+    return { ok: true, data: { dryRun: true, action, payload } };
+  }
+
+  const res = await ctx.api.call(BACKEND_ID, action, payload);
+  if (res && res.ok === true) {
+    invalidate();
+  }
+  return res;
+}
+
+/** 網址帶 ?dryrun=1 就進入試跑模式。非瀏覽器環境（node 測試）一律不啟用。 */
+export function isDryRun() {
+  try {
+    if (typeof window === 'undefined' || !window.location) return false;
+    return new URLSearchParams(window.location.search).get('dryrun') === '1';
+  } catch {
+    return false;
+  }
+}
+
+</script>
+
+<script type="text/plain" id="src-fillcashbox">
+/**
+ * modules/audit-stock/views/fill-cashbox.js — 稽核填寫：金庫抽查＋共用的兩態切換鈕（T2-3 第二段）
+ *
+ * 正本規格：docs/spec.md §4.10（ctx.fmt.esc／UI 一律用 platform/css/components.css
+ * 既有 class，不新增色碼、不內嵌樣式）。
+ * 來源：~/mala-audit/js/views/audit.js 金庫區塊（vaultChoiceGroup／renderVaultBody／
+ * renderVault，原檔 615-645 行一帶）。
+ *
+ * 舊版金庫三個核定（零找金／零用金／小費相符）與「填寫方式」「單項正確／異常」
+ * 都是同一種 UI：一組互斥的切換鈕，選中的用行內樣式標成 active。這裡改用 platform
+ * 既有的 .btn-primary（選中）／.btn-secondary（未選中）互換來表示 active 狀態，
+ * 不新增色碼、不內嵌樣式（spec §4.10）——所以 buildChoiceGroup() 順便輸出給
+ * fill.js 共用（填寫方式、單項正確／異常都是同一顆元件），不是本檔獨有。
+ * DOM 的 data-group／data-value／既有 id（audit-vault-card／audit-vault-body／
+ * audit-tip-amount／audit-note）原樣保留。
+ */
+'use strict';
+
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  if (attrs) {
+    for (const key of Object.keys(attrs)) {
+      const value = attrs[key];
+      if (value === undefined || value === null) continue;
+      if (key === 'class') node.className = value;
+      else if (key === 'text') node.textContent = value;
+      else node.setAttribute(key, value);
+    }
+  }
+  if (children) {
+    for (const child of children) if (child) node.appendChild(child);
+  }
+  return node;
+}
+
+/** 顯示後端資料一律經 ctx.fmt.esc()（同 modules/audit-stock/views/overview.js 的 escEl() 慣例）。 */
+function escEl(ctx, tag, attrs, value) {
+  const node = el(tag, attrs);
+  node.innerHTML = ctx.fmt.esc(value);
+  return node;
+}
+
+/** 標準金額顯示：10000 → '1 萬'；整萬數一律顯示「N 萬」，其他原數字顯示（照抄 stdLabel()）。 */
+export function stdLabel(std) {
+  if (typeof std !== 'number' || !std) return String(std || '');
+  if (std % 10000 === 0) return (std / 10000) + ' 萬';
+  return String(std);
+}
+
+/**
+ * 一組互斥切換鈕（二選一或多選一）：選中的用 .btn-primary，未選中用 .btn-secondary，
+ * class 額外掛 `active` 方便測試／既有 e2e 選擇器辨識目前選了哪個。
+ * @param {string} group        data-group 值（例 'change_fund'）
+ * @param {string[]} options    可選值（例 ['正確','不正確']）
+ * @param {string} current      目前選中的值
+ * @param {function} onPick     (group, value) => void
+ * @param {string} [btnClass]   額外掛在每顆按鈕上的 class（例 'audit-vault-btn'）
+ */
+export function buildChoiceGroup(group, options, current, onPick, btnClass) {
+  const wrap = el('div', { class: 'audit-choice-group card-row', 'data-group': group });
+  options.forEach((v) => {
+    const active = current === v;
+    const cls = ['btn', active ? 'btn-primary' : 'btn-secondary', btnClass, active ? 'active' : '']
+      .filter(Boolean).join(' ');
+    const btn = el('button', {
+      type: 'button', class: cls, 'data-group': group, 'data-value': v, text: v
+    });
+    btn.addEventListener('click', () => onPick(group, v));
+    wrap.appendChild(btn);
+  });
+  return wrap;
+}
+
+/**
+ * 掛上金庫抽查卡片。呼叫端（fill.js）負責存草稿／重繪其他區塊；本函式只管
+ * 金庫這張卡片自己的 DOM 與互動。
+ *
+ * @param {object} ctx
+ * @param {function} getConfig  () => config（spec §4.8 的 config，含 change_fund_std／
+ *                              petty_cash_std）——傳函式而不是物件本身，因為 fill.js 在
+ *                              loadData() 拿到後端資料後會把外層 config 變數整個重新指派
+ *                              （不是原地改內容），傳物件參照的話這裡拿到的會是掛載當下
+ *                              那個空殼、看不到後來載入的真正設定。
+ * @param {function} getState   () => vaultState（{change_fund,petty_cash,tip_amount,tip_match,note}）
+ * @param {function} onChange   (patch) => void，欄位變動時呼叫，呼叫端合併進 vaultState
+ * @returns {{el: HTMLElement, refresh: function}} refresh() 依 getState() 目前值重繪（切店／月／還原草稿時呼叫）
+ */
+export function mountVaultCard(ctx, getConfig, getState, onChange) {
+  const bodyEl = el('div', { id: 'audit-vault-body' });
+  const noteEl = el('textarea', {
+    id: 'audit-note', class: 'input', rows: '3', placeholder: '（選填）'
+  });
+  noteEl.addEventListener('input', () => onChange({ note: noteEl.value }));
+
+  const card = el('div', { class: 'card', id: 'audit-vault-card' }, [
+    el('div', { class: 'card-title', text: '金庫抽查' }),
+    bodyEl,
+    el('div', { class: 'field' }, [
+      el('label', { for: 'audit-note', class: 'field-label', text: '整單備註' }),
+      noteEl
+    ])
+  ]);
+
+  function refresh() {
+    const state = getState();
+    const config = getConfig() || {};
+    while (bodyEl.firstChild) bodyEl.removeChild(bodyEl.firstChild);
+
+    const tipInput = el('input', {
+      type: 'number', step: 'any', inputmode: 'decimal', id: 'audit-tip-amount', class: 'input',
+      value: state.tip_amount === undefined || state.tip_amount === null ? '' : state.tip_amount
+    });
+    tipInput.addEventListener('input', () => onChange({ tip_amount: tipInput.value }));
+
+    bodyEl.appendChild(el('div', { class: 'audit-vault-row field' }, [
+      escEl(ctx, 'label', { class: 'field-label' }, '零找金（標準 ' + stdLabel(config.change_fund_std) + '）'),
+      buildChoiceGroup('change_fund', ['正確', '不正確'], state.change_fund,
+        (g, v) => onChange({ [g]: v }), 'audit-vault-btn')
+    ]));
+    bodyEl.appendChild(el('div', { class: 'audit-vault-row field' }, [
+      escEl(ctx, 'label', { class: 'field-label' }, '零用金（標準 ' + stdLabel(config.petty_cash_std) + '）'),
+      buildChoiceGroup('petty_cash', ['正確', '不正確'], state.petty_cash,
+        (g, v) => onChange({ [g]: v }), 'audit-vault-btn')
+    ]));
+    bodyEl.appendChild(el('div', { class: 'audit-vault-row field' }, [
+      el('label', { for: 'audit-tip-amount', class: 'field-label', text: '小費金額' }),
+      tipInput,
+      buildChoiceGroup('tip_match', ['相符', '不相符'], state.tip_match,
+        (g, v) => onChange({ [g]: v }), 'audit-vault-btn')
+    ]));
+
+    noteEl.value = state.note || '';
+  }
+
+  refresh();
+  return { el: card, refresh };
+}
+
+</script>
+
+<script type="text/plain" id="src-fillsubmit">
+/**
+ * modules/audit-stock/views/fill-submit.js — 稽核填寫：驗證／建立送出內容／草稿（T2-3 第三段）
+ *
+ * 正本規格：docs/spec.md §4.8（送出格式，本檔 buildRecord/buildDetails 就是在組這個形狀）。
+ * 來源：~/mala-audit/js/views/audit.js 的 validate()／buildRecord()／buildDetails()／
+ * 草稿相關函式（原檔第 44-97、252-300、647-777 行一帶），逐字元行為照抄，只是抽成
+ * 不碰 DOM 的純函式＋一組 localStorage 存取，方便 fill.js 呼叫、也方便直接單元測試
+ * （不必真的掛 DOM 就能驗「缺單位擋下」「只填異常項分母固定」這類規則）。
+ *
+ * 抽查標準項數 SAMPLE_SIZE：舊版來自 ~/mala-audit/js/config.js 的 Config.SAMPLE_SIZE
+ * ——那本身就是前端寫死的常數（不是後端 config 的一部分，該檔案註解寫得很清楚）。
+ * 新系統沒有對應的 ctx.config 通道，這裡原樣沿用同一個寫死常數，不是遺漏，是照抄
+ * 舊版原本就沒有經過後端的東西。
+ *
+ * 草稿沿用舊版做法直接用瀏覽器 localStorage（不透過 ctx.api，草稿本來就只是本機
+ * 暫存，不是要送後端的資料）：key 規則 `draft_{store}_{month}`，只填異常項模式多
+ * 後綴 `_anomaly`，兩種模式的草稿分開存互不覆蓋（同舊版 draftKeyFor()）。
+ */
+'use strict';
+
+import { Format } from '../../audit-shared/umd-bridge.js';
+
+export const SAMPLE_SIZE = 20;
+export const MODE_FULL = 'full';
+export const MODE_ANOMALY = 'anomaly';
+
+const MODE_KEY = 'audit_fill_mode';
+const LAST_STORE_KEY = 'audit_last_store';
+
+export function isAnomalyMode(mode) {
+  return mode === MODE_ANOMALY;
+}
+
+/**
+ * 品項填值正規化：確保每項都有填寫用的欄位（預設空）。
+ * 只填異常項模式下，清單裡的每一項本來就是異常項，判定直接固定成「異常」——
+ * 畫面不再顯示正確／異常按鈕，也就沒有「忘了核定」這種狀態（同舊版 normalizeItem()）。
+ */
+export function normalizeItem(it, mode) {
+  return {
+    name: it.name,
+    unit: it.unit || '', // 品項庫可能沒填單位，統一成空字串好判斷
+    lastDrawn: it.lastDrawn || null,
+    book_qty: it.book_qty !== undefined && it.book_qty !== null ? it.book_qty : '',
+    recount_qty: it.recount_qty !== undefined && it.recount_qty !== null ? it.recount_qty : '',
+    verdict: isAnomalyMode(mode) ? '異常' : (it.verdict || ''),
+    reason: it.reason || '',
+    note: it.note || ''
+  };
+}
+
+export function isBlankNumber(v) {
+  return v === '' || v === null || v === undefined || isNaN(Number(v));
+}
+
+/** 只填異常項模式：異常數超過標準項數就沒有意義（正確項會變負數），擋下並提示。 */
+export function tooManyAnomalies(mode, itemCount, sampleSize) {
+  return isAnomalyMode(mode) && itemCount > (sampleSize || SAMPLE_SIZE);
+}
+
+/**
+ * 驗證（spec §7 枚舉逐字元，照抄 ~/mala-audit/js/views/audit.js 的 validate()）。
+ * @param {{mode:string, items:object[], vault:object, sampleSize?:number}} input
+ * @returns {string[]} 錯誤訊息陣列；空陣列＝可以送出
+ */
+export function validate({ mode, items, vault, sampleSize }) {
+  const size = sampleSize || SAMPLE_SIZE;
+  const errors = [];
+  const anomalyMode = isAnomalyMode(mode);
+  const list = items || [];
+  const v = vault || {};
+
+  // 只填異常項模式：0 項異常是合法的（＝全部正確，正確率 100%），不能擋。
+  if (!anomalyMode && list.length === 0) {
+    errors.push('尚未抽樣，清單是空的');
+  }
+  if (tooManyAnomalies(mode, list.length, size)) {
+    errors.push('異常 ' + list.length + ' 項，已超過標準 ' + size + ' 項，請刪除多餘項目');
+  }
+
+  list.forEach((it, idx) => {
+    const label = (idx + 1) + '.' + it.name;
+    // 單位不分來源都要有：品項庫本身就有留空單位的項目，抽到那些項目異常說明會
+    // 少一塊（2026-08-07 實查到真實案例）。缺單位的當場補，不用回試算表改。
+    if (!it.unit || !String(it.unit).trim()) errors.push(label + '：缺單位，請在該列補上');
+    if (isBlankNumber(it.book_qty)) errors.push(label + '：門市盤點數未填');
+    if (isBlankNumber(it.recount_qty)) errors.push(label + '：會計複盤數未填');
+    if (anomalyMode) {
+      if (!it.reason) {
+        errors.push(label + '：異常需選擇原因');
+      } else if (it.reason === '其他' && !(it.note && it.note.trim())) {
+        errors.push(label + '：原因為「其他」需填寫備註');
+      }
+      return;
+    }
+    if (it.verdict !== '正確' && it.verdict !== '異常') {
+      errors.push(label + '：尚未核定正確／異常');
+    } else if (it.verdict === '異常') {
+      if (!it.reason) {
+        errors.push(label + '：異常需選擇原因');
+      } else if (it.reason === '其他' && !(it.note && it.note.trim())) {
+        errors.push(label + '：原因為「其他」需填寫備註');
+      }
+    }
+  });
+
+  if (v.change_fund !== '正確' && v.change_fund !== '不正確') {
+    errors.push('零找金尚未核定');
+  }
+  if (v.petty_cash !== '正確' && v.petty_cash !== '不正確') {
+    errors.push('零用金尚未核定');
+  }
+  if (isBlankNumber(v.tip_amount)) {
+    errors.push('小費金額未填');
+  }
+  if (v.tip_match !== '相符' && v.tip_match !== '不相符') {
+    errors.push('小費是否相符尚未核定');
+  }
+  return errors;
+}
+
+function pad2(n) {
+  return (n < 10 ? '0' : '') + n;
+}
+
+export function todayStr(d) {
+  d = d || new Date();
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+
+export function nowIso(d) {
+  d = d || new Date();
+  const tzOffsetMin = -d.getTimezoneOffset();
+  const sign = tzOffsetMin >= 0 ? '+' : '-';
+  const abs = Math.abs(tzOffsetMin);
+  const oh = pad2(Math.floor(abs / 60));
+  const om = pad2(abs % 60);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+    'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) +
+    sign + oh + ':' + om;
+}
+
+/**
+ * 建送出的 record（spec §4.8 送出格式；照抄 buildRecord()）。
+ * 完整模式：分母＝實際清單項數，正確數＝核定為正確的項數。
+ * 只填異常項模式：分母固定 sampleSize，正確數＝sampleSize − 異常項數
+ * ——沒被輸入的品項不必逐項核定，直接視同正確（Format.anomalyOnlyCounts 負責這條算式）。
+ */
+export function buildRecord({ store, month, mode, items, vault, sampleSize, now }) {
+  const size = sampleSize || SAMPLE_SIZE;
+  const list = items || [];
+  const v = vault || {};
+  const counts = isAnomalyMode(mode)
+    ? Format.anomalyOnlyCounts(list.length, size)
+    : (() => {
+        const total = list.length;
+        const correctCount = list.filter((it) => it.verdict === '正確').length;
+        return {
+          sample_count: total,
+          correct_count: correctCount,
+          correct_rate: Format.correctRate(correctCount, total)
+        };
+      })();
+  const anomalyForText = list
+    .filter((it) => isAnomalyMode(mode) || it.verdict === '異常')
+    .map((it) => ({ item: it.name, unit: it.unit, book_qty: it.book_qty, recount_qty: it.recount_qty, verdict: '異常' }));
+
+  return {
+    record_key: Format.recordKey(store, month),
+    store,
+    month,
+    status: '已稽核',
+    audit_date: todayStr(now),
+    sample_count: counts.sample_count,
+    correct_count: counts.correct_count,
+    correct_rate: counts.correct_rate,
+    change_fund: v.change_fund,
+    petty_cash: v.petty_cash,
+    tip_amount: Number(v.tip_amount),
+    tip_match: v.tip_match,
+    anomaly_text: Format.buildAnomalyText(anomalyForText),
+    note: v.note || '',
+    submitted_at: nowIso(now)
+  };
+}
+
+/** 建送出的 details（照抄 buildDetails()）。只填異常項模式下清單裡本來就只有異常項。 */
+export function buildDetails({ store, month, items, mode }) {
+  const key = Format.recordKey(store, month);
+  return (items || []).map((it) => {
+    const isAnomaly = isAnomalyMode(mode) || it.verdict === '異常';
+    return {
+      record_key: key,
+      store,
+      month,
+      item: it.name,
+      unit: it.unit,
+      book_qty: Number(it.book_qty),
+      recount_qty: Number(it.recount_qty),
+      verdict: isAnomaly ? '異常' : it.verdict,
+      reason: isAnomaly ? (it.reason || '') : '',
+      note: isAnomaly ? (it.note || '') : ''
+    };
+  });
+}
+
+// ============================================================
+// 草稿（localStorage；同舊版 key 規則）
+// ============================================================
+
+function storage() {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function draftKeyFor(store, month, mode) {
+  return 'draft_' + Format.recordKey(store, month) + (isAnomalyMode(mode) ? '_anomaly' : '');
+}
+
+export function saveDraft(store, month, mode, items, vault) {
+  const s = storage();
+  if (!s || !store || !month) return;
+  try {
+    const payload = {
+      store,
+      month,
+      items: (items || []).map((it) => ({
+        name: it.name, unit: it.unit, lastDrawn: it.lastDrawn,
+        book_qty: it.book_qty, recount_qty: it.recount_qty,
+        verdict: it.verdict, reason: it.reason, note: it.note
+      })),
+      vault
+    };
+    s.setItem(draftKeyFor(store, month, mode), JSON.stringify(payload));
+  } catch (e) { /* 儲存空間不可用時忽略，不擋操作 */ }
+}
+
+export function loadDraft(store, month, mode) {
+  const s = storage();
+  if (!s) return null;
+  try {
+    const raw = s.getItem(draftKeyFor(store, month, mode));
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 送出成功時兩種模式的草稿一起清，避免另一把舊 key 之後又冒出來（同舊版 clearDraft()）。 */
+export function clearDraft(store, month) {
+  const s = storage();
+  if (!s) return;
+  try {
+    s.removeItem(draftKeyFor(store, month, MODE_FULL));
+    s.removeItem(draftKeyFor(store, month, MODE_ANOMALY));
+  } catch (e) { /* 忽略 */ }
+}
+
+function draftHasContent(payload) {
+  if (!payload) return false;
+  if ((payload.items || []).length) return true;
+  const v = payload.vault || {};
+  return !!(v.change_fund || v.petty_cash || v.tip_amount || v.tip_match || v.note);
+}
+
+/** 列出所有還沒送出的草稿（同舊版 listDrafts()，跨店月掃描 localStorage）。 */
+export function listDrafts() {
+  const s = storage();
+  const out = [];
+  if (!s) return out;
+  try {
+    for (let i = 0; i < s.length; i++) {
+      const k = s.key(i);
+      if (!k || k.indexOf('draft_') !== 0) continue;
+      let payload = null;
+      try { payload = JSON.parse(s.getItem(k)); } catch (e) { payload = null; }
+      if (!payload || !payload.store || !payload.month) continue;
+      if (!draftHasContent(payload)) continue;
+      out.push({
+        key: k,
+        store: payload.store,
+        month: payload.month,
+        mode: /_anomaly$/.test(k) ? MODE_ANOMALY : MODE_FULL,
+        count: (payload.items || []).length
+      });
+    }
+  } catch (e) { /* 儲存空間不可用時當作沒有草稿 */ }
+  out.sort((a, b) => {
+    if (a.month !== b.month) return a.month < b.month ? 1 : -1; // 新的月份排前面
+    return a.store < b.store ? -1 : 1;
+  });
+  return out;
+}
+
+/** 找某家店最近一份「有內容的未送出草稿」→ {month, mode}；沒有回 null（同舊版 latestDraftForStore()）。 */
+export function latestDraftForStore(store) {
+  if (!store) return null;
+  let best = null;
+  listDrafts().filter((d) => d.store === store).forEach((d) => {
+    if (!best || d.month > best.month) best = { month: d.month, mode: d.mode };
+  });
+  return best;
+}
+
+export function dropDraft(key) {
+  const s = storage();
+  if (!s) return;
+  try { s.removeItem(key); } catch (e) { /* 忽略 */ }
+}
+
+export function readDraftByKey(key) {
+  const s = storage();
+  if (!s) return null;
+  try {
+    const raw = s.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function loadMode() {
+  const s = storage();
+  if (!s) return MODE_FULL;
+  try {
+    const m = s.getItem(MODE_KEY);
+    return m === MODE_ANOMALY ? MODE_ANOMALY : MODE_FULL;
+  } catch (e) {
+    return MODE_FULL;
+  }
+}
+
+export function persistMode(mode) {
+  const s = storage();
+  if (!s) return;
+  try { s.setItem(MODE_KEY, mode); } catch (e) { /* 忽略 */ }
+}
+
+export function loadLastStore() {
+  const s = storage();
+  if (!s) return null;
+  try { return s.getItem(LAST_STORE_KEY); } catch (e) { return null; }
+}
+
+export function persistLastStore(store) {
+  const s = storage();
+  if (!s || !store) return;
+  try { s.setItem(LAST_STORE_KEY, store); } catch (e) { /* 忽略 */ }
+}
+
+</script>
+
+<script type="text/plain" id="src-overview">
+/**
+ * modules/audit-stock/views/overview.js — 月初盤點抽查・總覽畫面（T2-2）
+ *
+ * 正本規格：docs/spec.md §4.6（mount(el,ctx) 回傳 unmount）、§4.7（ctx 逐字元形狀）、
+ * §4.10（ctx.ui／ctx.fmt 簽章；UI 一律用 platform/css/components.css 既有 class，
+ * 不新增色碼、不內嵌樣式）。
+ *
+ * 來源：~/mala-audit/js/views/overview.js（204 行，window.Views.overview = {render}）。
+ * DOM 結構與資料語意盡量原樣保留（既有 e2e 的選擇器才不會全部失效）：id
+ * （overview-year／btn-start-audit／btn-mark-rest／rest-dialog／rest-store／
+ * rest-month／rest-error／rest-confirm／rest-cancel）與舊版的結構性 class
+ * （overview-toolbar／overview-actions／overview-grid-wrap／overview-grid／
+ * grid-cell，含 data-store／data-month／data-clickable）都保留，但拿掉全部行內
+ * style，改疊上 platform 既有的 .card／.table／.table-wrap／.btn／.tag／.field
+ * 等 class 負責實際外觀——舊版本身就沒有這套元件可用，是這次搬遷才補上的。
+ *
+ * 資料一律經 audit-shared/api.js 的 getAll(ctx)／submit(ctx, action, payload)
+ * 取得與送出（不自己呼叫 ctx.api），成功送出後 submit() 會自動 invalidate 快取。
+ *
+ * 角色判斷：舊版用 app.state.role === 'accountant' 決定要不要顯示「開始稽核」
+ * 「標記輪休」兩個動作。舊系統只有 accountant／viewer 兩種角色，只有 accountant
+ * 能寫入；新系統的權限碼對照（spec §4.2／§4.3）裡，也只有 accountant（與萬用字元
+ * admin）持有 audit.write，其餘角色都沒有——與舊版行為等價，所以改用
+ * ctx.can('audit.write') 判斷，而不是比對角色代號字串（角色代號本身不是 ctx 該給
+ * 模組拿來做業務判斷的東西，spec §4.7 只保證 ctx.user.role 存在，沒保證角色清單
+ * 不會再變動；can() 才是穩定的判斷介面）。
+ */
+'use strict';
+
+import * as sharedApi from '../../audit-shared/api.js';
+
+const YEARS = ['2026']; // 預留多年：之後只要加這個陣列（同舊版）
+
+// 對照 modules/audit-shared/format.js 的 monthLabel()：純顯示用的靜態月份中文對照表，
+// 不是業務邏輯，不值得為了這一個用途另外搭一層 UMD→ESM 轉接（那是後續任務要做的事）。
+const MONTH_LABELS = {
+  '01': '一月', '02': '二月', '03': '三月', '04': '四月',
+  '05': '五月', '06': '六月', '07': '七月', '08': '八月',
+  '09': '九月', '10': '十月', '11': '十一月', '12': '十二月'
+};
+
+function monthLabel(month) {
+  const mm = String(month).split('-')[1];
+  return MONTH_LABELS[mm] || mm;
+}
+
+function pad2(n) {
+  return (n < 10 ? '0' : '') + n;
+}
+
+function monthCols() {
+  const cols = [];
+  for (let m = 1; m <= 12; m++) cols.push(pad2(m));
+  return cols;
+}
+
+// ============================================================
+// 小工具：DOM 建構（做法同 modules/users/views/list.js，模組自己一份，
+// 平台層沒有輸出這個工具給模組用）
+// ============================================================
+
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  if (attrs) {
+    for (const key of Object.keys(attrs)) {
+      const value = attrs[key];
+      if (value === undefined || value === null) continue;
+      if (key === 'class') node.className = value;
+      else if (key === 'text') node.textContent = value;
+      else node.setAttribute(key, value);
+    }
+  }
+  if (children) {
+    for (const child of children) if (child) node.appendChild(child);
+  }
+  return node;
+}
+
+/** 顯示後端資料一律經 ctx.fmt.esc()（同 modules/users/views/list.js 的 textCell() 慣例）。 */
+function escEl(ctx, tag, attrs, value) {
+  const node = el(tag, attrs);
+  node.innerHTML = ctx.fmt.esc(value);
+  return node;
+}
+
+/**
+ * @param {HTMLElement} root 殼／index.js 給的掛載點
+ * @param {object} ctx spec §4.7
+ * @returns {function} unmount
+ */
+export function mountOverview(root, ctx) {
+  let destroyed = false;
+  let config = { stores: [] };
+  let records = [];
+  let recordMap = {}; // record_key -> record，renderGrid() 重建，buildGridCell() 讀
+  let year = YEARS[0];
+  const canWrite = ctx.can('audit.write');
+
+  // ---- 骨架：年份工具列 ----
+  const yearSelect = el('select', { id: 'overview-year', class: 'input' });
+  YEARS.forEach((y) => yearSelect.appendChild(el('option', { value: y, text: y })));
+  yearSelect.value = year;
+
+  const toolbar = el('div', { class: 'overview-toolbar card-row' }, [
+    el('label', { for: 'overview-year', class: 'field-label', text: '年份' }),
+    yearSelect
+  ]);
+
+  // ---- 骨架：會計限定的動作列（開始稽核／標記輪休）----
+  let startBtn = null;
+  let markRestBtn = null;
+  let actionsRow = null;
+  if (canWrite) {
+    startBtn = el('button', {
+      type: 'button', id: 'btn-start-audit', class: 'btn btn-primary', text: '開始稽核'
+    });
+    markRestBtn = el('button', {
+      type: 'button', id: 'btn-mark-rest', class: 'btn btn-secondary', text: '標記輪休'
+    });
+    actionsRow = el('div', { class: 'overview-actions card-row' }, [startBtn, markRestBtn]);
+  }
+
+  // ---- 骨架：抽查總覽表格 ----
+  const theadEl = el('thead');
+  const tbodyEl = el('tbody');
+  const table = el('table', { class: 'table overview-grid' }, [theadEl, tbodyEl]);
+  const tableWrap = el('div', { class: 'table-wrap overview-grid-wrap' }, [table]);
+
+  const cardTitle = el('div', { class: 'card-title', text: '總覽' });
+  const gridCard = el('div', { class: 'card' },
+    [cardTitle, toolbar].concat(actionsRow ? [actionsRow] : []).concat([tableWrap]));
+
+  // ---- 骨架：標記輪休表單（會計限定，預設隱藏；沿用舊版「行內卡片」而非浮層對話框）----
+  let restDialogCard = null;
+  let restStoreSelect = null;
+  let restMonthSelect = null;
+  let restErrorEl = null;
+  let restConfirmBtn = null;
+  let restCancelBtn = null;
+
+  if (canWrite) {
+    restStoreSelect = el('select', { id: 'rest-store', class: 'input' });
+    restMonthSelect = el('select', { id: 'rest-month', class: 'input' });
+    restErrorEl = el('p', { id: 'rest-error', class: 'field-hint', hidden: 'true' });
+    restConfirmBtn = el('button', {
+      type: 'button', id: 'rest-confirm', class: 'btn btn-primary', text: '確認'
+    });
+    restCancelBtn = el('button', {
+      type: 'button', id: 'rest-cancel', class: 'btn btn-secondary', text: '取消'
+    });
+
+    restDialogCard = el('div', { id: 'rest-dialog', class: 'card', hidden: 'true' }, [
+      el('div', { class: 'card-title', text: '標記輪休' }),
+      el('div', { class: 'field' }, [
+        el('label', { for: 'rest-store', class: 'field-label', text: '店別' }),
+        restStoreSelect
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { for: 'rest-month', class: 'field-label', text: '月份' }),
+        restMonthSelect
+      ]),
+      restErrorEl,
+      el('div', { class: 'dialog-actions' }, [restCancelBtn, restConfirmBtn])
+    ]);
+  }
+
+  root.appendChild(gridCard);
+  if (restDialogCard) root.appendChild(restDialogCard);
+
+  // ============================================================
+  // 渲染
+  // ============================================================
+
+  function renderGrid() {
+    const cols = monthCols();
+    const stores = (config.stores || []).slice().sort((a, b) => a.order - b.order);
+    recordMap = {};
+    records.forEach((r) => { recordMap[r.record_key] = r; });
+
+    while (theadEl.firstChild) theadEl.removeChild(theadEl.firstChild);
+    const headCells = [el('th', { text: '店別' })].concat(
+      cols.map((mm) => el('th', { text: Number(mm) + '月' }))
+    );
+    theadEl.appendChild(el('tr', {}, headCells));
+
+    while (tbodyEl.firstChild) tbodyEl.removeChild(tbodyEl.firstChild);
+    stores.forEach((store) => {
+      const cells = cols.map((mm) => buildGridCell(store, mm));
+      tbodyEl.appendChild(el('tr', {}, [escEl(ctx, 'th', {}, store.name)].concat(cells)));
+    });
+
+    if (canWrite) renderRestOptions(stores, cols);
+  }
+
+  function buildGridCell(store, mm) {
+    const month = year + '-' + mm;
+    const key = store.code + '_' + month;
+    const rec = recordMap[key];
+
+    const td = document.createElement('td');
+    td.className = 'grid-cell';
+    td.setAttribute('data-store', store.code);
+    td.setAttribute('data-month', month);
+
+    if (rec && rec.status === '已稽核') {
+      td.setAttribute('data-clickable', '1');
+      td.appendChild(escEl(ctx, 'span', { class: 'tag tag-ok' }, rec.correct_rate + '%'));
+      td.addEventListener('click', () => {
+        ctx.nav('report', { store: store.code, month });
+      });
+    } else if (rec && rec.status === '輪休') {
+      td.textContent = '輪休';
+    } else {
+      td.textContent = '—';
+    }
+    return td;
+  }
+
+  function renderRestOptions(stores, cols) {
+    while (restStoreSelect.firstChild) restStoreSelect.removeChild(restStoreSelect.firstChild);
+    stores.forEach((s) => {
+      restStoreSelect.appendChild(escEl(ctx, 'option', { value: s.code }, s.name));
+    });
+
+    while (restMonthSelect.firstChild) restMonthSelect.removeChild(restMonthSelect.firstChild);
+    cols.forEach((mm) => {
+      restMonthSelect.appendChild(el('option', { value: mm, text: monthLabel(year + '-' + mm) }));
+    });
+  }
+
+  // ============================================================
+  // 資料載入
+  // ============================================================
+
+  async function loadData() {
+    ctx.ui.loading(true);
+    try {
+      const res = await sharedApi.getAll(ctx);
+      if (destroyed) return;
+      if (!res || res.ok !== true) {
+        ctx.ui.toast((res && res.error) || '發生錯誤，請稍後再試', 'danger');
+        return;
+      }
+      config = (res.data && res.data.config) || { stores: [] };
+      records = (res.data && res.data.records) || [];
+      renderGrid();
+    } catch {
+      if (!destroyed) ctx.ui.toast('發生錯誤，請稍後再試', 'danger');
+    } finally {
+      if (!destroyed) ctx.ui.loading(false);
+    }
+  }
+
+  // ============================================================
+  // 事件
+  // ============================================================
+
+  function onYearChange() {
+    year = yearSelect.value;
+    renderGrid();
+  }
+  yearSelect.addEventListener('change', onYearChange);
+
+  function onStartAuditClick() {
+    ctx.nav('fill');
+  }
+
+  function onMarkRestClick() {
+    restErrorEl.hidden = true;
+    restDialogCard.hidden = false;
+  }
+
+  function onRestCancelClick() {
+    restDialogCard.hidden = true;
+  }
+
+  async function onRestConfirmClick() {
+    const storeCode = restStoreSelect.value;
+    const mm = restMonthSelect.value;
+    const month = year + '-' + mm;
+    restConfirmBtn.disabled = true;
+    try {
+      const res = await sharedApi.submit(ctx, 'markRest', { store: storeCode, month });
+      if (destroyed) return;
+      if (res && res.ok) {
+        restDialogCard.hidden = true;
+        await loadData();
+      } else {
+        restErrorEl.textContent = '標記輪休失敗，請重試';
+        restErrorEl.hidden = false;
+      }
+    } finally {
+      if (!destroyed) restConfirmBtn.disabled = false;
+    }
+  }
+
+  if (canWrite) {
+    startBtn.addEventListener('click', onStartAuditClick);
+    markRestBtn.addEventListener('click', onMarkRestClick);
+    restCancelBtn.addEventListener('click', onRestCancelClick);
+    restConfirmBtn.addEventListener('click', onRestConfirmClick);
+  }
+
+  loadData();
+
+  return function unmount() {
+    destroyed = true;
+    yearSelect.removeEventListener('change', onYearChange);
+    if (canWrite) {
+      startBtn.removeEventListener('click', onStartAuditClick);
+      markRestBtn.removeEventListener('click', onMarkRestClick);
+      restCancelBtn.removeEventListener('click', onRestCancelClick);
+      restConfirmBtn.removeEventListener('click', onRestConfirmClick);
+    }
+    if (gridCard.parentNode) gridCard.parentNode.removeChild(gridCard);
+    if (restDialogCard && restDialogCard.parentNode) restDialogCard.parentNode.removeChild(restDialogCard);
+  };
+}
+
+</script>
+
+<script type="text/plain" id="src-fill">
+/**
+ * modules/audit-stock/views/fill.js — 月初盤點抽查・稽核填寫畫面（T2-3）
+ *
+ * 正本規格：docs/spec.md §4.6（mount(el,ctx) 回傳 unmount）、§4.7（ctx，含 viewId／params）、
+ * §4.10（ctx.ui／ctx.fmt 簽章；UI 一律用 platform/css/components.css 既有 class，
+ * 不新增色碼、不內嵌樣式）。
+ *
+ * 來源：~/mala-audit/js/views/audit.js（1157 行，window.Views.audit = {render}），
+ * 拆成三支：本檔（骨架＋抽樣區＋品項清單，對照原檔 T4「抽樣區」段落）、
+ * fill-cashbox.js（金庫抽查，對照原檔 615-645 行）、fill-submit.js（驗證／建送出內容／
+ * 草稿，不碰 DOM 的純函式，對照原檔 44-97、252-300、647-777 行）。三支的行為合起來
+ * 就是原檔的 render()，DOM 結構與 class 名盡量原樣保留（既有 e2e 的選擇器才不會失效）：
+ * id（audit-store／audit-month／audit-drafts-card／audit-drafts-list／audit-mode-group／
+ * audit-mode-hint／audit-draw／audit-add-input／audit-item-datalist／audit-add-unit／
+ * audit-add-btn／audit-add-hint／audit-add-error／audit-count-warning／audit-items／
+ * audit-vault-card／audit-vault-body／audit-tip-amount／audit-note／audit-submit-error／
+ * audit-submit-btn／audit-retry-btn）與結構性 class（audit-item-row／audit-item-fill／
+ * audit-item-qty-row／audit-choice-group／audit-verdict-btn／audit-vault-btn／
+ * audit-anomaly-detail／audit-draft-row 等）都保留；舊版用 JS 內嵌 <style> 標記 active／
+ * 顏色，這裡改疊 platform 既有的 .card／.table／.btn／.btn-primary／.btn-secondary／
+ * .tag／.field／.input 等 class 負責外觀（spec §4.10：不新增色碼、不內嵌樣式）。
+ *
+ * 資料一律經 audit-shared/api.js 的 getAll(ctx)／submit(ctx, action, payload) 取得與
+ * 送出（不自己呼叫 ctx.api），成功送出後 submit() 會自動 invalidate() 快取，下一次
+ * 進報告頁（T2-4，尚未實作）呼叫 getAll() 就會拿到剛送出的新資料——這也是本檔不必
+ * 像舊版 app.reload() 那樣手動重抓一次的原因（見下方 performSubmit() 的說明）。
+ *
+ * 寫入權限一律用 ctx.can('audit.write') 判斷（不比對角色代號字串，同 overview.js 的
+ * 理由：manifest.js 的 fill 分頁本身就 requires:['audit.write']，正常路由不會讓沒權限
+ * 的人進到這裡；這裡的 canWrite 檢查是第二道防線——見 spec §4.6 對「模組不得只信任
+ * 平台已經擋過一次」的一貫做法，overview.js 的 canWrite 也是同樣用途）。沒有寫入權限
+ * 時完全不畫表單，只顯示提示卡片，符合「看不到送出控制項」這條驗收。
+ *
+ * 覆蓋確認：舊版用一張行內卡片（#audit-overwrite-dialog）＋自己的確認／取消鈕；
+ * 這裡改用 ctx.ui.confirm()（spec §4.10 已提供的標準確認框）——對使用者來說是同一個
+ * 操作（送出前被問一次「確定要覆蓋嗎」）、同一個結果（確認才送出、取消不送出），
+ * 只是介面元件從模組自己刻的卡片換成平台既有元件，行為等價，DOM 少了一組 id
+ * （audit-overwrite-dialog 等），這點記在任務回報的「與舊版差異」。
+ *
+ * 抽查標準項數 SAMPLE_SIZE、金庫抽查、驗證、建送出內容、草稿存取都在另外兩支，
+ * 本檔只負責畫面骨架、抽樣/品項清單的 DOM 與事件、以及把各段串起來。
+ */
+'use strict';
+
+import * as sharedApi from '../../audit-shared/api.js';
+import { Sampling, Format } from '../../audit-shared/umd-bridge.js';
+import * as FillSubmit from './fill-submit.js';
+import { mountVaultCard, buildChoiceGroup } from './fill-cashbox.js';
+
+const { MODE_FULL, MODE_ANOMALY, SAMPLE_SIZE } = FillSubmit;
+
+// ============================================================
+// 小工具：DOM 建構（做法同 overview.js／fill-cashbox.js，模組自己一份）
+// ============================================================
+
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  if (attrs) {
+    for (const key of Object.keys(attrs)) {
+      const value = attrs[key];
+      if (value === undefined || value === null) continue;
+      if (key === 'class') node.className = value;
+      else if (key === 'text') node.textContent = value;
+      // hidden 走 IDL 屬性（同真實 DOM 的反映規則），因為畫面其餘地方一律用
+      // `.hidden = true/false` 這個屬性切換顯示，不是走 attribute——兩邊要用同一套。
+      else if (key === 'hidden') node.hidden = true;
+      else node.setAttribute(key, value);
+    }
+  }
+  if (children) {
+    for (const child of children) if (child) node.appendChild(child);
+  }
+  return node;
+}
+
+function escEl(ctx, tag, attrs, value) {
+  const node = el(tag, attrs);
+  node.innerHTML = ctx.fmt.esc(value);
+  return node;
+}
+
+function pad2(n) {
+  return (n < 10 ? '0' : '') + n;
+}
+
+// 本模組唯一支援的年份，同 overview.js 的 YEARS（之後要加年份，兩檔一起加）。
+const YEAR = '2026';
+
+function buildMonthList() {
+  const months = [];
+  for (let m = 1; m <= 12; m++) months.push(YEAR + '-' + pad2(m));
+  return months;
+}
+
+/**
+ * @param {HTMLElement} root 殼／index.js 給的掛載點
+ * @param {object} ctx spec §4.7
+ * @returns {function} unmount
+ */
+export function mountFill(root, ctx) {
+  let destroyed = false;
+  const canWrite = ctx.can('audit.write');
+
+  if (!canWrite) {
+    const card = el('div', { class: 'card' }, [
+      el('div', { class: 'card-title', text: '稽核填寫' }),
+      el('p', { class: 'field-hint', text: '沒有填寫權限，無法使用這個分頁。' })
+    ]);
+    root.appendChild(card);
+    return function unmount() {
+      destroyed = true;
+      if (card.parentNode) card.parentNode.removeChild(card);
+    };
+  }
+
+  // ---- 資料狀態（destroyed 之前都可能被 loadData() 更新）----
+  let config = { stores: [], reasons: [] };
+  let allItems = [];
+  let allDetails = [];
+  let records = [];
+
+  // ---- 畫面狀態 ----
+  let mode = FillSubmit.loadMode();
+  let currentStore = '';
+  let currentMonth = '';
+  let items = []; // [{name, unit, lastDrawn, book_qty, recount_qty, verdict, reason, note}]
+  let vaultState = { change_fund: '', petty_cash: '', tip_amount: '', tip_match: '', note: '' };
+
+  const months = buildMonthList();
+  const params = ctx.params || {};
+
+  // ============================================================
+  // 骨架
+  // ============================================================
+
+  const storeSelect = el('select', { id: 'audit-store', class: 'input' });
+  const monthSelect = el('select', { id: 'audit-month', class: 'input' });
+  months.forEach((m) => monthSelect.appendChild(el('option', { value: m, text: m + '（' + Format.monthLabel(m) + '）' })));
+
+  const selectCard = el('div', { class: 'card' }, [
+    el('div', { class: 'card-title', text: '稽核填寫' }),
+    el('div', { class: 'field' }, [el('label', { class: 'field-label', for: 'audit-store', text: '店' }), storeSelect]),
+    el('div', { class: 'field' }, [el('label', { class: 'field-label', for: 'audit-month', text: '月份' }), monthSelect])
+  ]);
+
+  const draftsList = el('ul', { id: 'audit-drafts-list' });
+  const draftsCard = el('div', { class: 'card', id: 'audit-drafts-card', hidden: 'true' }, [
+    el('div', { class: 'card-title', text: '未送出的草稿' }),
+    el('p', { class: 'field-hint', text: '填到一半離開的內容都還在，點一下就接著填。' }),
+    draftsList
+  ]);
+
+  const modeHint = el('p', { id: 'audit-mode-hint', class: 'field-hint' });
+  const modeGroup = el('div', { id: 'audit-mode-group' });
+  const modeCard = el('div', { class: 'card' }, [
+    el('div', { class: 'card-title', text: '填寫方式' }),
+    modeGroup,
+    modeHint
+  ]);
+
+  const drawBtn = el('button', { type: 'button', id: 'audit-draw', class: 'btn btn-primary', text: '隨機抽 ' + SAMPLE_SIZE + ' 項' });
+  const addInput = el('input', { type: 'text', id: 'audit-add-input', class: 'input', list: 'audit-item-datalist' });
+  const datalist = el('datalist', { id: 'audit-item-datalist' });
+  const addUnitInput = el('input', { type: 'text', id: 'audit-add-unit', class: 'input' });
+  const addBtn = el('button', { type: 'button', id: 'audit-add-btn', class: 'btn btn-secondary' });
+  const addHintEl = el('p', { id: 'audit-add-hint', class: 'field-hint' });
+  const addErrorEl = el('p', { id: 'audit-add-error', class: 'field-hint', hidden: 'true' });
+  const warningEl = el('p', { id: 'audit-count-warning', hidden: 'true' });
+  const itemsEl = el('ul', { id: 'audit-items' });
+
+  const samplingCard = el('div', { class: 'card' }, [
+    el('div', { class: 'card-title', text: '品項抽查' }),
+    drawBtn,
+    el('div', { id: 'audit-add-row' }, [
+      el('div', { class: 'field' }, [el('label', { class: 'field-label', text: '加入品項' }), addInput, datalist]),
+      el('div', { class: 'field' }, [el('label', { class: 'field-label', text: '單位' }), addUnitInput]),
+      addBtn,
+      addHintEl,
+      addErrorEl
+    ]),
+    warningEl,
+    el('div', { class: 'table-wrap' }, [itemsEl])
+  ]);
+
+  const vaultCardHandle = mountVaultCard(ctx, () => config, () => vaultState, (patch) => {
+    vaultState = Object.assign({}, vaultState, patch);
+    saveDraft();
+  });
+
+  const submitErrorEl = el('p', { id: 'audit-submit-error', class: 'field-hint', hidden: 'true' });
+  const submitBtn = el('button', { type: 'button', id: 'audit-submit-btn', class: 'btn btn-primary', text: '送出稽核' });
+  const retryBtn = el('button', { type: 'button', id: 'audit-retry-btn', class: 'btn btn-secondary', text: '重試送出', hidden: 'true' });
+
+  root.appendChild(selectCard);
+  root.appendChild(draftsCard);
+  root.appendChild(modeCard);
+  root.appendChild(samplingCard);
+  root.appendChild(vaultCardHandle.el);
+  root.appendChild(submitErrorEl);
+  root.appendChild(submitBtn);
+  root.appendChild(retryBtn);
+
+  // ============================================================
+  // 衍生資料
+  // ============================================================
+
+  function currentStoreItems() {
+    return allItems.filter((it) => it.store === currentStore && it.active !== false);
+  }
+  function currentStoreDetails() {
+    return allDetails.filter((d) => d.store === currentStore);
+  }
+  function libraryItem(name) {
+    return currentStoreItems().filter((it) => it.name === name)[0] || null;
+  }
+  function findIndexByName(name) {
+    return items.findIndex((it) => it.name === name);
+  }
+
+  // ============================================================
+  // 渲染：填寫方式
+  // ============================================================
+
+  function renderMode() {
+    // 不直接用 buildChoiceGroup()：它的按鈕文字＝值本身（MODE_FULL/MODE_ANOMALY），
+    // 這裡需要中文標籤，自己組（data-mode／.audit-mode-btn 這組 class／屬性沿用同慣例）。
+    while (modeGroup.firstChild) modeGroup.removeChild(modeGroup.firstChild);
+    const wrap = el('div', { class: 'audit-choice-group card-row' });
+    [
+      { v: MODE_FULL, label: '完整 ' + SAMPLE_SIZE + ' 項' },
+      { v: MODE_ANOMALY, label: '只填異常項' }
+    ].forEach(({ v, label }) => {
+      const active = mode === v;
+      const btn = el('button', {
+        type: 'button',
+        class: 'btn ' + (active ? 'btn-primary' : 'btn-secondary') + ' audit-mode-btn' + (active ? ' active' : ''),
+        'data-mode': v,
+        text: label
+      });
+      btn.addEventListener('click', () => onModeChange(v));
+      wrap.appendChild(btn);
+    });
+    modeGroup.appendChild(wrap);
+
+    if (mode === MODE_ANOMALY) {
+      modeHint.textContent = '只輸入異常的品項，其餘視同正確；正確率固定以 ' + SAMPLE_SIZE + ' 項為分母計算。';
+      drawBtn.hidden = true;
+      addInput.setAttribute('placeholder', '輸入異常品項名稱加入');
+      addBtn.textContent = '加入異常品項';
+    } else {
+      modeHint.textContent = '抽滿 ' + SAMPLE_SIZE + ' 項逐項核定正確／異常，正確率以實際清單項數為分母。';
+      drawBtn.hidden = false;
+      addInput.setAttribute('placeholder', '輸入品項名稱加入');
+      addBtn.textContent = '加入品項';
+    }
+    hideAddError();
+  }
+
+  function onModeChange(next) {
+    if (next === mode) return;
+    saveDraft(); // 先把目前模式的內容存起來，再換過去（兩把 key 各存各的）
+    mode = next;
+    FillSubmit.persistMode(mode);
+    tryRestoreOrReset();
+  }
+
+  // ============================================================
+  // 渲染：品項清單
+  // ============================================================
+
+  function renderDatalist() {
+    while (datalist.firstChild) datalist.removeChild(datalist.firstChild);
+    currentStoreItems().forEach((it) => {
+      datalist.appendChild(el('option', { value: it.name }));
+    });
+  }
+
+  function setWarning(text, kind) {
+    warningEl.className = kind ? 'tag ' + kind : '';
+    warningEl.textContent = text || '';
+    warningEl.hidden = !text;
+  }
+
+  function renderWarning() {
+    if (mode === MODE_ANOMALY) {
+      if (FillSubmit.tooManyAnomalies(mode, items.length, SAMPLE_SIZE)) {
+        setWarning('異常 ' + items.length + ' 項，已超過標準 ' + SAMPLE_SIZE + ' 項，請刪除多餘項目後再送出', 'tag-danger');
+        return;
+      }
+      const counts = Format.anomalyOnlyCounts(items.length, SAMPLE_SIZE);
+      setWarning('異常 ' + items.length + ' 項，其餘視同正確 → 正確率 ' + counts.correct_rate +
+        '%（' + counts.correct_count + '／' + SAMPLE_SIZE + '，分母固定 ' + SAMPLE_SIZE + ' 項）', 'tag');
+      return;
+    }
+    if (items.length === SAMPLE_SIZE) {
+      setWarning('', '');
+    } else {
+      // 品項庫不足 SAMPLE_SIZE 項時會抽不滿——這是正常情況、不是錯誤，只用提示告知，
+      // 不擋任何操作（會計可以用下面的「加入品項」現場補，也可以不補直接送出）。
+      setWarning('目前 ' + items.length + ' 項（標準 ' + SAMPLE_SIZE + ' 項）', 'tag-warn');
+    }
+  }
+
+  function hideAddError() {
+    addErrorEl.hidden = true;
+    addErrorEl.textContent = '';
+  }
+  function showAddError(msg) {
+    addErrorEl.textContent = msg;
+    addErrorEl.hidden = false;
+  }
+
+  function buildItemRow(it) {
+    const anomalyMode = mode === MODE_ANOMALY;
+    const isAnomaly = anomalyMode || it.verdict === '異常';
+
+    const nameSpan = escEl(ctx, 'span', { class: 'audit-item-name' }, it.name);
+    const unitSpan = it.unit
+      ? escEl(ctx, 'span', { class: 'audit-item-unit' }, '(' + it.unit + ')')
+      : el('span', { class: 'audit-item-unit tag tag-danger', text: '缺單位' });
+    const flagSpan = it.lastDrawn
+      ? escEl(ctx, 'span', { class: 'audit-item-flag tag tag-warn' }, '⚠ ' + it.lastDrawn + ' 抽過')
+      : null;
+    const headLeft = el('span', {}, [nameSpan, unitSpan, flagSpan]);
+
+    const redrawBtn = anomalyMode ? null : el('button', {
+      type: 'button', class: 'btn btn-secondary audit-item-redraw', 'data-name': it.name, text: '換一項'
+    });
+    if (redrawBtn) redrawBtn.addEventListener('click', () => onRedraw(it.name));
+
+    const removeBtn = el('button', {
+      type: 'button', class: 'btn btn-danger audit-item-remove', 'data-name': it.name, text: '刪除'
+    });
+    removeBtn.addEventListener('click', () => onRemove(it.name));
+
+    const headRow = el('div', { class: 'card-row' }, [headLeft, el('span', { class: 'card-row' }, [redrawBtn, removeBtn])]);
+
+    const bookInput = el('input', {
+      type: 'number', step: 'any', inputmode: 'decimal', class: 'input audit-book-qty',
+      value: it.book_qty === undefined || it.book_qty === null ? '' : it.book_qty
+    });
+    bookInput.addEventListener('input', () => {
+      it.book_qty = bookInput.value;
+      saveDraft();
+    });
+
+    const recountInput = el('input', {
+      type: 'number', step: 'any', inputmode: 'decimal', class: 'input audit-recount-qty',
+      value: it.recount_qty === undefined || it.recount_qty === null ? '' : it.recount_qty
+    });
+    recountInput.addEventListener('input', () => {
+      it.recount_qty = recountInput.value;
+      saveDraft();
+    });
+
+    const qtyChildren = [
+      el('div', { class: 'field' }, [el('label', { class: 'field-label', text: '門市盤點數' }), bookInput]),
+      el('div', { class: 'field' }, [el('label', { class: 'field-label', text: '會計複盤數' }), recountInput])
+    ];
+    if (!it.unit) {
+      // 品項庫有項目當初沒印單位（留空），抽到這種項目異常說明會少一塊，缺單位的當場補。
+      const unitInput = el('input', { type: 'text', class: 'input audit-item-unit-input audit-unit-fix', value: '' });
+      unitInput.addEventListener('input', () => {
+        it.unit = unitInput.value;
+        saveDraft();
+      });
+      qtyChildren.push(el('div', { class: 'field' }, [el('label', { class: 'field-label', text: '單位' }), unitInput]));
+    }
+    const qtyRow = el('div', { class: 'audit-item-qty-row card-row' }, qtyChildren);
+
+    const verdictGroup = anomalyMode ? null : buildChoiceGroup(
+      'verdict', ['正確', '異常'], it.verdict, (g, v) => onVerdictChange(it.name, v), 'audit-verdict-btn'
+    );
+
+    let anomalyDetail = null;
+    if (isAnomaly) {
+      const reasonSelect = el('select', { class: 'input audit-reason' });
+      reasonSelect.appendChild(el('option', { value: '', text: '請選擇' }));
+      (config.reasons || []).forEach((r) => reasonSelect.appendChild(el('option', { value: r, text: r })));
+      reasonSelect.value = it.reason || '';
+      reasonSelect.addEventListener('change', () => {
+        it.reason = reasonSelect.value;
+        saveDraft();
+        renderItems();
+      });
+
+      const noteInput = el('input', {
+        type: 'text', class: 'input audit-item-note', value: it.note || '',
+        placeholder: it.reason === '其他' ? '必填：請說明原因' : '選填'
+      });
+      noteInput.addEventListener('input', () => {
+        it.note = noteInput.value;
+        saveDraft();
+      });
+
+      anomalyDetail = el('div', { class: 'audit-anomaly-detail card' }, [
+        el('div', { class: 'field' }, [el('label', { class: 'field-label', text: '異常原因' }), reasonSelect]),
+        el('div', { class: 'field' }, [el('label', { class: 'field-label', text: '備註' }), noteInput])
+      ]);
+    }
+
+    const fillBlock = el('div', { class: 'audit-item-fill' }, [qtyRow, verdictGroup, anomalyDetail]);
+    return el('li', { class: 'audit-item-row', 'data-item': it.name, 'data-unit': it.unit }, [headRow, fillBlock]);
+  }
+
+  function renderItems() {
+    while (itemsEl.firstChild) itemsEl.removeChild(itemsEl.firstChild);
+    items.forEach((it) => itemsEl.appendChild(buildItemRow(it)));
+    renderWarning();
+    saveDraft();
+  }
+
+  function setItems(newItems) {
+    items = newItems;
+    renderItems();
+  }
+
+  function onRedraw(name) {
+    const idx = findIndexByName(name);
+    if (idx === -1) return;
+    const currentNames = items.map((it) => it.name);
+    const replacement = Sampling.redrawOne(currentNames, currentStoreItems(), currentStoreDetails());
+    if (replacement) {
+      items = items.slice();
+      items[idx] = FillSubmit.normalizeItem(replacement, mode);
+      renderItems();
+    } else {
+      ctx.ui.toast('已無其他品項可替換', 'warn');
+    }
+  }
+
+  function onRemove(name) {
+    items = items.filter((it) => it.name !== name);
+    renderItems();
+  }
+
+  function onVerdictChange(name, verdict) {
+    const idx = findIndexByName(name);
+    if (idx === -1) return;
+    items[idx].verdict = verdict;
+    if (verdict !== '異常') {
+      items[idx].reason = '';
+      items[idx].note = '';
+    }
+    renderItems();
+  }
+
+  function addItemByName(name) {
+    hideAddError();
+    name = (name || '').trim();
+    if (!name) {
+      showAddError('請先輸入品項名稱');
+      return;
+    }
+    if (items.some((it) => it.name === name)) {
+      showAddError('「' + name + '」已在清單中');
+      return;
+    }
+    const hit = libraryItem(name);
+    const unit = hit ? (addUnitInput.value.trim() || hit.unit || '') : addUnitInput.value.trim();
+    if (!unit) {
+      showAddError(hit
+        ? '品項庫沒有填「' + name + '」的單位，請補一個（例：包、盒、公斤）'
+        : '「' + name + '」不在品項庫，請一併填單位（例：包、盒、公斤）');
+      return;
+    }
+    items = items.concat([FillSubmit.normalizeItem({
+      name, unit, lastDrawn: Sampling.lastDrawnOf(name, currentStoreDetails())
+    }, mode)]);
+    renderItems();
+    addInput.value = '';
+    addUnitInput.value = '';
+    addHintEl.textContent = '';
+  }
+
+  // ============================================================
+  // 草稿還原／重置
+  // ============================================================
+
+  function saveDraft() {
+    FillSubmit.saveDraft(currentStore, currentMonth, mode, items, vaultState);
+  }
+
+  function applyDraft(draft) {
+    items = (draft.items || []).map((it) => FillSubmit.normalizeItem(it, mode));
+    const v = draft.vault || {};
+    vaultState = {
+      change_fund: v.change_fund || '',
+      petty_cash: v.petty_cash || '',
+      tip_amount: v.tip_amount !== undefined && v.tip_amount !== null ? v.tip_amount : '',
+      tip_match: v.tip_match || '',
+      note: v.note || ''
+    };
+  }
+
+  function resetState() {
+    items = [];
+    vaultState = { change_fund: '', petty_cash: '', tip_amount: '', tip_match: '', note: '' };
+  }
+
+  function tryRestoreOrReset() {
+    const draft = FillSubmit.loadDraft(currentStore, currentMonth, mode);
+    if (draft) {
+      applyDraft(draft);
+    } else {
+      resetState();
+    }
+    renderMode();
+    renderItems();
+    vaultCardHandle.refresh();
+    renderDrafts();
+    hideSubmitError();
+    retryBtn.hidden = true;
+  }
+
+  // ============================================================
+  // 未送出草稿一覽
+  // ============================================================
+
+  function storeLabel(code) {
+    const hit = (config.stores || []).find((s) => s.code === code);
+    return hit ? hit.name : code;
+  }
+
+  function renderDrafts() {
+    const others = FillSubmit.listDrafts().filter(
+      (d) => !(d.store === currentStore && d.month === currentMonth && d.mode === mode)
+    );
+    while (draftsList.firstChild) draftsList.removeChild(draftsList.firstChild);
+    if (!others.length) {
+      draftsCard.hidden = true;
+      return;
+    }
+    draftsCard.hidden = false;
+    others.forEach((d) => {
+      const modeTxt = d.mode === MODE_ANOMALY ? '只填異常項' : '完整 ' + SAMPLE_SIZE + ' 項';
+      const resumeBtn = escEl(ctx, 'button', {
+        type: 'button', class: 'btn btn-secondary audit-draft-resume', 'data-key': d.key
+      }, storeLabel(d.store) + '　' + Format.monthLabel(d.month) + '（' + modeTxt + '·已填 ' + d.count + ' 項）');
+      resumeBtn.addEventListener('click', () => resumeDraft(d.key));
+
+      const dropBtn = el('button', {
+        type: 'button', class: 'btn btn-danger audit-draft-drop', 'data-key': d.key, text: '丟棄'
+      });
+      dropBtn.addEventListener('click', () => {
+        FillSubmit.dropDraft(d.key);
+        renderDrafts();
+      });
+
+      draftsList.appendChild(el('li', { class: 'audit-draft-row card-row' }, [resumeBtn, dropBtn]));
+    });
+  }
+
+  function resumeDraft(key) {
+    const payload = FillSubmit.readDraftByKey(key);
+    if (!payload) return;
+    saveDraft(); // 先保住目前這一份
+    currentStore = payload.store;
+    currentMonth = payload.month;
+    mode = /_anomaly$/.test(key) ? MODE_ANOMALY : MODE_FULL;
+    FillSubmit.persistMode(mode);
+    storeSelect.value = currentStore;
+    monthSelect.value = currentMonth;
+    renderDatalist();
+    tryRestoreOrReset();
+  }
+
+  // ============================================================
+  // 送出
+  // ============================================================
+
+  function hideSubmitError() {
+    submitErrorEl.hidden = true;
+    submitErrorEl.textContent = '';
+  }
+  function showSubmitError(msg) {
+    submitErrorEl.textContent = msg;
+    submitErrorEl.hidden = false;
+  }
+  function showSubmitFailure() {
+    showSubmitError('送出失敗，草稿已保留，請按下方「重試送出」再試一次');
+    retryBtn.hidden = false;
+    ctx.ui.toast('送出失敗，請重試', 'danger');
+  }
+
+  async function performSubmit() {
+    hideSubmitError();
+    retryBtn.hidden = true;
+    submitBtn.disabled = true;
+    submitBtn.textContent = '送出中…';
+    const record = FillSubmit.buildRecord({ store: currentStore, month: currentMonth, mode, items, vault: vaultState, sampleSize: SAMPLE_SIZE });
+    const details = FillSubmit.buildDetails({ store: currentStore, month: currentMonth, items, mode });
+    try {
+      const res = await sharedApi.submit(ctx, 'submitAudit', { record, details });
+      if (destroyed) return;
+      submitBtn.disabled = false;
+      submitBtn.textContent = '送出稽核';
+      if (res && res.ok) {
+        // submit() 成功時已經呼叫過 invalidate()（見 audit-shared/api.js），下一次
+        // 進報告頁（T2-4）呼叫 getAll() 就會拿到剛送出的新資料，不必像舊版
+        // app.reload() 那樣在這裡手動重抓一次。
+        FillSubmit.clearDraft(currentStore, currentMonth);
+        ctx.ui.toast('稽核已送出', 'ok');
+        ctx.nav('report', { store: currentStore, month: currentMonth });
+      } else {
+        showSubmitFailure();
+      }
+    } catch (e) {
+      if (destroyed) return;
+      submitBtn.disabled = false;
+      submitBtn.textContent = '送出稽核';
+      showSubmitFailure();
+    }
+  }
+
+  async function doSubmit() {
+    hideSubmitError();
+    const errors = FillSubmit.validate({ mode, items, vault: vaultState, sampleSize: SAMPLE_SIZE });
+    if (errors.length) {
+      showSubmitError(errors.join('\n'));
+      ctx.ui.toast('請修正下列問題再送出', 'danger');
+      return;
+    }
+    const key = Format.recordKey(currentStore, currentMonth);
+    const existing = records.find((r) => r.record_key === key);
+    if (existing) {
+      const ok = await ctx.ui.confirm('將覆蓋 ' + (existing.audit_date || '') + ' 的紀錄，確定送出？');
+      if (!ok || destroyed) return;
+    }
+    await performSubmit();
+  }
+
+  // ============================================================
+  // 事件：選店／選月
+  // ============================================================
+
+  function onStoreChange() {
+    saveDraft();
+    currentStore = storeSelect.value;
+    FillSubmit.persistLastStore(currentStore);
+    renderDatalist();
+    tryRestoreOrReset();
+  }
+  function onMonthChange() {
+    saveDraft();
+    currentMonth = monthSelect.value;
+    tryRestoreOrReset();
+  }
+  storeSelect.addEventListener('change', onStoreChange);
+  monthSelect.addEventListener('change', onMonthChange);
+
+  drawBtn.addEventListener('click', () => {
+    setItems(Sampling.drawSample(currentStoreItems(), currentStoreDetails(), SAMPLE_SIZE).map((it) => FillSubmit.normalizeItem(it, mode)));
+  });
+  addBtn.addEventListener('click', () => addItemByName(addInput.value));
+  addInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault ? e.preventDefault() : null;
+      addItemByName(addInput.value);
+    }
+  });
+
+  submitBtn.addEventListener('click', () => { doSubmit(); });
+  retryBtn.addEventListener('click', () => { performSubmit(); });
+
+  // ============================================================
+  // 初始化
+  // ============================================================
+
+  function pickDefaultStore() {
+    const codes = (config.stores || []).map((s) => s.code);
+    if (params.store && codes.indexOf(params.store) !== -1) return params.store;
+    const saved = FillSubmit.loadLastStore();
+    if (saved && codes.indexOf(saved) !== -1) return saved;
+    return codes[0] || '';
+  }
+
+  async function loadData() {
+    ctx.ui.loading(true);
+    try {
+      const res = await sharedApi.getAll(ctx);
+      if (destroyed) return;
+      if (!res || res.ok !== true) {
+        ctx.ui.toast((res && res.error) || '發生錯誤，請稍後再試', 'danger');
+        return;
+      }
+      config = (res.data && res.data.config) || { stores: [], reasons: [] };
+      allItems = (res.data && res.data.items) || [];
+      allDetails = (res.data && res.data.details) || [];
+      records = (res.data && res.data.records) || [];
+
+      while (storeSelect.firstChild) storeSelect.removeChild(storeSelect.firstChild);
+      (config.stores || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)).forEach((s) => {
+        storeSelect.appendChild(escEl(ctx, 'option', { value: s.code }, s.name));
+      });
+
+      currentStore = pickDefaultStore();
+      storeSelect.value = currentStore;
+
+      // 不是從別處帶 month 進來時，若這家店有未送出的草稿，落在那份草稿的月份與模式上
+      // （同舊版 latestDraftForStore()：否則只回到店、月份卻是當月，看起來像內容不見了）。
+      const resumeTarget = params.month ? null : FillSubmit.latestDraftForStore(currentStore);
+      const now = new Date();
+      const realMonthStr = String(now.getFullYear()) + '-' + pad2(now.getMonth() + 1);
+      currentMonth = params.month
+        ? params.month
+        : (resumeTarget ? resumeTarget.month : (String(now.getFullYear()) === YEAR ? realMonthStr : months[0]));
+      if (months.indexOf(currentMonth) === -1) currentMonth = months[0];
+      monthSelect.value = currentMonth;
+      mode = resumeTarget ? resumeTarget.mode : mode;
+
+      renderDatalist();
+      tryRestoreOrReset();
+    } catch (e) {
+      if (!destroyed) ctx.ui.toast('發生錯誤，請稍後再試', 'danger');
+    } finally {
+      if (!destroyed) ctx.ui.loading(false);
+    }
+  }
+
+  loadData();
+
+  return function unmount() {
+    destroyed = true;
+    storeSelect.removeEventListener('change', onStoreChange);
+    monthSelect.removeEventListener('change', onMonthChange);
+    [selectCard, draftsCard, modeCard, samplingCard, vaultCardHandle.el, submitErrorEl, submitBtn, retryBtn].forEach((n) => {
+      if (n && n.parentNode) n.parentNode.removeChild(n);
+    });
+  };
+}
+
+</script>
+
+<script type="module">
+(async function () {
+  function srcOf(id) {
+    return document.getElementById(id).textContent;
+  }
+  function blobify(text) {
+    return URL.createObjectURL(new Blob([text], { type: 'text/javascript' }));
+  }
+  // 只替換「原始碼裡的 import 路徑字面字串」成對應的 blob URL，函式本身、
+  // DOM 邏輯、事件處理一個字元都不動——這就是任務指示允許的「import 展開」做法。
+  function rewrite(text, pairs) {
+    let out = text;
+    for (const [from, to] of pairs) out = out.split(from).join(to);
+    return out;
+  }
+
+  try {
+    // ---- 沒有相依的葉節點模組，直接原樣做成 blob ----
+    const fmtUrl = blobify(srcOf('src-fmt'));
+    const formatUrl = blobify(srcOf('src-format'));
+    const samplingUrl = blobify(srcOf('src-sampling'));
+    const mockdataUrl = blobify(srcOf('src-mockdata'));
+    const opschecklistUrl = blobify(srcOf('src-opschecklist'));
+    const apiUrl = blobify(srcOf('src-api'));
+    const fillcashboxUrl = blobify(srcOf('src-fillcashbox'));
+
+    // ---- 依相依順序改寫 import 路徑 ----
+    const uiUrl = blobify(rewrite(srcOf('src-ui'), [
+      ["'./fmt.js'", "'" + fmtUrl + "'"]
+    ]));
+
+    const umdbridgeUrl = blobify(rewrite(srcOf('src-umdbridge'), [
+      ["'./format.js'", "'" + formatUrl + "'"],
+      ["'./sampling.js'", "'" + samplingUrl + "'"],
+      ["'./mock-data.js'", "'" + mockdataUrl + "'"],
+      ["'./ops-checklist.js'", "'" + opschecklistUrl + "'"]
+    ]));
+
+    const fillsubmitUrl = blobify(rewrite(srcOf('src-fillsubmit'), [
+      ["'../../audit-shared/umd-bridge.js'", "'" + umdbridgeUrl + "'"]
+    ]));
+
+    const overviewUrl = blobify(rewrite(srcOf('src-overview'), [
+      ["'../../audit-shared/api.js'", "'" + apiUrl + "'"]
+    ]));
+
+    const fillUrl = blobify(rewrite(srcOf('src-fill'), [
+      ["'../../audit-shared/api.js'", "'" + apiUrl + "'"],
+      ["'../../audit-shared/umd-bridge.js'", "'" + umdbridgeUrl + "'"],
+      ["'./fill-submit.js'", "'" + fillsubmitUrl + "'"],
+      ["'./fill-cashbox.js'", "'" + fillcashboxUrl + "'"]
+    ]));
+
+    const [uiMod, fmtMod, umdBridgeMod, overviewMod, fillMod] = await Promise.all([
+      import(uiUrl),
+      import(fmtUrl),
+      import(umdbridgeUrl),
+      import(overviewUrl),
+      import(fillUrl)
+    ]);
+
+    const { toast, loading, confirm, dialog, signaturePad } = uiMod;
+    const { esc, date, datetime, roc, money } = fmtMod;
+    const { MockData } = umdBridgeMod;
+    const { mountOverview } = overviewMod;
+    const { mountFill } = fillMod;
+
+    // ============================================================
+    // 假 ctx（spec §4.7 的形狀，逐項對照任務指示第 5 點）
+    // ============================================================
+
+    function buildPreviewSummaryEl(action, payload) {
+      const wrap = document.createElement('div');
+      wrap.className = 'preview-summary';
+      const p = document.createElement('p');
+      p.textContent = '這是預覽版，並未真的送出到後端。action＝「' + action + '」，實際會送出的內容如下：';
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(payload, null, 2);
+      wrap.appendChild(p);
+      wrap.appendChild(pre);
+      return wrap;
+    }
+
+    // 任何「送出類」action（submitAudit／markRest…）一律攔下：不打任何後端、
+    // 改跳一個對話框顯示 payload 摘要，使用者按下「我知道了」才算數（任務指示第 6 點）。
+    async function apiCall(moduleId, action, payload) {
+      await new Promise((r) => setTimeout(r, 200)); // 模擬延遲，純本機計時，不是網路
+      if (action === 'getAll') {
+        return {
+          ok: true,
+          data: {
+            config: MockData.config,
+            items: MockData.items,
+            records: MockData.records,
+            details: MockData.details
+          }
+        };
+      }
+      await dialog({
+        title: '這是預覽版',
+        body: buildPreviewSummaryEl(action, payload),
+        actions: [{ label: '我知道了', value: true, variant: 'primary' }]
+      });
+      return { ok: true, data: { preview: true, action, payload } };
+    }
+
+    const ctx = {
+      user: { id: 'u001', name: '預覽帳號（會計）', role: 'accountant', node: null },
+      can: () => true, // 任務指示第 5 點：一律回 true，讓 Eason 看得到全部控制項
+      api: { call: apiCall },
+      ui: { toast, loading, confirm, dialog, signaturePad },
+      fmt: { date, datetime, roc, esc, money },
+      nav: (viewId, params) => mountView(viewId, params),
+      viewId: 'overview',
+      params: {}
+    };
+
+    // ============================================================
+    // 最小外框：兩個分頁互相切換，切換時把上一個畫面 unmount 掉
+    // ============================================================
+
+    const viewRoot = document.getElementById('view-root');
+    const tabsEl = document.getElementById('preview-tabs');
+    let currentUnmount = null;
+
+    function setActiveTab(viewId) {
+      tabsEl.querySelectorAll('.nav-item').forEach((btn) => {
+        btn.classList.toggle('is-active', btn.getAttribute('data-view') === viewId);
+      });
+    }
+
+    function mountView(viewId, params) {
+      if (currentUnmount) {
+        try { currentUnmount(); } catch (e) { console.error(e); }
+        currentUnmount = null;
+      }
+      while (viewRoot.firstChild) viewRoot.removeChild(viewRoot.firstChild);
+
+      // spec §4.7：同一個 ctx 物件原地更新 viewId／params，不是換新物件
+      ctx.viewId = viewId === 'overview' || viewId === 'fill' ? viewId : ctx.viewId;
+      ctx.params = params || {};
+
+      if (viewId === 'overview') {
+        setActiveTab('overview');
+        currentUnmount = mountOverview(viewRoot, ctx);
+      } else if (viewId === 'fill') {
+        setActiveTab('fill');
+        currentUnmount = mountFill(viewRoot, ctx);
+      } else {
+        // 這份預覽只做「總覽／稽核填寫」兩頁（任務指示第 4 點），
+        // 真實系統會導去的「report」報告頁這裡沒有，安靜退回總覽並提示一下。
+        toast('預覽版尚未包含「' + viewId + '」頁面，這兩頁已經是完整真實邏輯', 'warn');
+        setActiveTab('overview');
+        currentUnmount = mountOverview(viewRoot, ctx);
+      }
+    }
+
+    tabsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('.nav-item');
+      if (!btn) return;
+      mountView(btn.getAttribute('data-view'), {});
+    });
+
+    mountView('overview', {});
+  } catch (err) {
+    console.error('[預覽版] 初始化失敗：', err);
+    const box = document.createElement('div');
+    box.className = 'preview-boot-error';
+    box.textContent = '預覽版初始化失敗：' + (err && err.stack ? err.stack : String(err));
+    document.body.appendChild(box);
+  }
+})();
+</script>
+</body>
+</html>
