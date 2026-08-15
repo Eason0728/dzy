@@ -43,8 +43,7 @@
 'use strict';
 
 import * as sharedApi from '../../audit-shared/api.js';
-import Sampling from '../../audit-shared/sampling.js';
-import Format from '../../audit-shared/format.js';
+import { Sampling, Format } from '../../audit-shared/umd-bridge.js';
 import * as FillSubmit from './fill-submit.js';
 import { mountVaultCard, buildChoiceGroup } from './fill-cashbox.js';
 

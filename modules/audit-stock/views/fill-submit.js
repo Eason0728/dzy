@@ -18,7 +18,7 @@
  */
 'use strict';
 
-import Format from '../../audit-shared/format.js';
+import { Format } from '../../audit-shared/umd-bridge.js';
 
 export const SAMPLE_SIZE = 20;
 export const MODE_FULL = 'full';

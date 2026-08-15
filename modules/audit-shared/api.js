@@ -102,9 +102,28 @@ export function invalidate() {
  * @returns {Promise<{ok:true,data:object}|{ok:false,error:string}>}
  */
 export async function submit(ctx, action, payload) {
+  // 試跑模式（網址加 ?dryrun=1）：讀取照常走真實後端，但**寫入一律攔下不送出**。
+  // 存在的理由：稽核後端接的是會計每個月實際在用的正式試算表。
+  // 要請人實際點過一輪給意見時，不能讓「試按一下送出」變成一筆假資料寫進正式資料。
+  // 這不是測試替身，是給真人試用時的安全閥——所以它留在正式程式碼裡，只靠網址開關。
+  if (isDryRun()) {
+    console.warn('[試跑模式] 攔下一次寫入，未送出到後端：', action, payload);
+    return { ok: true, data: { dryRun: true, action, payload } };
+  }
+
   const res = await ctx.api.call(BACKEND_ID, action, payload);
   if (res && res.ok === true) {
     invalidate();
   }
   return res;
+}
+
+/** 網址帶 ?dryrun=1 就進入試跑模式。非瀏覽器環境（node 測試）一律不啟用。 */
+export function isDryRun() {
+  try {
+    if (typeof window === 'undefined' || !window.location) return false;
+    return new URLSearchParams(window.location.search).get('dryrun') === '1';
+  } catch {
+    return false;
+  }
 }
