@@ -9,19 +9,21 @@
  * （spec §4.6／shell.js route() 的實際行為），所以這裡用 ctx.viewId 分派到對應分頁的
  * mount 函式，並在 onRoute() 時換掉目前掛著的那個分頁。
  *
- * 這次只做 overview（T2-2 範圍）。fill／report／analysis／my 是後續任務
- * （T2-3a/b/c、T2-4、T2-6），屆時只需要在 VIEW_MOUNTERS 補一行對應項目，
- * 這支檔案的分派邏輯不必再動。尚未實作的分頁先顯示「尚未完成」提示，不讓畫面壞掉。
+ * T2-2（overview）之後這次補上 fill（T2-3，稽核填寫）。report／analysis／my 是
+ * 後續任務（T2-4、T2-6），屆時只需要在 VIEW_MOUNTERS 補一行對應項目，這支檔案的
+ * 分派邏輯不必再動。尚未實作的分頁先顯示「尚未完成」提示，不讓畫面壞掉。
  *
  * badge() 固定回 null：真正的待辦數字等 T2-8 才做（任務指示明載）。
  */
 'use strict';
 
 import { mountOverview } from './views/overview.js';
+import { mountFill } from './views/fill.js';
 
 const VIEW_MOUNTERS = {
-  overview: mountOverview
-  // fill / report / analysis / my：後續任務補上
+  overview: mountOverview,
+  fill: mountFill
+  // report / analysis / my：後續任務補上
 };
 
 let currentEl = null;
