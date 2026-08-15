@@ -14,6 +14,7 @@
 
 export const MODULES = [
   { load: () => import('../modules/users/manifest.js') },
+  { load: () => import('../modules/audit-stock/manifest.js') },
   // Phase 2 加入：
   // { load: () => import('../modules/audit-ops/manifest.js') },
   // { load: () => import('../modules/audit-stock/manifest.js') },
