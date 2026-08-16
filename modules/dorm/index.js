@@ -6,9 +6,11 @@
  * （殼只在「換模組」時呼叫 mount/unmount，同模組內切分頁改叫 onRoute(ctx)；用 ctx.viewId
  * 分派到對應分頁的 mount 函式；沒有 mounter 的分頁顯示「此分頁尚未完成」佔位卡片，不崩潰）。
  *
- * 本任務只實作 list 一個分頁（見 views/list.js）。create／handover 是平行任務要做的事，
- * 這裡先不放進 VIEW_MOUNTERS——renderView() 對任何不在表裡的 viewId 一律回退到佔位卡片，
- * 這兩個分頁自然就是「此分頁尚未完成」，不必為它們各寫一個 no-op mounter。
+ * 三個分頁都已接線（2026-08-17 補）：T3-2 建骨架時只有 list，create／handover 由平行任務
+ * 實作完成（T3-3／T3-4，各自的 node 測試直接 import 畫面檔所以全綠），但沒人回頭把
+ * mounter 接進本表——實際點開那兩個分頁只會看到「此分頁尚未完成」佔位卡片。
+ * 這正是「跨層接縫測試抓不到」的典型案例，e2e ⑥（建單→點交流程）現在會守住這條。
+ * renderView() 對任何不在表裡的 viewId 仍回退到佔位卡片，不崩潰。
  *
  * 【模組層狀態（做法照 audit-stock，見它的 index.js 檔頭說明）】
  * list 本身不需要跨分頁記住任何東西，但還是比照 audit-stock 建立這一份 moduleState／
@@ -29,10 +31,14 @@
 'use strict';
 
 import { mountList } from './views/list.js';
+import { mountCreate } from './views/create.js';
+import { mountHandover } from './views/handover.js';
 import { listContracts } from './api.js';
 
 const VIEW_MOUNTERS = {
-  list: mountList
+  list: mountList,
+  create: mountCreate,
+  handover: mountHandover
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

@@ -633,7 +633,12 @@ await at('index.js：viewId=\'list\' 掛出合約清單（不是占位卡片）'
   unmount();
 });
 
-await at('index.js：viewId=\'create\' 與 \'handover\' 顯示「此分頁尚未完成」占位，不崩潰', async () => {
+// 2026-08-17 斷言升級：原本這兩條釘的是「create／handover 還沒實作時顯示占位卡片」的
+// **鷹架狀態**（T3-2 時代）。T3-3／T3-4 把兩個畫面做完後 index.js 已接線，正確行為變成
+// 「掛載真畫面」；占位行為改用一個真正不存在的 viewId 來守（安全性質不變：未知分頁
+// 不崩潰、顯示占位）。這不是弱化測試——驗的行為從「未完成時不崩潰」升級成「完成後真的能用」。
+await at('index.js：viewId=\'create\' 與 \'handover\' 掛載真畫面（不再是占位卡片），不崩潰', async () => {
+  const MARKERS = { create: '建立合約單', handover: '退宿點交' };
   for (const viewId of ['create', 'handover']) {
     const root = new FakeElement('div');
     const { ctx } = makeFakeCtx({ listHandler: () => ({ ok: true, data: { contracts: [] } }) });
@@ -648,13 +653,33 @@ await at('index.js：viewId=\'create\' 與 \'handover\' 顯示「此分頁尚未
       threw = true;
     }
     assert.equal(threw, false, `viewId=${viewId} 掛載不該拋例外`);
-    assert.ok(findByText(root, '此分頁尚未完成'), `viewId=${viewId} 應該顯示占位卡片，未拿到`);
+    assert.equal(findByText(root, '此分頁尚未完成'), null, `viewId=${viewId} 不該再顯示占位卡片`);
+    assert.ok(findByText(root, MARKERS[viewId]), `viewId=${viewId} 應該掛載真畫面（找得到「${MARKERS[viewId]}」）`);
 
     if (unmount) unmount();
   }
 });
 
-await at('index.js：onRoute 切分頁——同一次 mount 內從 list 切到 create 會換成占位卡片', async () => {
+await at('index.js：真正未知的 viewId 仍顯示「此分頁尚未完成」占位，不崩潰', async () => {
+  const root = new FakeElement('div');
+  const { ctx } = makeFakeCtx({ listHandler: () => ({ ok: true, data: { contracts: [] } }) });
+  ctx.viewId = 'no-such-view';
+
+  let threw = false;
+  let unmount;
+  try {
+    unmount = dormIndex.mount(root, ctx);
+    await flush();
+  } catch {
+    threw = true;
+  }
+  assert.equal(threw, false, '未知 viewId 掛載不該拋例外');
+  assert.ok(findByText(root, '此分頁尚未完成'), '未知 viewId 應該顯示占位卡片');
+
+  if (unmount) unmount();
+});
+
+await at('index.js：onRoute 切分頁——同一次 mount 內從 list 切到 create 會換成建單畫面', async () => {
   const root = new FakeElement('div');
   const { ctx } = makeFakeCtx({ listHandler: () => ({ ok: true, data: { contracts: [] } }) });
   ctx.viewId = 'list';
@@ -668,7 +693,7 @@ await at('index.js：onRoute 切分頁——同一次 mount 內從 list 切到 c
   await flush();
 
   assert.equal(findDescendant(root, (n) => n.classList && n.classList.contains('dorm-list-table')), null, '切到 create 後清單表格應該被換掉');
-  assert.ok(findByText(root, '此分頁尚未完成'), '切到 create 後應該顯示占位卡片');
+  assert.ok(findByText(root, '建立合約單'), '切到 create 後應該顯示建單畫面');
 
   unmount();
 });

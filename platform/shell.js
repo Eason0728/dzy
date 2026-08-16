@@ -358,16 +358,30 @@ function renderHomeCards() {
   for (const m of permittedModules) {
     const firstView = m.views.find(isViewPermitted);
     const target = firstView ? `#/${m.id}/${firstView.id}` : '#/home';
-    const badgeEl = el('div', { 'data-role': 'badge', 'data-module': m.id });
+    const badgeEl = el('div', { class: 'module-badge', 'data-role': 'badge', 'data-module': m.id });
+    // 圖示檔名＝manifest.icon（manifest-check 已驗過是合法 id），檔在 assets/icons/。
+    // 殼只拿 icon 當「資料」組路徑，不對值做任何 if 判斷——分層不破。
+    const iconEl = el('img', {
+      class: 'module-icon',
+      src: `assets/icons/${m.icon}.png`,
+      alt: ''
+    });
     const card = el(
       'div',
       {
-        class: 'card card-link',
+        class: 'card card-link module-card',
         'data-role': 'module-card',
         'data-module': m.id,
         'data-target': target
       },
-      [el('div', { class: 'card-title', text: m.name }), el('p', { class: 'text-muted', text: m.desc }), badgeEl]
+      [
+        iconEl,
+        el('div', { class: 'module-card-text' }, [
+          el('div', { class: 'card-title', text: m.name }),
+          el('p', { class: 'text-muted', text: m.desc })
+        ]),
+        badgeEl
+      ]
     );
     viewContentEl.appendChild(card);
   }
