@@ -30,7 +30,17 @@
 | 系統 | Script ID | 部署 ID | 註 |
 |---|---|---|---|
 | 稽核 | `1MKar7OQpp6HKrQg_Vo809NQsgna5bWCVRhoB6tgNjUEZNcj9op-nEkWy` | `AKfycbz5l_aH_qypN6HK6UDT__5NLZDk4A2clyqeqvJzx5JrL9SBVeH5GyDYBCW3gv-CDy7fFQ`（@8） | 容器繫結於稽核試算表 |
-| 宿舍合約 | `1UTBAjjdRk5mNpn6OtCzFEcXw858pglyUrVRYX4YRWsbex4h7ifVkBxb1` | `AKfycbyxyhJ35MWTjtvzKr54_9JzGfLZlclyqn2fYLWXgz0muTFzL_tu81nR1r3W332J1igm`（**@16**，2026-08-14 移除 wipeAll；dispatch-rules 第 5 節記載的 @7 已過時） | 獨立 script |
+| 宿舍合約 | `1UTBAjjdRk5mNpn6OtCzFEcXw858pglyUrVRYX4YRWsbex4h7ifVkBxb1` | `AKfycbyxyhJ35MWTjtvzKr54_9JzGfLZlclyqn2fYLWXgz0muTFzL_tu81nR1r3W332J1igm`（**@17**，2026-08-15；dispatch-rules 第 5 節記載的 @7 已過時） | 獨立 script |
+
+**2026-08-15 對宿舍後端做過的兩次改動**（都經 Eason 明確同意，都是純新增或純記錄修正）：
+1. @16：移除 `wipeAll` 端點與 `wipeAllData()`（帶 admin 通行碼就能從網路清空所有合約）
+2. @17：`doPost` 補上四個讀取 action（`rooms`／`list`／`contract`／`handover`）。
+   新系統一律用 POST（用 GET 會讓通行碼進網址列），而那四個原本只在 `doGet` 有，
+   不補的話宿舍模組一筆資料都讀不到——**而且測試 mock 掉後端永遠抓不到這件事**。
+   `doGet` 一個字沒動，舊網址與已發出的簽約連結不受影響。
+3. 另補提交了一個 2026-07-24 就存在的未提交修改（`Pdf.gs` 重複區塊）：
+   git HEAD 存的那版有重複的 `const` 宣告、`node --check` 直接 SyntaxError，
+   也就是**線上是好的、Mac 是好的、只有 git 是壞的**。任何人 checkout 還原就會弄掛系統。
 
 ⚠ 這兩支**永遠用 `deploy -i` 更新既有部署 ID**，絕不 `create-deployment`（會換網址、前端斷線）。
 本專案 Phase 1–4 完全不推送這兩支。
