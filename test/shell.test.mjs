@@ -801,6 +801,58 @@ await at("ctx.api.call('假模組id', ...) 會轉成用該 manifest 的 backend 
 });
 
 // ============================================================
+// 測試 7b：ctx.api.call('backend名', ...) 也要通（2026-08-17 修的缺陷）
+//
+// spec §6.4 規定 audit-stock／audit-ops 共用 modules/audit-shared/api.js，那支共用層
+// 不隸屬任何單一模組、傳的是 backend 名 'audit'。修法前殼只按 moduleId 查 manifest，
+// 兩個稽核模組的每一次後端呼叫（含首頁 badge）都拿到「殼找不到這個模組」——
+// dorm 因為 id 恰好等於 backend 才沒中。這條釘住 fallback：按 id 查不到就按 backend 查。
+// ============================================================
+
+await at("ctx.api.call('backend名', ...)（共用資料層的呼叫方式）也解析得到後端", async () => {
+  resetGlobalState();
+
+  let capturedCall = null;
+
+  const manifestNsCaller = makeManifest({
+    id: 'demo-ns-caller',
+    ns: 'audit', // backend===ns（spec §4.1），模組 id 與 backend 名不同——正是稽核兩模組的形狀
+    requires: ['audit.read'],
+    views: [{ id: 'overview', name: '總覽', requires: [] }],
+    body: {
+      mount: async (mountEl, ctx) => {
+        // 模仿 modules/audit-shared/api.js：用 backend 名呼叫，不是用自己的 moduleId
+        ctx.api.call('audit', 'getAll', {});
+      }
+    }
+  });
+  MODULES.push({ load: () => Promise.resolve({ default: manifestNsCaller }) });
+  seedSession({ id: 'u106', name: '測試員', role: 'accountant', node: '' }, ['audit.read']);
+
+  await freshShellImport();
+  await flush();
+
+  globalThis.fetch = async (url, opts) => {
+    capturedCall = { url: String(url), body: JSON.parse((opts && opts.body) || '{}') };
+    return { json: async () => ({ ok: true }) };
+  };
+
+  const appEl = getAppEl();
+  const cardNs = findDescendant(
+    appEl,
+    (n) => n.getAttribute && n.getAttribute('data-module') === 'demo-ns-caller' && n.getAttribute('data-role') === 'module-card'
+  );
+  dispatchClick(cardNs);
+  await flush();
+
+  armFetchGuard();
+
+  assert.ok(capturedCall, "ctx.api.call('audit',...) 應該真的送出了一次請求（修法前這裡拿到「殼找不到這個模組」）");
+  assert.equal(capturedCall.url, BACKENDS.audit, "backend 名 'audit' 應該 fallback 解析到 BACKENDS.audit 的網址");
+  assert.equal(capturedCall.body.action, 'getAll', '送出的 action 正確帶到');
+});
+
+// ============================================================
 // 測試 8：缺陷①——一次導覽只會讓模組 mount 一次
 //
 // 修法前：navigateTo() 先 window.location.hash = hash 再立刻呼叫 route()，但檔案最後也

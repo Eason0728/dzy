@@ -166,6 +166,18 @@ export function mountList(root, ctx) {
   function buildActionCell(c) {
     const td = document.createElement('td');
     if (canWrite && c.status === '在住') {
+      // 「開點交單」：舊版 admin.html 245 行對「在住」合約提供的入口（現有功能一項不減）。
+      // 這裡只做導頁，把 contract_id 交給退宿點交分頁；handoverCreate 由 handover.js
+      // 自己呼叫（它已寫好「沒 token 就先 handoverCreate」的流程），本檔維持唯讀＋終止。
+      // 2026-08-17 補：handover.js 的缺參數提示一直寫著「請從合約清單點選開點交單進入」，
+      // 但這顆按鈕先前根本沒做——又一個平行任務各自完工、沒人接線的接縫。
+      td.appendChild(el('button', {
+        type: 'button',
+        class: 'btn btn-secondary',
+        'data-action': 'open-handover',
+        'data-id': c.contract_id,
+        text: '開點交單'
+      }));
       const label = c.terminate_flag ? '取消終止' : '標記終止';
       td.appendChild(el('button', {
         type: 'button',
@@ -269,6 +281,7 @@ export function mountList(root, ctx) {
     const c = contracts.find((x) => x && String(x.contract_id) === String(id));
     if (!c) return;
     if (action === 'toggle-terminate') onToggleTerminate(c);
+    if (action === 'open-handover') ctx.nav('handover', { contract_id: c.contract_id });
   }
 
   tbodyEl.addEventListener('click', onRowClick);

@@ -199,7 +199,15 @@ function isViewPermitted(view) {
 // ============================================================
 
 function callModuleBackend(moduleId, action, payload) {
-  const manifest = allManifests.find((m) => m.id === moduleId);
+  // 先按 moduleId 查（spec §4.7 的字面契約）；查不到再按 backend／ns fallback
+  // （2026-08-17 修）。原因：spec §6.4 規定 audit-stock／audit-ops 共用一支資料層
+  // modules/audit-shared/api.js，那支「共用層」不隸屬任何單一模組，沒有合法的
+  // moduleId 可傳，實際傳的是 backend 名 'audit'——只認 moduleId 會讓兩個稽核模組
+  // 的每一次後端呼叫都拿到「殼找不到這個模組」（dorm 是 id 恰好等於 backend 才沒事）。
+  // §4.1 已約束 backend 必須等於 ns，同 backend 的多個 manifest 解析出的也是同一支
+  // 後端，這個 fallback 是純放寬、不改任何既有行為（shell.test.mjs 測試 7 照舊全綠）。
+  const manifest = allManifests.find((m) => m.id === moduleId)
+    || allManifests.find((m) => m.backend === moduleId);
   if (!manifest) {
     return Promise.resolve({ ok: false, error: `殼找不到這個模組：${moduleId}` });
   }
