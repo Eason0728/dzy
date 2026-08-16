@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>宿舍租賃契約　線上簽署</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<style>
+  :root{
+    --ink:#1c1a19; --muted:#6f665f; --line:#e2dbd4; --bg:#f7f4f1; --card:#fff;
+    --brand:#c8402c; --ok:#2f6b3a; --shadow:0 1px 3px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"PingFang TC","Noto Sans TC","Helvetica Neue",sans-serif;
+    line-height:1.75;font-size:15px}
+  .wrap{max-width:640px;margin:0 auto;padding:0 0 120px}
+
+  /* 封面 */
+  .cover{background:var(--card);padding:38px 24px 34px;text-align:center;
+    border-bottom:1px solid var(--line)}
+  .logos{display:flex;justify-content:center;align-items:center;gap:18px;margin-bottom:18px}
+  .logos img{height:56px;width:auto;border-radius:6px}
+  .cover .group{font-size:13px;color:var(--muted);letter-spacing:.18em}
+  .cover h1{font-size:25px;margin:8px 0 22px;letter-spacing:.06em}
+  .cover dl{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;
+    text-align:left;max-width:400px;margin:0 auto;font-size:14px}
+  .cover dt{color:var(--muted);white-space:nowrap}
+  .cover dd{margin:0;font-weight:600}
+  .scrollhint{margin-top:24px;font-size:12.5px;color:var(--muted)}
+
+  section{background:var(--card);margin:12px 0;padding:20px 22px;box-shadow:var(--shadow)}
+  h2{font-size:15.5px;margin:0 0 4px;letter-spacing:.03em}
+  h2 .no{color:var(--brand);margin-right:8px}
+  .clause{white-space:pre-line;font-size:14.5px;color:#2b2724;margin:0 0 4px}
+  .sect-label{font-size:11.5px;letter-spacing:.14em;color:var(--muted);
+    margin:26px 0 8px;padding:0 22px}
+
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px}
+  th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left}
+  th{font-size:12px;color:var(--muted);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+
+  /* 需要動手的區塊：用顏色跟唯讀條文區分 */
+  .action{border-left:3px solid var(--brand)}
+  .action h2{color:var(--brand)}
+  .hint{font-size:13px;color:var(--muted);margin:2px 0 12px}
+  .equip{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .equip label{display:flex;align-items:center;gap:9px;padding:11px 12px;
+    border:1px solid var(--line);border-radius:7px;background:var(--bg);font-size:14.5px}
+  .equip input{width:19px;height:19px;accent-color:var(--brand)}
+  .equip label.on{background:#fdf6f4;border-color:var(--brand)}
+
+  #pad{width:100%;height:190px;border:1px dashed var(--line);border-radius:8px;
+    background:var(--bg);touch-action:none;display:block}
+  .padrow{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+  .clear{background:none;border:none;color:var(--muted);font-size:13.5px;
+    text-decoration:underline;padding:6px 0;cursor:pointer}
+
+  .bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);
+    border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+    box-shadow:0 -2px 12px rgba(0,0,0,.06)}
+  .bar .inner{max-width:640px;margin:0 auto;display:flex;gap:12px;align-items:center}
+  .status{flex:1;font-size:12.5px;color:var(--muted);line-height:1.45}
+  button.submit{background:var(--brand);color:#fff;border:none;border-radius:9px;
+    padding:14px 24px;font-size:16px;font-weight:600;cursor:pointer;white-space:nowrap}
+  button.submit:disabled{background:#cfc8c2;cursor:not-allowed}
+
+  .done{background:var(--card);margin:12px 0;padding:36px 24px;text-align:center}
+  .done .tick{font-size:40px;color:var(--ok)}
+  .done a{display:inline-block;margin-top:16px;background:var(--ink);color:#fff;
+    text-decoration:none;padding:12px 22px;border-radius:8px;font-size:15px}
+  .err{background:#fdf3f2;border-left:3px solid var(--brand);padding:16px 20px;margin:16px 0}
+  .banner{background:#fff8e6;border-bottom:1px solid #e8d9a8;padding:9px 16px;
+    font-size:12.5px;color:#7a6320;text-align:center}
+</style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+
+<script src="mock-terms.js"></script>
+<script type="module">
+// T3-5 去重：esc()／簽名板改 import 平台共用版本，API_URL 改從 platform/config.js 取。
+// 流程邏輯（欄位、驗證、送出、文案）不動一行——見 docs/task.md T3-5、spec.md §4.10。
+import { esc } from './platform/fmt.js';
+import { signaturePad } from './platform/ui.js';
+import { BACKENDS } from './platform/config.js';
+
+// ── 設定 ──────────────────────────────────────
+// Phase 2 本機預覽用 ?mock=1；正式版 API_URL 一律從 BACKENDS.dorm 取，這頁不再自己刻一份網址字串。
+const API_URL = BACKENDS.dorm;
+const qs = new URLSearchParams(location.search);
+const MOCK = qs.get('mock') === '1';
+
+const $ = (h) => { const d = document.createElement('div'); d.innerHTML = h.trim(); return d.firstChild; };
+
+// ── 取資料 ────────────────────────────────────
+async function load() {
+  if (MOCK) return window.MOCK_DATA;
+  const t = qs.get('t');
+  if (!t) throw new Error('連結不完整，請向宿舍長索取正確的簽署連結。');
+  const r = await fetch(API_URL + '?action=contract&token=' + encodeURIComponent(t));
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || '連結無效');
+  return j;
+}
+
+// ── 畫面 ──────────────────────────────────────
+function renderCover(c) {
+  return `
+  <div class="cover">
+    <div class="logos">
+      <img src="assets/logo-mala.jpg" alt="麻的小辛辣">
+      <img src="assets/logo-mozhu.jpg" alt="墨竹亭">
+    </div>
+    <div class="group">鼎兆元餐飲集團</div>
+    <h1>宿舍租賃契約書</h1>
+    <dl>
+      <dt>承租人</dt><dd>${esc(c.name)}</dd>
+      <dt>租賃標的</dt><dd>${esc(c.property_addr || '新竹市光復路一段435號')}<br>${esc(c.room_bed)}</dd>
+      <dt>租賃期間</dt><dd>${esc(c.term_start)} 至 ${esc(c.term_end)}</dd>
+      <dt>每月住宿費</dt><dd>${Number(c.rent).toLocaleString()} 元／月</dd>
+    </dl>
+    <div class="scrollhint">請往下捲動閱讀全部條文，最後簽名送出 ↓</div>
+  </div>`;
+}
+
+function renderTerms(t) {
+  let h = '<div class="sect-label">契約條文</div>';
+  t.clauses.forEach(c => {
+    h += `<section><h2><span class="no">${esc(c.no)}</span>${esc(c.title)}</h2>
+          <p class="clause">${esc(c.body)}</p></section>`;
+  });
+
+  h += '<div class="sect-label">附件一</div><section>';
+  h += `<h2>${esc(t.annex1.title.replace('附件一　',''))}</h2>`;
+  h += '<table><thead><tr><th>設備項目</th><th>數量</th><th style="text-align:right">賠償單價</th></tr></thead><tbody>';
+  t.annex1.prices.forEach(p => {
+    h += `<tr><td>${esc(p.item)}</td><td>${p.qty}</td><td class="num">${p.price.toLocaleString()}</td></tr>`;
+  });
+  h += '</tbody></table>';
+  h += `<p class="clause" style="font-size:13.5px;color:#6f665f">${esc(t.annex1.footer)}</p></section>`;
+
+  h += '<div class="sect-label">附件二</div>';
+  t.annex2.sections.forEach(s => {
+    h += `<section><h2>${esc(s.title)}</h2><p class="clause">${esc(s.body)}</p></section>`;
+  });
+  return h;
+}
+
+function renderActions(equip) {
+  return `
+  <div class="sect-label">請你確認</div>
+  <section class="action">
+    <h2>身分資料</h2>
+    <p class="hint">請填寫你本人的資料，將載入合約承租人欄。</p>
+    <div style="display:grid;gap:10px">
+      <div><label style="font-size:12px;color:var(--muted)">身分證字號 *</label>
+        <input id="f_id_no" autocapitalize="characters" autocomplete="off" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:7px;font-size:16px;font-family:inherit;background:var(--bg)"></div>
+      <div><label style="font-size:12px;color:var(--muted)">手機號碼 *</label>
+        <input id="f_phone" inputmode="tel" autocomplete="tel" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:7px;font-size:16px;font-family:inherit;background:var(--bg)"></div>
+      <div><label style="font-size:12px;color:var(--muted)">通訊地址</label>
+        <input id="f_mail_addr" autocomplete="street-address" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:7px;font-size:16px;font-family:inherit;background:var(--bg)"></div>
+    </div>
+  </section>
+  <section class="action">
+    <h2>附屬設備點收</h2>
+    <p class="hint">請勾選房間實際有提供的設備；房間沒有的項目請取消勾選（不影響簽約）。</p>
+    <div class="equip">
+      ${equip.map((k,i)=>`<label id="eq${i}"><input type="checkbox" data-k="${esc(k)}" checked>${esc(k)}</label>`).join('')}
+    </div>
+  </section>
+  <section class="action">
+    <h2>手寫簽名</h2>
+    <p class="hint">用手指在下方框內簽名。簽名送出後即完成簽約。</p>
+    <canvas id="pad"></canvas>
+    <div class="padrow">
+      <span class="hint" style="margin:0">簽名即表示你已閱讀並同意上述全部條文與附件</span>
+      <button class="clear" id="clear">清除重簽</button>
+    </div>
+  </section>`;
+}
+
+function renderBar() {
+  return `<div class="bar"><div class="inner">
+    <div class="status" id="status">請先簽名</div>
+    <button class="submit" id="submit" disabled>確認送出</button>
+  </div></div>`;
+}
+
+// ── 簽名板 ────────────────────────────────────
+// 改用 platform/ui.js 的共用 signaturePad()（T3-5 去重，見上方 import），不再自己刻一份。
+// 該共用元件的介面是 {isEmpty(),toDataURL(),clear(),destroy()}（輪詢式，非callback式），
+// 與這頁原本 initPad() 回傳的 {isSigned(),dataUrl()} 不同，呼叫端（下面「啟動」區塊）
+// 需要用等價的方式接住：建立時記一個 padWasEmpty 旗標，在畫布 move 事件裡偵測「從空到非空」
+// 的那一刻呼叫一次 onChange()——效果等同原本 initPad() 內部 move handler 的
+// `if (!dirty) { dirty = true; onChange(); }`，可即時更新送出鈕與狀態文字，行為不變。
+// 清除重簽鈕同理：原本由 initPad() 內部接管，現在改在呼叫端接 pad.clear() 之後手動觸發 onChange()。
+
+let pad, equipBoxes;
+
+// 離開頁面（分頁關閉／導頁走）要解除 signaturePad 掛在 window 上的 mouseup 監聽，
+// 否則重複開這支頁面會累積監聽（platform/ui.js destroy() 說明同此）。
+window.addEventListener('pagehide', () => {
+  if (pad && typeof pad.destroy === 'function') pad.destroy();
+});
+function idFilled() {
+  const id = document.getElementById('f_id_no').value.trim().toUpperCase();
+  const ph = document.getElementById('f_phone').value.trim();
+  return { id, ph,
+    idOk: /^[A-Z][0-9]{9}$/.test(id),
+    phOk: /^09[0-9]{8}$/.test(ph) };
+}
+function onChange() {
+  const signed = !pad.isEmpty();
+  const f = idFilled();
+  const btn = document.getElementById('submit');
+  const st = document.getElementById('status');
+  btn.disabled = !(signed && f.idOk && f.phOk);
+  const nEquip = equipBoxes.filter(b => b.checked).length;
+  if (!f.id) st.textContent = '請填身分證字號';
+  else if (!f.idOk) st.textContent = '身分證格式：英文字母開頭，共 10 碼';
+  else if (!f.ph) st.textContent = '請填聯絡電話';
+  else if (!f.phOk) st.textContent = '手機格式：09 開頭共 10 碼';
+  else if (!signed) st.textContent = '請先簽名（已點收 ' + nEquip + ' 項設備）';
+  else st.textContent = '確認無誤即可送出（點收 ' + nEquip + ' 項設備）';
+}
+
+// ── 送出 ──────────────────────────────────────
+async function submit(data) {
+  const btn = document.getElementById('submit');
+  btn.disabled = true; btn.textContent = '送出中…';
+  const payload = {
+    action: 'sign', token: qs.get('t'),
+    equip: equipBoxes.map(b => ({ item: b.dataset.k, ok: b.checked })),
+    sign_png: pad.toDataURL(),
+    ua: navigator.userAgent,
+    id_no: document.getElementById('f_id_no').value.trim().toUpperCase(),
+    phone: document.getElementById('f_phone').value.trim(),
+    mail_addr: document.getElementById('f_mail_addr').value.trim(),
+  };
+  if (MOCK) {
+    await new Promise(r => setTimeout(r, 600));
+    return showDone('（本機預覽：沒有真的送出）', null);
+  }
+  const r = await fetch(API_URL, { method:'POST', body: JSON.stringify(payload) });
+  const j = await r.json();
+  if (!j.ok) { alert('送出失敗：' + j.error); btn.disabled = false; btn.textContent='確認送出'; return; }
+  showDone('簽署完成', j.pdf_url);
+}
+
+function showDone(msg, pdfUrl) {
+  document.getElementById('app').innerHTML = `
+    <div class="done">
+      <div class="tick">✓</div>
+      <h1 style="font-size:20px;margin:10px 0 6px">${esc(msg)}</h1>
+      <p style="color:#6f665f;font-size:14px">合約已成立，請下載並自行留存一份。</p>
+      ${pdfUrl ? `<a href="${pdfUrl}" target="_blank">下載我的合約 PDF</a>` : ''}
+    </div>`;
+}
+
+// ── 啟動 ──────────────────────────────────────
+(async function () {
+  const app = document.getElementById('app');
+  try {
+    const d = await load();
+    if (d.state === 'signed') {
+      app.innerHTML = renderCover(d.contract) + renderTerms(d.terms)
+        + `<div class="done"><div class="tick">✓</div>
+           <h1 style="font-size:19px;margin:10px 0 6px">這份合約已完成簽署</h1>
+           <p style="color:#6f665f;font-size:14px">簽署時間 ${esc(d.contract.signed_at||'')}</p>
+           ${d.contract.pdf_url ? `<a href="${d.contract.pdf_url}" target="_blank">下載合約 PDF</a>`:''}</div>`;
+      return;
+    }
+    app.innerHTML = (MOCK ? '<div class="banner">本機預覽模式（mock）——資料是假的，送出不會寫入</div>' : '')
+      + renderCover(d.contract) + renderTerms(d.terms)
+      + renderActions(d.equip) + renderBar();
+    pad = signaturePad(document.getElementById('pad'));
+    let padWasEmpty = true;
+    const notifyPadChange = () => {
+      if (padWasEmpty && !pad.isEmpty()) { padWasEmpty = false; onChange(); }
+    };
+    document.getElementById('pad').addEventListener('mousemove', notifyPadChange);
+    document.getElementById('pad').addEventListener('touchmove', notifyPadChange);
+    document.getElementById('clear').onclick = () => {
+      pad.clear(); padWasEmpty = true; onChange();
+    };
+    equipBoxes = Array.from(document.querySelectorAll('.equip input'));
+    equipBoxes.forEach(b => {
+      const lab = b.parentElement;
+      const sync = () => lab.classList.toggle('on', b.checked);
+      b.addEventListener('change', () => { sync(); onChange(); }); sync();
+    });
+    ['f_id_no','f_phone','f_mail_addr'].forEach(id =>
+      document.getElementById(id).addEventListener('input', onChange));
+    if (d.contract.mail_addr) document.getElementById('f_mail_addr').value = d.contract.mail_addr;
+    document.getElementById('submit').onclick = () => submit(d);
+    onChange();
+  } catch (e) {
+    app.innerHTML = `<div class="err"><strong>無法開啟這份合約</strong><br>${esc(e.message)}</div>`;
+  }
+})();
+
+</script>
+</body>
+</html>
