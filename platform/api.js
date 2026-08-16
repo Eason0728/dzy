@@ -170,7 +170,19 @@ function transformResponse_(backendId, json) {
     return { ok: false, error: '伺服器回應格式錯誤' };
   }
   if (json.ok !== true) {
-    return { ok: false, error: (json && json.error) || '請求失敗' };
+    // 2026-08-15 修：原本只留 error，其餘欄位全丟掉。
+    // 但宿舍後端的「床位重複」是一種**軟性警告**：
+    //   {ok:false, warn:'床位重複', message:'…確定要建立嗎？'}
+    // 它連 error 欄位都沒有，舊版是拿 message 問使用者、確認後帶 force 重送。
+    // 只留 error 的結果是：既有的「強制建立」流程整個消失，而且畫面只顯示
+    // 「請求失敗」四個字——會計完全不知道發生什麼事。
+    // 改成：訊息取 error → message → 通用字；其餘欄位原樣放進 data 供模組判斷。
+    const rest = { ...json };
+    delete rest.ok;
+    delete rest.error;
+    const out = { ok: false, error: json.error || json.message || '請求失敗' };
+    if (Object.keys(rest).length > 0) out.data = rest;
+    return out;
   }
 
   if (backendId === 'platform') {

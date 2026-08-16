@@ -249,7 +249,10 @@ ctx = {
 
 - 稽核既有回傳 `{ok:true, config, items, records, ...}` → 轉接層包成 `{ok:true, data:{config, items, records, ...}}`
 - 宿舍既有回傳 `{ok:true, contract_id, token, ...}` → 同樣包進 `data`
-- 既有的 `{ok:false, error}` 原樣通過。
+- 失敗回應：`{ok:false, error}`；**後端若還回了其他欄位，一律原樣放進 `data`**（2026-08-15 修）。
+  原因：宿舍後端的「床位重複」是軟性警告——`{ok:false, warn:'床位重複', message:'…確定要建立嗎？'}`，
+  連 `error` 欄位都沒有。只留 `error` 會讓既有的「確認後強制建立」流程整個消失，
+  而且畫面只顯示「請求失敗」。訊息取用順序：`error` → `message` → 通用字。
 - **轉接只在平台 `api.js` 一處做**，模組內不得再判既有格式。
 
 ### 4.9 路由字串

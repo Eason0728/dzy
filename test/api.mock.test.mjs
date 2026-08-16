@@ -248,7 +248,13 @@ await (async function test3() {
     list: () => ({ ok: false, error: '通行碼錯誤', code: 401 })
   });
   const res2 = await call('dorm', 'list', {});
-  assertEqual(res2, { ok: false, error: '通行碼錯誤' }, '3b: 宿舍 {ok:false,error} 原樣通過，訊息逐字不變');
+  // 2026-08-15 放寬：從「完全相等」改成驗真正的不變量——error 訊息逐字不變。
+  // 原因：轉接層現在會把後端多回的欄位（這裡是 code:401）保留進 data，
+  // 那是刻意的（宿舍「床位重複」是 {ok:false, warn, message} 的軟性警告，
+  // 只留 error 會讓既有的「確認後強制建立」流程消失）。斷言的本意沒有被弱化。
+  assertTrue(res2.ok === false, '3b-1: 宿舍失敗回應 ok 為 false');
+  assertEqual(res2.error, '通行碼錯誤', '3b-2: 宿舍失敗訊息逐字不變');
+  assertEqual(res2.data && res2.data.code, 401, '3b-3: 後端多回的欄位保留在 data，沒有被丟掉');
 
   armGuard();
   logout();
@@ -535,6 +541,31 @@ await (async function test15() {
     Array.isArray(res.data.config && res.data.config.stores) && res.data.config.stores.length > 0,
     '15e: 設定與對照表（config.stores）保留，只清「一列一店」的資料'
   );
+  logout();
+})();
+
+// ============================================================
+// 16. 軟性警告要傳得到模組（2026-08-15 補）
+//     宿舍後端的「床位重複」回 {ok:false, warn, message}，**連 error 都沒有**。
+//     舊版是拿 message 問使用者、確認後帶 force 重送。轉接層若只留 error，
+//     這個既有流程會整個消失，而且畫面只顯示「請求失敗」。
+// ============================================================
+await (async function test16() {
+  await loginAs({
+    token: 'tok-mgr-9',
+    user: { id: 'u092', name: '部門主管', role: 'manager', node: '' },
+    perms: ['dorm.read', 'dorm.write'],
+    secrets: { dorm: 'secret-016' }
+  });
+
+  globalThis.fetch = makeFetchMock({
+    create: () => ({ ok: false, warn: '床位重複', message: '二樓四人房1號床已有人，確定要建立嗎？' })
+  });
+
+  const res = await call('dorm', 'create', { room: '二樓四人房', bed: '1號床' });
+  assertTrue(res.ok === false, '16a: 軟性警告仍算失敗（不會誤當成建立成功）');
+  assertEqual(res.error, '二樓四人房1號床已有人，確定要建立嗎？', '16b: 沒有 error 時改用 message，不是通用的「請求失敗」');
+  assertEqual(res.data && res.data.warn, '床位重複', '16c: warn 保留在 data，模組才判斷得出這是可強制建立的情況');
   logout();
 })();
 
