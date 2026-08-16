@@ -945,18 +945,28 @@ await at("index.js：ctx.viewId='report' 掛出報告畫面", async () => {
   unmount();
 });
 
-await at("index.js：ctx.viewId='my'（尚未實作）顯示「此分頁尚未完成」占位卡片，不崩潰", async () => {
+// 2026-08-15 更新這條：原本斷言 viewId='my' 顯示「此分頁尚未完成」占位卡片——
+// 那是 T2-5 當時 my 分頁還沒做的暫時狀態。T2-6 已經把它做出來（views/my.js），
+// 所以斷言反轉成「真的畫出店長視角，而且完全沒有可寫入的控制項」。
+await at("index.js：ctx.viewId='my' 掛載店長視角，且完全沒有可寫入的控制項", async () => {
   resetAll();
   const root = new FakeElement('div');
   const { ctx, state } = makeFakeCtx();
   ctx.viewId = 'my';
+  state.apiHandlers.getAll = () => okGetAll({ config: makeConfig(), ops_records: [], ops_details: [] });
 
   const unmount = auditOpsIndex.mount(root, ctx);
   await flush();
 
   const placeholder = findDescendant(root, (n) => n.textContent === '此分頁尚未完成');
-  assert.ok(placeholder, "viewId='my' 應該顯示占位卡片，而不是拋錯或空白");
-  assert.equal(state.apiCalls.length, 0, '占位分頁不該呼叫後端');
+  assert.equal(placeholder, null, 'my 分頁已經實作，不該再是占位卡片');
+
+  // 店長視角是唯讀的：不得出現任何送出／編輯／標記類的控制項
+  const writable = findDescendant(root, (n) => {
+    const tag = String(n.tagName || '').toUpperCase();
+    return tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+  });
+  assert.equal(writable, null, '店長視角必須完全唯讀，不能有任何可寫入的控制項');
 
   unmount();
 });

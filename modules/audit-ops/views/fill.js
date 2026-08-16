@@ -31,6 +31,12 @@
  * 「看不到送出控制項」這條驗收。
  *
  * 與舊版行為上的已知差異，見檔案最下方「與舊版差異」註記。
+ *
+ * 【狀態保留（Eason 2026-08-15 指示補，任務①）】index.js 呼叫本函式時會多傳一個第三參數
+ * `moduleState`（{get(), set(patch)}，見 modules/audit-ops/index.js 檔頭說明；這是
+ * audit-ops 自己的一份，不與 audit-stock 共用）：做法逐字元照抄
+ * modules/audit-stock/views/fill.js（任務①已驗收的範本）。獨立單元測試
+ * （test/audit-ops.test.mjs）呼叫 `mountFill(root, ctx)` 不帶第三參數時行為不變。
  */
 'use strict';
 
@@ -87,12 +93,22 @@ function escEl(ctx, tag, attrs, value) {
   return node;
 }
 
+/** 讀取模組層狀態（moduleState 可能是 undefined，見檔頭「狀態保留」說明）。 */
+function readModuleState(moduleState) {
+  if (moduleState && typeof moduleState.get === 'function') return moduleState.get() || {};
+  return {};
+}
+function writeModuleState(moduleState, patch) {
+  if (moduleState && typeof moduleState.set === 'function') moduleState.set(patch);
+}
+
 /**
  * @param {HTMLElement} root 殼／index.js 給的掛載點
  * @param {object} ctx spec §4.7
+ * @param {{get:function, set:function}} [moduleState] 模組層「目前選的店別／月份」（任務①，選填）
  * @returns {function} unmount
  */
-export function mountFill(root, ctx) {
+export function mountFill(root, ctx, moduleState) {
   let destroyed = false;
   const canWrite = ctx.can('audit.write');
 
@@ -216,6 +232,7 @@ export function mountFill(root, ctx) {
       btn.addEventListener('click', () => {
         store = d.store;
         month = d.month;
+        writeModuleState(moduleState, { store, month });
         loadEntriesForCurrent();
       });
       draftsEl.appendChild(btn);
@@ -462,10 +479,12 @@ export function mountFill(root, ctx) {
 
   function onStoreChange() {
     store = storeSelect.value;
+    writeModuleState(moduleState, { store });
     loadEntriesForCurrent();
   }
   function onMonthChange() {
     month = monthSelect.value;
+    writeModuleState(moduleState, { month });
     loadEntriesForCurrent();
   }
   storeSelect.addEventListener('change', onStoreChange);
@@ -483,6 +502,8 @@ export function mountFill(root, ctx) {
   function pickDefaultStore() {
     const codes = (config.stores || []).map((s) => s.code);
     if (params.store && codes.indexOf(params.store) !== -1) return params.store;
+    const carried = readModuleState(moduleState).store;
+    if (carried && codes.indexOf(carried) !== -1) return carried;
     const saved = FillSubmit.loadLastStore();
     if (saved && codes.indexOf(saved) !== -1) return saved;
     return codes[0] || '';
@@ -511,11 +532,16 @@ export function mountFill(root, ctx) {
       store = pickDefaultStore();
       storeSelect.value = store;
 
+      // 月份優先序同 audit-stock/views/fill.js：params ＞ moduleState（任務①）＞ 當月／預設。
+      const carriedMonth = params.month ? null : readModuleState(moduleState).month;
       const now = new Date();
       const realMonthStr = String(now.getFullYear()) + '-' + pad2(now.getMonth() + 1);
-      month = params.month || (String(now.getFullYear()) === YEAR ? realMonthStr : months[0]);
+      month = params.month
+        || (carriedMonth && months.indexOf(carriedMonth) !== -1 ? carriedMonth : null)
+        || (String(now.getFullYear()) === YEAR ? realMonthStr : months[0]);
       if (months.indexOf(month) === -1) month = months[0];
       monthSelect.value = month;
+      writeModuleState(moduleState, { store, month });
 
       loadEntriesForCurrent();
     } catch (e) {

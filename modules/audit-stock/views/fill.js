@@ -39,6 +39,15 @@
  *
  * 抽查標準項數 SAMPLE_SIZE、金庫抽查、驗證、建送出內容、草稿存取都在另外兩支，
  * 本檔只負責畫面骨架、抽樣/品項清單的 DOM 與事件、以及把各段串起來。
+ *
+ * 【狀態保留（Eason 2026-08-15 指示補，任務①）】index.js 呼叫本函式時會多傳一個第三參數
+ * `moduleState`（{get(), set(patch)}，見 modules/audit-stock/index.js 檔頭說明）：掛載時若
+ * `moduleState.get().store`／`.month` 有值，優先當預設店別／月份（僅次於 ctx.params——那代表
+ * 「從總覽點格子進來」的明確指定，優先序最高，同時也會回寫 moduleState，讓之後切到別的分頁
+ * 延續這組明確指定）；使用者改選店／月時寫回 moduleState.set()，讓切到 report 分頁能接著看到
+ * 同一組值。獨立單元測試（test/audit-stock-fill.test.mjs）呼叫 `mountFill(root, ctx)`
+ * 不帶第三參數，`moduleState` 是 `undefined`，下面每處使用都先判斷存在才呼叫，行為與原本
+ * 完全一致（既有測試斷言不受影響）。
  */
 'use strict';
 
@@ -92,12 +101,22 @@ function buildMonthList() {
   return months;
 }
 
+/** 讀取模組層狀態（moduleState 可能是 undefined，見檔頭「狀態保留」說明）。 */
+function readModuleState(moduleState) {
+  if (moduleState && typeof moduleState.get === 'function') return moduleState.get() || {};
+  return {};
+}
+function writeModuleState(moduleState, patch) {
+  if (moduleState && typeof moduleState.set === 'function') moduleState.set(patch);
+}
+
 /**
  * @param {HTMLElement} root 殼／index.js 給的掛載點
  * @param {object} ctx spec §4.7
+ * @param {{get:function, set:function}} [moduleState] 模組層「目前選的店別／月份」（任務①，選填）
  * @returns {function} unmount
  */
-export function mountFill(root, ctx) {
+export function mountFill(root, ctx, moduleState) {
   let destroyed = false;
   const canWrite = ctx.can('audit.write');
 
@@ -559,6 +578,7 @@ export function mountFill(root, ctx) {
     currentMonth = payload.month;
     mode = /_anomaly$/.test(key) ? MODE_ANOMALY : MODE_FULL;
     FillSubmit.persistMode(mode);
+    writeModuleState(moduleState, { store: currentStore, month: currentMonth });
     storeSelect.value = currentStore;
     monthSelect.value = currentMonth;
     renderDatalist();
@@ -638,12 +658,14 @@ export function mountFill(root, ctx) {
     saveDraft();
     currentStore = storeSelect.value;
     FillSubmit.persistLastStore(currentStore);
+    writeModuleState(moduleState, { store: currentStore });
     renderDatalist();
     tryRestoreOrReset();
   }
   function onMonthChange() {
     saveDraft();
     currentMonth = monthSelect.value;
+    writeModuleState(moduleState, { month: currentMonth });
     tryRestoreOrReset();
   }
   storeSelect.addEventListener('change', onStoreChange);
@@ -670,6 +692,8 @@ export function mountFill(root, ctx) {
   function pickDefaultStore() {
     const codes = (config.stores || []).map((s) => s.code);
     if (params.store && codes.indexOf(params.store) !== -1) return params.store;
+    const carried = readModuleState(moduleState).store;
+    if (carried && codes.indexOf(carried) !== -1) return carried;
     const saved = FillSubmit.loadLastStore();
     if (saved && codes.indexOf(saved) !== -1) return saved;
     return codes[0] || '';
@@ -697,17 +721,30 @@ export function mountFill(root, ctx) {
       currentStore = pickDefaultStore();
       storeSelect.value = currentStore;
 
-      // 不是從別處帶 month 進來時，若這家店有未送出的草稿，落在那份草稿的月份與模式上
-      // （同舊版 latestDraftForStore()：否則只回到店、月份卻是當月，看起來像內容不見了）。
-      const resumeTarget = params.month ? null : FillSubmit.latestDraftForStore(currentStore);
+      // 月份優先序：ctx.params（從總覽點格子進來，明確指定）＞ moduleState（切分頁帶過來的
+      // 選擇，任務①）＞ 草稿續填 ＞ 當月／預設。carriedMonth 只在沒有 params.month 時才採用，
+      // 理由同 pickDefaultStore()：params 代表更明確的使用者意圖，優先序最高。
+      const carriedMonth = params.month ? null : readModuleState(moduleState).month;
+      const useCarriedMonth = carriedMonth && months.indexOf(carriedMonth) !== -1;
+      // 不是從別處帶 month 進來、也沒有可用的 moduleState 月份時，若這家店有未送出的草稿，
+      // 落在那份草稿的月份與模式上（同舊版 latestDraftForStore()：否則只回到店、月份卻是
+      // 當月，看起來像內容不見了）。
+      const resumeTarget = (params.month || useCarriedMonth) ? null : FillSubmit.latestDraftForStore(currentStore);
       const now = new Date();
       const realMonthStr = String(now.getFullYear()) + '-' + pad2(now.getMonth() + 1);
       currentMonth = params.month
         ? params.month
-        : (resumeTarget ? resumeTarget.month : (String(now.getFullYear()) === YEAR ? realMonthStr : months[0]));
+        : (useCarriedMonth
+            ? carriedMonth
+            : (resumeTarget ? resumeTarget.month : (String(now.getFullYear()) === YEAR ? realMonthStr : months[0])));
       if (months.indexOf(currentMonth) === -1) currentMonth = months[0];
       monthSelect.value = currentMonth;
       mode = resumeTarget ? resumeTarget.mode : mode;
+
+      // 把（可能來自 params／草稿續填／預設值算出來的）最終選擇同步回模組層狀態，讓切到
+      // 別的分頁也能延續這組值（任務①：不只是「使用者手動改選時才寫回」，掛載當下算出來的
+      // 有效選擇本身就代表「目前選的店別／月份」）。
+      writeModuleState(moduleState, { store: currentStore, month: currentMonth });
 
       renderDatalist();
       tryRestoreOrReset();

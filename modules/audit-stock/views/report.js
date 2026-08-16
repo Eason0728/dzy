@@ -35,9 +35,12 @@
  *    差別只在「這次 session 選過但還沒送出」這種情況，舊版記得住、新版記不住。
  * 2. 拿掉舊版列印按鈕的行內 style="margin-top:8px"（spec §4.10 不得內嵌樣式）；改用
  *    platform 既有的 .btn class 版面，視覺上少了那 8px 間距，不影響功能與內容。
- * 3. 新架構下每次切進這個分頁都是全新掛載（見 index.js 的 teardown+remount），使用者上次
- *    選的模式／店別／月份不會像舊版那樣跨「切到別分頁又切回來」保留；每次以 ctx.params
- *    （若有 store+month，同舊版視為「從總覽點格子進來」強制切到單月模式）或預設值重新算。
+ * 3. 新架構下每次切進這個分頁都是全新掛載（見 index.js 的 teardown+remount）；
+ *    Eason 2026-08-15 指示補（任務①）：使用者上次選的店別／月份現在會提升到模組層狀態
+ *    （index.js 的 moduleState，見它的檔頭說明），切到別的分頁再切回來不會重置——只有
+ *    ctx.params（從總覽點格子進來，明確指定 store+month，強制切到單月模式）優先序更高，
+ *    離開整個模組（unmount）才會清空。「模式」（單月／年度總表）本身不在保留範圍內，
+ *    每次掛載固定回到單月模式，這點沒有改變。
  */
 'use strict';
 
@@ -80,12 +83,22 @@ function pad2(n) {
 const MODE_MONTH = 'month';
 const MODE_ANNUAL = 'annual';
 
+/** 讀取模組層狀態（moduleState 可能是 undefined，見檔頭「與舊版行為差異」第 3 點）。 */
+function readModuleState(moduleState) {
+  if (moduleState && typeof moduleState.get === 'function') return moduleState.get() || {};
+  return {};
+}
+function writeModuleState(moduleState, patch) {
+  if (moduleState && typeof moduleState.set === 'function') moduleState.set(patch);
+}
+
 /**
  * @param {HTMLElement} root 殼／index.js 給的掛載點
  * @param {object} ctx spec §4.7
+ * @param {{get:function, set:function}} [moduleState] 模組層「目前選的店別／月份」（任務①，選填）
  * @returns {function} unmount
  */
-export function mountReport(root, ctx) {
+export function mountReport(root, ctx, moduleState) {
   let destroyed = false;
 
   // ---- 資料狀態 ----
@@ -152,6 +165,8 @@ export function mountReport(root, ctx) {
   // 依 ctx.params 初始化選擇；params 帶 store+month 視為「從總覽點格子進來」，強制切到單月模式
   // （同舊版 initFromParams()；新架構每次進這個分頁都是全新掛載，不需要舊版 lastParamsKey
   // 那組「這次 render 跟上次是不是同一組 params」的比對，見檔頭差異第 3 點）。
+  // moduleState（任務①）優先序次於 params、高於這支檔案自己的預設值：切分頁帶過來的
+  // 選擇比「猜一個預設值」更貼近使用者剛才做的事。
   function applyParams() {
     if (params.store && params.month) {
       mode = MODE_MONTH;
@@ -159,9 +174,21 @@ export function mountReport(root, ctx) {
       month = params.month;
       annualStore = params.store;
     }
-    if (!store) store = defaultStore();
+    if (!store) {
+      const carried = readModuleState(moduleState).store;
+      store = (carried && storeList().some((s) => s.code === carried)) ? carried : defaultStore();
+    }
     if (!annualStore) annualStore = store;
-    if (!month) month = defaultMonth();
+    if (!month) {
+      const carriedMonth = readModuleState(moduleState).month;
+      month = carriedMonth || defaultMonth();
+    }
+    syncModuleState();
+  }
+
+  /** 把目前有效的店別／月份同步回模組層狀態（任務①）。 */
+  function syncModuleState() {
+    writeModuleState(moduleState, { store, month });
   }
 
   // ---- 換行轉「列」：保留原本的自動編號文字，逐行各自一個區塊 ----
@@ -224,6 +251,7 @@ export function mountReport(root, ctx) {
     storeSelect.value = store;
     storeSelect.addEventListener('change', () => {
       store = storeSelect.value;
+      syncModuleState();
       renderReport();
     });
 
@@ -236,6 +264,7 @@ export function mountReport(root, ctx) {
     monthSelect.value = month;
     monthSelect.addEventListener('change', () => {
       month = monthSelect.value;
+      syncModuleState();
       renderReport();
     });
 
@@ -251,6 +280,8 @@ export function mountReport(root, ctx) {
     sel.value = annualStore;
     sel.addEventListener('change', () => {
       annualStore = sel.value;
+      // 年度總表沒有「月份」概念，只把店別同步回模組層狀態（同 buildMonthControls 的理由）。
+      writeModuleState(moduleState, { store: annualStore });
       renderReport();
     });
 

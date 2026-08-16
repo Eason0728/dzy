@@ -19,6 +19,11 @@
  *
  * 沒有另外的權限判斷：舊版 opsreport.js 本身也沒有角色檢查，manifest.js 的 report 分頁
  * 本身就 requires:['audit.read']，一致交由平台層路由把關（同 overview.js 的做法）。
+ *
+ * 【狀態保留（Eason 2026-08-15 指示補，任務①）】index.js 呼叫本函式時會多傳一個第三參數
+ * `moduleState`（{get(), set(patch)}，見 modules/audit-ops/index.js 檔頭說明）：掛載時若
+ * moduleState 有值，優先於「猜一個預設值」（僅次於 ctx.params，那代表更明確的使用者意圖）；
+ * 使用者改選店／月時寫回。獨立單元測試不帶第三參數時行為不變。
  */
 'use strict';
 
@@ -53,19 +58,35 @@ function escEl(ctx, tag, attrs, value) {
   return node;
 }
 
+/** 讀取模組層狀態（moduleState 可能是 undefined，見檔頭「狀態保留」說明）。 */
+function readModuleState(moduleState) {
+  if (moduleState && typeof moduleState.get === 'function') return moduleState.get() || {};
+  return {};
+}
+function writeModuleState(moduleState, patch) {
+  if (moduleState && typeof moduleState.set === 'function') moduleState.set(patch);
+}
+
 /**
  * @param {HTMLElement} root 殼／index.js 給的掛載點
  * @param {object} ctx spec §4.7
+ * @param {{get:function, set:function}} [moduleState] 模組層「目前選的店別／月份」（任務①，選填）
  * @returns {function} unmount
  */
-export function mountReport(root, ctx) {
+export function mountReport(root, ctx, moduleState) {
   let destroyed = false;
   let config = { stores: [] };
   let opsData = { ops_records: [], ops_details: [] };
 
   const params = ctx.params || {};
-  let store = params.store || '';
-  let month = params.month || '';
+  const carried = params.store && params.month ? {} : readModuleState(moduleState);
+  let store = params.store || carried.store || '';
+  let month = params.month || carried.month || '';
+
+  /** 把目前有效的店別／月份同步回模組層狀態（任務①）；空字串不寫，避免覆蓋成空值。 */
+  function syncModuleState() {
+    if (store && month) writeModuleState(moduleState, { store, month });
+  }
 
   const storeSelect = el('select', { id: 'opsreport-store', class: 'input' });
   const monthSelect = el('select', { id: 'opsreport-month', class: 'input' });
@@ -221,10 +242,12 @@ export function mountReport(root, ctx) {
 
   function onStoreChange() {
     store = storeSelect.value;
+    syncModuleState();
     renderAll();
   }
   function onMonthChange() {
     month = monthSelect.value;
+    syncModuleState();
     renderBody();
   }
   storeSelect.addEventListener('change', onStoreChange);
@@ -260,6 +283,7 @@ export function mountReport(root, ctx) {
         const now = new Date();
         month = String(now.getFullYear()) + '-' + pad2(now.getMonth() + 1);
       }
+      syncModuleState();
 
       renderAll();
     } catch (e) {
