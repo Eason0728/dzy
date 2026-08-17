@@ -45,6 +45,15 @@
   --on-glass-ink: #fff;                        /* 深色照片上的主文字 */
   --on-glass-soft: rgba(255, 255, 255, .85);   /* 深色照片上的標籤／提示 */
   --login-input-bg: rgba(255, 255, 255, .92);  /* 輸入欄近不透明白：可讀性不妥協 */
+  /* 登入鈕／焦點框的照片主張色（Eason 08-17 五改：配色要參照背景色）。
+     各取自該照片高飽和像素的平均（tools 採樣）：mala＝滷汁紅銅、
+     mzt＝辣油琥珀、yakiniku＝油花深肉紅；-dark 是各自壓暗的 hover 色 */
+  --accent-mala: #945932;
+  --accent-mala-dark: #7a4827;
+  --accent-mzt: #8d5f2d;
+  --accent-mzt-dark: #714a1f;
+  --accent-yakiniku: #6b2c20;   /* 採樣 #54241C 提亮一階當按鈕底，hover 才有得壓 */
+  --accent-yakiniku-dark: #54241c;
   /* 全透明登入框（Eason 08-17 四改）：框身無底色，文字直接浮在照片上，
      可讀性改靠文字投影——深色照片用暗影、淺色照片（mzt）用亮暈 */
   --text-glow-on-dark: 0 1px 3px rgba(0, 0, 0, .55), 0 0 18px rgba(0, 0, 0, .35);

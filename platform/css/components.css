@@ -593,15 +593,25 @@ textarea.input:disabled {
    可讀性靠文字投影（深照片暗影、淺照片亮暈，值在 tokens.css）。
    輸入欄維持近不透明白——照片再重要，帳密都要一眼讀得清。 */
 .login-bg {
-  /* 預設＝深色照片那組（沒有 data-hero 時的保底） */
+  /* 預設＝mala 那組（沒有 data-hero 時的保底）。
+     --login-accent＝當次照片的主張色（採樣值在 tokens.css），
+     登入鈕與輸入欄焦點框跟著它走——配色參照背景照片（Eason 08-17 五改）。 */
   --login-ink: var(--on-glass-ink);
   --login-ink-soft: var(--on-glass-soft);
   --login-text-glow: var(--text-glow-on-dark);
+  --login-accent: var(--accent-mala);
+  --login-accent-dark: var(--accent-mala-dark);
 }
 .login-bg[data-hero="mzt"] {
   --login-ink: var(--ink);
   --login-ink-soft: var(--ink);   /* 亮背景上 muted 灰不夠力，標籤直接用主文字色 */
   --login-text-glow: var(--text-glow-on-light);
+  --login-accent: var(--accent-mzt);
+  --login-accent-dark: var(--accent-mzt-dark);
+}
+.login-bg[data-hero="yakiniku"] {
+  --login-accent: var(--accent-yakiniku);
+  --login-accent-dark: var(--accent-yakiniku-dark);
 }
 
 .login-card {
@@ -631,6 +641,19 @@ textarea.input:disabled {
 }
 .login-card .input {
   background: var(--login-input-bg);
+}
+/* 登入鈕與焦點框：跟著當次照片的主張色（覆寫 .btn-primary／.input:focus 的品牌紅） */
+.login-card .btn-primary {
+  background: var(--login-accent);
+  border-color: var(--login-accent);
+}
+.login-card .btn-primary:hover:not(:disabled) {
+  background: var(--login-accent-dark);
+  border-color: var(--login-accent-dark);
+}
+.login-card .input:focus {
+  border-color: var(--login-accent);
+  box-shadow: 0 0 0 3px var(--login-input-bg);
 }
 
 /* 卡片左半：表單 */
