@@ -60,14 +60,9 @@ export function render(el, app) {
     <div class="login-bg" data-hero="${esc(hero.key)}">
       <div class="login-blur" aria-hidden="true"></div>
       <div class="login-card">
-        <!-- 左半：照片＋大標題（照參考版型，標題在左上）。
-             系統名放這裡之後，右半就是純表單，不再重複一次標題。 -->
-        <div class="login-card-visual" role="img" aria-label="${esc(hero.name)}">
-          <div class="login-card-heading">
-            <h2>鼎兆元餐飲集團</h2>
-            <p>內部管理系統</p>
-          </div>
-        </div>
+        <!-- 左半：帳密表單（Eason 2026-08-17 指定：帳密統一放左側，白色表單才不會壓在
+             照片主體上——三張品牌照的主體都偏中偏右）。DOM 順序＝表單在前，
+             鍵盤 tab 一進來就是帳號欄。 -->
         <div class="login-card-form">
       <div class="card">
         <h1 class="card-title">${esc(APP_NAME)}</h1>
@@ -87,6 +82,14 @@ export function render(el, app) {
           <p class="field-hint" data-role="hint"></p>
         </form>
       </div>
+        </div>
+        <!-- 右半：照片開窗＋大標題。跟背景是同一張圖（background-attachment: fixed 的
+             開窗效果與位置無關），移到右半自動透出照片右半，主體不再被白色表單擋住。 -->
+        <div class="login-card-visual" role="img" aria-label="${esc(hero.name)}">
+          <div class="login-card-heading">
+            <h2>鼎兆元餐飲集團</h2>
+            <p>內部管理系統</p>
+          </div>
         </div>
       </div>
     </div>

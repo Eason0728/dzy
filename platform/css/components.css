@@ -595,7 +595,8 @@ textarea.input:disabled {
   overflow: hidden;
 }
 
-/* 卡片左半：清晰照片＋品牌名 */
+/* 卡片右半：清晰照片＋品牌名（2026-08-17 起帳密表單在左、開窗在右——
+   Eason 指定：白色表單別壓在照片主體上。順序由 login.js 的 DOM 決定，這裡不用 order） */
 .login-card-visual {
   display: none;
   position: relative;
@@ -638,7 +639,7 @@ textarea.input:disabled {
   opacity: .85;
 }
 
-/* 卡片右半：表單 */
+/* 卡片左半：表單 */
 .login-card-form {
   padding: var(--space-6, 32px) var(--space-5, 24px);
   display: flex;
