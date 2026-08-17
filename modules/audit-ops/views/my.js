@@ -96,10 +96,34 @@ export function mountMy(root, ctx) {
     trackListEl
   ]);
 
+  // 歷史紀錄（2026-08-17 新增，Eason 指示「要有查詢歷史紀錄」）。做法同 audit-stock 的
+  // my.js：**純表格、零控制項**——本檔的唯讀保證與 test/audit-ops.test.mjs
+  // 「店長視角不得有任何 button/input/select/textarea」那條斷言都要繼續成立。
+  // 資料本來就在手上（平台層已裁到只剩自己店），不必再打一次後端。
+  const historyBodyEl = el('tbody', { id: 'my-history-body' });
+  const historyCard = el('div', { class: 'card' }, [
+    el('div', { class: 'card-title', text: '歷史紀錄' }),
+    el('p', { class: 'field-hint', text: '這家店歷次營運稽核的結果，最新的在最上面。' }),
+    el('div', { class: 'table-wrap' }, [
+      el('table', { class: 'table', id: 'my-history-table' }, [
+        el('thead', {}, [
+          el('tr', {}, [
+            el('th', { text: '月份' }),
+            el('th', { text: '狀態' }),
+            el('th', { text: '合格率' }),
+            el('th', { text: '未完成項目' })
+          ])
+        ]),
+        historyBodyEl
+      ])
+    ])
+  ]);
+
   root.appendChild(headerCard);
   root.appendChild(rateCard);
   root.appendChild(issuesCard);
   root.appendChild(trackCard);
+  root.appendChild(historyCard);
 
   function renderEmptyState(message) {
     storeLabelEl.textContent = node ? ('目前登入節點：' + node) : '未設定所屬節點，無法判斷要看哪一家店。';
@@ -108,6 +132,55 @@ export function mountMy(root, ctx) {
     while (trackListEl.firstChild) trackListEl.removeChild(trackListEl.firstChild);
     issuesListEl.appendChild(el('li', { class: 'field-hint', text: message }));
     trackListEl.appendChild(el('li', { class: 'field-hint', text: message }));
+    renderHistory([], []);
+  }
+
+  /**
+   * 歷史紀錄表：一列一個月份，最新在最上面。
+   * 「未完成項目」欄列出該月 verdict==='未完成' 的檢查項目；輪休月與全合格各有自己的說法，
+   * 不要一律顯示破折號——店長看到「—」會分不清是沒稽核還是全合格。
+   */
+  function renderHistory(records, details) {
+    while (historyBodyEl.firstChild) historyBodyEl.removeChild(historyBodyEl.firstChild);
+
+    const sorted = (records || []).slice()
+      .sort((a, b) => (a.month < b.month ? 1 : (a.month > b.month ? -1 : 0)));
+
+    if (!sorted.length) {
+      const td = el('td', { class: 'field-hint', text: '尚無稽核紀錄' });
+      td.setAttribute('colspan', '4');
+      historyBodyEl.appendChild(el('tr', {}, [td]));
+      return;
+    }
+
+    for (const r of sorted) {
+      const isRest = r.status === '輪休';
+      const fails = isRest ? [] : (details || [])
+        .filter((d) => d.record_key === r.record_key && d.verdict === '未完成');
+
+      const rateTd = el('td');
+      if (isRest) {
+        rateTd.appendChild(el('span', { class: 'field-hint', text: '—' }));
+      } else {
+        rateTd.appendChild(escEl(ctx, 'span', { class: 'tag tag-ok' }, r.pass_rate + '%'));
+      }
+
+      const failsTd = el('td');
+      if (isRest) {
+        failsTd.appendChild(el('span', { class: 'field-hint', text: '本月輪休' }));
+      } else if (!fails.length) {
+        failsTd.appendChild(el('span', { class: 'field-hint', text: '全部合格' }));
+      } else {
+        failsTd.appendChild(escEl(ctx, 'span', {}, fails.map((d) => d.text).join('、')));
+      }
+
+      historyBodyEl.appendChild(el('tr', { 'data-role': 'history-row', 'data-month': r.month }, [
+        escEl(ctx, 'td', {}, r.month),
+        escEl(ctx, 'td', {}, r.status),
+        rateTd,
+        failsTd
+      ]));
+    }
   }
 
   function buildRow(d) {
@@ -129,6 +202,8 @@ export function mountMy(root, ctx) {
       renderEmptyState('未設定所屬節點，無法顯示稽核資料。');
       return;
     }
+
+    renderHistory(records, details);
 
     const record = pickLatestRecord(records);
     while (issuesListEl.firstChild) issuesListEl.removeChild(issuesListEl.firstChild);
@@ -196,7 +271,7 @@ export function mountMy(root, ctx) {
 
   return function unmount() {
     destroyed = true;
-    [headerCard, rateCard, issuesCard, trackCard].forEach((n) => {
+    [headerCard, rateCard, issuesCard, trackCard, historyCard].forEach((n) => {
       if (n && n.parentNode) n.parentNode.removeChild(n);
     });
   };

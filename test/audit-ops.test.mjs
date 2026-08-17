@@ -972,6 +972,108 @@ await at("index.js：ctx.viewId='my' 掛載店長視角，且完全沒有可寫�
 });
 
 // ============================================================
+// 歷史紀錄（2026-08-17 新增，Eason 指示「盤點抽查和稽核表要有查詢歷史紀錄」）
+//
+// 店長原本只看得到「最新一筆」，過往月份完全查不到。歷史表刻意做成純表格、零控制項，
+// 才不會破壞上面那條「店長視角完全唯讀」的斷言——下面第三條就是釘住這件事。
+// ============================================================
+
+await at('我的門市・歷史紀錄：列出該店所有月份，最新在最上面', async () => {
+  resetAll();
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  ctx.viewId = 'my';
+  ctx.user = { id: 'u009', name: '光復店長', role: 'storelead', node: 'sxl-gf' };
+  state.apiHandlers.getAll = () => okGetAll({
+    config: makeConfig(),
+    ops_records: [
+      { record_key: 'sxl-gf_2026-05', store: 'sxl-gf', month: '2026-05', status: '已稽核', pass_rate: 90 },
+      { record_key: 'sxl-gf_2026-07', store: 'sxl-gf', month: '2026-07', status: '已稽核', pass_rate: 95 },
+      { record_key: 'sxl-gf_2026-06', store: 'sxl-gf', month: '2026-06', status: '輪休' }
+    ],
+    ops_details: [
+      { record_key: 'sxl-gf_2026-07', store: 'sxl-gf', verdict: '未完成', text: '出口指示燈正常' },
+      { record_key: 'sxl-gf_2026-05', store: 'sxl-gf', verdict: '合格', text: '滅火器在有效期限內' }
+    ]
+  });
+
+  const unmount = auditOpsIndex.mount(root, ctx);
+  await flush();
+
+  const rows = findAllDescendants(root,
+    (n) => n.getAttribute && n.getAttribute('data-role') === 'history-row');
+  assert.equal(rows.length, 3, '三個月份都要列出來（含輪休月）');
+  assert.deepEqual(rows.map((r) => r.getAttribute('data-month')), ['2026-07', '2026-06', '2026-05'],
+    '排序：最新的月份在最上面');
+
+  unmount();
+});
+
+await at('我的門市・歷史紀錄：輪休月不顯示合格率，全合格月要說「全部合格」而不是破折號', async () => {
+  resetAll();
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  ctx.viewId = 'my';
+  ctx.user = { id: 'u009', name: '光復店長', role: 'storelead', node: 'sxl-gf' };
+  state.apiHandlers.getAll = () => okGetAll({
+    config: makeConfig(),
+    ops_records: [
+      { record_key: 'sxl-gf_2026-07', store: 'sxl-gf', month: '2026-07', status: '已稽核', pass_rate: 100 },
+      { record_key: 'sxl-gf_2026-06', store: 'sxl-gf', month: '2026-06', status: '輪休' }
+    ],
+    ops_details: []
+  });
+
+  const unmount = auditOpsIndex.mount(root, ctx);
+  await flush();
+
+  const rows = findAllDescendants(root,
+    (n) => n.getAttribute && n.getAttribute('data-role') === 'history-row');
+  const textOf = (row) => {
+    let out = '';
+    const walk = (n) => {
+      if (!n.children || !n.children.length) out += (n.textContent || '') + (n.innerHTML || '');
+      else (n.children || []).forEach(walk);
+    };
+    walk(row);
+    return out;
+  };
+  const done = textOf(rows[0]);
+  const rest = textOf(rows[1]);
+  assert.ok(done.includes('100%'), '已稽核月要顯示合格率，實際：' + done);
+  assert.ok(done.includes('全部合格'), '零缺失要明講「全部合格」，實際：' + done);
+  assert.ok(rest.includes('本月輪休'), '輪休月要明講輪休（不是破折號），實際：' + rest);
+
+  unmount();
+});
+
+await at('我的門市・歷史紀錄：加了歷史表之後，店長視角仍然完全沒有控制項', async () => {
+  resetAll();
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  ctx.viewId = 'my';
+  ctx.user = { id: 'u009', name: '光復店長', role: 'storelead', node: 'sxl-gf' };
+  state.apiHandlers.getAll = () => okGetAll({
+    config: makeConfig(),
+    ops_records: [
+      { record_key: 'sxl-gf_2026-07', store: 'sxl-gf', month: '2026-07', status: '已稽核', pass_rate: 95 }
+    ],
+    ops_details: []
+  });
+
+  const unmount = auditOpsIndex.mount(root, ctx);
+  await flush();
+
+  const writable = findDescendant(root, (n) => {
+    const tag = String(n.tagName || '').toUpperCase();
+    return tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+  });
+  assert.equal(writable, null, '歷史紀錄必須是純表格——加了它也不能讓店長視角出現任何控制項');
+
+  unmount();
+});
+
+// ============================================================
 if (failed > 0) {
   console.error('\n失敗清單：');
   failures.forEach(({ name, err }) => {
