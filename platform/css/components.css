@@ -543,11 +543,11 @@ textarea.input:disabled {
 }
 
 /* ============================================================
-   登入頁（2026-08-14 改版，參考 Eason 提供的版型）
-   整片模糊背景 ＋ 中央卡片；卡片左半是清晰照片＋品牌名，右半是表單。
-   背景與卡片左半用「同一個品牌」的照片，每次載入隨機挑一個——
-   隨機才有意義，不是兩張不相干的圖並置。
-   手機沒有左右並排的空間：只留表單那半，背景照片仍在。
+   登入頁（2026-08-17 二改，Eason 指定）
+   整片模糊背景 ＋ 單一半透明登入框（毛玻璃），框靠左、不壓照片主體。
+   歷次演變：08-14 中央雙欄卡片（左照片右表單）→ 08-17 早上表單換到左半
+   → 08-17 下午拿掉照片開窗與大標題，只留登入框＋半透明。
+   背景照片每次載入隨機挑一個品牌（mala／mzt／yakiniku）。
    ============================================================ */
 
 .login-bg {
@@ -556,9 +556,13 @@ textarea.input:disabled {
   min-height: 100dvh;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;   /* 框靠左（Eason 08-17：別擋照片主體，三張圖主體都偏中偏右） */
   padding: var(--space-4, 16px);
   overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .login-bg { padding-left: 8vw; }
 }
 
 /* 全幅背景：同一張照片，模糊＋壓暗，只當氛圍不搶焦點 */
@@ -581,62 +585,20 @@ textarea.input:disabled {
   background: var(--hero-scrim);
 }
 
-/* 中央卡片 */
+/* 登入框：半透明毛玻璃（Eason 08-17 指定「採用半透明」）。
+   框身半透明讓照片透出來；輸入欄維持不透明白（.input 用 --card），可讀性不受背景影響。
+   backdrop-filter 不支援的舊瀏覽器只會少了模糊、半透明底色仍在，可接受的優雅降級。 */
 .login-card {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 880px;
-  display: grid;
-  grid-template-columns: 1fr;
-  background: var(--card);
+  max-width: 440px;
+  background: var(--card-glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
   border-radius: 0;            /* 範例是直角，視覺上更正式、更像企業系統 */
   box-shadow: var(--shadow-float);
   overflow: hidden;
-}
-
-/* 卡片右半：清晰照片＋品牌名（2026-08-17 起帳密表單在左、開窗在右——
-   Eason 指定：白色表單別壓在照片主體上。順序由 login.js 的 DOM 決定，這裡不用 order） */
-.login-card-visual {
-  display: none;
-  position: relative;
-  min-height: 420px;
-  /* 這裡不是第二張圖，是背景那張圖「透出來」的一塊：
-     跟 .login-blur 用完全相同的 cover／center／fixed 幾何，
-     所以照片是連續的一張，只是這一塊沒被壓暗、另外壓一層提亮色塊。
-     這正是參考版型的層次關係（Eason 2026-08-14 指正：範例只呈現一張圖）。 */
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-}
-
-.login-card-visual::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--hero-tint);
-}
-
-.login-card-brand {
-  position: absolute;
-  z-index: 1;
-  left: var(--space-5, 24px);
-  right: var(--space-5, 24px);
-  bottom: var(--space-5, 24px);
-  color: var(--ink-inverse);
-}
-
-.login-card-brand h2 {
-  margin: 0;
-  font-size: var(--fs-xl, 24px);
-  font-weight: var(--fw-bold, 700);
-  letter-spacing: .02em;
-}
-
-.login-card-brand p {
-  margin: 4px 0 0;
-  font-size: var(--fs-sm, 14px);
-  opacity: .85;
 }
 
 /* 卡片左半：表單 */
@@ -656,55 +618,20 @@ textarea.input:disabled {
 }
 
 @media (min-width: 768px) {
-  .login-card { grid-template-columns: 1fr 1fr; }
-  .login-card-visual { display: block; }
   .login-card-form { padding: var(--space-7, 40px) var(--space-6, 32px); }
 }
 
-/* 三個品牌各自的照片：背景與卡片左半共用同一張 */
-.login-bg[data-hero="mala"] .login-blur,
-.login-bg[data-hero="mala"] .login-card-visual {
+/* 三個品牌各自的背景照片 */
+.login-bg[data-hero="mala"] .login-blur {
   background-image: url("../../assets/brand-photos/mala.jpg");
 }
-.login-bg[data-hero="mzt"] .login-blur,
-.login-bg[data-hero="mzt"] .login-card-visual {
+.login-bg[data-hero="mzt"] .login-blur {
   background-image: url("../../assets/brand-photos/mzt.jpg");
 }
-.login-bg[data-hero="yakiniku"] .login-blur,
-.login-bg[data-hero="yakiniku"] .login-card-visual {
+.login-bg[data-hero="yakiniku"] .login-blur {
   background-image: url("../../assets/brand-photos/yakiniku.jpg");
 }
 
 /* 逐張裁切微調已不需要：三張圖的品牌 logo 已在 assets 端裁掉
    （原圖 logo 在左上或正中央，近正方形的裁切框怎麼移都會吃到半截 logo，
    靠 background-position 救不回來，正解是裁圖檔本身）。*/
-
-/* 左半的大標題（照參考版型，置於左上） */
-.login-card-heading {
-  position: absolute;
-  z-index: 1;
-  top: var(--space-6, 32px);
-  left: var(--space-6, 32px);
-  right: var(--space-5, 24px);
-  color: var(--ink-inverse);
-  text-shadow: 0 1px 12px var(--hero-scrim-strong);
-}
-
-.login-card-heading h2 {
-  margin: 0;
-  font-size: var(--fs-2xl, 30px);
-  line-height: 1.25;
-  font-weight: var(--fw-bold, 700);
-  letter-spacing: .01em;
-}
-
-.login-card-heading p {
-  margin: 6px 0 0;
-  font-size: var(--fs-md, 16px);
-  opacity: .9;
-}
-
-/* 標題已經在左半，右半是純表單，桌機不再重複一次系統名 */
-@media (min-width: 768px) {
-  .login-card-form .card-title { display: none; }
-}

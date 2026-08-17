@@ -127,3 +127,17 @@ hr {
     padding: var(--space-6);
   }
 }
+
+/* 讀屏器專用：視覺上完全隱藏、輔助技術仍讀得到（登入頁系統名用它——
+   視覺上的品牌由背景照片承擔，不重複一行字） */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
