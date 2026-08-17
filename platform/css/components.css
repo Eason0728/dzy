@@ -562,7 +562,9 @@ textarea.input:disabled {
 }
 
 @media (min-width: 768px) {
-  .login-bg { padding-left: 8vw; }
+  /* Eason 08-17：登入框切齊畫面左緣。外層 padding 歸零，
+     文字離螢幕邊的距離由 .login-card-form 自己的內距提供 */
+  .login-bg { padding-left: 0; }
 }
 
 /* 全幅背景：同一張照片，模糊＋壓暗，只當氛圍不搶焦點 */
