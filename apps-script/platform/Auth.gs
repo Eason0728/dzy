@@ -216,7 +216,15 @@ function pickSecrets_(perms) {
     if (!wantLevel) return;
     var secret = levels[wantLevel];
     if (secret === undefined || secret === null || secret === '') return;
-    out[backendId] = secret;
+    // 2026-08-17 修（Eason 實際踩到「店長看稽核＝通行碼錯誤」）：
+    // 試算表儲存格若是**純數字**的通行碼，getValues() 回來的是 number 不是 string。
+    // 既有兩支後端都用嚴格比對（稽核 Code.gs resolveRole_ 的 `code === settings.viewerCode`、
+    // 宿舍 Api.gs 的 requireAdmin），而它們那邊是 String(...) 過的——
+    // number 123456 永遠不會等於 string '123456'，於是通行碼「明明填對了卻一直錯」。
+    // 一律轉字串並去掉前後空白（貼上時很容易多一個空格，同樣是肉眼看不出來的錯）。
+    var normalized = String(secret).trim();
+    if (!normalized) return;
+    out[backendId] = normalized;
   });
   return out;
 }
