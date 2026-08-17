@@ -325,9 +325,10 @@ async function teardownCurrent() {
 
 function renderTopNav() {
   const activeId = currentModule ? currentModule.id : '__home__';
+  // 修改密碼是平台層自己的功能（不是模組），所有登入者都看得到，不需要任何權限碼。
   const items = [{ id: '__home__', label: '首頁' }]
     .concat(permittedModules.map((m) => ({ id: m.id, label: m.name })))
-    .concat([{ id: '__logout__', label: '登出' }]);
+    .concat([{ id: '__password__', label: '修改密碼' }, { id: '__logout__', label: '登出' }]);
 
   const buildButtons = () =>
     items.map((it) =>
@@ -407,6 +408,10 @@ function onTopNavClick(e) {
 
   if (id === '__logout__') {
     doLogout();
+    return;
+  }
+  if (id === '__password__') {
+    openChangePassword();
     return;
   }
   if (id === '__home__') {
@@ -515,6 +520,78 @@ async function mountModuleView(manifest, view, params) {
 function goHomeWithWarning() {
   ui.toast('沒有權限', 'warn');
   navigateTo('#/home');
+}
+
+// ============================================================
+// 修改密碼（平台層功能，2026-08-17）
+//
+// 用共用的 ui.dialog（它吃 DOM body），不自己刻彈窗——這正是共用元件存在的理由。
+// 驗證分兩層：這裡先擋明顯錯誤（沒填、太短、兩次不一致），真正的舊密碼比對在後端，
+// 前端永遠不碰任何 hash（spec §5.6）。
+// ============================================================
+
+function buildPasswordField(labelText, inputId) {
+  const input = el('input', {
+    class: 'input',
+    id: inputId,
+    type: 'password',
+    autocomplete: inputId === 'pw-old' ? 'current-password' : 'new-password'
+  });
+  const field = el('div', { class: 'field' }, [
+    el('label', { class: 'field-label', for: inputId, text: labelText }),
+    input
+  ]);
+  return { field, input };
+}
+
+async function openChangePassword() {
+  const oldF = buildPasswordField('目前密碼', 'pw-old');
+  const newF = buildPasswordField('新密碼（至少 8 個字元）', 'pw-new');
+  const confirmF = buildPasswordField('再輸入一次新密碼', 'pw-new2');
+  const errorEl = el('p', { class: 'field-hint', 'data-role': 'pw-error' });
+
+  const body = el('div', { class: 'stack' }, [oldF.field, newF.field, confirmF.field, errorEl]);
+
+  const choice = await ui.dialog({
+    title: '修改密碼',
+    body,
+    actions: [
+      { label: '取消', value: null, variant: 'secondary' },
+      { label: '確定修改', value: 'ok', variant: 'primary' }
+    ]
+  });
+  if (choice !== 'ok') return;
+
+  const oldPw = oldF.input.value;
+  const newPw = newF.input.value;
+  const newPw2 = confirmF.input.value;
+
+  if (!oldPw || !newPw) {
+    ui.toast('請填寫目前密碼與新密碼', 'warn');
+    return openChangePassword();
+  }
+  if (newPw.length < 8) {
+    ui.toast('新密碼至少需要 8 個字元', 'warn');
+    return openChangePassword();
+  }
+  if (newPw !== newPw2) {
+    ui.toast('兩次輸入的新密碼不一致', 'warn');
+    return openChangePassword();
+  }
+
+  ui.loading(true);
+  let res;
+  try {
+    res = await auth.changePassword(oldPw, newPw);
+  } finally {
+    ui.loading(false);
+  }
+
+  if (!res || !res.ok) {
+    ui.toast((res && res.error) || '修改失敗', 'danger');
+    return;
+  }
+  ui.toast('密碼已更新，下次登入請用新密碼', 'ok');
 }
 
 // ============================================================

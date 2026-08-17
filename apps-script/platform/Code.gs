@@ -14,7 +14,7 @@
  * 訊息原樣保留，不受這條規則影響。
  */
 
-var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive', 'resetPassword', 'listRoles'];
+var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive', 'resetPassword', 'listRoles', 'changePassword'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -75,6 +75,9 @@ function dispatch_(e) {
       return handleResetPassword_(token, payload);
     case 'listRoles':
       return handleListRoles_(token);
+    case 'changePassword':
+      // 本人改自己的密碼，不需要 platform.users（見 Users.gs §5b 說明）
+      return handleChangePassword_(token, payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };

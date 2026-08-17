@@ -249,3 +249,34 @@ export function getSecret(backendId) {
   if (!backendId) return '';
   return secrets[backendId] || '';
 }
+
+/**
+ * 本人修改自己的密碼（2026-08-17，Eason 指定「同仁可自己改密碼」）。
+ *
+ * 與人員管理的「重設密碼」是兩件事：那是 admin 幫別人重設（要 platform.users 權限、
+ * 不驗舊密碼）；這支是本人改自己的，**任何登入者都能用，但一定要驗舊密碼**。
+ * 身分完全由 token 決定——前端不送 id，後端也只認 token 裡的身分（見 Users.gs §5b），
+ * 所以沒有「改到別人密碼」這條路。
+ *
+ * 成功後 session 不變（token 未失效、不必重新登入）；下次登入才用新密碼。
+ *
+ * @param {string} oldPassword
+ * @param {string} newPassword
+ * @returns {Promise<{ok:boolean, error?:string}>}
+ */
+export async function changePassword(oldPassword, newPassword) {
+  let res;
+  try {
+    res = await transport({
+      action: 'changePassword',
+      token: getToken(),
+      payload: { oldPassword, newPassword }
+    });
+  } catch (err) {
+    return { ok: false, error: (err && err.message) || '網路連線失敗，請稍後再試' };
+  }
+  if (!res || res.ok !== true) {
+    return { ok: false, error: (res && res.error) || '修改失敗' };
+  }
+  return { ok: true };
+}

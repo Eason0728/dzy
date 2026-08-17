@@ -35,6 +35,8 @@ var USR_MSG_USERNAME_TAKEN = '帳號已存在';
 var USR_MSG_ID_REQUIRED = 'id 不得為空';
 var USR_MSG_ACTIVE_INVALID = 'active 格式錯誤';
 var USR_MSG_PASSWORD_TOO_SHORT = '密碼至少需要 8 個字元';
+var USR_MSG_OLD_PASSWORD_WRONG = '目前密碼不正確';
+var USR_MSG_PASSWORD_SAME = '新密碼不能與目前密碼相同';
 
 // ============================================================
 // 0. 權限檢查（spec：token → verifyToken_ → 取角色 → getRolePerms_ → hasPerm_）
@@ -278,6 +280,53 @@ function handleResetPassword_(token, payload) {
 
   var found = findUsrRowById_(id);
   if (!found) return { ok: false, error: USR_MSG_NOT_FOUND };
+
+  var newSalt = Utilities.getUuid();
+  var newHash = hashPassword_(newPassword, newSalt);
+
+  var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
+  sheet.getRange(found.row, USR_COL.salt + 1, 1, 2).setValues([[newSalt, newHash]]);
+
+  return { ok: true, data: {} };
+}
+
+// ============================================================
+// 5b. changePassword（2026-08-17 新增，Eason 指定「同仁可自己改密碼」）
+//
+// 與 handleResetPassword_ 是**兩件不同的事**，刻意不共用：
+//   - resetPassword：admin 幫別人重設，要 platform.users 權限，**不驗舊密碼**，指定 id。
+//   - changePassword：本人改自己的，**任何登入者都可用**（不需要任何 perm），
+//     **一定要驗舊密碼**，而且 id 一律取自 token（不收 payload 的 id）——
+//     少了任何一條，就會變成「登入任何帳號即可改他人密碼」的提權漏洞。
+//
+// 舊密碼錯誤的訊息刻意與登入失敗一致（不透露是哪個環節錯），也不動登入失敗鎖定計數
+// （那是防猜帳號密碼的機制，本人改密碼打錯字不該把自己鎖在外面）。
+// ============================================================
+
+function handleChangePassword_(token, payload) {
+  var me = handleMe_(token);          // 驗 token＋重查 active，與其他 action 同一條鏈
+  if (!me.ok) return me;
+
+  payload = payload || {};
+  var oldPassword = (payload.oldPassword === undefined || payload.oldPassword === null)
+    ? '' : String(payload.oldPassword);
+  var newPassword = (payload.newPassword === undefined || payload.newPassword === null)
+    ? '' : String(payload.newPassword);
+
+  if (newPassword.length < 8) return { ok: false, error: USR_MSG_PASSWORD_TOO_SHORT };
+
+  // id 只認 token 裡的身分：payload 就算夾帶 id 也一律忽略（見上方說明）
+  var found = findUsrRowById_(me.data.user.id);
+  if (!found) return { ok: false, error: USR_MSG_NOT_FOUND };
+
+  var currentSalt = found.values[USR_COL.salt];
+  var currentHash = found.values[USR_COL.hash];
+  if (hashPassword_(oldPassword, currentSalt) !== String(currentHash)) {
+    return { ok: false, error: USR_MSG_OLD_PASSWORD_WRONG };
+  }
+  if (newPassword === oldPassword) {
+    return { ok: false, error: USR_MSG_PASSWORD_SAME };
+  }
 
   var newSalt = Utilities.getUuid();
   var newHash = hashPassword_(newPassword, newSalt);
