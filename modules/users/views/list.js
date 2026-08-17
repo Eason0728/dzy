@@ -464,6 +464,19 @@ export function mountList(root, ctx) {
   }
 
   async function onAddClick() {
+    // 2026-08-17 修：角色清單載入失敗時，原本會靜靜開出一個「空的角色下拉」，
+    // 使用者只看到選不了角色、完全不知道原因（Eason 實際踩到）。
+    // 改成：開之前先確認有選項；沒有就當場重抓一次，仍然沒有就明講原因並不開對話框
+    //（開了也建不成帳號——角色是必填，saveUser 會被後端擋下）。
+    if (!roleOptions.length) {
+      await loadRoles();
+      if (destroyed) return;
+    }
+    if (!roleOptions.length) {
+      ctx.ui.toast('讀不到角色清單，無法新增帳號。請重新整理；若持續發生，檢查「帳號權限」試算表的 roles 分頁是否有資料', 'danger');
+      return;
+    }
+
     const payload = await trackDialog(openUserFormDialog, null, roleOptions);
     if (!payload) return;
     ctx.ui.loading(true);
@@ -478,6 +491,12 @@ export function mountList(root, ctx) {
   }
 
   async function onEditClick(user) {
+    // 同 onAddClick：角色清單空的時候先重抓一次（修改時至少還保得住他現在的角色，
+    // 所以這裡不擋著不開，只是盡量把選項補回來）
+    if (!roleOptions.length) {
+      await loadRoles();
+      if (destroyed) return;
+    }
     const payload = await trackDialog(openUserFormDialog, user, roleOptions);
     if (!payload) return;
     ctx.ui.loading(true);

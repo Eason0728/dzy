@@ -920,19 +920,56 @@ await at('角色清單退路：listRoles 回 {ok:false} 時畫面不崩潰，角
   unmount();
 });
 
-await at('角色清單退路：listRoles 失敗時，新增使用者表單仍能開啟（角色下拉沒有選項但不拋錯）', async () => {
+// 2026-08-17 行為變更（Eason 實際踩到後指示修正，斷言同步更新）：
+//
+// 原斷言是「listRoles 失敗時，新增表單仍能開啟（下拉空著但不拋錯）」。
+// 那個退路在真實世界的效果是：Eason 點了新增使用者，看到一個**空的角色下拉**、
+// 畫面沒有任何說明，只能猜哪裡壞了——而且就算填完也送不出去（角色必填，後端會擋）。
+//
+// 新行為：開之前先重抓一次 listRoles；仍然失敗就明講原因、不開這個開了也沒用的表單。
+// 「不拋錯」這條原本的核心保障沒有變（仍然斷言不拋例外），變的是「開空表單」→「明講」。
+await at('角色清單失敗：先自動重抓一次；仍失敗則明講原因、不開空表單（不拋錯）', async () => {
   const root = new FakeElement('div');
   const { ctx, state } = makeFakeCtx();
-  state.apiHandlers.listRoles = () => ({ ok: false, error: '沒有權限' });
+  let listRolesCalls = 0;
+  state.apiHandlers.listRoles = () => { listRolesCalls += 1; return { ok: false, error: '沒有權限' }; };
   state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [] } });
 
   const unmount = mountList(root, ctx);
   await flush();
+  const callsAfterMount = listRolesCalls;
+
   assert.doesNotThrow(() => fireClick(byRole(root, 'add-user')));
   await flush();
 
+  assert.equal(listRolesCalls, callsAfterMount + 1, '按新增時應該再自動重抓一次角色清單');
+  assert.equal(byRole(fakeDocument.body, 'user-form-overlay'), null,
+    '角色清單拿不到時不該開出一個填不完的空表單');
+  const danger = state.toasts.filter((t) => t.type === 'danger').pop();
+  assert.ok(danger && danger.message.includes('角色'), '應該明講讀不到角色清單，實際：' + JSON.stringify(danger));
+
+  unmount();
+});
+
+await at('角色清單失敗但重抓成功：表單照常開啟，下拉有選項', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  let n = 0;
+  state.apiHandlers.listRoles = () => {
+    n += 1;
+    return n === 1
+      ? { ok: false, error: '暫時性錯誤' }
+      : { ok: true, data: { roles: [{ role: 'admin', name_zh: '系統管理者', perms: ['*'] }] } };
+  };
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [] } });
+
+  const unmount = mountList(root, ctx);
+  await flush();
+  fireClick(byRole(root, 'add-user'));
+  await flush();
+
   const overlay = byRole(fakeDocument.body, 'user-form-overlay');
-  assert.ok(overlay, 'listRoles 失敗不該讓新增使用者表單開不出來');
+  assert.ok(overlay, '重抓成功後表單應該開得出來');
 
   fireClick(byRole(overlay, 'cancel'));
   await flush();
