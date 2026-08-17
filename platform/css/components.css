@@ -660,6 +660,17 @@ textarea.input:disabled {
   .login-blur { background-position: center; }
 }
 
+/* 手機（直式）逐張微調（Eason 08-17，兩張的問題相反）：
+   · 墨竹亭是正方形照片，貼上緣後高度等於螢幕寬（375px），下緣一路壓到表單上方，
+     視覺上「吃到照片」。縮成螢幕寬的 78%，照片變小、與表單之間空出乾淨的距離。
+   · 一悟是 16:10 橫幅，貼上緣後只佔約 234px 高，在直式螢幕上顯得太小。
+     放大到 100% 寬以上；它的 logo 在照片正中央（不在上緣），放大裁到的是四周留白，
+     logo 不會被切——另外兩張 logo 都在左上角，所以不能這樣放大。 */
+@media (max-width: 767px) {
+  .login-bg[data-hero="mzt"] .login-blur { background-size: 78% auto; }
+  .login-bg[data-hero="yakiniku"] .login-blur { background-size: 130% auto; }
+}
+
 .login-bg::after {
   content: "";
   position: absolute;
