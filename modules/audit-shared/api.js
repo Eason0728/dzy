@@ -38,7 +38,19 @@
 
 const BACKEND_ID = 'audit';
 const GET_ALL_ACTION = 'getAll';
-const TTL_MS = 60 * 1000;
+
+// 2026-08-17（Eason：「分頁切換會延遲幾秒」）：
+// 每個分頁 mount 都會呼叫 getAll，而稽核後端一次要讀五個分頁、實測 2–5 秒。
+// 原本 TTL 只有 60 秒，讀個一分鐘再切分頁就要再空等一輪——這就是那幾秒的來源。
+// 改成兩段式：
+//   · TTL_MS 內＝新鮮，直接回傳（切分頁瞬間出畫面）
+//   · TTL_MS ~ STALE_MS 之間＝先把舊資料回給畫面，同時在背景重抓一次；
+//     使用者不必空等，下一次切分頁就會拿到剛更新的
+//   · 超過 STALE_MS＝太舊了，老實等新的（不讓人盯著半小時前的數字做決策）
+// 稽核資料是「一個月動一次」的性質，這個取捨很安全；而且任何送出動作都會呼叫
+// invalidate() 直接清掉快取，自己剛送出的東西一定看得到最新的。
+const TTL_MS = 5 * 60 * 1000;
+const STALE_MS = 30 * 60 * 1000;
 
 let cache = null;     // { result, expiresAt } —— result 一定是成功的 {ok:true,...}
 let inFlight = null;  // 目前進行中的 getAll() Promise；同時發起的呼叫共用它，不重複發請求
@@ -62,9 +74,35 @@ export function __setClock(fn) {
  */
 export async function getAll(ctx) {
   const nowMs = now_();
+
+  // ① 新鮮：直接回，切分頁不等待
   if (cache && nowMs < cache.expiresAt) {
     return cache.result;
   }
+
+  // ② 過期但還沒太舊：先把舊資料交出去，背景默默重抓（不 await）。
+  //    背景那次刻意吞掉錯誤——它失敗只代表快取沒更新，畫面已經有資料了，
+  //    不該因此跳錯誤打擾使用者；下一次 getAll() 自然會再試。
+  if (cache && nowMs < cache.expiresAt + (STALE_MS - TTL_MS)) {
+    if (!inFlight) {
+      inFlight = (async () => {
+        try {
+          const res = await ctx.api.call(BACKEND_ID, GET_ALL_ACTION, {});
+          if (res && res.ok === true) {
+            cache = { result: res, expiresAt: now_() + TTL_MS };
+          }
+          return res;
+        } catch (err) {
+          return { ok: false, error: (err && err.message) || '背景更新失敗' };
+        } finally {
+          inFlight = null;
+        }
+      })();
+    }
+    return cache.result;
+  }
+
+  // ③ 沒有快取，或舊到不能用了：老實等一次新的
   if (inFlight) {
     return inFlight;
   }

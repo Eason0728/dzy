@@ -111,13 +111,17 @@ await (async function test3() {
   await getAll(ctx);
   assertEqual(calls.length, 1, '3a: 第一次呼叫底層一次');
 
-  t += 30 * 1000; // 過 30 秒，還在 TTL(60s) 內
+  t += 30 * 1000; // 過 30 秒，還在 TTL(5 分鐘) 內
   await getAll(ctx);
   assertEqual(calls.length, 1, '3b: TTL 內（30 秒後）仍吃快取，不重抓');
 
-  t += 31 * 1000; // 累積過 61 秒，超過 TTL
+  // 2026-08-17：TTL 由 60 秒放寬為 5 分鐘（Eason 回報切分頁要等好幾秒——每個分頁
+  // mount 都會 getAll，而後端一次要 2–5 秒）。這條驗的行為沒變（過了 TTL 會重抓），
+  // 只是門檻跟著實作的常數走。超過 TTL 但未超過 STALE 時會「先回舊值＋背景重抓」，
+  // 所以這裡看到的是背景那一次呼叫（第 8 組測試專門驗這個新行為）。
+  t += 5 * 60 * 1000 + 1000; // 累積超過 5 分鐘
   await getAll(ctx);
-  assertEqual(calls.length, 2, '3c: 超過 TTL（累積 61 秒後）會重抓');
+  assertEqual(calls.length, 2, '3c: 超過 TTL（累積 5 分鐘後）會重抓');
 })();
 
 // ============================================================
@@ -217,6 +221,39 @@ await (async function test7() {
   assertEqual(calls[1].backendId, 'audit', '7c: submit 打的 backendId 也是 audit');
   assertEqual(calls[1].action, 'submitOpsAudit', '7d: submit 把呼叫端指定的 action 原樣傳下去');
   assertEqual(calls[1].payload, { foo: 'bar' }, '7e: submit 把 payload 原樣傳下去');
+})();
+
+// ============================================================
+// 8. 過期後的「先回舊值、背景更新」（2026-08-17 新增）
+//    目的是讓切分頁不必空等；驗：立刻回舊值、背景真的有重抓、之後拿到新值、太舊就等新的。
+// ============================================================
+await (async () => {
+  reset();
+  let t = 0;
+  __setClock(() => t);
+
+  let n = 0;
+  const { ctx, calls } = makeCtx(() => okResult({ n: ++n }));
+
+  const first = await getAll(ctx);
+  assertEqual(calls.length, 1, '8a: 第一次真的打後端');
+  assertEqual(first.data.n, 1, '8b: 拿到第一版資料');
+
+  t += 6 * 60 * 1000; // 過了 TTL（5 分）但還在 STALE（30 分）內
+  const stale = await getAll(ctx);
+  assertEqual(stale.data.n, 1, '8c: 過期後「立刻」拿到的是舊資料（不空等）');
+  assertEqual(calls.length, 2, '8d: 同時已在背景發出重抓');
+
+  await new Promise((r) => setTimeout(r, 0)); // 讓背景那次落地
+  const fresh = await getAll(ctx);
+  assertEqual(fresh.data.n, 2, '8e: 背景更新完成後，下一次拿到的是新資料');
+  assertEqual(calls.length, 2, '8f: 且沒有因此多打一次後端');
+
+  t += 40 * 60 * 1000; // 超過 STALE 上限
+  await getAll(ctx);
+  assertEqual(calls.length, 3, '8g: 舊到超過上限就老實等新的（不再回舊值）');
+
+  __setClock(null);
 })();
 
 // ============================================================
