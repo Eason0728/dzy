@@ -50,8 +50,10 @@
      mzt＝辣油琥珀、yakiniku＝油花深肉紅；-dark 是各自壓暗的 hover 色 */
   --accent-mala: #945932;
   --accent-mala-dark: #7a4827;
-  --accent-mzt: #8d5f2d;
-  --accent-mzt-dark: #714a1f;
+  --accent-mzt: #595859;        /* 墨石灰：mzt 照片低飽和主調（石牆 #908F91）壓暗。
+                                   原採高飽和得 #8D5F2D 辣油琥珀，跟 mala 紅銅撞色
+                                   （Eason 08-17 指出），改取石調——也正好是「墨」竹亭 */
+  --accent-mzt-dark: #454445;
   --accent-yakiniku: #6b2c20;   /* 採樣 #54241C 提亮一階當按鈕底，hover 才有得壓 */
   --accent-yakiniku-dark: #54241c;
   /* 全透明登入框（Eason 08-17 四改）：框身無底色，文字直接浮在照片上，
