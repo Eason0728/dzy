@@ -27,7 +27,7 @@
 | 擁有帳號 | madesiaosinla@gmail.com（與既有九支系統同帳號） |
 | 本機路徑 | `~/dzy/apps-script/platform`（`.clasp.json` 已 gitignore） |
 | 時區 | 腳本 Asia/Taipei ＋ **試算表本身也要另外設** Asia/Taipei（兩個是獨立設定，見記憶庫 apps-script-clasp-deploy-gotchas 第 15 條） |
-| **部署 ID** | `AKfycbww4w5qrdEqFA1UwOxDeZQKzoVahqJPrRDJ9mVUqUSb9-BcWqoHYLyAPN5O35QjX4Rs`（**@3**，2026-08-15；`clasp deployments` 2026-08-17 實查。@1 是 2026-08-14 首次部署的舊版號） |
+| **部署 ID** | `AKfycbww4w5qrdEqFA1UwOxDeZQKzoVahqJPrRDJ9mVUqUSb9-BcWqoHYLyAPN5O35QjX4Rs`（**@4**，2026-08-17 加 `changePassword`；@3 是 2026-08-15、@1 是首次部署。一律 `create-version`＋`update-deployment -V <版號> <本 ID>`，網址不變） |
 | **正式網址** | https://script.google.com/macros/s/AKfycbww4w5qrdEqFA1UwOxDeZQKzoVahqJPrRDJ9mVUqUSb9-BcWqoHYLyAPN5O35QjX4Rs/exec |
 | 存取設定 | `ANYONE_ANONYMOUS`／`USER_DEPLOYING`（GitHub Pages 前端呼叫必需） |
 
