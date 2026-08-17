@@ -612,9 +612,14 @@ textarea.input:disabled {
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
-  align-items: center;
+  /* 手機：表單靠下（Eason 08-17）。照片貼齊上緣、表單沉到底部，兩者不互相壓；
+     拇指也構得到。桌機在下面的斷點改回置中。
+     env(safe-area-inset-bottom) 是 iPhone 底部那條 home indicator 的高度，
+     不加的話送出鈕會被它蓋到一角。 */
+  align-items: flex-end;
   justify-content: flex-start;   /* 框靠左（Eason 08-17：別擋照片主體，三張圖主體都偏中偏右） */
   padding: var(--space-4, 16px);
+  padding-bottom: calc(var(--space-6, 32px) + env(safe-area-inset-bottom, 0px));
   overflow: hidden;
 }
 
@@ -622,6 +627,8 @@ textarea.input:disabled {
   /* Eason 08-17：登入框切齊畫面左緣。外層 padding 歸零，
      文字離螢幕邊的距離由 .login-card-form 自己的內距提供 */
   .login-bg { padding-left: 0; }
+  /* 桌機空間夠，維持原本的垂直置中 */
+  .login-bg { align-items: center; padding-bottom: var(--space-4, 16px); }
 }
 
 /* 全幅背景：同一張照片，壓暗當氛圍。
