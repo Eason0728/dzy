@@ -31,7 +31,6 @@
 
 import { login } from '../auth.js';
 import { loading, toast } from '../ui.js';
-import { APP_NAME } from '../config.js';
 import { esc } from '../fmt.js';
 
 /** 連續失敗幾次後，前端先擋一段冷卻時間才讓使用者再送出（純體驗節流，見檔頭說明） */
@@ -59,14 +58,15 @@ export function render(el, app) {
   el.innerHTML = `
     <div class="login-bg" data-hero="${esc(hero.key)}">
       <div class="login-blur" aria-hidden="true"></div>
-      <!-- 單一登入框（Eason 2026-08-17 二改：「只要這個登入框、採半透明」——
-           照片開窗與大標題整個拿掉，框改毛玻璃讓背景照片透出來；位置沿用
-           前一次指示靠左，不壓照片主體。系統名對視覺是多餘的（背景照片自帶品牌），
-           只留給讀屏器（visually-hidden）。 -->
+      <!-- 單一登入框（Eason 2026-08-17 三改：透明毛玻璃、避開照片中間食材、
+           配色跟著背景照片走——見 components.css 的 [data-hero] 主題）。
+           標題字樣是 Eason 指定的「鼎兆元集團｜管理系統」，**刻意不用 APP_NAME**
+           （那是「鼎兆元餐飲集團｜管理系統」，登入框上要短一點的版本），
+           所以這裡是字面字串，不是打錯。 -->
       <div class="login-card">
         <div class="login-card-form">
       <div class="card">
-        <h1 class="card-title visually-hidden">${esc(APP_NAME)}</h1>
+        <h1 class="card-title">鼎兆元集團｜管理系統</h1>
         <div class="toast toast-danger" data-role="error" hidden></div>
         <form data-role="form" class="stack" novalidate>
           <div class="field">

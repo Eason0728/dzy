@@ -585,20 +585,53 @@ textarea.input:disabled {
   background: var(--hero-scrim);
 }
 
-/* 登入框：半透明毛玻璃（Eason 08-17 指定「採用半透明」）。
-   框身半透明讓照片透出來；輸入欄維持不透明白（.input 用 --card），可讀性不受背景影響。
-   backdrop-filter 不支援的舊瀏覽器只會少了模糊、半透明底色仍在，可接受的優雅降級。 */
+/* 登入框：透明毛玻璃，配色跟著當次背景照片（Eason 08-17 三改）。
+   每個 data-hero 指派一組玻璃色（色值採樣自照片本身，正本在 tokens.css）＋文字色，
+   透明度壓低讓框後的食材透出來；輸入欄維持近不透明白，可讀性不跟玻璃妥協。
+   backdrop-filter 不支援的舊瀏覽器只會少了模糊、色底仍在，可接受的優雅降級。 */
+.login-bg {
+  /* 預設＝mala 那組（沒有 data-hero 時的保底） */
+  --login-glass: var(--glass-mala);
+  --login-glass-line: var(--glass-line-on-dark);
+  --login-ink: var(--on-glass-ink);
+  --login-ink-soft: var(--on-glass-soft);
+}
+.login-bg[data-hero="mzt"] {
+  --login-glass: var(--glass-mzt);
+  --login-glass-line: var(--glass-line-on-light);
+  --login-ink: var(--ink);
+  --login-ink-soft: var(--muted);
+}
+.login-bg[data-hero="yakiniku"] {
+  --login-glass: var(--glass-yakiniku);
+}
+
 .login-card {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 440px;
-  background: var(--card-glass);
-  -webkit-backdrop-filter: blur(14px) saturate(1.1);
-  backdrop-filter: blur(14px) saturate(1.1);
+  max-width: 420px;
+  background: var(--login-glass);
+  border: 1px solid var(--login-glass-line);
+  -webkit-backdrop-filter: blur(18px) saturate(1.05);
+  backdrop-filter: blur(18px) saturate(1.05);
   border-radius: 0;            /* 範例是直角，視覺上更正式、更像企業系統 */
   box-shadow: var(--shadow-float);
   overflow: hidden;
+}
+
+/* 玻璃上的文字全部跟著主題色走 */
+.login-card .card-title {
+  margin: 0 0 var(--space-5, 24px);
+  font-size: var(--fs-xl, 22px);
+  font-weight: var(--fw-bold, 700);
+  letter-spacing: .02em;
+  color: var(--login-ink);
+}
+.login-card .field-label { color: var(--login-ink-soft); }
+.login-card .field-hint { color: var(--login-ink-soft); }
+.login-card .input {
+  background: var(--login-input-bg);
 }
 
 /* 卡片左半：表單 */
