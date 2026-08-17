@@ -42,6 +42,12 @@
      曾經歷 78% 白玻璃→照片採樣三色玻璃兩個版本，token 已隨版本清除，查 git 史）。
      深色照片（mala／yakiniku）白字＋暗影；mzt 淺照片深字＋亮暈，
      由 components.css 依 .login-bg[data-hero] 指派。 */
+  /* 登入頁背景改 contain 後，照片放不滿的邊緣底色（2026-08-17）。兩種：
+     深色給 mala／yakiniku（配白字），淺色給 mzt（配深字）——底色必須跟著照片明暗走，
+     否則文字會落在對比不足的底上看不見（實測墨竹亭那張就中了）。
+     值取自各照片邊緣像素的平均，讓留白看起來像照片自己的延伸，不是外加的框。 */
+  --letterbox-dark: #241d1a;
+  --letterbox-light: #acafba;
   --on-glass-ink: #fff;                        /* 深色照片上的主文字 */
   --on-glass-soft: rgba(255, 255, 255, .85);   /* 深色照片上的標籤／提示 */
   --login-input-bg: rgba(255, 255, 255, .92);  /* 輸入欄近不透明白：可讀性不妥協 */

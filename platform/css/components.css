@@ -624,17 +624,33 @@ textarea.input:disabled {
   .login-bg { padding-left: 0; }
 }
 
-/* 全幅背景：同一張照片，模糊＋壓暗，只當氛圍不搶焦點 */
+/* 全幅背景：同一張照片，壓暗當氛圍。
+   2026-08-17 由 cover 改 contain（Eason：「背景圖片再小一點，讓上方的 logo 完全入鏡」）——
+   cover 是「填滿容器、超出的裁掉」，三張照片的品牌 logo 都在上緣或中央，寬螢幕上必被切到頭；
+   contain 是「整張塞進容器、不裁切」，logo 一定完整。代價是邊緣會留空，用 --login-letterbox
+   填成深色（不能留白，白邊在深色照片旁邊會很突兀）。 */
 .login-blur {
   position: absolute;
   inset: 0;
-  background-size: cover;
-  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-color: var(--login-letterbox);
+  /* 手機（直式）：照片貼齊上緣，下方留給表單——直式螢幕硬要置中會讓照片卡在
+     表單正後方，字壓在食材上很難讀（Eason 08-17 回報手機上「圖片過大」）。
+     桌機：置中。切換點沿用全站的 768px（與導覽列、卡片同一個斷點）。 */
+  background-position: center top;
   /* 跟卡片左半用同一個座標系（都是 fixed，對齊視窗），
      這樣兩處顯示的是同一張照片的同一個位置，看起來就是「一張圖」，
      不是兩份大小不同的拷貝。 */
   background-attachment: fixed;
   filter: saturate(.95) brightness(.82);
+}
+
+/* 桌機：背景置中（手機是貼齊上緣，見上方 .login-blur 說明）。
+   這段一定要放在 .login-blur 之後——同特異性下比的是原始碼順序，
+   寫在前面會被後面的基底規則蓋掉（2026-08-17 實際踩過一次）。 */
+@media (min-width: 768px) {
+  .login-blur { background-position: center; }
 }
 
 .login-bg::after {
@@ -658,6 +674,7 @@ textarea.input:disabled {
   --login-text-glow: var(--text-glow-on-dark);
   --login-accent: var(--accent-mala);
   --login-accent-dark: var(--accent-mala-dark);
+  --login-letterbox: var(--letterbox-dark);
 }
 .login-bg[data-hero="mzt"] {
   --login-ink: var(--ink);
@@ -665,6 +682,8 @@ textarea.input:disabled {
   --login-text-glow: var(--text-glow-on-light);
   --login-accent: var(--accent-mzt);
   --login-accent-dark: var(--accent-mzt-dark);
+  /* 淺色照片＝深色文字，留白也必須是淺的，否則深字落在深底上看不見 */
+  --login-letterbox: var(--letterbox-light);
 }
 .login-bg[data-hero="yakiniku"] {
   --login-accent: var(--accent-yakiniku);
