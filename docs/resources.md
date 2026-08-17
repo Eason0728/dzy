@@ -1,5 +1,16 @@
 # 雲端資源清單
 
+## 前端（2026-08-17 上線，Eason 明示「t4-5上線」）
+
+| 項目 | 值 |
+|---|---|
+| 正式網址 | https://eason0728.github.io/dzy/ |
+| repo | `Eason0728/dzy`（public） |
+| Pages 設定 | main branch／root，legacy build；push main 即部署，build 約 1 分鐘 |
+| 上線前掃描 | repo 零機密（密碼只在試算表與 Script Properties）、路徑全相對 |
+| 上線驗證 | 真瀏覽器：登入頁渲染、資源零 404、假密碼實測後端可達（回「帳號或密碼錯誤」）；舊網址 mala-audit／mala-dorm（admin.html／sign.html）皆正常 |
+| 帳號狀態 | 上線當下只有 admin；會計 1＋主管 n＋店長 5 名單待 Eason 提供 |
+
 建立當下就記在這裡，避免跨 session／跨 harness 重複建立。上線時同步一份到
 `~/.claude/mala-ops/dispatch-rules.md` 第 5 節（任務 T4-6）。
 
