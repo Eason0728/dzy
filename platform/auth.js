@@ -61,8 +61,14 @@ async function defaultTransport(requestBody) {
     return { ok: false, error: '尚未設定平台後端網址（platform/config.js）' };
   }
 
+  // 逾時 45 秒（2026-08-17 由 15 秒放寬，Eason 在手機上實際踩到「連線逾時」）。
+  // 為什麼登入天生就慢：後端每次驗密碼要跑 AUTH_HASH_ITERATIONS=10000 次 SHA-256
+  //（spec §5.6，刻意加重以防暴力破解），在 Apps Script 上就是好幾秒；加上 Google 的
+  // 轉址與行動網路來回，很容易頂到 15 秒。那個上限一開始是照「一般 API」的直覺定的，
+  // 沒有考慮這條路徑本來就重。
+  // 不能改成降低雜湊次數——既有帳號的 hash 都是用 10000 次算的，改了全部人都登不進來。
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), 45000);
   let res;
   try {
     res = await fetch(url, {

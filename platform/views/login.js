@@ -107,6 +107,9 @@ export function render(el, app) {
     submitBtn.disabled = busy;
     usernameInput.disabled = busy;
     passwordInput.disabled = busy;
+    // 登入天生要等好幾秒（後端跑一萬次雜湊，見 auth.js 的說明）。按鈕不改字的話，
+    // 使用者會以為沒反應而重複按——Eason 在手機上就是先遇到「像當掉」才看到逾時。
+    submitBtn.textContent = busy ? '登入中，請稍候…' : '登入';
   }
 
   /** 純體驗節流：擋使用者手殘連點，不是安全機制（安全機制在後端） */

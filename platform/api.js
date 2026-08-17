@@ -37,7 +37,9 @@
 import { BACKENDS } from './config.js';
 import { getUser, can, getSecret, getToken } from './auth.js';
 
-const DEFAULT_TIMEOUT_MS = 15000;
+// 45 秒（2026-08-17 由 15 秒放寬，與 auth.js 同一個理由：Apps Script 本來就慢，
+// 稽核 getAll 還要一次讀回五個分頁的整年資料，行動網路上 15 秒不夠用）。
+const DEFAULT_TIMEOUT_MS = 45000;
 let timeoutMs = DEFAULT_TIMEOUT_MS;
 
 /** 測試用：覆寫逾時毫秒數。傳非正數（或不傳）還原成預設的 15 秒。 */
