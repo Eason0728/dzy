@@ -50,16 +50,21 @@
 }
 
 /* 首頁模組卡片：左圖示、中文字、右待辦數字（T4-3） */
+/* 首頁模組卡片＝登入後的主要入口，加大點擊面積與字級（Eason 08-17） */
 .module-card {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+.module-card .card-title {
+  font-size: var(--fs-xl);
 }
 .module-icon {
   flex: none;
   display: block;
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--radius-sm);
 }
 .module-card-text {
@@ -345,8 +350,9 @@ textarea.input:disabled {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  color: var(--muted);
-  font-size: var(--fs-xs);
+  color: var(--ink);
+  font-size: var(--fs-sm);       /* 08-17 由 xs 放大：手機底部列字太小不好點 */
+  font-weight: var(--fw-medium);
   text-decoration: none;
   background: transparent;
   border: none;
@@ -355,7 +361,42 @@ textarea.input:disabled {
 
 .nav-item.is-active {
   color: var(--brand);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-bold);
+  background: var(--brand-light);
+}
+
+/* 模組內的分頁列（殼的 view-nav）：橫向膠囊，字放大、每顆都是明確的可點區塊
+   （Eason 08-17）。項目多時橫向捲動，不擠成兩行也不縮小字。 */
+[data-role="view-nav"] {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-2);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--space-1);
+}
+[data-role="view-nav"]:empty {
+  display: none;
+}
+[data-role="view-nav"] .nav-item {
+  flex: none;
+  flex-direction: row;
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--card);
+  font-size: var(--fs-md);
+  white-space: nowrap;
+}
+[data-role="view-nav"] .nav-item:hover {
+  border-color: var(--brand);
+  background: var(--brand-light);
+}
+[data-role="view-nav"] .nav-item.is-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--ink-inverse);
 }
 
 .sidebar {
@@ -387,20 +428,36 @@ textarea.input:disabled {
     overflow-y: auto;
   }
 
+  /* 側邊欄入口：字放大、每一項是看得見的區塊（Eason 08-17：字大一點、
+     用區塊方便點選）。高度 56px 遠超過 44px 的可點擊下限，滑鼠與觸控都好按。 */
   .sidebar .nav-item {
     flex: none;              /* 覆蓋 .nav-item 基底的 flex:1，否則在 flex-column 側邊欄裡會被撐滿垂直空間 */
     flex-direction: row;
     justify-content: flex-start;
     gap: var(--space-2);
     width: 100%;
-    height: 44px;
-    padding: 0 var(--space-3);
+    min-height: 56px;
+    padding: 0 var(--space-4);
     border-radius: var(--radius-sm);
-    font-size: var(--fs-base);
+    font-size: var(--fs-lg);
+    font-weight: var(--fw-medium);
+    color: var(--ink);
+    background: var(--bg);              /* 每項都有底色＝看得出是一塊可點的區域 */
+    border: 1px solid var(--line);
+    text-align: left;
+    transition: background .12s ease, border-color .12s ease;
+  }
+
+  .sidebar .nav-item:hover {
+    background: var(--brand-light);
+    border-color: var(--brand);
   }
 
   .sidebar .nav-item.is-active {
     background: var(--brand-light);
+    border-color: var(--brand);
+    color: var(--brand);
+    font-weight: var(--fw-bold);
   }
 }
 
