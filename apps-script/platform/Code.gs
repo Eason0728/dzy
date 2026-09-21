@@ -60,6 +60,25 @@ function dispatch_(e) {
   var token = body.token;
   var payload = (body.payload && typeof body.payload === 'object') ? body.payload : {};
 
+  // 會寫入試算表的動作要拿全域鎖：Apps Script 允許並發執行，
+  // 兩個管理者同時建帳號會各自用 appendRow 前的列數推 id，撞出重複資料列。
+  // 唯讀動作（login/me/listUsers/listRoles）不上鎖，登入速度不受影響。
+  var MUTATING_ACTIONS = { saveUser: 1, setActive: 1, resetPassword: 1, changePassword: 1 };
+  if (MUTATING_ACTIONS[action]) {
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(20000)) {
+      return { ok: false, error: CODE_MSG_INTERNAL_ERROR };
+    }
+    try {
+      return dispatchAction_(action, token, payload);
+    } finally {
+      lock.releaseLock();
+    }
+  }
+  return dispatchAction_(action, token, payload);
+}
+
+function dispatchAction_(action, token, payload) {
   switch (action) {
     case 'login':
       return handleLogin_(payload);
