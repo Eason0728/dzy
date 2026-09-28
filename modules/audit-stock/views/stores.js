@@ -8,6 +8,7 @@
  * - 門市清單讀 getAll 的 config.all_stores（含停用）；後端還沒更新時退回 config.stores。
  * - 新增：只填店名，店代碼由後端自動給（st-01、st-02…），同時在試算表建同名顯示分頁。
  * - 停用：不再出現在兩張稽核表的店別選單與總覽，歷史紀錄與顯示分頁都保留，可重新啟用。
+ * - 改名（renameStore）：店代碼不變、歷史紀錄不受影響；試算表分頁原本跟店名同名才會跟著改。
  * - 門市清單是兩個稽核模組共用的，所以這裡寫入成功後 submit() 會 invalidate 共用快取，
  *   營運稽核表那邊下次讀到的也是新清單。
  *
@@ -83,11 +84,15 @@ export function mountStores(root, ctx) {
         text: s.active ? '停用' : '重新啟用'
       });
       toggle.addEventListener('click', () => onToggle(s));
+      const renameBtn = el('button', {
+        class: 'btn btn-secondary store-rename', type: 'button', 'data-store': s.code, text: '改名'
+      });
+      renameBtn.addEventListener('click', () => onRename(s));
       const nameCell = el('td', null, [
         document.createTextNode(s.name),
         s.active ? null : el('span', { class: 'tag tag-danger', text: '停用中' })
       ]);
-      tbody.appendChild(el('tr', { 'data-store': s.code }, [nameCell, el('td', null, [toggle])]));
+      tbody.appendChild(el('tr', { 'data-store': s.code }, [nameCell, el('td', null, [renameBtn, document.createTextNode(' '), toggle])]));
     });
     root.appendChild(el('div', { class: 'card' }, [
       el('div', { class: 'card-title', text: '門市清單' }),
@@ -153,6 +158,28 @@ export function mountStores(root, ctx) {
     }
     if (!(await ctx.ui.confirm('確定新增門市「' + name + '」？'))) return;
     await write('addStore', { name }, '已新增「' + name + '」');
+  }
+
+  async function onRename(s) {
+    const input = el('input', { class: 'input', id: 'store-rename-input', type: 'text', maxlength: '20' });
+    input.value = s.name;
+    const body = el('div', { class: 'field' }, [
+      el('label', { class: 'field-label', for: 'store-rename-input', text: '新名稱' }),
+      input,
+      el('div', { class: 'field-hint', text: '歷史紀錄不受影響；試算表分頁原本跟店名同名的會一起改名。' })
+    ]);
+    const choice = await ctx.ui.dialog({
+      title: '修改「' + s.name + '」名稱',
+      body,
+      actions: [
+        { label: '取消', value: null, variant: 'secondary' },
+        { label: '儲存', value: 'save', variant: 'primary' }
+      ]
+    });
+    if (choice !== 'save') return;
+    const name = String(input.value || '').trim();
+    if (!name || name === s.name) return;
+    await write('renameStore', { store: s.code, name }, '已把「' + s.name + '」改名為「' + name + '」');
   }
 
   async function onToggle(s) {

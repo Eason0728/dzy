@@ -202,6 +202,22 @@ function makeContentService() {
   };
 }
 
+// LockService 假物件（2026-09-28 補）：平台後端 b13b402 起寫入動作會先 LockService.getScriptLock()，
+// 這個假環境沒有它，所有寫入都掉進 catch 回「系統忙碌中」，D 區整段失敗。
+// 記錄上鎖／解鎖次數，L 區斷言寫入動作真的有上鎖且一定解鎖。
+function makeLockService() {
+  const stats = { tryLock: 0, release: 0 };
+  return {
+    stats,
+    getScriptLock() {
+      return {
+        tryLock() { stats.tryLock++; return true; },
+        releaseLock() { stats.release++; }
+      };
+    }
+  };
+}
+
 // loadPlatform(sheetsSeed, propsSeed) → { sandbox, sheets }
 // Auth.gs → Users.gs → Code.gs 依序跑進同一個 vm context，模擬同一個 Apps Script 專案共用全域範疇。
 function loadPlatform(sheetsSeed, propsSeed) {
@@ -212,7 +228,8 @@ function loadPlatform(sheetsSeed, propsSeed) {
     Utilities: makeUtilities(),
     PropertiesService: makePropertiesService(propsSeed),
     CacheService: makeCacheService(),
-    ContentService: makeContentService()
+    ContentService: makeContentService(),
+    LockService: makeLockService()
   };
   vm.createContext(sandbox);
   vm.runInContext(AUTH_GS_CODE, sandbox, { filename: 'Auth.gs' });
@@ -384,6 +401,23 @@ function loginToken(sandbox, username, password) {
     ['active', 'created_at', 'id', 'last_login_at', 'name', 'node', 'role', 'username'].sort(),
     'C4: 使用者物件的 key 集合正確（id/username/name/role/node/active/created_at/last_login_at）'
   );
+})();
+
+// ============================================================
+// L. 寫入動作有上鎖且一定解鎖；唯讀動作不上鎖（b13b402 的行為）
+// ============================================================
+(() => {
+  const { sandbox } = freshApp();
+  const stats = sandbox.LockService.stats;
+  const adminToken = loginToken(sandbox, 'admin1', PW.admin1);
+  callDoPost(sandbox, { action: 'listUsers', token: adminToken, payload: {} });
+  assertEqual(stats.tryLock, 0, 'L1: 唯讀動作（login/listUsers）不上鎖');
+  callDoPost(sandbox, {
+    action: 'saveUser', token: adminToken,
+    payload: { username: 'locktest', name: '鎖測試', role: 'storelead', node: 'ck', password: 'longenoughpw1' }
+  });
+  assertEqual(stats.tryLock, 1, 'L2: saveUser 上鎖一次');
+  assertEqual(stats.release, 1, 'L3: saveUser 結束後解鎖');
 })();
 
 // ============================================================

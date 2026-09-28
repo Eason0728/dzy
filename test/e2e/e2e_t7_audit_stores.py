@@ -47,6 +47,13 @@ class StoresMock(MockBackend):
                 code = 'st-%02d' % (1 + sum(1 for s in self.stores if s['code'].startswith('st-')))
                 self.stores.append({'code': code, 'name': body['name'], 'tab': body['name'], 'active': True})
                 return {'ok': True, 'store': {'code': code, 'name': body['name']}}
+            if action == 'renameStore':
+                self.calls.append((backend, action))
+                self.writes.append(body)
+                for s in self.stores:
+                    if s['code'] == body['store']:
+                        s['name'] = body['name']
+                return {'ok': True, 'tab_renamed': True}
             if action == 'setStoreStatus':
                 self.calls.append((backend, action))
                 self.writes.append(body)
@@ -93,6 +100,16 @@ def main():
             check(w.get('action') == 'addStore' and w.get('name') == '測試新店' and w.get('code') == AUDIT_SECRET,
                   'addStore 送出格式正確（action/name/通行碼由平台帶），實際：%s' % w)
 
+            # 改名
+            page.click('#store-list tr[data-store="st-01"] .store-rename')
+            page.wait_for_selector('#store-rename-input', timeout=5000)
+            page.fill('#store-rename-input', '測試新店竹北')
+            page.click('.dialog .btn-primary')
+            page.wait_for_selector('#store-list tr[data-store="st-01"] >> text=測試新店竹北', timeout=8000)
+            w = mock.writes[-1]
+            check(w.get('action') == 'renameStore' and w.get('store') == 'st-01' and w.get('name') == '測試新店竹北',
+                  'renameStore 送出格式正確，實際：%s' % w)
+
             # 停用央廚
             page.click('#store-list tr[data-store="ck"] .store-toggle')
             confirm_dialog(page)
@@ -105,14 +122,14 @@ def main():
             # 總覽：新店在、央廚不在
             page.locator('[data-role="view-nav"] .nav-item', has_text='總覽').click()
             page.wait_for_selector('#store-list', state='detached', timeout=8000)
-            page.wait_for_selector('[data-role="view-content"] >> text=測試新店', timeout=8000)
+            page.wait_for_selector('[data-role="view-content"] >> text=測試新店竹北', timeout=8000)
             content = page.locator('[data-role="view-content"]').inner_text()
-            check('測試新店' in content and '央廚' not in content, '盤點總覽：有新店、沒有停用的央廚')
+            check('測試新店竹北' in content and '央廚' not in content, '盤點總覽：有新店、沒有停用的央廚')
 
             # 營運稽核表也讀到新清單（共用快取已 invalidate）
             page.evaluate("() => { window.location.hash = '#/audit-ops/overview'; }")
-            page.wait_for_selector('text=測試新店', timeout=8000)
-            check(True, '營運稽核總覽也出現新店')
+            page.wait_for_selector('text=測試新店竹北', timeout=8000)
+            check(True, '營運稽核總覽也出現新店（改名後的名稱）')
 
             # 重新啟用
             page.evaluate("() => { window.location.hash = '#/audit-stock/stores'; }")
@@ -125,6 +142,7 @@ def main():
             check(True, '重新啟用後央廚不再標停用中')
             page.screenshot(path=os.path.join(os.path.dirname(__file__), 'shots', 't7_stores.png'), full_page=True)
 
+            check(page.locator('.store-rename').count() == 6, '每家店都有改名鈕')
             check(not mock.leaked, '沒有請求漏出 mock：%s' % mock.leaked)
             check(not errors, '頁面無 JS 錯誤：%s' % errors[:3])
 
