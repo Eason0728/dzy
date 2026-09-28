@@ -22,7 +22,9 @@ export default {
     { id: 'fill',     name: '稽核填寫', requires: ['audit.write'] },
     { id: 'report',   name: '報告',     requires: ['audit.read'] },
     { id: 'analysis', name: '異常分析', requires: ['audit.read'] },
-    { id: 'my',       name: '我的門市', requires: ['audit.read.own'] }
+    { id: 'my',       name: '我的門市', requires: ['audit.read.own'] },
+    // 2026-09-28：會計新增／停用門市（後端 addStore／setStoreStatus）
+    { id: 'stores',   name: '門市管理', requires: ['audit.write'] }
   ],
   entry: () => import('./index.js')    // 動態載入模組本體
 };

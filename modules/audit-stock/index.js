@@ -33,6 +33,7 @@ import { mountFill } from './views/fill.js';
 import { mountReport } from './views/report.js';
 import { mountAnalysis } from './views/analysis.js';
 import { mountMy } from './views/my.js';
+import { mountStores } from './views/stores.js';
 import * as sharedApi from '../audit-shared/api.js';
 
 const VIEW_MOUNTERS = {
@@ -40,7 +41,8 @@ const VIEW_MOUNTERS = {
   fill: mountFill,
   report: mountReport,
   analysis: mountAnalysis,
-  my: mountMy
+  my: mountMy,
+  stores: mountStores
 };
 
 // 本模組唯一支援的年份，同各分頁的 YEAR 常數（badge 算「本月」要落在資料涵蓋的年份內）。

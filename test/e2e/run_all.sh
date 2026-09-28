@@ -11,6 +11,7 @@ TESTS=(
   e2e_t4_spa_switch.py
   e2e_t5_audit_suite.py
   e2e_t6_dorm_flow.py
+  e2e_t7_audit_stores.py
 )
 
 for i in "${!TESTS[@]}"; do
