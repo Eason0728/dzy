@@ -137,6 +137,13 @@ class MockBackend:
 
     def install(self, page):
         page.route('https://script.google.com/**', self._route)
+        # 2026-10-11：平台後端可能搬到 Mac mini（Funnel 網址）——config.js 裡每一支後端的主機都要攔，
+        # 不然換網址後 e2e 會打到真伺服器。沒被 mock 涵蓋的一樣進 leaked。
+        from urllib.parse import urlparse
+        for u in set(self.urls.values()):
+            host = urlparse(u).netloc
+            if host and host != 'script.google.com':
+                page.route('https://%s/**' % host, self._route)
 
     def _route(self, route):
         req = route.request
