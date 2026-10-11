@@ -7,7 +7,7 @@
 ## 0. 定案摘要（requirements 第 7 節六題，Eason 2026-10-11「照建議」）
 1. 央廚用門市職級。
 2. 墨竹亭總部、小辛辣總部、鼎兆元總部用總部職級。
-3. 總部單位多一個「部門」下拉（部門清單待 Eason 提供，先放 org 分頁、可隨時加，不必改程式）。
+3. 總部單位多一個「部門」下拉；部門只掛鼎兆元總部（九個，見 §4.2），放 org 分頁、可隨時加，不必改程式。
 4. 每人只填一個主要單位。
 5. 沒到職日的 11 人這次不編；日後從下一號往後接，不插隊。
 6. 只有暱稱的 9 人先用現有名字建檔，日後後台改姓名（編號不變）。
@@ -102,7 +102,7 @@
   mala-gf 新竹光復、mala-hq 小辛辣總部(hq)；yiwu-js 新竹金山、yiwu-wx 竹北文興；ck 央廚(store)；dzy-hq 鼎兆元總部(hq)。其餘 ladder＝store。
 - title store：pt 計時同仁(1)、ft 正職同仁(2)、sm 店長(3)、am 區經理(4)、sv 督導(5)、bd 品牌總監(6)
 - title hq：hs 部門同仁(1)、hm 部門主管(2)、ceo 執行長(3)、gm 總經理(4)、chair 董事長(5)
-- dept：**空，等 Eason 給清單**。總部單位在 dept 清單為空時，部門欄不顯示、不必填。
+- dept（Eason 2026-10-11，只掛鼎兆元總部 dzy-hq）：fin 財務部、hr 人資部、it 資訊部、eng 工程部、franchise 加盟招商部、purchase 採購部、ops 營運部、training 訓練部、marketing 行銷部。墨竹亭總部、小辛辣總部沒有部門，部門欄不顯示、不必填。
 
 ### 4.3 `staff_log` 分頁（新，只追加）
 `at`（台北時間）、`emp_no`、`event`、`by`（同仁自助＝自己的 emp_no；後台＝操作者 users.id；登入前動作＝`self`）、`detail`。
@@ -153,7 +153,7 @@ pending／rejected／active --unclaim（後台，冒用時用）--> unclaimed（
 ### 6.3 後台（需 token＋`platform.staff`）
 | action | payload | 說明 |
 |---|---|---|
-| `staffList` | — | 全部 staff 列（含個資，不含 hash） |
+| `staffList` | — | 全部 staff 列（含個資，不含 hash）。三個分頁有任一不存在時，先在寫入鎖內跑一次 setupStaff（上線第一次由後台打開名單時自動初始化） |
 | `staffImport` | `{names:[...], preview:true/false }` | 依陣列順序從下一號起建 users＋staff 列（status unclaimed）。只擋「與現有 **unclaimed** 列同名」或「陣列內重複」（同名者無法用姓名認領）→ 整批拒絕、一筆不寫；與已認領／停用的人同名允許（日後新人可能同名）。`preview:true` 只回將建立的編號對照、不寫入。回 `{created:[{emp_no,name}]}` |
 | `staffAdd` | `{name}` | 單筆新增＝staffImport 一筆 |
 | `staffConfirm` | `{emp_no}` | p_* 搬進正式欄並清空；status pending→active；log `confirm`。前端確認鈕旁固定提示「確認前請打電話給本人核對」（防冒用的人工核對點，Fable 第 14 條） |
@@ -219,6 +219,17 @@ pending／rejected／active --unclaim（後台，冒用時用）--> unclaimed（
 - 回傳到前端的資料依 §6 各 action 限定欄位；`staffList` 只給 `platform.staff`。
 - 試算表本身只有 Eason 帳號可開（沿用平台現況）。
 - **平台層沒有 dryrun**（只有稽核模組自己有，Fable 第 2 條）。本案的演練方式＝匯入頁「預覽」（`preview:true`，後端不寫入），確認編號對照正確才按「建立」。
+
+## 8b. 上線前關（Fable 2026-10-11）後的修正
+1. users 有第 11 欄後 writeUsersRow_ 只寫前 10 欄（原本人員管理編輯會整個失敗）。
+2. 忘記密碼先驗新密碼規則，再比對生日手機（原本可當無聲探測器）。
+3. 全公司忘記密碼被鎖的風險：保留後台解鎖，首頁「同仁名單」會顯示被鎖人數。
+4. 限流改三桶（查詢／認領／忘記密碼）、固定 10 分鐘窗、被擋不計數。
+5. 系統帳號的 resetPassword、setActive 也寫 token_after。
+6. 匯入編號同時避開 users 已存在的 DZY 帳號。
+7. claimSubmit 先寫 staff 再寫密碼。
+9. setupStaff 遇到表頭不一致直接停，不覆寫。
+（第 8 條姓名可查是否在名單：規格已接受，不改。）
 
 ## 9. 不做（第一期）
 職稱→系統權限、表單簽核、通知推播、匯出、改打卡／佈告欄／薪資名單、跨店主管範圍、四碼編號。

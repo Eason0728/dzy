@@ -177,10 +177,10 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   ok(v({ title: 'hs' }) !== null, 'A2 門市單位選總部職稱 → 擋');
   ok(v({ unit: 'mzt-hq', title: 'hs' }) === null, 'A2 總部單位用總部職稱、沒有部門清單時不必選部門');
   ok(v({ unit: 'mzt-hq', title: 'hs', dept: 'x' }) !== null, 'A2 沒有部門清單時填了部門 → 擋');
-  sb.SpreadsheetApp.getActive().getSheetByName('org').appendRow(['dept', 'acct', '會計部', 'dzy-hq', '', '', 1, 'TRUE']);
-  const org2 = sb.stfReadOrg_();
-  ok(sb.stfValidateOrg_(org2, { brand: 'dzy', unit: 'dzy-hq', dept: '', title: 'hs' }) !== null, 'A2 有部門清單時部門必填');
-  ok(sb.stfValidateOrg_(org2, { brand: 'dzy', unit: 'dzy-hq', dept: 'acct', title: 'hs' }) === null, 'A2 有部門清單時選對部門通過');
+  ok(org.list.dept.length === 9 && org.list.dept.every((d) => d.parent === 'dzy-hq'), 'A2 預設九個部門、全部掛鼎兆元總部');
+  ok(v({ brand: 'dzy', unit: 'dzy-hq', dept: '', title: 'hs' }) !== null, 'A2 鼎兆元總部有部門清單 → 部門必填');
+  ok(v({ brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' }) === null, 'A2 鼎兆元總部選對部門通過');
+  ok(v({ brand: 'mala', unit: 'mala-hq', dept: '', title: 'hm' }) === null, 'A2 小辛辣總部沒有部門 → 不必選');
   ok(sb.stfValidateBirthday_('1995-02-30') !== null, 'A2 不存在的日期擋');
   ok(sb.stfValidateBirthday_('1995-02-28') === null, 'A2 正常生日通過');
   ok(sb.stfValidatePhone_('0911222333') === null && sb.stfValidatePhone_('0211222333') !== null, 'A2 手機 09 開頭 10 碼');
@@ -344,7 +344,7 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   for (let i = 0; i < 5; i++) post(sb, 'claimLookup', { name: '亂試的名字' });
   ok(post(sb, 'claimLookup', { name: '亂試的名字' }).error === '操作太頻繁，請稍後再試', 'A7 同一姓名查無 5 次 → 限流');
   ok(post(sb, 'claimLookup', { name: '測試丙' }).ok, 'A7 其他人不受影響');
-  cache.set('stf_global', { v: '600', exp: null });
+  cache.set('stf_g_lookup_' + Math.floor(Date.now() / 1000 / 600), { v: '600', exp: null });
   ok(post(sb, 'claimLookup', { name: '測試丙' }).error === '操作太頻繁，請稍後再試', 'A7 全域 600 上限');
 })();
 
@@ -365,6 +365,65 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   });
   ok(post(sb, 'nope', {}).error === '不支援的操作', 'A8 未知 action 照舊拒絕');
   ok(post(sb, 'orgOptions', {}).data.units.length === 13, 'A8 orgOptions 不需登入即可取得下拉');
+})();
+
+// ============================================================
+// A9 上線前關（Fable 2026-10-11）抓到的問題，各一個回歸測試
+// ============================================================
+(() => {
+  const { sb, sheets, cache } = fresh();
+  const tok = adminToken(sb);
+  // 第 1 條：setupStaff 加了第 11 欄後，人員管理編輯（含 admin → BOSS 改名）不能壞
+  const ed = post(sb, 'saveUser', { id: 'u002', username: 'acc1', name: '假會計改', role: 'accountant', node: '' }, tok);
+  ok(ed.ok, 'A9-1 跑過 setupStaff 後人員管理編輯仍正常', ed);
+  const rn = post(sb, 'saveUser', { id: 'u001', username: 'BOSS2', name: '系統管理者', role: 'admin', node: '' }, tok);
+  ok(rn.ok && sheets.users._rows()[1][1] === 'BOSS2', 'A9-1 系統管理員帳號可以改名');
+  post(sb, 'saveUser', { id: 'u001', username: 'BOSS', name: '系統管理者', role: 'admin', node: '' }, tok);
+  // 第 5 條：系統帳號重設密碼／停用再啟用，舊 token 失效
+  const accTok = post(sb, 'login', { username: 'acc1', password: 'fake-acc-pw-01' }).data.token;
+  post(sb, 'resetPassword', { id: 'u002', newPassword: 'fake-acc-pw-02' }, tok);
+  ok(post(sb, 'me', {}, accTok).ok === false, 'A9-5 admin 重設密碼後對方舊 token 失效');
+  const accTok2 = post(sb, 'login', { username: 'acc1', password: 'fake-acc-pw-02' }).data.token;
+  post(sb, 'setActive', { id: 'u002', active: false }, tok);
+  post(sb, 'setActive', { id: 'u002', active: true }, tok);
+  ok(post(sb, 'me', {}, accTok2).ok === false, 'A9-5 停用再啟用後舊 token 不復活');
+  // 第 6 條：人員管理手動建過 DZY 帳號 → 匯入不撞號
+  post(sb, 'saveUser', { username: 'DZY001', name: '手動建的', role: 'staff', node: '', password: 'manual-pw-123' }, tok);
+  const im = post(sb, 'staffImport', { names: ['測試甲'] }, tok);
+  ok(im.ok && im.data.created[0].emp_no === 'DZY002', 'A9-6 已有 DZY001 帳號 → 匯入從 DZY002 起', im);
+  ok(sheets.users._rows().filter((u) => u[1] === 'DZY002').length === 1, 'A9-6 users 沒有重複帳號');
+  // 第 2 條：生日手機對、密碼亂打 → 訊息不能跟「資料不符」不同到可以當探測器
+  const lk = post(sb, 'claimLookup', { name: '測試甲' });
+  post(sb, 'claimSubmit', Object.assign({ name: '測試甲', emp_no: lk.data.emp_no, password: 'fake-staff-pw-1' }, PROFILE));
+  const rightBadPw = post(sb, 'forgotReset', { emp_no: 'DZY002', birthday: '1995-05-05', phone: '0911222333', new_password: 'x' });
+  const wrongBadPw = post(sb, 'forgotReset', { emp_no: 'DZY002', birthday: '1990-01-01', phone: '0911222333', new_password: 'x' });
+  ok(rightBadPw.error === wrongBadPw.error, 'A9-2 密碼不合規時，生日手機對錯回一樣的訊息', [rightBadPw, wrongBadPw]);
+  // 第 4 條：三支各自一桶、被擋不計數
+  const win = Math.floor(Date.now() / 1000 / 600);
+  cache.set('stf_g_lookup_' + win, { v: '600', exp: null });
+  ok(post(sb, 'claimLookup', { name: '測試丙' }).error === '操作太頻繁，請稍後再試', 'A9-4 查詢桶滿了被擋');
+  ok(cache.get('stf_g_lookup_' + win).v === '600', 'A9-4 被擋的請求不再計數');
+  ok(post(sb, 'forgotReset', { emp_no: 'DZY002', birthday: '1995-05-05', phone: '0911222333', new_password: 'new-pw-99999' }).ok, 'A9-4 查詢被刷爆時忘記密碼照常可用');
+  // 第 9 條：表頭不一致 → 停，不覆寫
+  sheets.staff._data[0][2] = '姓名被人改過';
+  let threw = false;
+  try { sb.setupStaff(); } catch (e) { threw = /表頭與程式不一致/.test(e.message); }
+  ok(threw && sheets.staff._data[0][2] === '姓名被人改過', 'A9-9 表頭被改過 → setupStaff 停下、不覆寫');
+})();
+
+// A10 上線第一次：後台打開名單自動建分頁、upsert roles.staff
+(() => {
+  const { sb, sheets } = load(freshSeed(HASHER));
+  const tok = adminToken(sb);
+  ok(!sheets.staff, 'A10 開始時沒有 staff 分頁');
+  const r = post(sb, 'staffList', {}, tok);
+  ok(r.ok && r.data.staff.length === 0 && sheets.staff && sheets.org && sheets.staff_log, 'A10 後台第一次打開名單自動建三個分頁');
+  ok(sheets.roles._rows().find((x) => x[0] === 'staff')[2] === 'platform.self', 'A10 roles.staff 同時 upsert');
+  const acc = post(sb, 'login', { username: 'acc1', password: 'fake-acc-pw-01' }).data.token;
+  const { sb: sb2, sheets: sh2 } = load(freshSeed(HASHER));
+  const acc2 = post(sb2, 'login', { username: 'acc1', password: 'fake-acc-pw-01' }).data.token;
+  post(sb2, 'staffList', {}, acc2);
+  ok(!sh2.staff, 'A10 沒權限的人呼叫不會觸發建表');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

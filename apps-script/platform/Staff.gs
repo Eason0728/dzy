@@ -282,9 +282,17 @@ function stfCacheIncr_(key, ttl) {
 }
 function stfCacheGet_(key) { return Number(CacheService.getScriptCache().get(key) || 0); }
 
-/** 全域保險上限：只防腳本洪水。超過回 true（要擋） */
-function stfGlobalFlood_() {
-  return stfCacheIncr_('stf_global', STF_GLOBAL_WINDOW) > STF_GLOBAL_LIMIT;
+/**
+ * 全域保險上限：只防腳本洪水。超過回 true（要擋）。
+ * 三支各自一桶（有人刷 claimLookup 不會連忘記密碼一起癱瘓），用固定 10 分鐘窗（key 帶窗號，
+ * 不會因為每次 put 重設 TTL 而把視窗無限延長），被擋的請求不再計數（Fable 上線前審第 4 條）。
+ */
+function stfGlobalFlood_(bucket) {
+  var win = Math.floor(stfNowSec_() / STF_GLOBAL_WINDOW);
+  var key = 'stf_g_' + bucket + '_' + win;
+  if (stfCacheGet_(key) >= STF_GLOBAL_LIMIT) return true;
+  stfCacheIncr_(key, STF_GLOBAL_WINDOW + 60);
+  return false;
 }
 
 // ============================================================
@@ -298,7 +306,7 @@ function stfUnclaimedByName_(name) {
 }
 
 function handleClaimLookup_(payload) {
-  if (stfGlobalFlood_()) return { ok: false, error: STF_MSG.TOO_MANY };
+  if (stfGlobalFlood_('lookup')) return { ok: false, error: STF_MSG.TOO_MANY };
   var name = stfStr_(payload && payload.name);
   if (!name) return { ok: false, error: '請輸入全名' };
   var missKey = 'stf_miss_' + name;
@@ -326,7 +334,7 @@ function stfCleanProfile_(payload, org, needPrivate) {
 }
 
 function handleClaimSubmit_(payload) {
-  if (stfGlobalFlood_()) return { ok: false, error: STF_MSG.TOO_MANY };
+  if (stfGlobalFlood_('submit')) return { ok: false, error: STF_MSG.TOO_MANY };
   payload = payload || {};
   var name = stfStr_(payload.name);
   var empNo = stfNormEmp_(payload.emp_no);
@@ -347,11 +355,8 @@ function handleClaimSubmit_(payload) {
   var userRow = findUsrRowById_(stfStr_(hit.values[STF_COL.user_id]));
   if (!userRow) return { ok: false, error: STF_MSG.NOT_FOUND };
 
-  // users：設密碼（active 維持 TRUE）
-  var salt = Utilities.getUuid();
-  var usersSheet = stfSheet_(USR_SHEET_USERS);
-  usersSheet.getRange(userRow.row, USR_COL.salt + 1, 1, 2).setValues([[salt, hashPassword_(password, salt)]]);
-
+  // 寫入順序：先 staff 再 users 密碼（Fable 上線前審第 7 條）。中途失敗時最多留下「staff 已 pending、
+  // 還沒有密碼」——登不進去也不能再認領，後台「撤回認領」即可復原；反過來會留下能登入的半套帳號。
   // staff：組織四欄寫 p_*，個資寫正式欄
   var v = hit.values.slice();
   var now = stfNowText_();
@@ -364,6 +369,9 @@ function handleClaimSubmit_(payload) {
   v[STF_COL.claimed_at] = now;
   v[STF_COL.updated_at] = now;
   stfWriteRow_(STF_SHEET, hit.row, v, STF_COL_COUNT);
+  // users：設密碼（active 維持 TRUE）
+  var salt = Utilities.getUuid();
+  stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.salt + 1, 1, 2).setValues([[salt, hashPassword_(password, salt)]]);
   stfLog_(empNo, 'claim', 'self', '');
   writeLoginLog_(empNo, '', AUTH_LOG_OK);
 
@@ -390,9 +398,14 @@ function stfIssueSession_(userRow) {
 // ============================================================
 
 function handleForgotReset_(payload) {
-  if (stfGlobalFlood_()) return { ok: false, error: STF_MSG.TOO_MANY };
+  if (stfGlobalFlood_('forgot')) return { ok: false, error: STF_MSG.TOO_MANY };
   payload = payload || {};
   var empNo = stfNormEmp_(payload.emp_no);
+  // 新密碼規則先驗：它只看呼叫者自己的輸入，不洩漏任何資料。放在比對之後的話，
+  // 「生日手機對了、密碼故意亂打」會回不同訊息又不留紀錄，變成無聲確認個資的探測器（Fable 上線前審第 2 條）
+  var newPwFirst = payload.new_password === undefined || payload.new_password === null ? '' : String(payload.new_password);
+  var pwErrFirst = stfValidatePassword_(newPwFirst, empNo);
+  if (pwErrFirst) return { ok: false, error: pwErrFirst };
   var hit = STF_EMP_RE.test(empNo) ? stfFindByEmp_(empNo) : null;
   var status = hit ? stfStr_(hit.values[STF_COL.status]) : '';
   if (!hit || status === 'unclaimed' || status === 'disabled') return { ok: false, error: STF_MSG.RESET_MISMATCH };
@@ -429,10 +442,6 @@ function handleForgotReset_(payload) {
     stfWriteRow_(STF_SHEET, hit.row, v, STF_COL_COUNT);
     return { ok: false, error: STF_MSG.RESET_MISMATCH };
   }
-
-  // 生日手機都對才檢查新密碼（避免用密碼規則錯誤訊息當成「前兩欄對了」的探測訊號）
-  var pwErr = stfValidatePassword_(newPw, empNo);
-  if (pwErr) return { ok: false, error: pwErr };
 
   var userRow = findUsrRowById_(stfStr_(v[STF_COL.user_id]));
   if (!userRow) return { ok: false, error: STF_MSG.RESET_MISMATCH };
@@ -538,12 +547,15 @@ function handleMyUnit_(token) {
 // 8. 後台（§6.3）
 // ============================================================
 
+/** 現有最大編號：staff 與 users 兩邊都掃（有人在人員管理手動建過 DZY 帳號也不會撞號，Fable 上線前審第 6 條） */
 function stfMaxEmpNum_() {
   var max = 0;
-  stfAllRows_().forEach(function (r) {
-    var m = /^DZY([0-9]{3})$/.exec(stfNormEmp_(r.values[STF_COL.emp_no]));
+  var take = function (v) {
+    var m = /^DZY([0-9]{3})$/.exec(stfNormEmp_(v));
     if (m && +m[1] > max) max = +m[1];
-  });
+  };
+  stfAllRows_().forEach(function (r) { take(r.values[STF_COL.emp_no]); });
+  readUsersRawRows_().forEach(function (r) { take(r[USR_COL.username]); });
   return max;
 }
 function stfEmpOf_(n) { var s = String(n); while (s.length < 3) s = '0' + s; return 'DZY' + s; }
@@ -551,6 +563,12 @@ function stfEmpOf_(n) { var s = String(n); while (s.length < 3) s = '0' + s; ret
 function handleStaffList_(token) {
   var auth = stfRequire_(token, 'platform.staff');
   if (!auth.ok) return auth;
+  // 上線第一次由後台打開名單時自動建分頁（只補不覆蓋，見 setupStaff），不必進 Apps Script 編輯器手動跑
+  if (!stfSheet_(STF_SHEET) || !stfSheet_(STF_SHEET_ORG) || !stfSheet_(STF_SHEET_LOG)) {
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(20000)) return { ok: false, error: '系統忙碌中，請稍後再試' };
+    try { setupStaff(); } finally { lock.releaseLock(); }
+  }
   var org = stfReadOrg_();
   return { ok: true, data: { staff: stfAllRows_().map(function (r) { return stfToObj_(r.values, org, true); }) } };
 }
@@ -571,6 +589,8 @@ function handleStaffImport_(token, payload) {
   var start = stfMaxEmpNum_() + 1;
   if (start + names.length - 1 > 999) return { ok: false, error: STF_MSG.FULL };
   var created = names.map(function (n, i) { return { emp_no: stfEmpOf_(start + i), name: n }; });
+  var taken = created.filter(function (c) { return findUsrRowByUsername_(c.emp_no); });
+  if (taken.length) return { ok: false, error: '這些編號已經有帳號：' + taken.map(function (c) { return c.emp_no; }).join('、') };
   if (payload.preview === true) return { ok: true, data: { created: created, preview: true } };
 
   // 一次寫完（113 筆逐列寫會頂到前端 45 秒逾時）：users、staff、staff_log 各一次 setValues
@@ -788,13 +808,29 @@ var STF_DEFAULT_ORG = [
   ['title', 'hm', '部門主管', 'hq', '', 2, 2, 'TRUE'],
   ['title', 'ceo', '執行長', 'hq', '', 3, 3, 'TRUE'],
   ['title', 'gm', '總經理', 'hq', '', 4, 4, 'TRUE'],
-  ['title', 'chair', '董事長', 'hq', '', 5, 5, 'TRUE']
+  ['title', 'chair', '董事長', 'hq', '', 5, 5, 'TRUE'],
+  // 部門只掛在鼎兆元總部（Eason 2026-10-11）；墨竹亭總部、小辛辣總部沒有部門，同仁不必選
+  ['dept', 'fin', '財務部', 'dzy-hq', '', '', 1, 'TRUE'],
+  ['dept', 'hr', '人資部', 'dzy-hq', '', '', 2, 'TRUE'],
+  ['dept', 'it', '資訊部', 'dzy-hq', '', '', 3, 'TRUE'],
+  ['dept', 'eng', '工程部', 'dzy-hq', '', '', 4, 'TRUE'],
+  ['dept', 'franchise', '加盟招商部', 'dzy-hq', '', '', 5, 'TRUE'],
+  ['dept', 'purchase', '採購部', 'dzy-hq', '', '', 6, 'TRUE'],
+  ['dept', 'ops', '營運部', 'dzy-hq', '', '', 7, 'TRUE'],
+  ['dept', 'training', '訓練部', 'dzy-hq', '', '', 8, 'TRUE'],
+  ['dept', 'marketing', '行銷部', 'dzy-hq', '', '', 9, 'TRUE']
 ];
 
 function stfEnsureSheet_(ss, name, headers, defaults) {
   var sh = ss.getSheetByName(name);
   if (!sh) sh = ss.insertSheet(name);
-  sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+  // 已有表頭就比對，不一樣直接停（Fable 上線前審第 9 條：無條件覆寫會讓資料與表頭錯位且沒有任何警告）
+  var existing = sh.getRange(1, 1, 1, headers.length).getValues()[0].map(function (v) { return String(v).trim(); });
+  var empty = existing.every(function (v) { return v === ''; });
+  if (!empty && existing.join('|') !== headers.join('|')) {
+    throw new Error('分頁「' + name + '」的表頭與程式不一致，停止初始化以免資料錯位：' + existing.join(','));
+  }
+  if (empty) sh.getRange(1, 1, 1, headers.length).setValues([headers]);
   if (sh.getLastRow() <= 1 && defaults && defaults.length) {
     sh.getRange(2, 1, defaults.length, headers.length).setValues(defaults);
   }

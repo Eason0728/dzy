@@ -138,7 +138,12 @@ function appendUsersRow_(rowValues) {
 
 function writeUsersRow_(rowNumber, rowValues) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
-  sheet.getRange(rowNumber, 1, 1, USR_COL_COUNT).setValues([rowValues]);
+  // 只寫前 10 欄：2026-10-11 users 多了第 11 欄 token_after，讀回來的列是 11 欄，
+  // 原樣 setValues 到 10 欄的範圍會尺寸不符直接丟錯（Fable 上線前審第 1 條：人員管理編輯全壞）；
+  // 截到 10 欄也剛好不會蓋掉 token_after
+  var out = rowValues.slice(0, USR_COL_COUNT);
+  while (out.length < USR_COL_COUNT) out.push('');
+  sheet.getRange(rowNumber, 1, 1, USR_COL_COUNT).setValues([out]);
 }
 
 // ============================================================
@@ -259,6 +264,8 @@ function handleSetActive_(token, payload) {
 
   var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
   sheet.getRange(found.row, USR_COL.active + 1).setValue(payload.active ? 'TRUE' : 'FALSE');
+  // 停用再啟用後，停用前簽的舊 token 不得復活（Fable 上線前審第 5 條）
+  setTokenAfter_(found.row);
 
   return { ok: true, data: {} };
 }
@@ -287,6 +294,8 @@ function handleResetPassword_(token, payload) {
 
   var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
   sheet.getRange(found.row, USR_COL.salt + 1, 1, 2).setValues([[newSalt, newHash]]);
+  // admin 幫人重設密碼後，對方所有舊登入失效（Fable 上線前審第 5 條）
+  setTokenAfter_(found.row);
 
   return { ok: true, data: {} };
 }
