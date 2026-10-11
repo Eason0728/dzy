@@ -1,0 +1,221 @@
+# 規格：個人帳號管理（第一期）
+
+版本：v2 / 2026-10-11（v1 經 Fable 對抗性設計審 15 條，全部處理；GPT 設計審因 Codex 額度用完未跑）
+上游：`docs/personnel/requirements.md`（2026-10-11 Eason 確認，六題照建議）
+平台既有契約：`docs/spec.md`（以下稱「平台 spec」）。本文件只寫**新增與變動**；沒寫到的照平台 spec。
+
+## 0. 定案摘要（requirements 第 7 節六題，Eason 2026-10-11「照建議」）
+1. 央廚用門市職級。
+2. 墨竹亭總部、小辛辣總部、鼎兆元總部用總部職級。
+3. 總部單位多一個「部門」下拉（部門清單待 Eason 提供，先放 org 分頁、可隨時加，不必改程式）。
+4. 每人只填一個主要單位。
+5. 沒到職日的 11 人這次不編；日後從下一號往後接，不插隊。
+6. 只有暱稱的 9 人先用現有名字建檔，日後後台改姓名（編號不變）。
+
+## 1. 架構與落點
+- 全部在既有平台：前端 `~/dzy`（GitHub Pages），後端 `apps-script/platform`（同一支 Apps Script、同一個部署 ID，
+  只 `create-version`＋`update-deployment`，**絕不 create-deployment**）。
+- 同仁登入帳號放既有 `users` 分頁（沿用 login／me／token／鎖定機制），個人資料放新分頁 `staff`，以 `user_id` 對應。
+- 新增兩個前端模組（registry 各加一行）＋兩個登入前畫面（平台層，屬登入流程，不是模組）：
+
+| 名稱 | 類型 | 檔案 | 誰看得到 |
+|---|---|---|---|
+| 我的資料 | 模組 `me` | `modules/me/` | 有 `platform.self`（同仁） |
+| 同仁名單 | 模組 `staff` | `modules/staff/` | 有 `platform.staff`（後台；admin 的 `*` 涵蓋） |
+| 第一次使用 | 平台畫面 | `platform/views/claim.js` | 未登入 |
+| 忘記密碼 | 平台畫面 | `platform/views/forgot.js` | 未登入 |
+
+- 既有「人員管理」模組（users）不改行為；只在列表**排除** role＝`staff` 的列（同仁改在「同仁名單」管），避免 113 列擠進系統帳號清單。
+
+## 2. 權限與角色（平台 spec §4.2／§4.3 的增補）
+| 權限碼 | 意思 |
+|---|---|
+| `platform.self` | 看／改自己的個人資料；店長以上另可看自己單位通訊錄（見 §6.4） |
+| `platform.staff` | 同仁名單後台：匯入、新增、確認、退回、停用、解鎖、改資料 |
+
+- 同仁帳號一律 role＝`staff`（平台 spec 已保留此代號）；roles 分頁 `staff` 那列 perms 由空字串改為 `platform.self`。
+- `node` 一律空字串（第一期不做店別權限；第二期依職稱對應時再定）。
+- **第一期職稱不影響任何系統權限**（第二期才做），唯一例外是 §6.4 單位通訊錄。
+
+## 3. 編號與帳號
+- 編號格式（逐字元）：`^DZY[0-9]{3}$`，例 `DZY001`。存在 `users.username` 與 `staff.emp_no`，**一律大寫**。
+- 登入時：handleLogin_ **第一行**就把 trim 後符合 `/^dzy[0-9]{3}$/i` 的輸入轉大寫，之後鎖定計數、login_log、比對全部用轉好的值（否則 dzy001／DZY001 各算各的鎖定）。其他帳號（admin 等）維持原本「原樣比對」，不改既有行為。
+- 編號只增不減：下一號＝現有最大號＋1（含停用者）。到 `DZY999` 後拒絕新增並提示（屆時再議四碼）。
+- `users.id` 照平台既有規則 `u` 開頭流水號（由 Users.gs 既有產號函式產生），與編號無關。
+
+## 4. 資料（Google 試算表，平台既有那本）
+### 4.1 `staff` 分頁（新）
+| 欄 | 名稱 | 說明 |
+|---|---|---|
+| A | emp_no | `DZY001`，唯一 |
+| B | user_id | 對應 users.id |
+| C | name | 全名（後台可改；第一次使用比對用） |
+| D | status | `unclaimed`／`pending`／`active`／`rejected`／`disabled`（逐字元，只有這五種） |
+| E | brand | 已確認的品牌代號（見 §4.2） |
+| F | unit | 已確認的單位代號 |
+| G | dept | 已確認的部門代號（非總部單位為空） |
+| H | title | 已確認的職稱代號 |
+| I | p_brand | 待確認的品牌（沒有待確認＝空） |
+| J | p_unit | 待確認的單位 |
+| K | p_dept | 待確認的部門 |
+| L | p_title | 待確認的職稱 |
+| M | birthday | `YYYY-MM-DD`（純文字格式，防 Google 自動轉日期） |
+| N | phone | `09` 開頭 10 碼（純文字，防前導 0 被吃） |
+
+**純文字保證（v2）**：每次寫 staff 列前，先對那一列 `setNumberFormat('@')` 再 `setValues`（不用 appendRow，新列不一定繼承欄格式）。
+讀出比對前一律正規化：phone 若是數字 → 左補 0 到 10 碼；birthday 若是 Date 物件 → 用台北時區轉 `YYYY-MM-DD`。
+| O | address | 文字 |
+| P | reject_reason | 退回原因（重送時清空） |
+| Q | reset_fail | 忘記密碼連續失敗次數（數字） |
+| R | reset_locked | `TRUE`／空 |
+| S | claimed_at | 台北時間 `YYYY-MM-DD HH:mm:ss` |
+| T | confirmed_at | 同上 |
+| U | updated_at | 同上 |
+| V | prev_status | 停用前的狀態（disable 時寫入、enable 時讀回並清空） |
+| W | reset_lock_until | 忘記密碼時間鎖到期（Unix 秒；空＝沒鎖） |
+| X | reset_lock_count | 24 小時內被時間鎖的次數（達 3 次改成 reset_locked＝TRUE，要後台解） |
+
+### 4.1b `users` 分頁加一欄（v2，Fable 第 1 條）
+- 第 K 欄 `token_after`（Unix 秒，空＝不限）。token payload 加 `i`（簽發時間，Unix 秒）。
+- 驗 token 的共用函式（handleMe_ 與所有需要 token 的新 action 都經過它）：簽章＋到期＋users.active＋`i >= token_after`；舊 token 沒有 `i` 視為 0（只要該帳號從沒設過 token_after 就照常通過，既有帳號不受影響）。
+- 寫 token_after＝現在：staffUnclaim、forgotReset 成功、staffSetActive 停用、changePassword 成功（本人改密碼後，其他裝置上的舊登入一併失效）。
+- 防的情境：冒用者認領拿到 7 天 token，後台撤回後真人重新認領，冒用者用舊 token 讀到真人個資。
+
+### 4.2 `org` 分頁（新，下拉選單正本，改這張不必改程式）
+| 欄 | 名稱 | 說明 |
+|---|---|---|
+| A | kind | `brand`／`unit`／`dept`／`title` |
+| B | code | 代號，`^[a-z][a-z0-9-]{1,23}$` |
+| C | name | 顯示名稱 |
+| D | parent | unit→所屬 brand code；dept→所屬 unit code；title→所屬 ladder（`store`／`hq`） |
+| E | ladder | 只有 unit 填：該單位用哪套職級 `store`／`hq` |
+| F | rank | 只有 title 填：職級數字，越大越高 |
+| G | order | 下拉顯示順序 |
+| H | active | `TRUE`／`FALSE`（停用的選項不出現在下拉，但舊資料照常顯示名稱） |
+
+預設內容（Setup 時寫入）：
+- brand：`mzt` 墨竹亭、`mala` 麻的小辛辣、`yiwu` 一悟燒肉、`ck` 央廚、`dzy` 鼎兆元總部
+- unit（parent／ladder）：mzt-js 新竹金山、mzt-gf 新竹光復、mzt-lzl 台北六張犁、mzt-wx 台中文心、mzt-rg 內湖瑞光、mzt-mc 台中美村、mzt-hq 墨竹亭總部(hq)；
+  mala-gf 新竹光復、mala-hq 小辛辣總部(hq)；yiwu-js 新竹金山、yiwu-wx 竹北文興；ck 央廚(store)；dzy-hq 鼎兆元總部(hq)。其餘 ladder＝store。
+- title store：pt 計時同仁(1)、ft 正職同仁(2)、sm 店長(3)、am 區經理(4)、sv 督導(5)、bd 品牌總監(6)
+- title hq：hs 部門同仁(1)、hm 部門主管(2)、ceo 執行長(3)、gm 總經理(4)、chair 董事長(5)
+- dept：**空，等 Eason 給清單**。總部單位在 dept 清單為空時，部門欄不顯示、不必填。
+
+### 4.3 `staff_log` 分頁（新，只追加）
+`at`（台北時間）、`emp_no`、`event`、`by`（同仁自助＝自己的 emp_no；後台＝操作者 users.id；登入前動作＝`self`）、`detail`。
+event 逐字元：`import`、`add`、`claim`、`resubmit`、`profile_edit`、`confirm`、`reject`、`disable`、`enable`、`unclaim`、`reset_ok`、`reset_fail`、`reset_timelock`、`reset_locked`、`reset_unlock`、`admin_edit`。
+**detail 不得寫生日、手機、地址、密碼**（只寫欄位名稱，例如「改了：phone,address」）。之後通知機器人讀這張。
+
+## 5. 狀態機
+```
+unclaimed --claim--> pending --confirm--> active
+pending --reject--> rejected --resubmit--> pending
+active --改品牌/單位/部門/職稱--> active（p_* 有值＝待確認變更）--confirm--> active（p_* 搬進正式欄）
+                                                            --reject--> active（p_* 清空，填 reject_reason）
+任何狀態 --disable--> disabled（prev_status＝原狀態）--enable--> prev_status（清空 prev_status）
+pending／rejected／active --unclaim（後台，冒用時用）--> unclaimed（清密碼、清個資、保留編號與姓名）
+```
+- users.active：unclaimed＝TRUE 但 hash 空；pending／rejected／active＝TRUE；disabled＝FALSE。
+- 登入時 hash 空 → 回「這個編號還沒開通，請按「第一次使用」」，**照樣計入鎖定次數**（不然可以無限試出哪些編號還沒人認領）。
+- 首頁待辦（staff 模組 alerts）：pending 的人數＋active 有 p_* 的人數，各一列。
+
+## 6. API（平台後端 doPost 新增 action；回傳形狀照平台 spec §4.8）
+### 6.1 登入前（不需 token）
+| action | payload | 成功回傳 | 規則 |
+|---|---|---|---|
+| `orgOptions` | — | `{brands,units,depts,titles}`（只含 active） | 下拉用 |
+| `claimLookup` | `{name}` | `{emp_no}` | name trim 後**完全相等**、status＝unclaimed 才回。查不到回「名單上找不到這個名字，請找後台」；已認領回「這個名字已經開通，請用編號登入」。不回任何其他欄位 |
+| `claimSubmit` | `{name, emp_no, password, brand, unit, dept, title, birthday, phone, address}` | 同 login 回傳（token…） | name＋emp_no 必須對上同一列且仍是 unclaimed；欄位驗證見 §6.5；寫 hash、p_* 欄、個資，status→pending，log `claim` |
+| `forgotReset` | `{emp_no, birthday, phone, new_password}` | `{}` | 見 §6.6 |
+
+登入前 action 防濫用（v2，Fable 第 4 條：Apps Script 拿不到來源 IP，全域小額度會讓上線當天 113 人同時認領被自己擋掉，也讓任何人能刷爆它癱瘓全公司）：
+- 不做全域小額度。`claimLookup` 查無姓名時，對「該姓名」計數，同一姓名 10 分鐘內查無 5 次 → 該姓名 10 分鐘內一律回「操作太頻繁」。
+- 全域保險上限：三支登入前 action 合計每 10 分鐘 600 次（只防腳本洪水，正常上線日用不到）。
+- `claimSubmit` 必須 name＋emp_no 同時對上 unclaimed 列，本身不需額外限流。
+- `forgotReset` 的防線見 §6.6。
+- claimSubmit 成功、forgotReset 成功各補寫一筆 login_log（result 分別為 `ok`），讓日後通知機器人只讀一張表也不會漏。
+
+### 6.2 同仁（需 token＋`platform.self`）
+| action | payload | 回傳 |
+|---|---|---|
+| `myProfile` | — | 自己的 staff 列（不含 reset_* 欄）＋各代號的顯示名稱 |
+| `saveMyProfile` | `{brand,unit,dept,title,phone,address}` | 更新後的 myProfile |
+
+- pending／rejected：四個組織欄直接寫 p_*（rejected 送出→pending，清 reject_reason，log `resubmit`）。
+- active：組織欄與正式值不同才寫 p_*；手機／地址直接生效。log `profile_edit`。
+- 生日與姓名本人不能改（payload 帶了也忽略）。
+- 身分只認 token（payload 夾帶 user_id／emp_no 一律忽略，同 changePassword 的防線）。
+- 呼叫者沒有 staff 列（admin、會計等系統帳號；admin 的 `*` 會讓它看到「我的資料」）→ myProfile 回 `{none:true}`，me 模組顯示「這是系統帳號，沒有個人資料」；alerts 回空陣列（不顯示「暫時讀不到」）。
+
+### 6.3 後台（需 token＋`platform.staff`）
+| action | payload | 說明 |
+|---|---|---|
+| `staffList` | — | 全部 staff 列（含個資，不含 hash） |
+| `staffImport` | `{names:[...], preview:true/false }` | 依陣列順序從下一號起建 users＋staff 列（status unclaimed）。只擋「與現有 **unclaimed** 列同名」或「陣列內重複」（同名者無法用姓名認領）→ 整批拒絕、一筆不寫；與已認領／停用的人同名允許（日後新人可能同名）。`preview:true` 只回將建立的編號對照、不寫入。回 `{created:[{emp_no,name}]}` |
+| `staffAdd` | `{name}` | 單筆新增＝staffImport 一筆 |
+| `staffConfirm` | `{emp_no}` | p_* 搬進正式欄並清空；status pending→active；log `confirm`。前端確認鈕旁固定提示「確認前請打電話給本人核對」（防冒用的人工核對點，Fable 第 14 條） |
+| `staffReject` | `{emp_no, reason}` | reason 必填；pending→rejected；active 則只清 p_*；log `reject` |
+| `staffSetActive` | `{emp_no, active}` | 停用／啟用（同步 users.active）；log `disable`／`enable` |
+| `staffUnclaim` | `{emp_no}` | 冒用處理，見 §5 |
+| `staffUnlockReset` | `{emp_no}` | reset_fail＝0、reset_locked 空、reset_lock_until 空、reset_lock_count＝0；log `reset_unlock` |
+| `staffEdit` | `{emp_no, name?, birthday?, brand?, unit?, dept?, title?, phone?, address?}` | 後台直接改正式欄；改 name 同步 users.name；log `admin_edit`（只記欄位名） |
+
+### 6.4 單位通訊錄（需 token＋`platform.self`）
+`myUnit` → 呼叫者 status＝active 且職級達門檻（store 職級 rank≥3 店長；hq 職級 rank≥2 部門主管）才回
+同單位（總部單位且有部門時＝同單位同部門）、status＝active 的同仁：`emp_no,name,title,phone`；其他人回「只有店長以上可以看」。
+**不回生日、地址。** 區經理以上第一期也只看自己單位（跨店範圍第二期定）。
+
+### 6.5 欄位驗證（前後端同一套，後端為準）
+- password：8 字元以上；不得等於 emp_no（不分大小寫）。
+- brand／unit／dept／title：必須是 org 中 active 的代號；unit.parent＝brand；title.parent＝unit.ladder；
+  unit 是 hq 且該 unit 有 active dept 時 dept 必填且 dept.parent＝unit，否則 dept 必須空。
+- birthday：`YYYY-MM-DD`，真實存在的日期，年齡 15～80 歲。
+- phone：`^09[0-9]{8}$`（前端自動去掉空白與連字號）。
+- address：trim 後 5～100 字。
+- 錯誤一律回「哪一欄、怎麼改」的白話訊息。
+
+### 6.6 忘記密碼（v2：改成時間鎖，Fable 第 11 條）
+1. emp_no 轉大寫找 staff 列；不存在、unclaimed、disabled → 一律回「資料不符，請確認或找後台」（不透露哪一種）。
+2. reset_locked＝TRUE → 回「忘記密碼已鎖住，請找後台解鎖」。reset_lock_until 未到 → 回「錯太多次，請 1 小時後再試，或找後台」。
+3. birthday、phone 都相符 → 寫新 hash（新 salt）、token_after＝現在、清 reset_fail 與時間鎖、清該帳號登入鎖定，log `reset_ok`＋login_log。
+4. 不符 → reset_fail+1、log `reset_fail`；達 5 → reset_fail 歸零、reset_lock_until＝現在+1 小時、reset_lock_count+1、log `reset_timelock`；
+   24 小時內第 3 次時間鎖 → reset_locked＝TRUE、log `reset_locked`。回「資料不符」，**不回剩餘次數**。
+5. 新密碼規則同 §6.5。
+- 為什麼改：requirements 原寫「連錯 5 次就鎖、要後台解」，但編號是連號，任何人對 DZY001～113 各打 5 次就能把全公司忘記密碼鎖死。改成先鎖 1 小時、一天被鎖 3 次才要後台解。
+- 已知風險（requirements 已告知 Eason）：知道生日＋手機的人可重設。緩解＝時間鎖、全程留紀錄、重設後其他裝置登入失效、通知機器人讀 `reset_ok` 通知本人（機器人另案）。
+
+### 6.7 寫入鎖
+所有會寫試算表的新 action（claimSubmit、forgotReset、saveMyProfile、staff* 寫入類）加進 Code.gs 的 MUTATING_ACTIONS，走既有 LockService。
+
+## 7. 前端
+### 7.1 登入頁（`platform/views/login.js`）
+帳號欄提示改「DZY 編號或系統帳號」；表單下方加兩個連結：「第一次使用」「忘記密碼」→ 由 login.js 自己切畫面（同一個登入背景版型）。
+用 hash `#/claim`、`#/forgot`：login.js 開機時讀 hash 決定顯示哪個畫面；shell 把 `claim`、`forgot` 列為保留字（不當模組 id、manifest-check 也擋這兩個 id）。認領成功後先清掉 hash 再呼叫 onSuccess，避免登入後 route() 把 `claim` 當模組找不到而跳「沒有權限」。
+
+### 7.2 第一次使用（`platform/views/claim.js`）三步
+1. 輸入全名 → `claimLookup`。
+2. 顯示「你的編號是 DZY0xx」＋設密碼兩次＋個人資料表單（品牌→單位→部門→職稱連動）。
+3. 送出 `claimSubmit` → 成功即登入，進首頁（只會看到「我的資料」）。頂端顯示「資料已送出，等後台確認」。
+
+### 7.3 忘記密碼（`platform/views/forgot.js`）
+編號、生日、手機、新密碼兩次 → `forgotReset` → 成功回登入頁並帶入編號。
+
+### 7.4 模組 `me`（我的資料）
+- 分頁 `profile`：顯示狀態（待確認／已退回＋原因／已確認／有變更待確認）、正式值與待確認值並列、可編輯欄位。
+- 分頁 `unit`：單位通訊錄（不夠職級時顯示說明，不報錯）。
+- alerts：rejected → 一列紅「資料被退回：原因」；pending → 一列黃「等後台確認」。
+
+### 7.5 模組 `staff`（同仁名單，後台）
+- 分頁 `list`：表格（編號、姓名、品牌、單位、職稱、狀態、待確認變更），搜尋、篩選；每列動作依狀態出現。
+  個資欄預設收合，點「顯示個資」才展開（防旁人偷看螢幕）。
+- 分頁 `import`：貼上姓名（一行一個，照順序）→ 預覽「將建立 DZY001～DZY113」→ 確認才送出。
+- alerts：「N 位同仁待確認開通」「N 位同仁有資料變更待確認」。
+
+## 8. 個資與安全
+- 姓名名單、個資**不進 repo**（dzy 是 public repo）：名單只經後台「匯入」頁貼上進試算表；測試一律假名。
+- 回傳到前端的資料依 §6 各 action 限定欄位；`staffList` 只給 `platform.staff`。
+- 試算表本身只有 Eason 帳號可開（沿用平台現況）。
+- **平台層沒有 dryrun**（只有稽核模組自己有，Fable 第 2 條）。本案的演練方式＝匯入頁「預覽」（`preview:true`，後端不寫入），確認編號對照正確才按「建立」。
+
+## 9. 不做（第一期）
+職稱→系統權限、表單簽核、通知推播、匯出、改打卡／佈告欄／薪資名單、跨店主管範圍、四碼編號。

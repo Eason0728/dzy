@@ -1,0 +1,144 @@
+<title>個人帳號管理規格</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* 版型：單欄文件，左側深色編號條呼應管理系統側邊欄；黃色＝要你決定的地方 */
+:root{
+  --bg:#faf8f6; --card:#ffffff; --ink:#231815; --soft:#5d554f; --muted:#8a817a; --line:#e6e0da;
+  --side:#1b1917; --side-ink:#f3eee8; --gold:#FABE00; --gold-soft:#fff6d6; --red:#c8402c; --red-soft:#fbe9e6; --ok:#2f6b3a; --ok-soft:#e8f2ea;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#161413; --card:#1f1c1a; --ink:#f1ebe5; --soft:#c9c0b8; --muted:#958b82; --line:#34302c;
+  --side:#0e0d0c; --side-ink:#f3eee8; --gold:#f5c22b; --gold-soft:#3a2f0e; --red:#ef7a64; --red-soft:#3a1f1a; --ok:#8fc19c; --ok-soft:#1d2a20; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161413; --card:#1f1c1a; --ink:#f1ebe5; --soft:#c9c0b8; --muted:#958b82; --line:#34302c;
+  --side:#0e0d0c; --side-ink:#f3eee8; --gold:#f5c22b; --gold-soft:#3a2f0e; --red:#ef7a64; --red-soft:#3a1f1a; --ok:#8fc19c; --ok-soft:#1d2a20; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.75;margin:0}
+.wrap{max-width:46rem;margin:0 auto;padding-inline:16px;padding-block:2.2rem 4rem}
+header{background:var(--side);color:var(--side-ink);border-radius:14px;padding:1.4rem 1.4rem 1.3rem}
+.eyebrow{font-size:.78rem;letter-spacing:.14em;color:var(--gold);font-weight:700}
+h1{font-size:clamp(1.6rem,5vw,2.1rem);font-weight:900;margin:.3rem 0 .5rem;line-height:1.25;text-wrap:balance}
+header p{margin:0;color:#cfc6bd}
+.id{font-family:var(--mono);font-weight:700;background:var(--gold);color:#231815;border-radius:6px;padding:0 .4em;white-space:nowrap}
+section{margin-top:2.4rem}
+h2{font-size:1.25rem;font-weight:900;margin:0 0 .8rem;text-wrap:balance}
+h2 small{font-size:.8rem;font-weight:500;color:var(--muted);margin-left:.4rem}
+p{margin:0 0 .8rem}
+.phases{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ph{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.8rem .9rem;min-width:0}
+.ph.now{border:2px solid var(--gold)}
+.ph b{display:block;font-size:.85rem;color:var(--muted)}
+.ph.now b{color:var(--ink)}
+.ph span{font-weight:700;font-size:.95rem}
+ol.flow{list-style:none;margin:0;padding:0;display:grid;gap:8px;counter-reset:s}
+ol.flow li{counter-increment:s;display:grid;grid-template-columns:2rem 1fr;gap:.6rem;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;align-items:start}
+ol.flow li::before{content:counter(s);width:1.7rem;height:1.7rem;border-radius:50%;background:var(--side);color:var(--side-ink);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;margin-top:.15rem}
+ol.flow li div{min-width:0}
+.note{font-size:.9rem;color:var(--soft)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55rem .75rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:700;color:var(--soft);background:color-mix(in srgb,var(--line) 35%,var(--card));white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.y{color:var(--ok);font-weight:700}.n{color:var(--muted)}
+.ladder{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:.3rem 0 .9rem}
+.ladder span{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:.15rem .7rem;font-size:.9rem;font-weight:500}
+.ladder i{color:var(--muted);font-style:normal}
+ul.plain{margin:0;padding-left:1.2rem}ul.plain li{margin:.25rem 0}
+.dec{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--ok);border-radius:10px;padding:.8rem 1rem}
+.dec ul{margin:0;padding-left:1.1rem}.dec li{margin:.35rem 0}
+.q{background:var(--gold-soft);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:10px;padding:.85rem 1rem;margin-top:10px}
+.q h3{margin:0 0 .3rem;font-size:1rem;font-weight:900}
+.q .rec{margin:.35rem 0 0;font-size:.93rem}
+.q .rec b{color:var(--ink)}
+.risk{background:var(--red-soft);border-radius:10px;padding:.75rem 1rem;font-size:.92rem;margin-top:.8rem}
+.reply{margin-top:2.4rem;background:var(--side);color:var(--side-ink);border-radius:14px;padding:1.1rem 1.3rem}
+.reply p{margin:.2rem 0}
+footer{margin-top:2rem;font-size:.8rem;color:var(--muted)}
+@media (max-width:560px){.phases{grid-template-columns:1fr}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">鼎兆元管理系統・第一期規格・請確認</div>
+  <h1>個人帳號管理：怎麼做</h1>
+  <p>需求你已經確認。這頁說明會怎麼蓋、Fable 審出什麼、因此改了哪裡。確認後就開工寫程式。</p>
+</header>
+
+<section>
+  <h2>蓋在哪裡</h2>
+  <ul class="plain">
+    <li>全部做在現有的鼎兆元管理系統裡，同一個網址、同一個登入框。</li>
+    <li>同仁的帳號跟現有系統帳號放在同一張帳號表；個人資料另開一張「同仁」表。</li>
+    <li>品牌、單位、部門、職稱的下拉選項放在一張「選項」表，之後要加單位、加部門，改表就好，不用改程式。</li>
+    <li>每一次認領、確認、退回、重設密碼都記在「紀錄」表，紀錄裡不寫生日、手機、地址。你之後做的通知機器人讀這張就好。</li>
+  </ul>
+</section>
+
+<section>
+  <h2>畫面會多出這些</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>畫面</th><th>誰用</th><th>做什麼</th></tr></thead>
+    <tbody>
+      <tr><td>登入頁「第一次使用」</td><td>同仁</td><td>輸入全名 → 看到編號 → 設密碼、填資料</td></tr>
+      <tr><td>登入頁「忘記密碼」</td><td>同仁</td><td>編號＋生日＋手機 → 設新密碼</td></tr>
+      <tr><td>我的資料</td><td>同仁</td><td>看狀態、改資料；店長以上多一頁「單位通訊錄」</td></tr>
+      <tr><td>同仁名單</td><td>後台</td><td>匯入名單、確認開通、退回、停用、解鎖、改資料</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note" style="margin-top:.6rem">原本的「人員管理」不變，只是不再列出同仁帳號，專門管 admin、會計這類系統帳號。</p>
+</section>
+
+<section>
+  <h2>建檔怎麼做</h2>
+  <ol class="flow">
+    <li><div>我從你 10/8 的名單網頁產出 113 個名字的純文字給你（不放進程式碼庫，因為管理系統的程式碼是公開的）。</div></li>
+    <li><div>你在「同仁名單 → 匯入」貼上，先按「預覽」，看 DZY001 和 DZY113 對到的人對不對。預覽不會寫入任何東西。</div></li>
+    <li><div>確認無誤按「建立」，113 個帳號一次建好，狀態都是「未開通」。</div></li>
+  </ol>
+</section>
+
+<section>
+  <h2>Fable 審出 15 個問題，全部改掉了</h2>
+  <p>GPT 那一份沒跑成：Codex 帳號今天的額度用完了。以下是影響你最多的幾條，其餘是程式內部的細節。</p>
+  <div class="tbl"><table>
+    <thead><tr><th>問題</th><th>改成</th></tr></thead>
+    <tbody>
+      <tr><td>有人冒用認領後被後台撤回，他手上的登入還能用 7 天，真人重新認領後，他能看到真人的生日和地址</td><td>撤回、重設密碼、停用、改密碼的當下，那個帳號在其他地方的登入一律失效</td></tr>
+      <tr><td>原本設計「全公司每 10 分鐘最多 60 次」防亂試。上線當天你在群組一宣布，113 人同時認領就會被自己擋掉；有心人也能刷爆它讓全公司認領不了</td><td>改成只限制「同一個名字一直查不到」的情況；另設一個 600 次的大上限只防程式亂刷</td></tr>
+      <tr><td>忘記密碼「錯 5 次就鎖、要後台解」：編號是連號，任何人把 DZY001～113 各試 5 次，全公司的忘記密碼就都鎖死了</td><td>錯 5 次先鎖 1 小時；一天內被鎖到第 3 次，才要後台解。錯誤訊息也不再顯示剩幾次</td></tr>
+      <tr><td>我原本寫「用試跑模式演練匯入」，但管理系統其實沒有通用的試跑模式，你以為在演練，其實會直接寫進正式資料</td><td>改成匯入頁自己的「預覽」，預覽完全不寫入</td></tr>
+      <tr><td>後台按「確認開通」時，畫面上的資料全是同仁自己填的，冒用的人也能填得像本人</td><td>確認鈕旁固定提示「確認前請打電話給本人核對」</td></tr>
+      <tr><td>新進同仁如果跟已離職的人同名，原本會建不了檔</td><td>只有跟「還沒認領」的人同名才擋（兩個同名的人沒辦法用名字分辨誰是誰）</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>跟你確認過的需求不一樣的地方</h2>
+  <div class="q"><h3>忘記密碼的鎖法改了</h3>
+    <p class="rec">需求寫的是「錯 5 次鎖住，要後台解鎖」。規格改成「錯 5 次鎖 1 小時，一天被鎖 3 次才要後台解」，原因在上面第三列。你不同意的話我改回原本的。</p></div>
+  <div class="q"><h3>改密碼後其他裝置會被登出</h3>
+    <p class="rec">這是新加的。同仁改了密碼，或你幫他重設、停用，他在其他手機或電腦上的登入會失效，要重新登入。現有的 admin、會計帳號也一樣。</p></div>
+  <div class="q"><h3>admin、會計帳號會看到「我的資料」</h3>
+    <p class="rec">admin 擁有全部權限，所以選單會出現「我的資料」，點進去會顯示「這是系統帳號，沒有個人資料」。不影響使用。</p></div>
+</section>
+
+<section>
+  <h2>還在等你</h2>
+  <ul class="plain">
+    <li>總部的部門清單（例如會計部、人事部、資訊部）。給之前，總部同仁先不用選部門。</li>
+  </ul>
+</section>
+
+<div class="reply">
+  <p><b>怎麼回我</b></p>
+  <p>沒問題 → 回「規格確認」，我就開工。</p>
+  <p>要改 → 直接說哪一段。</p>
+</div>
+
+<footer>規格正本：~/dzy/docs/personnel/spec.md（v2）・方案 plan.md・任務 task.md・2026-10-11・本頁不含任何同仁姓名或個資</footer>
+</div>
