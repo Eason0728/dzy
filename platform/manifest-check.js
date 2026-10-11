@@ -14,6 +14,9 @@ export const ID_RE = /^[a-z][a-z0-9-]{1,19}$/;
 /** 權限碼：兩段或三段，點分隔，例 audit.read、audit.read.own */
 export const PERM_RE = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*){1,2}$/;
 
+/** 平台登入前畫面用掉的路由字，不能當模組 id（2026-10-11，docs/personnel/spec.md §7.1） */
+export const RESERVED_IDS = ['claim', 'forgot', 'home'];
+
 const REQUIRED_KEYS = ['id', 'ns', 'backend', 'name', 'desc', 'icon', 'requires', 'views', 'entry'];
 const KNOWN_KEYS = REQUIRED_KEYS.concat(['color']);
 
@@ -38,6 +41,9 @@ export function validateManifest(m) {
   }
 
   checkId(m.id, 'id', errors);
+  if (typeof m.id === 'string' && RESERVED_IDS.includes(m.id)) {
+    errors.push(`${at('id')}「${m.id}」是平台保留字（${RESERVED_IDS.join('、')}），不能當模組代號`);
+  }
   checkId(m.ns, 'ns', errors);
   checkId(m.backend, 'backend', errors);
   checkId(m.icon, 'icon', errors);

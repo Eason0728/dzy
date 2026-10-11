@@ -81,7 +81,7 @@ def main():
             mock.install(page)
             login(page, base, 'acct')
 
-            page.click('[data-role="module-card"][data-module="audit-stock"]')
+            page.click('[data-role="module-card"][data-module="audit-stock"] .todo-head')  # 卡片中間是提醒列（點了會進該列的分頁），進模組要點組頭
             page.wait_for_selector('[data-role="view-nav"] .nav-item')
             tabs = page.locator('[data-role="view-nav"] .nav-item').all_inner_texts()
             check('門市管理' in tabs, '會計看得到「門市管理」分頁，實際：%s' % tabs)
@@ -150,7 +150,7 @@ def main():
             page2 = browser.new_context(viewport={'width': 375, 'height': 800}).new_page()
             mock.install(page2)
             login(page2, base, 'lead')
-            page2.click('[data-role="module-card"][data-module="audit-stock"]')
+            page2.click('[data-role="module-card"][data-module="audit-stock"] .todo-head')  # 卡片中間是提醒列（點了會進該列的分頁），進模組要點組頭
             page2.wait_for_selector('[data-role="view-nav"] .nav-item')
             tabs2 = page2.locator('[data-role="view-nav"] .nav-item').all_inner_texts()
             check('門市管理' not in tabs2, '店長沒有「門市管理」分頁，實際：%s' % tabs2)

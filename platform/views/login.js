@@ -29,9 +29,11 @@
  * （loading／toast 兩個函式），不因為它可能還沒完成就自己刻一份 loading/toast。
  */
 
-import { login } from '../auth.js';
+import { login, getUser } from '../auth.js';
 import { loading, toast } from '../ui.js';
 import { esc } from '../fmt.js';
+import { renderClaim } from './claim.js';
+import { renderForgot } from './forgot.js';
 
 /** 連續失敗幾次後，前端先擋一段冷卻時間才讓使用者再送出（純體驗節流，見檔頭說明） */
 // Eason 2026-08-14 指定：連續輸入錯誤三次之後才擋。與後端 Auth.gs 的
@@ -53,7 +55,54 @@ function pickHero() {
   return HERO_BRANDS[Math.floor(Math.random() * HERO_BRANDS.length)];
 }
 
+/**
+ * 登入前三個畫面（登入／第一次使用／忘記密碼）共用同一個背景版型，由網址 hash 決定顯示哪一個
+ * （#/claim、#/forgot；docs/personnel/spec.md §7.1）。重新整理會停在原畫面。
+ * shell.js 的 hashchange 監聽在未登入時一律不處理，所以這裡自己聽 hashchange。
+ */
+let hashListener = null;
 export function render(el, app) {
+  if (hashListener) window.removeEventListener('hashchange', hashListener);
+  hashListener = () => {
+    if (getUser()) return; // 已經登入：交給 shell
+    renderMode(el, app);
+  };
+  window.addEventListener('hashchange', hashListener);
+  return renderMode(el, app);
+}
+
+function currentMode() {
+  const h = String(window.location.hash || '');
+  if (h.startsWith('#/claim')) return 'claim';
+  if (h.startsWith('#/forgot')) return 'forgot';
+  return 'login';
+}
+
+function renderMode(el, app) {
+  const mode = currentMode();
+  if (mode === 'login') return renderLoginForm(el, app);
+  const hero = pickHero();
+  el.innerHTML = `
+    <div class="login-bg" data-hero="${esc(hero.key)}">
+      <div class="login-blur" aria-hidden="true"></div>
+      <div class="login-card"><div class="login-card-form"><div class="card" data-role="pre-login"></div></div></div>
+    </div>`;
+  const card = el.querySelector('[data-role="pre-login"]');
+  const done = () => {
+    // 清掉 #/claim 再交給 shell（replaceState 不會觸發 hashchange，避免 shell 把 claim 當模組找）
+    try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) { /* ignore */ }
+    if (app && typeof app.onSuccess === 'function') app.onSuccess();
+  };
+  const back = (empNo) => {
+    window.location.hash = '';
+    if (empNo) setTimeout(() => { const u = el.querySelector('#login-username'); if (u) u.value = empNo; }, 0);
+  };
+  if (mode === 'claim') renderClaim(card, { onSuccess: done, onBack: back });
+  else renderForgot(card, { onDone: back, onBack: back });
+  return function unmount() {};
+}
+
+function renderLoginForm(el, app) {
   const hero = pickHero();
   el.innerHTML = `
     <div class="login-bg" data-hero="${esc(hero.key)}">
@@ -72,6 +121,7 @@ export function render(el, app) {
           <div class="field">
             <label class="field-label" for="login-username">帳號</label>
             <input class="input" id="login-username" name="username" type="text"
+                   placeholder="DZY 編號或系統帳號"
                    autocomplete="username" autocapitalize="off" autocorrect="off" required>
           </div>
           <div class="field">
@@ -82,6 +132,10 @@ export function render(el, app) {
           <button class="btn btn-primary btn-block" type="submit" data-role="submit">登入</button>
           <p class="field-hint" data-role="hint"></p>
         </form>
+        <div class="login-links">
+          <a href="#/claim" data-role="to-claim">第一次使用</a>
+          <a href="#/forgot" data-role="to-forgot">忘記密碼</a>
+        </div>
       </div>
         </div>
       </div>

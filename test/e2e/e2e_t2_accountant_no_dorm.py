@@ -15,7 +15,7 @@ from common import MockBackend, check, finish, login, start_server
 
 from playwright.sync_api import sync_playwright
 
-PORT = 8792
+PORT = 8786  # 8792 常被電子佈告欄的預覽伺服器佔用（launch.json bulletin-preview）
 
 
 def main():
@@ -46,7 +46,7 @@ def main():
             check(page.locator('#dorm-list-table, .dorm-list-table').count() == 0, '宿舍畫面完全沒有被畫出來')
 
             # 會計進盤點模組：預設分頁總覽，且分頁列有「稽核填寫」（audit.write）
-            page.click('[data-role="module-card"][data-module="audit-stock"]')
+            page.click('[data-role="module-card"][data-module="audit-stock"] .todo-head')  # 卡片中間是提醒列（點了會進該列的分頁），進模組要點組頭
             page.wait_for_selector('[data-role="view-nav"] .nav-item')
             tabs = page.locator('[data-role="view-nav"] .nav-item').all_inner_texts()
             check('稽核填寫' in tabs and '總覽' in tabs,

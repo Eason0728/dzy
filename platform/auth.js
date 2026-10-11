@@ -284,5 +284,39 @@ export async function changePassword(oldPassword, newPassword) {
   if (!res || res.ok !== true) {
     return { ok: false, error: (res && res.error) || '修改失敗' };
   }
+  // 2026-10-11：後端改完密碼會撤銷所有舊 token（其他裝置登出）並換發一張新的給這台，換上才不會被登出
+  if (res.data && typeof res.data.token === 'string' && res.data.token) {
+    currentToken = res.data.token;
+    writeTokenToStorage(res.data.token);
+  }
+  return { ok: true };
+}
+
+/**
+ * 登入前的平台呼叫（2026-10-11 個人帳號管理：orgOptions／claimLookup／forgotReset）。
+ * 不帶 token；回傳形狀同後端 {ok,data}|{ok:false,error}，斷網收斂成 {ok:false}。
+ * @param {string} action
+ * @param {object} payload
+ */
+export async function publicCall(action, payload) {
+  try {
+    const res = await transport({ action, token: '', payload: payload || {} });
+    return res && typeof res === 'object' ? res : { ok: false, error: '伺服器回應格式錯誤' };
+  } catch (err) {
+    return { ok: false, error: (err && err.message) || '網路連線失敗，請稍後再試' };
+  }
+}
+
+/**
+ * 第一次使用：送出認領表單，成功即登入（後端回與 login 相同的形狀）。
+ * 密碼只經過這個函式的參數交給 transport，不留副本。
+ */
+export async function claimSubmit(payload) {
+  const res = await publicCall('claimSubmit', payload);
+  if (!res || res.ok !== true) return { ok: false, error: (res && res.error) || '送出失敗' };
+  const data = res.data || {};
+  if (!data.token || !data.user) return { ok: false, error: '伺服器回應格式錯誤' };
+  applySession(data);
+  writeTokenToStorage(data.token);
   return { ok: true };
 }

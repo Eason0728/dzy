@@ -196,7 +196,106 @@ class MockBackend:
             if not u:
                 return {'ok': False, 'error': 'token 無效'}
             return {'ok': True, 'data': {'user': u['user'], 'perms': u['perms'], 'secrets': u['secrets']}}
+        staff_res = self.staff_action(action, body)
+        if staff_res is not None:
+            return staff_res
         return {'ok': False, 'error': '未知的 platform action（mock）：' + action}
+
+    # ---- 個人帳號管理（2026-10-11）：有狀態的極簡模擬，只為了驗前端接線 ----
+    # 規則正本與完整邏輯在 apps-script/platform/Staff.gs（node 測試 test/staff.mock.test.mjs 驗 106 項）；
+    # 這裡只做到畫面點得通所需的最小行為。全部是假名。
+    ORG = {
+        'brands': [{'code': 'mzt', 'name': '墨竹亭'}, {'code': 'dzy', 'name': '鼎兆元總部'}],
+        'units': [{'code': 'mzt-gf', 'name': '新竹光復', 'parent': 'mzt', 'ladder': 'store'},
+                  {'code': 'dzy-hq', 'name': '鼎兆元總部', 'parent': 'dzy', 'ladder': 'hq'}],
+        'depts': [],
+        'titles': [{'code': 'pt', 'name': '計時同仁', 'parent': 'store', 'rank': 1},
+                   {'code': 'sm', 'name': '店長', 'parent': 'store', 'rank': 3},
+                   {'code': 'hs', 'name': '部門同仁', 'parent': 'hq', 'rank': 1}],
+    }
+
+    def _org_name(self, kind, code):
+        for x in self.ORG[kind + 's']:
+            if x['code'] == code:
+                return x['name']
+        return ''
+
+    def _staff_obj(self, r):
+        o = {k: r.get(k, '') for k in ('emp_no', 'name', 'status', 'phone', 'birthday', 'address', 'reject_reason', 'claimed_at')}
+        for f in ('brand', 'unit', 'dept', 'title'):
+            o[f] = r.get(f, '')
+            o[f + '_name'] = self._org_name(f, o[f])
+            o['p_' + f] = r.get('p_' + f, '')
+            o['p_' + f + '_name'] = self._org_name(f, o['p_' + f])
+        o['has_pending_change'] = any(o['p_' + f] for f in ('brand', 'unit', 'dept', 'title'))
+        o['reset_locked'] = r.get('reset_fail', 0) >= 5
+        return o
+
+    def staff_action(self, action, body):
+        if not hasattr(self, 'staff'):
+            self.staff = []
+        p = body.get('payload') or {}
+        tok = body.get('token') or ''
+        who = tok.replace('e2e-token-', '')
+        if action == 'orgOptions':
+            return {'ok': True, 'data': self.ORG}
+        if action == 'staffImport':
+            if USERS.get(who, {}).get('perms') != ['*']:
+                return {'ok': False, 'error': '沒有權限'}
+            start = len(self.staff) + 1
+            created = [{'emp_no': 'DZY%03d' % (start + i), 'name': n} for i, n in enumerate(p.get('names') or [])]
+            if not p.get('preview'):
+                for c in created:
+                    self.staff.append({'emp_no': c['emp_no'], 'name': c['name'], 'status': 'unclaimed', 'reset_fail': 0})
+            return {'ok': True, 'data': {'created': created}}
+        if action == 'staffList':
+            if USERS.get(who, {}).get('perms') != ['*']:
+                return {'ok': False, 'error': '沒有權限'}
+            return {'ok': True, 'data': {'staff': [self._staff_obj(r) for r in self.staff]}}
+        if action == 'claimLookup':
+            for r in self.staff:
+                if r['name'] == (p.get('name') or '').strip() and r['status'] == 'unclaimed':
+                    return {'ok': True, 'data': {'emp_no': r['emp_no']}}
+            return {'ok': False, 'error': '名單上找不到這個名字，請找後台'}
+        if action == 'claimSubmit':
+            for r in self.staff:
+                if r['emp_no'] == p.get('emp_no') and r['status'] == 'unclaimed' and r['name'] == p.get('name'):
+                    r.update({'status': 'pending', 'password': p.get('password'), 'birthday': p.get('birthday'),
+                              'phone': p.get('phone'), 'address': p.get('address'), 'claimed_at': '2026-10-11 10:00:00'})
+                    for f in ('brand', 'unit', 'dept', 'title'):
+                        r['p_' + f] = p.get(f, '')
+                    USERS[r['emp_no']] = {'password': p.get('password'), 'perms': ['platform.self'], 'secrets': {},
+                                          'user': {'id': 'u-' + r['emp_no'], 'name': r['name'], 'role': 'staff', 'node': ''}}
+                    u = USERS[r['emp_no']]
+                    return {'ok': True, 'data': {'token': 'e2e-token-' + r['emp_no'], 'user': u['user'], 'perms': u['perms'], 'secrets': {}}}
+            return {'ok': False, 'error': '姓名與編號對不上，請重新輸入全名'}
+        if action in ('myProfile', 'myUnit', 'saveMyProfile'):
+            r = next((x for x in self.staff if x['emp_no'] == who), None)
+            if r is None:
+                return {'ok': True, 'data': {'none': True}} if action == 'myProfile' else {'ok': False, 'error': '只有店長以上可以看'}
+            if action == 'myUnit':
+                return {'ok': False, 'error': '只有店長（總部為部門主管）以上可以看單位通訊錄'}
+            return {'ok': True, 'data': self._staff_obj(r)}
+        if action == 'staffConfirm':
+            r = next((x for x in self.staff if x['emp_no'] == p.get('emp_no')), None)
+            for f in ('brand', 'unit', 'dept', 'title'):
+                r[f] = r.get('p_' + f, '')
+                r['p_' + f] = ''
+            r['status'] = 'active'
+            return {'ok': True, 'data': {'staff': self._staff_obj(r)}}
+        if action == 'forgotReset':
+            r = next((x for x in self.staff if x['emp_no'] == p.get('emp_no')), None)
+            if not r or r['status'] in ('unclaimed', 'disabled'):
+                return {'ok': False, 'error': '資料不符，請確認或找後台'}
+            if r.get('reset_fail', 0) >= 5:
+                return {'ok': False, 'error': '錯太多次，請 1 小時後再試，或找後台'}
+            if r.get('birthday') != p.get('birthday') or r.get('phone') != p.get('phone'):
+                r['reset_fail'] = r.get('reset_fail', 0) + 1
+                return {'ok': False, 'error': '資料不符，請確認或找後台'}
+            USERS[r['emp_no']]['password'] = p.get('new_password')
+            r['reset_fail'] = 0
+            return {'ok': True, 'data': {}}
+        return None
 
     # ---- dorm（有狀態）----
     # 讀取類（rooms/list/contract/handover）：2026-08-15 後端 @17 已補進 doPost，

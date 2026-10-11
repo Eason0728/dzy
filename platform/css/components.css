@@ -1091,6 +1091,48 @@ textarea.input:disabled {
   box-shadow: 0 0 0 3px var(--login-input-bg);
 }
 
+/* 登入頁下方「第一次使用／忘記密碼」連結，以及這兩個畫面的說明文字（2026-10-11 個人帳號管理） */
+.login-links {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.login-links a,
+.login-card .link-btn {
+  color: var(--login-ink);
+  text-shadow: var(--login-text-glow);
+  font-weight: var(--fw-medium);
+  background: none;
+  border: 0;
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  font-size: var(--fs-base);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.login-card .pre-text {
+  color: var(--login-ink);
+  text-shadow: var(--login-text-glow);
+  margin: 0 0 var(--space-4);
+}
+.login-card .emp-no {
+  display: inline-block;
+  font-size: var(--fs-2xl);
+  font-weight: 900;
+  letter-spacing: .06em;
+  color: var(--login-ink);
+  text-shadow: var(--login-text-glow);
+}
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 var(--space-3);
+}
+@media (max-width: 480px) {
+  .form-grid-2 { grid-template-columns: 1fr; }
+}
+
 /* 卡片左半：表單 */
 .login-card-form {
   padding: var(--space-6, 32px) var(--space-5, 24px);

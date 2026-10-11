@@ -51,7 +51,7 @@ def main():
             login(page, base, 'mgr')
 
             # ---- 1. 建單 ----
-            page.click('[data-role="module-card"][data-module="dorm"]')
+            page.click('[data-role="module-card"][data-module="dorm"] .todo-head')  # 卡片中間是提醒列（點了會進該列的分頁），進模組要點組頭
             page.wait_for_selector('[data-role="view-nav"] .nav-item:has-text("建立合約")')
             page.click('[data-role="view-nav"] .nav-item:has-text("建立合約")')
             page.wait_for_selector('#dorm-create-name', timeout=8000)

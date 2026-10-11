@@ -17,6 +17,8 @@ export const MODULES = [
   { load: () => import('../modules/audit-stock/manifest.js') },
   { load: () => import('../modules/audit-ops/manifest.js') },
   { load: () => import('../modules/dorm/manifest.js') },
+  { load: () => import('../modules/staff/manifest.js') },
+  { load: () => import('../modules/me/manifest.js') },
 ];
 
 /**

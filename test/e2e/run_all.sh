@@ -12,6 +12,7 @@ TESTS=(
   e2e_t5_audit_suite.py
   e2e_t6_dorm_flow.py
   e2e_t7_audit_stores.py
+  e2e_t8_staff_flow.py
 )
 
 for i in "${!TESTS[@]}"; do
@@ -24,4 +25,4 @@ for i in "${!TESTS[@]}"; do
 done
 
 echo
-echo "e2e 六支全部通過"
+echo "e2e 八支全部通過"

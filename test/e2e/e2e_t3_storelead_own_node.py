@@ -34,7 +34,7 @@ def main():
             ids = [c.get_attribute('data-module') for c in page.locator('[data-role="module-card"]').all()]
             check(ids == ['audit-stock', 'audit-ops'], '店長首頁只有兩張稽核卡片，實際：%s' % ids)
 
-            page.click('[data-role="module-card"][data-module="audit-stock"]')
+            page.click('[data-role="module-card"][data-module="audit-stock"] .todo-head')  # 卡片中間是提醒列（點了會進該列的分頁），進模組要點組頭
             page.wait_for_selector('[data-role="view-nav"] .nav-item')
             tabs = page.locator('[data-role="view-nav"] .nav-item').all_inner_texts()
             check(tabs == ['我的門市'], '店長只有「我的門市」一個分頁，實際：%s' % tabs)
