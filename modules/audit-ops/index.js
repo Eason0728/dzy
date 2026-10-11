@@ -82,6 +82,51 @@ function renderView(el, ctx) {
   currentViewUnmount = typeof maybeUnmount === 'function' ? maybeUnmount : null;
 }
 
+/**
+ * badge()／alerts() 共用：每個節點「最新一筆已稽核」紀錄裡 track===true 的明細列數
+ * （同一家店只算最新一筆，避免跨月疊加出不會歸零的數字）。
+ * 回 [{store,name,month,count}]；算不出來回 null，不拋錯。
+ */
+async function trackByStore(ctx) {
+  try {
+    const res = await sharedApi.getAll(ctx);
+    if (!res || res.ok !== true) return null;
+
+    const opsRecords = (res.data && res.data.ops_records) || [];
+    const opsDetails = (res.data && res.data.ops_details) || [];
+    const stores = (res.data && res.data.config && res.data.config.stores) || [];
+    const nameOf = (code) => (stores.find((x) => x.code === code) || {}).name || code;
+
+    const hasFull = ctx.can('audit.read');
+    const hasOwn = ctx.can('audit.read.own');
+    const isStoreLead = hasOwn && !hasFull;
+
+    let scopedRecords = opsRecords;
+    if (isStoreLead) {
+      const node = ctx.user && ctx.user.node;
+      if (!node) return null; // 店長沒有所屬節點＝資料算不出來（同 platform/api.js 的保守失敗方向）
+      scopedRecords = opsRecords.filter((r) => r.store === node);
+    }
+
+    const latestByStore = {};
+    scopedRecords.forEach((r) => {
+      if (r.status !== '已稽核') return;
+      const prev = latestByStore[r.store];
+      if (!prev || r.month > prev.month) latestByStore[r.store] = r;
+    });
+
+    return Object.values(latestByStore).map((r) => ({
+      store: r.store,
+      name: nameOf(r.store),
+      month: r.month,
+      count: opsDetails.filter((d) => d.record_key === r.record_key && d.track === true).length
+    }));
+  } catch (err) {
+    console.error('[audit-ops] 待辦算不出來，回 null', err);
+    return null;
+  }
+}
+
 export default {
   mount(el, ctx) {
     currentEl = el;
@@ -97,37 +142,18 @@ export default {
     if (currentEl) renderView(currentEl, ctx);
   },
   async badge(ctx) {
-    try {
-      const res = await sharedApi.getAll(ctx);
-      if (!res || res.ok !== true) return null;
-
-      const opsRecords = (res.data && res.data.ops_records) || [];
-      const opsDetails = (res.data && res.data.ops_details) || [];
-
-      const hasFull = ctx.can('audit.read');
-      const hasOwn = ctx.can('audit.read.own');
-      const isStoreLead = hasOwn && !hasFull;
-
-      let scopedRecords = opsRecords;
-      if (isStoreLead) {
-        const node = ctx.user && ctx.user.node;
-        if (!node) return null; // 店長沒有所屬節點＝資料算不出來（同 platform/api.js 的保守失敗方向）
-        scopedRecords = opsRecords.filter((r) => r.store === node);
-      }
-
-      // 每個節點只取最新一筆「已稽核」紀錄（避免跨月疊加，見檔頭說明）。
-      const latestByStore = {};
-      scopedRecords.forEach((r) => {
-        if (r.status !== '已稽核') return;
-        const prev = latestByStore[r.store];
-        if (!prev || r.month > prev.month) latestByStore[r.store] = r;
-      });
-      const latestKeys = new Set(Object.values(latestByStore).map((r) => r.record_key));
-
-      return opsDetails.filter((d) => latestKeys.has(d.record_key) && d.track === true).length;
-    } catch (err) {
-      console.error('[audit-ops] badge() 算不出來，回 null', err);
-      return null;
-    }
+    const r = await trackByStore(ctx);
+    return r ? r.reduce((n, x) => n + x.count, 0) : null;
+  },
+  /** 首頁「待辦與異常」（spec §4.6 alerts）：每家店最新一次營運稽核還沒完成的追蹤項目，點了進那一次的報告。 */
+  async alerts(ctx) {
+    const r = await trackByStore(ctx);
+    if (!r) return null;
+    return r.filter((x) => x.count > 0).map((x) => ({
+      level: 'warn',
+      text: `${x.name}：追蹤清單還有 ${x.count} 項未完成（${Number(x.month.slice(5))} 月稽核）`,
+      view: 'report',
+      params: { store: x.store, month: x.month }
+    }));
   }
 };

@@ -266,35 +266,126 @@ function withTimeout(promiseOrValue, ms) {
   });
 }
 
-async function loadBadge(manifest) {
+/** 首頁一組最多顯示幾列提醒；超過的收成一列「還有 N 項」。 */
+const ALERTS_MAX_ROWS = 8;
+const ALERT_LEVELS = ['error', 'warn', 'info'];
+
+function findGroupBody(moduleId) {
+  return findDescendant(
+    viewContentEl,
+    (n) => n.getAttribute && n.getAttribute('data-role') === 'alert-list' && n.getAttribute('data-module') === moduleId
+  );
+}
+
+function alertRow(level, text, target) {
+  return el('div', {
+    class: `todo-row lv-${level}`,
+    'data-role': 'alert-row',
+    'data-target': target || null,
+    role: target ? 'link' : null,
+    tabindex: target ? '0' : null
+  }, [el('span', { class: 'tx', text }), target ? el('span', { class: 'go', 'aria-hidden': 'true', text: '›' }) : null]);
+}
+
+/** 把模組 alerts() 的一項轉成路由字串；分頁不存在或沒權限 → 退回模組第一個有權限的分頁。 */
+function alertTarget(manifest, item) {
+  const view = manifest.views.find((v) => v.id === item.view && isViewPermitted(v)) || manifest.views.find(isViewPermitted);
+  if (!view) return null;
+  const params = item.params && typeof item.params === 'object' ? item.params : null;
+  return `#/${manifest.id}/${view.id}${buildQueryString(params)}`;
+}
+
+function fillGroup(manifest, items, badgeValue, failed) {
+  const body = findGroupBody(manifest.id);
+  if (!body) return;
+  clearChildren(body);
+  if (failed) {
+    body.appendChild(alertRow('note', '暫時讀不到'));
+    return;
+  }
+  if (items === null) {
+    // 模組沒實作 alerts()：有 badge 數字就顯示件數，沒有就放模組說明
+    if (typeof badgeValue === 'number' && badgeValue > 0) {
+      body.appendChild(alertRow('warn', `${badgeValue} 件待處理`, alertTarget(manifest, {})));
+    } else if (badgeValue === 0) {
+      body.appendChild(el('div', { class: 'todo-empty', text: '沒有待辦' }));
+    } else {
+      body.appendChild(alertRow('note', manifest.desc, alertTarget(manifest, {})));
+    }
+    return;
+  }
+  if (!items.length) {
+    body.appendChild(el('div', { class: 'todo-empty', text: '沒有待辦' }));
+    return;
+  }
+  items.slice(0, ALERTS_MAX_ROWS).forEach((it) => body.appendChild(alertRow(it.level, it.text, alertTarget(manifest, it))));
+  if (items.length > ALERTS_MAX_ROWS) {
+    body.appendChild(alertRow('note', `還有 ${items.length - ALERTS_MAX_ROWS} 項`, alertTarget(manifest, {})));
+  }
+}
+
+/** alerts() 回傳值清洗：只收 {level,text} 形狀正確的項目；整個不是陣列＝算不出來。 */
+function cleanAlerts(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  return raw
+    .filter((it) => it && typeof it.text === 'string' && it.text)
+    .map((it) => ({
+      level: ALERT_LEVELS.includes(it.level) ? it.level : 'info',
+      text: it.text,
+      view: typeof it.view === 'string' ? it.view : null,
+      params: it.params
+    }));
+}
+
+/**
+ * 首頁每一組：載模組本體 → 並行跑 badge() 與（選填的）alerts()，各自 5 秒逾時、拋錯視同算不出來
+ * （spec §4.6）。badge 數字寫進卡片與側邊欄；alerts 畫成提醒列。
+ */
+async function loadHomeGroup(manifest, isStale) {
   let body;
   try {
     const modBody = await manifest.entry();
     body = modBody && modBody.default;
   } catch (err) {
-    console.error(`[shell] 模組本體載入失敗，badge 略過：${manifest.id}`, err);
+    console.error(`[shell] 模組本體載入失敗，首頁這組略過：${manifest.id}`, err);
+    if (!isStale()) fillGroup(manifest, null, null, true);
     return;
   }
-  if (!body || typeof body.badge !== 'function') return;
+  if (!body) return;
 
-  const ctx = buildCtx(manifest, null, {});
-  let raw;
-  try {
-    raw = body.badge(ctx);
-  } catch (err) {
-    console.error(`[shell] badge() 拋錯，該卡片不顯示數字：${manifest.id}`, err);
-    return;
+  const run = (fnName) => {
+    if (typeof body[fnName] !== 'function') return Promise.resolve(undefined);
+    let raw;
+    try {
+      raw = body[fnName](buildCtx(manifest, null, {}));
+    } catch (err) {
+      console.error(`[shell] ${fnName}() 拋錯：${manifest.id}`, err);
+      return Promise.resolve(null);
+    }
+    return withTimeout(raw, BADGE_TIMEOUT_MS);
+  };
+
+  const hasAlerts = typeof body.alerts === 'function';
+  const [badgeRaw, alertsRaw] = await Promise.all([run('badge'), run('alerts')]);
+  if (isStale()) return;
+
+  const value = typeof badgeRaw === 'number' && Number.isFinite(badgeRaw) ? badgeRaw : null;
+  if (value !== null) {
+    const badgeEl = findDescendant(
+      viewContentEl,
+      (n) => n.getAttribute && n.getAttribute('data-role') === 'badge' && n.getAttribute('data-module') === manifest.id
+    );
+    // 0 不顯示（照營運系統：沒有待辦就不掛數字）
+    if (badgeEl) badgeEl.textContent = value > 0 ? String(value) : '';
+    setNavBadge(manifest.id, value);
   }
 
-  const value = await withTimeout(raw, BADGE_TIMEOUT_MS);
-  if (typeof value !== 'number' || !Number.isFinite(value)) return;
-
-  const badgeEl = findDescendant(
-    viewContentEl,
-    (n) => n.getAttribute && n.getAttribute('data-role') === 'badge' && n.getAttribute('data-module') === manifest.id
-  );
-  if (badgeEl) badgeEl.textContent = String(value);
-  setNavBadge(manifest.id, value);
+  if (hasAlerts) {
+    const items = cleanAlerts(alertsRaw);
+    fillGroup(manifest, items === undefined ? null : items, value, items === undefined);
+  } else {
+    fillGroup(manifest, null, value, false);
+  }
 }
 
 // ============================================================
@@ -371,7 +462,7 @@ function renderTopNav() {
   ]));
 
   // 內容區頂端頁名：首頁顯示「首頁」、模組顯示模組名；副標＝登入者
-  pageTitleEl.textContent = currentModule ? currentModule.name : '首頁';
+  pageTitleEl.textContent = currentModule ? currentModule.name : '待辦與異常';
   pageSubEl.textContent = [user.name, ROLE_ZH[user.role] || user.role].filter(Boolean).join('・');
 }
 
@@ -402,41 +493,40 @@ function renderViewNav(manifest) {
   }
 }
 
+/** 每次重畫首頁 +1；非同步回來的結果若不是這一輪的就丟掉（使用者已經切走）。 */
+let homeToken = 0;
+
+/**
+ * 首頁＝「待辦與異常」（外觀照門市營運系統首頁，2026-10-11）：每個有權限的模組一組，
+ * 組頭是模組名＋件數，組內是模組 alerts() 回來的提醒列（點了直接進對應分頁）。
+ * 先畫骨架（讀取中…），各組再非同步填。整組卡片點了也能進模組（data-role="module-card"）。
+ */
 function renderHomeCards() {
   clearChildren(viewContentEl);
-  const grid = el('div', { class: 'module-grid' });
-  viewContentEl.appendChild(grid);
+  const tok = ++homeToken;
+  const isStale = () => tok !== homeToken || currentModule !== null;
+  const wrap = el('div', { class: 'todo-groups', 'aria-live': 'polite' });
+  viewContentEl.appendChild(wrap);
   for (const m of permittedModules) {
     const firstView = m.views.find(isViewPermitted);
     const target = firstView ? `#/${m.id}/${firstView.id}` : '#/home';
-    const badgeEl = el('div', { class: 'module-badge', 'data-role': 'badge', 'data-module': m.id });
-    // 圖示檔名＝manifest.icon（manifest-check 已驗過是合法 id），檔在 assets/icons/。
-    // 殼只拿 icon 當「資料」組路徑，不對值做任何 if 判斷——分層不破。
-    const iconEl = el('img', {
-      class: 'module-icon',
-      src: `assets/icons/${m.icon}.png`,
-      alt: ''
-    });
-    const card = el(
-      'div',
-      {
-        class: 'card card-link module-card',
-        'data-role': 'module-card',
-        'data-module': m.id,
-        'data-target': target
-      },
-      [
-        iconEl,
-        el('div', { class: 'module-card-text' }, [
-          el('div', { class: 'card-title', text: m.name }),
-          el('p', { class: 'text-muted', text: m.desc })
-        ]),
-        badgeEl
-      ]
-    );
-    grid.appendChild(card);
+    const head = el('div', { class: 'todo-head' }, [
+      // 圖示檔名＝manifest.icon（manifest-check 已驗過是合法 id），殼只拿它當資料組路徑。
+      el('img', { class: 'module-icon', src: `assets/icons/${m.icon}.png`, alt: '' }),
+      el('div', { class: 'card-title', text: m.name }),
+      el('div', { class: 'module-badge', 'data-role': 'badge', 'data-module': m.id })
+    ]);
+    const list = el('div', { class: 'todo-body', 'data-role': 'alert-list', 'data-module': m.id }, [
+      el('div', { class: 'todo-empty', text: '讀取中…' })
+    ]);
+    wrap.appendChild(el('section', {
+      class: 'card todo-group module-card',
+      'data-role': 'module-card',
+      'data-module': m.id,
+      'data-target': target
+    }, [head, list]));
   }
-  for (const m of permittedModules) loadBadge(m);
+  for (const m of permittedModules) loadHomeGroup(m, isStale);
 }
 
 // ============================================================
@@ -478,6 +568,12 @@ function onViewNavClick(e) {
 }
 
 function onViewContentClick(e) {
+  const row = findAncestorWithAttr(e.target, 'data-role', 'alert-row');
+  if (row) {
+    const t = row.getAttribute('data-target');
+    if (t) navigateTo(t);
+    return;
+  }
   const card = findAncestorWithAttr(e.target, 'data-role', 'module-card');
   if (!card) return;
   const target = card.getAttribute('data-target');
@@ -518,6 +614,9 @@ function ensureShellDom() {
   navDesktopEl.addEventListener('click', onTopNavClick);
   viewNavEl.addEventListener('click', onViewNavClick);
   viewContentEl.addEventListener('click', onViewContentClick);
+  viewContentEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && findAncestorWithAttr(e.target, 'data-role', 'alert-row')) onViewContentClick(e);
+  });
 }
 
 // ============================================================

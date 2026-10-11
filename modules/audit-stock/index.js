@@ -105,6 +105,50 @@ function renderView(el, ctx) {
   currentViewUnmount = typeof maybeUnmount === 'function' ? maybeUnmount : null;
 }
 
+/**
+ * badge()／alerts() 共用：本月尚未完成盤點（沒有「已稽核」或「輪休」紀錄）的節點。
+ * 回 { month, nodes:[{code,name}] }；算不出來回 null，不拋錯。
+ */
+async function pendingNodes(ctx) {
+  try {
+    const res = await sharedApi.getAll(ctx);
+    if (!res || res.ok !== true) return null;
+
+    const config = (res.data && res.data.config) || { stores: [] };
+    const records = (res.data && res.data.records) || [];
+
+    const hasFull = ctx.can('audit.read');
+    const hasOwn = ctx.can('audit.read.own');
+    const isStoreLead = hasOwn && !hasFull;
+
+    const stores = config.stores || [];
+    const nameOf = (code) => (stores.find((x) => x.code === code) || {}).name || code;
+    let nodeCodes;
+    if (isStoreLead) {
+      const node = ctx.user && ctx.user.node;
+      nodeCodes = node ? [node] : [];
+    } else {
+      nodeCodes = stores.map((x) => x.code);
+    }
+    if (!nodeCodes.length) return null;
+
+    const month = currentMonthStr();
+    const doneNodes = new Set(
+      records
+        .filter((r) => r.month === month && (r.status === '已稽核' || r.status === '輪休'))
+        .map((r) => r.store)
+    );
+
+    return {
+      month,
+      nodes: nodeCodes.filter((code) => !doneNodes.has(code)).map((code) => ({ code, name: nameOf(code) }))
+    };
+  } catch (err) {
+    console.error('[audit-stock] 待辦算不出來，回 null', err);
+    return null;
+  }
+}
+
 export default {
   mount(el, ctx) {
     currentEl = el;
@@ -120,37 +164,19 @@ export default {
     if (currentEl) renderView(currentEl, ctx);
   },
   async badge(ctx) {
-    try {
-      const res = await sharedApi.getAll(ctx);
-      if (!res || res.ok !== true) return null;
-
-      const config = (res.data && res.data.config) || { stores: [] };
-      const records = (res.data && res.data.records) || [];
-
-      const hasFull = ctx.can('audit.read');
-      const hasOwn = ctx.can('audit.read.own');
-      const isStoreLead = hasOwn && !hasFull;
-
-      let nodeCodes;
-      if (isStoreLead) {
-        const node = ctx.user && ctx.user.node;
-        nodeCodes = node ? [node] : [];
-      } else {
-        nodeCodes = (config.stores || []).map((s) => s.code);
-      }
-      if (!nodeCodes.length) return null;
-
-      const month = currentMonthStr();
-      const doneNodes = new Set(
-        records
-          .filter((r) => r.month === month && (r.status === '已稽核' || r.status === '輪休'))
-          .map((r) => r.store)
-      );
-
-      return nodeCodes.filter((code) => !doneNodes.has(code)).length;
-    } catch (err) {
-      console.error('[audit-stock] badge() 算不出來，回 null', err);
-      return null;
-    }
+    const r = await pendingNodes(ctx);
+    return r ? r.nodes.length : null;
+  },
+  /** 首頁「待辦與異常」（spec §4.6 alerts）：本月還沒盤點的店，一家一列，點了直接進該店本月的稽核填寫。 */
+  async alerts(ctx) {
+    const r = await pendingNodes(ctx);
+    if (!r) return null;
+    const mm = Number(r.month.slice(5));
+    return r.nodes.map((n) => ({
+      level: 'warn',
+      text: `${n.name}：${mm} 月還沒盤點`,
+      view: 'fill',
+      params: { store: n.code, month: r.month }
+    }));
   }
 };

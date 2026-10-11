@@ -85,6 +85,9 @@
   --tab-line: #EF856D;          /* 分頁列選中底線 */
   --shadow-pill: 0 4px 12px rgba(0, 0, 0, .28);
   --shadow-card-hover: 0 2px 10px rgba(35, 24, 21, .08);
+  /* 首頁提醒列（照營運系統 .todo-row.lv-*）：error 紅底、warn 黃底、info 品牌色條 */
+  --todo-error-bg: #fdf3f1;
+  --todo-warn-bg: #fffaf0;
 
   /* ---- 圓角階梯 ---- */
   --radius-sm: 6px;

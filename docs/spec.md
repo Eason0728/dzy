@@ -182,7 +182,8 @@ export default {
 export default {
   mount(el, ctx)   { /* 畫進 el；回傳 unmount 函式或 undefined */ },
   unmount()        { /* 選填：清事件、清計時器 */ },
-  badge(ctx)       { /* 選填：回 Promise<number|null>，首頁卡片的待辦數字 */ },
+  badge(ctx)       { /* 選填：回 Promise<number|null>，首頁卡片與側邊欄的待辦數字 */ },
+  alerts(ctx)      { /* 選填：回 Promise<Array<{level,text,view?,params?}>|null>，首頁「待辦與異常」的提醒列 */ },
   onRoute(ctx)      { /* 選填：同一個模組內分頁或 params 變動時，殼呼叫一次 */ }
 };
 ```
@@ -190,6 +191,13 @@ export default {
 - `badge()` **必須由模組自己算**，平台層不得內建任何業務邏輯（這是分層成不成立的判準）。
 - `badge()` 回 `null` 或拋錯 → 卡片不顯示數字，不得讓首頁壞掉。
 - `badge()` 逾時上限 5 秒，逾時視同 `null`。
+- `alerts(ctx)`（2026-10-11 新增，首頁改成跟門市營運系統一樣的「待辦與異常」）：
+  - 每項 `{ level: 'error'|'warn'|'info', text, view?, params? }`；首頁每個模組一組，一項一列，
+    點了導到 `#/<模組>/<view>?<params>`。`view` 不存在或沒權限 → 退回第一個有權限的分頁。
+  - 判斷「什麼算異常」**一律由模組自己算**（同 badge 的分層判準）；殼只負責畫。
+  - 回 `null`、不是陣列、拋錯或逾時（同 5 秒）→ 該組顯示「暫時讀不到」，其他組照常。空陣列 → 「沒有待辦」。
+  - 沒實作 `alerts()` 的模組：有 badge 數字就顯示一列「N 件待處理」，否則顯示模組說明當捷徑。
+  - 一組最多 8 列，多的收成「還有 N 項」。
 - `onRoute(ctx)`（2026-08-15 對抗審查後新增，修正原本「同模組換分頁，模組收不到通知」的缺陷）：
   同一個模組內切分頁或 query 改變時（例如稽核模組四到五個分頁互切），殼會先原地更新這個
   模組已經拿到的那個 `ctx` 物件（見 §4.7 的 `viewId`／`params`），再——如果模組有實作這個

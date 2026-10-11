@@ -116,6 +116,37 @@ async function computeDueSoonBadge(ctx) {
   }
 }
 
+/**
+ * 首頁「待辦與異常」（spec §4.6 alerts）：
+ *   - 已過合約到期日、狀態仍是「在住」→ error（要續約或辦退宿點交）
+ *   - 30 天內到期的「在住」合約 → warn（與 badge() 同一個判準）
+ * 一份合約一列，依到期日排序；算不出來回 null。
+ */
+async function computeAlerts(ctx) {
+  try {
+    const res = await listContracts(ctx);
+    if (!res || res.ok !== true) return null;
+    const contracts = res.data && res.data.contracts;
+    if (!Array.isArray(contracts)) return null;
+    if (!ctx.fmt || typeof ctx.fmt.date !== 'function') return null;
+    const todayStr = ctx.fmt.date(new Date());
+    const cutoffStr = ctx.fmt.date(new Date(Date.now() + DUE_SOON_DAYS * MS_PER_DAY));
+    if (!todayStr || !cutoffStr) return null;
+
+    const who = (c) => [c.name, c.room_bed_display].filter(Boolean).join('（') + (c.room_bed_display && c.name ? '）' : '');
+    const md = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+    return contracts
+      .filter((c) => c && c.status === '在住' && typeof c.term_end === 'string' && c.term_end && c.term_end <= cutoffStr)
+      .sort((x, y) => (x.term_end < y.term_end ? -1 : 1))
+      .map((c) => (c.term_end < todayStr
+        ? { level: 'error', text: `${who(c)}：合約 ${md(c.term_end)} 已到期，還是在住`, view: 'list' }
+        : { level: 'warn', text: `${who(c)}：合約 ${md(c.term_end)} 到期`, view: 'list' }));
+  } catch (err) {
+    console.error('[dorm] alerts() 算不出來，回 null', err);
+    return null;
+  }
+}
+
 export default {
   mount(el, ctx) {
     currentEl = el;
@@ -132,5 +163,8 @@ export default {
   },
   badge(ctx) {
     return computeDueSoonBadge(ctx);
+  },
+  alerts(ctx) {
+    return computeAlerts(ctx);
   }
 };

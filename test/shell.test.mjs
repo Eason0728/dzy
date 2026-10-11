@@ -1100,6 +1100,78 @@ await at('缺陷②：模組沒有實作 onRoute → 切分頁不會拋錯，行
 });
 
 // ============================================================
+// 測試 15：alerts()（2026-10-11 首頁改「待辦與異常」）
+//   - 正常回陣列 → 每項一列，帶 data-target（含 params）；不認得的 level 收成 info
+//   - 分頁不存在 → 連結退回第一個有權限的分頁
+//   - alerts() 拋錯 → 該組顯示「暫時讀不到」，其他組照常
+//   - 回空陣列 → 「沒有待辦」
+// ============================================================
+
+await at('alerts() 畫成首頁提醒列；拋錯只壞自己那組', async () => {
+  resetGlobalState();
+
+  const mA = makeManifest({
+    id: 'demo-al',
+    ns: 'demoal',
+    requires: ['demoal.read'],
+    views: [{ id: 'overview', name: '總覽', requires: [] }, { id: 'fill', name: '填寫', requires: [] }],
+    body: {
+      mount: async () => undefined,
+      badge: async () => 2,
+      alerts: async () => [
+        { level: 'warn', text: '甲店還沒盤點', view: 'fill', params: { store: 'a', month: '2026-10' } },
+        { level: 'weird', text: '乙店', view: 'no-such-view' },
+        { level: 'error' } // 沒有 text → 丟掉
+      ]
+    }
+  });
+  const mB = makeManifest({
+    id: 'demo-al-err',
+    ns: 'demoalerr',
+    requires: ['demoalerr.read'],
+    views: [{ id: 'overview', name: '總覽', requires: [] }],
+    body: { mount: async () => undefined, alerts: () => { throw new Error('boom'); } }
+  });
+  const mC = makeManifest({
+    id: 'demo-al-empty',
+    ns: 'demoalempty',
+    requires: ['demoalempty.read'],
+    views: [{ id: 'overview', name: '總覽', requires: [] }],
+    body: { mount: async () => undefined, alerts: async () => [] }
+  });
+  MODULES.push(
+    { load: () => Promise.resolve({ default: mA }) },
+    { load: () => Promise.resolve({ default: mB }) },
+    { load: () => Promise.resolve({ default: mC }) }
+  );
+  seedSession({ id: 'u115', name: '測試員', role: 'manager', node: '' }, ['demoal.read', 'demoalerr.read', 'demoalempty.read']);
+
+  await freshShellImport();
+  await flush();
+
+  const appEl = getAppEl();
+  const listOf = (id) => findDescendant(appEl, (n) => n.getAttribute && n.getAttribute('data-role') === 'alert-list' && n.getAttribute('data-module') === id);
+  const rowsA = findAllDescendants(listOf('demo-al'), (n) => n.getAttribute && n.getAttribute('data-role') === 'alert-row');
+  assert.equal(rowsA.length, 2, '兩項有 text 的提醒各一列，沒 text 的丟掉');
+  assert.equal(rowsA[0].getAttribute('data-target'), '#/demo-al/fill?store=a&month=2026-10', '第一列連到指定分頁＋params');
+  assert.ok(rowsA[0].classList.contains('lv-warn'), 'level warn 照用');
+  assert.equal(rowsA[1].getAttribute('data-target'), '#/demo-al/overview', '分頁不存在 → 退回第一個分頁');
+  assert.ok(rowsA[1].classList.contains('lv-info'), '不認得的 level 收成 info');
+
+  const textOf = (node) => findAllDescendants(node, () => true).map((n) => n.textContent || '').join('|');
+  assert.ok(textOf(listOf('demo-al-err')).includes('暫時讀不到'), 'alerts() 拋錯 → 該組顯示暫時讀不到');
+  assert.ok(textOf(listOf('demo-al-empty')).includes('沒有待辦'), '空陣列 → 沒有待辦');
+
+  const badgeA = findDescendant(appEl, (n) => n.getAttribute && n.getAttribute('data-role') === 'badge' && n.getAttribute('data-module') === 'demo-al');
+  assert.equal(badgeA.textContent, '2', 'badge 與 alerts 並存時數字照常');
+
+  // 點提醒列 → 導到它的 data-target
+  rowsA[0].dispatchEvent({ type: 'click', target: rowsA[0], bubbles: true });
+  await flush();
+  assert.equal(fakeWindow.location.hash, '#/demo-al/fill?store=a&month=2026-10', '點提醒列導到該列的路由');
+});
+
+// ============================================================
 // 收尾
 // ============================================================
 
