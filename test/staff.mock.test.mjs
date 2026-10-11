@@ -330,8 +330,12 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
     sheets.staff._data[rowIdx][COL('reset_lock_until')] = Math.floor(Date.now() / 1000) - 10;
     for (let i = 0; i < 5; i++) post(sb, 'forgotReset', bad);
   }
+  ok(post(sb, 'forgotReset', Object.assign({}, bad, { birthday: '1995-05-05' })).error === '忘記密碼已鎖住，請找後台解鎖，或 24 小時後再試', 'A7 24 小時內第 3 次時間鎖 → 鎖 24 小時（後台可提早解）');
+  const until = sheets.staff._data[rowIdx][COL('reset_lock_until')];
+  ok(until - Math.floor(Date.now() / 1000) > 23 * 3600, 'A7 第 3 次鎖的到期是 24 小時後');
   sheets.staff._data[rowIdx][COL('reset_lock_until')] = Math.floor(Date.now() / 1000) - 10;
-  ok(post(sb, 'forgotReset', Object.assign({}, bad, { birthday: '1995-05-05' })).error === '忘記密碼已鎖住，請找後台解鎖', 'A7 24 小時內第 3 次時間鎖 → 要後台解');
+  ok(post(sb, 'forgotReset', Object.assign({}, bad, { birthday: '1995-05-05', new_password: 'auto-unlock-1' })).ok, 'A7 24 小時到了自動解鎖，不必後台（GPT 第 6 條）');
+  ok(sheets.staff._data[rowIdx][COL('reset_locked')] === '', 'A7 自動解鎖後旗標清掉');
   post(sb, 'staffUnlockReset', { emp_no: 'DZY001' }, tok);
   // 手機被試算表存成數字
   sheets.staff._data[rowIdx][COL('phone')] = 911222333;
@@ -424,6 +428,43 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   const acc2 = post(sb2, 'login', { username: 'acc1', password: 'fake-acc-pw-01' }).data.token;
   post(sb2, 'staffList', {}, acc2);
   ok(!sh2.staff, 'A10 沒權限的人呼叫不會觸發建表');
+})();
+
+// A11 GPT 上線前關的修正
+(() => {
+  const { sb, sheets, cache } = fresh();
+  const tok = adminToken(sb);
+  // 第 4 條：分頁還沒建就直接匯入 → 先建分頁，不留孤兒帳號
+  const { sb: sb2, sheets: sh2 } = load(freshSeed(HASHER));
+  const t2 = adminToken(sb2);
+  const im = post(sb2, 'staffImport', { names: ['測試甲'] }, t2);
+  ok(im.ok && sh2.staff && sh2.staff._rows().length === 2 && sh2.staff_log._rows().length === 2, 'A11-4 沒先開名單直接匯入：分頁自動建好，users／staff／log 一致', im);
+  // 第 9 條：格式不對的請求不計入全域額度
+  const win = Math.floor(Date.now() / 1000 / 600);
+  for (let i = 0; i < 20; i++) post(sb, 'forgotReset', {});
+  for (let i = 0; i < 20; i++) post(sb, 'claimLookup', { name: '' });
+  ok(!cache.get('stf_g_forgot_' + win) && !cache.get('stf_g_lookup_' + win), 'A11-9 空請求不耗全域額度');
+  // 第 12 條：編輯帳號只寫 B:E，不蓋掉 last_login_at
+  post(sb, 'login', { username: 'acc1', password: 'fake-acc-pw-01' });
+  const lastLogin = sheets.users._rows().find((u) => u[0] === 'u002')[9];
+  ok(lastLogin !== '', 'A11-12 登入寫了 last_login_at');
+  post(sb, 'saveUser', { id: 'u002', username: 'acc1', name: '改名會計', role: 'accountant', node: '' }, tok);
+  const row = sheets.users._rows().find((u) => u[0] === 'u002');
+  ok(row[2] === '改名會計' && row[9] === lastLogin && row[6] !== '', 'A11-12 編輯只改姓名等四格，登入時間與密碼不動');
+  // 第 1 條：登入雜湊期間帳號被撤回 → 不簽 token（模擬：雜湊時偷改 hash）
+  post(sb, 'staffImport', { names: ['測試乙'] }, tok);
+  const lk = post(sb, 'claimLookup', { name: '測試乙' });
+  post(sb, 'claimSubmit', Object.assign({ name: '測試乙', emp_no: lk.data.emp_no, password: 'race-pw-1234' }, PROFILE));
+  const origHash = sb.hashPassword_;
+  sb.hashPassword_ = function (pw, salt) {
+    const h = origHash(pw, salt);
+    const u = sheets.users._data.find((r) => r[1] === lk.data.emp_no);
+    u[6] = ''; // 雜湊跑的同時被後台撤回認領
+    return h;
+  };
+  const raced = post(sb, 'login', { username: lk.data.emp_no, password: 'race-pw-1234' });
+  sb.hashPassword_ = origHash;
+  ok(raced.ok === false, 'A11-1 雜湊期間被撤回 → 不簽發 token', raced);
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

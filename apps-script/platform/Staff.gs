@@ -52,7 +52,7 @@ var STF_MSG = {
   TOO_MANY: '操作太頻繁，請稍後再試',
   RESET_MISMATCH: '資料不符，請確認或找後台',
   RESET_TIMELOCK: '錯太多次，請 1 小時後再試，或找後台',
-  RESET_LOCKED: '忘記密碼已鎖住，請找後台解鎖',
+  RESET_LOCKED: '忘記密碼已鎖住，請找後台解鎖，或 24 小時後再試',
   NOT_FOUND: '找不到這位同仁',
   BAD_STATE: '目前的狀態不能做這個動作',
   NO_PENDING: '這位同仁沒有待確認的資料',
@@ -306,9 +306,10 @@ function stfUnclaimedByName_(name) {
 }
 
 function handleClaimLookup_(payload) {
-  if (stfGlobalFlood_('lookup')) return { ok: false, error: STF_MSG.TOO_MANY };
+  // 先擋格式不對的（不計入全域額度，GPT 第 9 條：空請求不該耗掉大家的額度）
   var name = stfStr_(payload && payload.name);
-  if (!name) return { ok: false, error: '請輸入全名' };
+  if (!name || name.length > 30) return { ok: false, error: '請輸入全名' };
+  if (stfGlobalFlood_('lookup')) return { ok: false, error: STF_MSG.TOO_MANY };
   var missKey = 'stf_miss_' + name;
   if (stfCacheGet_(missKey) >= STF_NAME_MISS_LIMIT) return { ok: false, error: STF_MSG.TOO_MANY };
 
@@ -334,10 +335,11 @@ function stfCleanProfile_(payload, org, needPrivate) {
 }
 
 function handleClaimSubmit_(payload) {
-  if (stfGlobalFlood_('submit')) return { ok: false, error: STF_MSG.TOO_MANY };
   payload = payload || {};
   var name = stfStr_(payload.name);
   var empNo = stfNormEmp_(payload.emp_no);
+  if (!name || !STF_EMP_RE.test(empNo)) return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
+  if (stfGlobalFlood_('submit')) return { ok: false, error: STF_MSG.TOO_MANY };
   var password = payload.password === undefined || payload.password === null ? '' : String(payload.password);
 
   var hits = stfUnclaimedByName_(name);
@@ -398,22 +400,35 @@ function stfIssueSession_(userRow) {
 // ============================================================
 
 function handleForgotReset_(payload) {
-  if (stfGlobalFlood_('forgot')) return { ok: false, error: STF_MSG.TOO_MANY };
   payload = payload || {};
   var empNo = stfNormEmp_(payload.emp_no);
+  // 編號格式不對、生日手機不像樣的請求直接回「資料不符」，不計入全域額度（GPT 第 9 條）
+  if (!STF_EMP_RE.test(empNo) || !/^\d{4}-\d{2}-\d{2}$/.test(stfStr_(payload.birthday)) ||
+      !/^09[0-9]{8}$/.test(stfPhone_(payload.phone))) {
+    return { ok: false, error: STF_MSG.RESET_MISMATCH };
+  }
   // 新密碼規則先驗：它只看呼叫者自己的輸入，不洩漏任何資料。放在比對之後的話，
   // 「生日手機對了、密碼故意亂打」會回不同訊息又不留紀錄，變成無聲確認個資的探測器（Fable 上線前審第 2 條）
   var newPwFirst = payload.new_password === undefined || payload.new_password === null ? '' : String(payload.new_password);
   var pwErrFirst = stfValidatePassword_(newPwFirst, empNo);
   if (pwErrFirst) return { ok: false, error: pwErrFirst };
+  if (stfGlobalFlood_('forgot')) return { ok: false, error: STF_MSG.TOO_MANY };
   var hit = STF_EMP_RE.test(empNo) ? stfFindByEmp_(empNo) : null;
   var status = hit ? stfStr_(hit.values[STF_COL.status]) : '';
   if (!hit || status === 'unclaimed' || status === 'disabled') return { ok: false, error: STF_MSG.RESET_MISMATCH };
 
   var v = hit.values.slice();
   var now = stfNowSec_();
-  if (String(v[STF_COL.reset_locked]).toUpperCase() === 'TRUE') return { ok: false, error: STF_MSG.RESET_LOCKED };
-  if ((Number(v[STF_COL.reset_lock_until]) || 0) > now) return { ok: false, error: STF_MSG.RESET_TIMELOCK };
+  var lockedFlag = String(v[STF_COL.reset_locked]).toUpperCase() === 'TRUE';
+  var lockUntil = Number(v[STF_COL.reset_lock_until]) || 0;
+  if (lockedFlag && lockUntil > now) return { ok: false, error: STF_MSG.RESET_LOCKED };
+  if (lockedFlag) {
+    // 24 小時鎖自動到期（Fable 第 3 條＋GPT 第 6 條：純匿名失敗不能把人永久鎖死）
+    v[STF_COL.reset_locked] = '';
+    v[STF_COL.reset_lock_count] = 0;
+  } else if (lockUntil > now) {
+    return { ok: false, error: STF_MSG.RESET_TIMELOCK };
+  }
 
   var newPw = payload.new_password === undefined || payload.new_password === null ? '' : String(payload.new_password);
   var match = stfDate_(v[STF_COL.birthday]) === stfStr_(payload.birthday) &&
@@ -432,6 +447,7 @@ function handleForgotReset_(payload) {
       v[STF_COL.reset_lock_count] = count;
       if (count >= STF_RESET_TIMELOCK_MAX_PER_DAY) {
         v[STF_COL.reset_locked] = 'TRUE';
+        v[STF_COL.reset_lock_until] = now + 24 * 3600;
         stfLog_(empNo, 'reset_locked', 'self', '');
       } else {
         stfLog_(empNo, 'reset_timelock', 'self', '');
@@ -560,11 +576,15 @@ function stfMaxEmpNum_() {
 }
 function stfEmpOf_(n) { var s = String(n); while (s.length < 3) s = '0' + s; return 'DZY' + s; }
 
+function stfSheetsReady_() {
+  return !!(stfSheet_(STF_SHEET) && stfSheet_(STF_SHEET_ORG) && stfSheet_(STF_SHEET_LOG));
+}
+
 function handleStaffList_(token) {
   var auth = stfRequire_(token, 'platform.staff');
   if (!auth.ok) return auth;
   // 上線第一次由後台打開名單時自動建分頁（只補不覆蓋，見 setupStaff），不必進 Apps Script 編輯器手動跑
-  if (!stfSheet_(STF_SHEET) || !stfSheet_(STF_SHEET_ORG) || !stfSheet_(STF_SHEET_LOG)) {
+  if (!stfSheetsReady_()) {
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) return { ok: false, error: '系統忙碌中，請稍後再試' };
     try { setupStaff(); } finally { lock.releaseLock(); }
@@ -576,6 +596,9 @@ function handleStaffList_(token) {
 function handleStaffImport_(token, payload) {
   var auth = stfRequire_(token, 'platform.staff');
   if (!auth.ok) return auth;
+  // 分頁沒建好就先建（GPT 第 4 條：不先建會留下 users 有、staff 沒有的孤兒帳號）。
+  // 匯入本身已在 Code.gs 的寫入鎖裡，這裡直接呼叫
+  if (!stfSheetsReady_()) setupStaff();
   var names = Array.isArray(payload && payload.names) ? payload.names.map(stfStr_).filter(function (n) { return n; }) : [];
   if (!names.length) return { ok: false, error: STF_MSG.NAMES_REQUIRED };
 

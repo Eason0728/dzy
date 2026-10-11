@@ -234,16 +234,11 @@ function handleSaveUser_(token, payload) {
     return { ok: true, data: { id: newId } };
   }
 
-  // 修改：不改密碼（帶了 password 也忽略），created_at 沿用既有值原樣寫回（不清空、不重產）
-  var values = existingById.values.slice();
-  values[USR_COL.username] = username;
-  values[USR_COL.name] = name;
-  values[USR_COL.role] = role;
-  values[USR_COL.node] = node;
-  // salt/hash/active/created_at/last_login_at 保留原值
-
-  writeUsersRow_(existingById.row, values);
-  return { ok: true, data: { id: values[USR_COL.id] } };
+  // 修改：只寫 username／name／role／node 這四格（B:E）。整列回寫會把同一時間別人登入寫進去的
+  // last_login_at、改密碼寫進去的 salt／hash 蓋回舊值（GPT 上線前審第 12 條）
+  var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
+  sheet.getRange(existingById.row, USR_COL.username + 1, 1, 4).setValues([[username, name, role, node]]);
+  return { ok: true, data: { id: existingById.values[USR_COL.id] } };
 }
 
 // ============================================================

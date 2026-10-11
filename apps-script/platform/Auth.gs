@@ -398,6 +398,16 @@ function handleLogin_(payload, ipHash) {
     return { ok: false, error: AUTH_MSG_BAD_PASSWORD };
   }
 
+  // 雜湊要跑好幾秒；這段期間若有人重設密碼／撤回認領／停用，用舊快照簽出的 token 會比 token_after 新而躲過撤銷
+  //（GPT 上線前審第 1 條）。簽發前重讀一次，salt／hash／active 有變就當作失敗
+  var recheck = findUserRow_(username);
+  if (!recheck || recheck.row !== found.row ||
+      String(recheck.values[AUTH_USERS_COL.salt]) !== String(salt) ||
+      String(recheck.values[AUTH_USERS_COL.hash]) !== String(storedHash) ||
+      !isActiveValue_(recheck.values[AUTH_USERS_COL.active])) {
+    return { ok: false, error: AUTH_MSG_BAD_PASSWORD };
+  }
+
   // 成功
   clearLoginState_(username);
   updateLastLogin_(found.row);
