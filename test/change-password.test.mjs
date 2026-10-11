@@ -131,6 +131,15 @@ function makeSandbox(usersRows) {
     hashPassword_: (pw, salt) => 'H(' + salt + ':' + pw + ')',
     handleMe_: (token) => sandbox.__meResult(token),
     hasPerm_: (perms, need) => Array.isArray(perms) && (perms.indexOf('*') !== -1 || perms.indexOf(need) !== -1),
+    // 2026-10-11 個人帳號管理：改密碼後撤銷舊 token、換發新 token（Auth.gs 的函式，這裡用替身記錄呼叫）
+    setTokenAfter_: (row) => { sandbox.__tokenAfterRows.push(row); return 1000; },
+    findUserById_: (id) => {
+      const i = sheet._rows.findIndex((r) => r[0] === id);
+      return i === -1 ? null : { row: i + 2, values: sheet._rows[i] };
+    },
+    rowToUser_: (v) => ({ id: v[0], username: v[1], name: v[2], role: v[3], node: v[4] }),
+    issueToken_: (u) => 'new-token-for-' + u.id,
+    __tokenAfterRows: [],
     __sheet: sheet
   };
   vm.createContext(sandbox);
@@ -161,6 +170,8 @@ await t('B1: 舊密碼正確 → 改成功，該列 salt 與 hash 都被換掉',
   assert.equal(res.ok, true, '應該成功：' + JSON.stringify(res));
   assert.equal(rows[0][5], 'new-salt-uuid', 'salt 應更新');
   assert.equal(rows[0][6], 'H(new-salt-uuid:brandnew123)', 'hash 應以新 salt 重算');
+  assert.deepEqual(sb.__tokenAfterRows, [2], '改密碼要撤銷本人第 2 列帳號的舊 token（其他裝置登出）');
+  assert.equal(res.data.token, 'new-token-for-u001', '本次這台換發新 token，不必重新登入');
 });
 
 await t('B2: 一般同仁不需要 platform.users 權限也能改自己的密碼', async () => {

@@ -149,7 +149,8 @@ function handleListUsers_(token) {
   var auth = requirePlatformUsers_(token);
   if (!auth.ok) return auth;
 
-  var rows = readUsersRawRows_();
+  // 同仁帳號（role＝staff）改在「同仁名單」管，這裡只列系統帳號（docs/personnel/spec.md §1）
+  var rows = readUsersRawRows_().filter(function (r) { return String(r[USR_COL.role]) !== 'staff'; });
   var users = rows.map(function (r) {
     return {
       id: r[USR_COL.id],
@@ -333,8 +334,11 @@ function handleChangePassword_(token, payload) {
 
   var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
   sheet.getRange(found.row, USR_COL.salt + 1, 1, 2).setValues([[newSalt, newHash]]);
-
-  return { ok: true, data: {} };
+  // 2026-10-11：改密碼後其他裝置上的舊登入一律失效（docs/personnel/spec.md §4.1b）；
+  // 本次這台換發新 token，前端收到後替換，不必重新登入
+  var revokedAt = setTokenAfter_(found.row);
+  var fresh = findUserById_(me.data.user.id);
+  return { ok: true, data: { token: issueToken_(rowToUser_(fresh.values), revokedAt + 1) } };
 }
 
 // ============================================================

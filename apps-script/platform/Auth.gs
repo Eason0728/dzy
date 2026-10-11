@@ -22,9 +22,11 @@ var AUTH_SHEET_LOG = 'login_log';
 // users 分頁欄序（spec §5.1，逐字元、0-based index）
 var AUTH_USERS_COL = {
   id: 0, username: 1, name: 2, role: 3, node: 4,
-  salt: 5, hash: 6, active: 7, created_at: 8, last_login_at: 9
+  salt: 5, hash: 6, active: 7, created_at: 8, last_login_at: 9,
+  token_after: 10   // 2026-10-11 個人帳號管理：此時間（Unix 毫秒）以前簽發的 token 一律無效（docs/personnel/spec.md §4.1b）
 };
-var AUTH_USERS_COL_COUNT = 10;
+var AUTH_USERS_COL_COUNT = 10; // 寫入既有十欄用；token_after 由 setTokenAfter_ 單獨寫
+var AUTH_MSG_NOT_CLAIMED = '這個編號還沒開通，請按「第一次使用」';
 
 // ── 參數 ─────────────────────────────────────────────────────────────
 var AUTH_HASH_ITERATIONS = 10000;           // spec §5.6：SHA-256 迭代 10,000 次
@@ -113,9 +115,13 @@ function signPayload_(payload) {
 }
 
 /** issueToken_(user) — user = {id, role, node}；payload 逐字照 spec §5.3：{u,r,n,e} */
-function issueToken_(user) {
+function issueToken_(user, minIssuedAt) {
   var nowSec = Math.floor(Date.now() / 1000);
-  var payload = { u: user.id, r: user.role, n: user.node, e: nowSec + AUTH_TOKEN_TTL_SECONDS };
+  // i＝簽發時間（毫秒，2026-10-11 加）：配合 users.token_after 撤銷舊登入。
+  // 用毫秒不用秒：撤銷與冒用者的 token 若落在同一秒，用秒會讓舊 token 照樣過關（測試抓到）
+  // minIssuedAt：剛撤銷完馬上換發新 token 時（改密碼），保證新 token 比撤銷時間晚，才過得了嚴格大於的檢查
+  var issuedAt = Math.max(Date.now(), Number(minIssuedAt) || 0);
+  var payload = { u: user.id, r: user.role, n: user.node, e: nowSec + AUTH_TOKEN_TTL_SECONDS, i: issuedAt };
   return signPayload_(payload);
 }
 
@@ -348,6 +354,9 @@ function writeLoginLog_(username, ipHash, result) {
 function handleLogin_(payload, ipHash) {
   payload = payload || {};
   var username = String(payload.username || '').trim();
+  // DZY 員工編號不分大小寫：第一行就轉大寫，之後鎖定計數／login_log／比對都用同一個值
+  //（docs/personnel/spec.md §3；不先轉的話 dzy001／DZY001 會各算各的鎖定次數）。其他帳號維持原樣比對。
+  if (/^dzy[0-9]{3}$/i.test(username)) username = username.toUpperCase();
   var password = String(payload.password || '');
   ipHash = ipHash || '';
 
@@ -376,6 +385,12 @@ function handleLogin_(payload, ipHash) {
 
   var salt = found.values[AUTH_USERS_COL.salt];
   var storedHash = found.values[AUTH_USERS_COL.hash];
+  if (String(storedHash || '') === '') {
+    // 還沒認領的同仁編號：照樣計入鎖定（否則可以無限試出哪些編號還沒人認領）
+    recordLoginFailure_(username, state);
+    writeLoginLog_(username, ipHash, AUTH_LOG_BAD_PASSWORD);
+    return { ok: false, error: AUTH_MSG_NOT_CLAIMED };
+  }
   var computedHash = hashPassword_(password, salt);
   if (computedHash !== storedHash) {
     recordLoginFailure_(username, state);
@@ -421,6 +436,12 @@ function handleMe_(token) {
   if (!isActiveValue_(found.values[AUTH_USERS_COL.active])) {
     return { ok: false, error: AUTH_MSG_DISABLED };
   }
+  // 撤銷檢查：token_after 有值時，簽發時間早於它的 token 一律無效（舊 token 沒有 i 視為 0）
+  var tokenAfter = Number(found.values[AUTH_USERS_COL.token_after]) || 0;
+  // 嚴格大於：撤銷那一毫秒簽出的舊 token 也要擋（測試實際撞到同一毫秒）
+  if (tokenAfter && (Number(payload.i) || 0) <= tokenAfter) {
+    return { ok: false, error: AUTH_MSG_INVALID_TOKEN };
+  }
 
   var user = rowToUser_(found.values);
   var perms = getRolePerms_(user.role);
@@ -434,4 +455,12 @@ function handleMe_(token) {
       secrets: secrets
     }
   };
+}
+
+/** 讓這個帳號「現在以前」簽發的 token 全部失效（停用、撤回認領、重設／修改密碼時呼叫） */
+function setTokenAfter_(rowNumber) {
+  var sheet = SpreadsheetApp.getActive().getSheetByName(AUTH_SHEET_USERS);
+  var now = Date.now();
+  sheet.getRange(rowNumber, AUTH_USERS_COL.token_after + 1).setValue(now);
+  return now;
 }

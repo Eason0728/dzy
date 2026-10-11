@@ -12,6 +12,9 @@
 5. 沒到職日的 11 人這次不編；日後從下一號往後接，不插隊。
 6. 只有暱稱的 9 人先用現有名字建檔，日後後台改姓名（編號不變）。
 
+## 0b. 系統管理員帳號改名（Eason 2026-10-11）
+- 系統管理員帳號的登入名稱由 `admin` 改為 `BOSS`；角色仍是 `admin`（全部權限）。改名在上線步驟由 Eason 於「人員管理」編輯該帳號完成（非 DZY 帳號維持大小寫原樣比對，登入要打 `BOSS`）。
+
 ## 1. 架構與落點
 - 全部在既有平台：前端 `~/dzy`（GitHub Pages），後端 `apps-script/platform`（同一支 Apps Script、同一個部署 ID，
   只 `create-version`＋`update-deployment`，**絕不 create-deployment**）。
@@ -76,7 +79,7 @@
 | X | reset_lock_count | 24 小時內被時間鎖的次數（達 3 次改成 reset_locked＝TRUE，要後台解） |
 
 ### 4.1b `users` 分頁加一欄（v2，Fable 第 1 條）
-- 第 K 欄 `token_after`（Unix 秒，空＝不限）。token payload 加 `i`（簽發時間，Unix 秒）。
+- 第 K 欄 `token_after`（Unix 毫秒，空＝不限）。token payload 加 `i`（簽發時間，Unix 毫秒；用秒的話同一秒內撤銷會漏，測試抓到）。驗證用嚴格大於 `i > token_after`；改密碼當下換發的新 token 以 `token_after+1` 簽發。
 - 驗 token 的共用函式（handleMe_ 與所有需要 token 的新 action 都經過它）：簽章＋到期＋users.active＋`i >= token_after`；舊 token 沒有 `i` 視為 0（只要該帳號從沒設過 token_after 就照常通過，既有帳號不受影響）。
 - 寫 token_after＝現在：staffUnclaim、forgotReset 成功、staffSetActive 停用、changePassword 成功（本人改密碼後，其他裝置上的舊登入一併失效）。
 - 防的情境：冒用者認領拿到 7 天 token，後台撤回後真人重新認領，冒用者用舊 token 讀到真人個資。

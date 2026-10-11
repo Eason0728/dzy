@@ -14,7 +14,11 @@
  * 訊息原樣保留，不受這條規則影響。
  */
 
-var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive', 'resetPassword', 'listRoles', 'changePassword'];
+var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive', 'resetPassword', 'listRoles', 'changePassword',
+  // 個人帳號管理（2026-10-11，docs/personnel/spec.md §6）
+  'orgOptions', 'claimLookup', 'claimSubmit', 'forgotReset', 'myProfile', 'saveMyProfile', 'myUnit',
+  'staffList', 'staffImport', 'staffAdd', 'staffConfirm', 'staffReject', 'staffSetActive', 'staffUnclaim',
+  'staffUnlockReset', 'staffEdit'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -63,7 +67,9 @@ function dispatch_(e) {
   // 會寫入試算表的動作要拿全域鎖：Apps Script 允許並發執行，
   // 兩個管理者同時建帳號會各自用 appendRow 前的列數推 id，撞出重複資料列。
   // 唯讀動作（login/me/listUsers/listRoles）不上鎖，登入速度不受影響。
-  var MUTATING_ACTIONS = { saveUser: 1, setActive: 1, resetPassword: 1, changePassword: 1 };
+  var MUTATING_ACTIONS = { saveUser: 1, setActive: 1, resetPassword: 1, changePassword: 1,
+    claimSubmit: 1, forgotReset: 1, saveMyProfile: 1, staffImport: 1, staffAdd: 1, staffConfirm: 1,
+    staffReject: 1, staffSetActive: 1, staffUnclaim: 1, staffUnlockReset: 1, staffEdit: 1 };
   if (MUTATING_ACTIONS[action]) {
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) {
@@ -97,6 +103,22 @@ function dispatchAction_(action, token, payload) {
     case 'changePassword':
       // 本人改自己的密碼，不需要 platform.users（見 Users.gs §5b 說明）
       return handleChangePassword_(token, payload);
+    case 'orgOptions': return handleOrgOptions_();
+    case 'claimLookup': return handleClaimLookup_(payload);
+    case 'claimSubmit': return handleClaimSubmit_(payload);
+    case 'forgotReset': return handleForgotReset_(payload);
+    case 'myProfile': return handleMyProfile_(token);
+    case 'saveMyProfile': return handleSaveMyProfile_(token, payload);
+    case 'myUnit': return handleMyUnit_(token);
+    case 'staffList': return handleStaffList_(token);
+    case 'staffImport': return handleStaffImport_(token, payload);
+    case 'staffAdd': return handleStaffAdd_(token, payload);
+    case 'staffConfirm': return handleStaffConfirm_(token, payload);
+    case 'staffReject': return handleStaffReject_(token, payload);
+    case 'staffSetActive': return handleStaffSetActive_(token, payload);
+    case 'staffUnclaim': return handleStaffUnclaim_(token, payload);
+    case 'staffUnlockReset': return handleStaffUnlockReset_(token, payload);
+    case 'staffEdit': return handleStaffEdit_(token, payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };
