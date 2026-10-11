@@ -22,7 +22,9 @@
 export const APP_NAME = '鼎兆元餐飲集團｜管理系統';
 
 export const BACKENDS = {
-  platform: 'https://script.google.com/macros/s/AKfycbww4w5qrdEqFA1UwOxDeZQKzoVahqJPrRDJ9mVUqUSb9-BcWqoHYLyAPN5O35QjX4Rs/exec',
+  // 2026-10 起平台後端在公司 Mac mini（dzy-minikit apps/dzy-platform，Funnel /platform）。
+  // 回退：還原這一行成舊 Apps Script /exec（git revert 合併 minikit-cutover 的 commit），見 ~/dzy-minikit/apps/dzy-platform/ROLLBACK.md
+  platform: 'https://dingzhaoyuandemac-mini.tailc27c34.ts.net/platform/api',
   audit: 'https://script.google.com/macros/s/AKfycbz5l_aH_qypN6HK6UDT__5NLZDk4A2clyqeqvJzx5JrL9SBVeH5GyDYBCW3gv-CDy7fFQ/exec',
   dorm: 'https://script.google.com/macros/s/AKfycbyxyhJ35MWTjtvzKr54_9JzGfLZlclyqn2fYLWXgz0muTFzL_tu81nR1r3W332J1igm/exec'
 };
