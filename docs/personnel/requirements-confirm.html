@@ -1,0 +1,198 @@
+<title>個人帳號管理需求</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* 版型：單欄文件，左側深色編號條呼應管理系統側邊欄；黃色＝要你決定的地方 */
+:root{
+  --bg:#faf8f6; --card:#ffffff; --ink:#231815; --soft:#5d554f; --muted:#8a817a; --line:#e6e0da;
+  --side:#1b1917; --side-ink:#f3eee8; --gold:#FABE00; --gold-soft:#fff6d6; --red:#c8402c; --red-soft:#fbe9e6; --ok:#2f6b3a; --ok-soft:#e8f2ea;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#161413; --card:#1f1c1a; --ink:#f1ebe5; --soft:#c9c0b8; --muted:#958b82; --line:#34302c;
+  --side:#0e0d0c; --side-ink:#f3eee8; --gold:#f5c22b; --gold-soft:#3a2f0e; --red:#ef7a64; --red-soft:#3a1f1a; --ok:#8fc19c; --ok-soft:#1d2a20; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161413; --card:#1f1c1a; --ink:#f1ebe5; --soft:#c9c0b8; --muted:#958b82; --line:#34302c;
+  --side:#0e0d0c; --side-ink:#f3eee8; --gold:#f5c22b; --gold-soft:#3a2f0e; --red:#ef7a64; --red-soft:#3a1f1a; --ok:#8fc19c; --ok-soft:#1d2a20; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.75;margin:0}
+.wrap{max-width:46rem;margin:0 auto;padding-inline:16px;padding-block:2.2rem 4rem}
+header{background:var(--side);color:var(--side-ink);border-radius:14px;padding:1.4rem 1.4rem 1.3rem}
+.eyebrow{font-size:.78rem;letter-spacing:.14em;color:var(--gold);font-weight:700}
+h1{font-size:clamp(1.6rem,5vw,2.1rem);font-weight:900;margin:.3rem 0 .5rem;line-height:1.25;text-wrap:balance}
+header p{margin:0;color:#cfc6bd}
+.id{font-family:var(--mono);font-weight:700;background:var(--gold);color:#231815;border-radius:6px;padding:0 .4em;white-space:nowrap}
+section{margin-top:2.4rem}
+h2{font-size:1.25rem;font-weight:900;margin:0 0 .8rem;text-wrap:balance}
+h2 small{font-size:.8rem;font-weight:500;color:var(--muted);margin-left:.4rem}
+p{margin:0 0 .8rem}
+.phases{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ph{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.8rem .9rem;min-width:0}
+.ph.now{border:2px solid var(--gold)}
+.ph b{display:block;font-size:.85rem;color:var(--muted)}
+.ph.now b{color:var(--ink)}
+.ph span{font-weight:700;font-size:.95rem}
+ol.flow{list-style:none;margin:0;padding:0;display:grid;gap:8px;counter-reset:s}
+ol.flow li{counter-increment:s;display:grid;grid-template-columns:2rem 1fr;gap:.6rem;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;align-items:start}
+ol.flow li::before{content:counter(s);width:1.7rem;height:1.7rem;border-radius:50%;background:var(--side);color:var(--side-ink);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;margin-top:.15rem}
+ol.flow li div{min-width:0}
+.note{font-size:.9rem;color:var(--soft)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55rem .75rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:700;color:var(--soft);background:color-mix(in srgb,var(--line) 35%,var(--card));white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.y{color:var(--ok);font-weight:700}.n{color:var(--muted)}
+.ladder{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:.3rem 0 .9rem}
+.ladder span{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:.15rem .7rem;font-size:.9rem;font-weight:500}
+.ladder i{color:var(--muted);font-style:normal}
+ul.plain{margin:0;padding-left:1.2rem}ul.plain li{margin:.25rem 0}
+.dec{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--ok);border-radius:10px;padding:.8rem 1rem}
+.dec ul{margin:0;padding-left:1.1rem}.dec li{margin:.35rem 0}
+.q{background:var(--gold-soft);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:10px;padding:.85rem 1rem;margin-top:10px}
+.q h3{margin:0 0 .3rem;font-size:1rem;font-weight:900}
+.q .rec{margin:.35rem 0 0;font-size:.93rem}
+.q .rec b{color:var(--ink)}
+.risk{background:var(--red-soft);border-radius:10px;padding:.75rem 1rem;font-size:.92rem;margin-top:.8rem}
+.reply{margin-top:2.4rem;background:var(--side);color:var(--side-ink);border-radius:14px;padding:1.1rem 1.3rem}
+.reply p{margin:.2rem 0}
+footer{margin-top:2rem;font-size:.8rem;color:var(--muted)}
+@media (max-width:560px){.phases{grid-template-columns:1fr}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">鼎兆元管理系統・第一期需求・請確認</div>
+  <h1>個人帳號管理</h1>
+  <p>每位同仁一個集團編號 <span class="id">DZY001</span>～<span class="id">DZY113</span>，第一次登入自己認領、填個人資料，後台確認後生效。</p>
+</header>
+
+<section>
+  <h2>分三期，這次只確認第一期</h2>
+  <div class="phases">
+    <div class="ph now"><b>第一期・這次</b><span>編號、第一次登入、個人資料、後台名單</span></div>
+    <div class="ph"><b>第二期</b><span>依職稱決定能用哪些系統</span></div>
+    <div class="ph"><b>第三期</b><span>表單依職級往上簽核（只做打卡系統沒有的）</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>編號怎麼來</h2>
+  <p>照你 10/8 那份名單的預設 113 人，前三位你指定、其餘照到職日。後台先建好「編號＋姓名」。</p>
+  <ul class="plain">
+    <li>新進同仁：後台新增，自動接下一號（DZY114 起）。</li>
+    <li>離職：帳號停用，編號保留，永遠不給別人。</li>
+  </ul>
+</section>
+
+<section>
+  <h2>同仁第一次登入</h2>
+  <ol class="flow">
+    <li><div>登入頁按「第一次使用」，輸入自己的<b>全名</b>。</div></li>
+    <li><div>名單上有、還沒開通 → 畫面顯示他的編號。<div class="note">查不到：請他找後台。已經開通過：請他用編號登入（不透露是誰開通的）。</div></div></li>
+    <li><div>自己設密碼（8 碼以上），填個人資料，送出。</div></li>
+    <li><div>變成「待確認」：可以登入，但只看得到「我的資料」。</div></li>
+    <li><div>後台按「確認開通」才正式生效；也可以退回並寫原因，讓他改完再送。<div class="note">首頁「待辦與異常」會顯示「有 N 位同仁待確認」。</div></div></li>
+  </ol>
+</section>
+
+<section>
+  <h2>個人資料<small>全部必填</small></h2>
+  <div class="tbl"><table>
+    <thead><tr><th>欄位</th><th>怎麼填</th><th>之後能自己改嗎</th></tr></thead>
+    <tbody>
+      <tr><td>品牌</td><td>下拉</td><td>可以，但要重新確認，確認前沿用舊的</td></tr>
+      <tr><td>單位</td><td>下拉，只列選到的品牌底下的</td><td>同上</td></tr>
+      <tr><td>職稱</td><td>下拉，門市品牌和總部各用自己的職級</td><td>同上</td></tr>
+      <tr><td>生日</td><td>選日期</td><td>不行，找後台改（它是忘記密碼的驗證）</td></tr>
+      <tr><td>手機</td><td>09 開頭 10 碼</td><td>可以</td></tr>
+      <tr><td>居住地址</td><td>文字</td><td>可以</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>下拉選單</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>品牌</th><th>單位</th></tr></thead>
+    <tbody>
+      <tr><td>墨竹亭</td><td>新竹金山、新竹光復、台北六張犁、台中文心、內湖瑞光、台中美村、墨竹亭總部</td></tr>
+      <tr><td>麻的小辛辣</td><td>新竹光復、小辛辣總部</td></tr>
+      <tr><td>一悟燒肉</td><td>新竹金山、竹北文興</td></tr>
+      <tr><td>央廚</td><td>央廚</td></tr>
+      <tr><td>鼎兆元總部</td><td>鼎兆元總部</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:1rem"><b>門市職級</b>（低 → 高）</p>
+  <div class="ladder"><span>計時同仁</span><i>›</i><span>正職同仁</span><i>›</i><span>店長</span><i>›</i><span>區經理</span><i>›</i><span>督導</span><i>›</i><span>品牌總監</span></div>
+  <p><b>總部職級</b>（低 → 高）</p>
+  <div class="ladder"><span>部門同仁</span><i>›</i><span>部門主管</span><i>›</i><span>執行長</span><i>›</i><span>總經理</span><i>›</i><span>董事長</span></div>
+</section>
+
+<section>
+  <h2>登入與忘記密碼</h2>
+  <ul class="plain">
+    <li>帳號是 DZY＋三碼（大小寫都可以），密碼是自己設的。</li>
+    <li>忘記密碼：輸入編號＋生日＋手機，三樣都對就能設新密碼。</li>
+    <li>現有的管理系統帳號（admin、會計等）不動，同一個登入框兩種都能登。</li>
+  </ul>
+  <div class="risk"><b>要注意：</b>同事之間常知道彼此的生日和手機，所以加了兩道防線：同一個編號連錯 5 次就鎖住忘記密碼，要找後台解鎖；每次重設都留紀錄，之後你的通知機器人可以讀去提醒本人。</div>
+</section>
+
+<section>
+  <h2>誰看得到什麼</h2>
+  <div class="tbl"><table>
+    <thead><tr><th></th><th>姓名、編號、職稱</th><th>手機</th><th>生日、地址</th></tr></thead>
+    <tbody>
+      <tr><td>本人</td><td class="y">看得到</td><td class="y">看得到、可改</td><td class="y">看得到（地址可改）</td></tr>
+      <tr><td>後台</td><td class="y">看得到</td><td class="y">看得到</td><td class="y">看得到</td></tr>
+      <tr><td>店長以上（自己單位）</td><td class="y">看得到</td><td class="y">看得到</td><td class="n">看不到</td></tr>
+      <tr><td>其他同仁</td><td class="n">看不到</td><td class="n">看不到</td><td class="n">看不到</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>這一期不做</h2>
+  <ul class="plain">
+    <li>依職稱鎖系統（第二期）、表單簽核（第三期）。</li>
+    <li>通知：你會另做機器人，這裡只留紀錄給它讀。</li>
+    <li>不動打卡、佈告欄、薪資的同仁名單。</li>
+    <li>匯出 Excel。</li>
+  </ul>
+</section>
+
+<section>
+  <h2>我替你決定的</h2>
+  <div class="dec"><ul>
+    <li><b>第一期只有後台能確認開通。</b>你選的是「後台或主管確認」，但一開始沒有任何人的職稱被確認過，系統還不知道誰是誰的主管。主管確認從第二期開始。</li>
+    <li><b>待確認的人能登入，但只看到「我的資料」。</b>這樣他可以回頭修改，又拿不到任何系統。</li>
+    <li><b>生日開通後本人不能改。</b>不然冒用的人可以先改生日、再拿去重設密碼。</li>
+  </ul></div>
+</section>
+
+<section>
+  <h2>還要你決定的</h2>
+  <div class="q"><h3>1. 央廚的人用哪一套職級？</h3>
+    <p class="rec">我建議：<b>用門市職級</b>（計時同仁～品牌總監）。如果央廚有自己的職稱（例如廠長、行政主廚），請列給我，並告訴我它們排在哪裡。</p></div>
+  <div class="q"><h3>2. 墨竹亭總部、小辛辣總部的人用哪一套職級？</h3>
+    <p class="rec">我建議：<b>用總部職級</b>（部門同仁、部門主管…），單位仍放在各自品牌底下。</p></div>
+  <div class="q"><h3>3. 總部要不要再選「部門」？</h3>
+    <p class="rec">總部職級有「部門主管」，第三期簽核要知道誰是誰的部門主管。我建議：<b>要</b>，在總部單位底下多一個「部門」下拉，請給我部門清單（例如會計部、人事部、資訊部）。</p></div>
+  <div class="q"><h3>4. 同時在兩個單位上班的人怎麼填？</h3>
+    <p class="rec">名單上有人跨兩個單位（例如鼎兆元總部＋一悟新竹金山）。我建議：<b>只填一個主要單位</b>，跨單位支援之後再處理。</p></div>
+  <div class="q"><h3>5. 沒有到職日的 11 人</h3>
+    <p class="rec">我建議：<b>這次先不編</b>。你補上日期後，從 DZY114 往後接著編，不插進中間，免得已經發出去的編號要改。</p></div>
+  <div class="q"><h3>6. 只有暱稱的 9 人</h3>
+    <p class="rec">請把全名給我（你上一題選了「照建議」：補全名後建檔）。給不了的，先用現在的名字建檔。</p></div>
+</section>
+
+<div class="reply">
+  <p><b>怎麼回我</b></p>
+  <p>內容沒問題、六題都照建議 → 回「需求確認，照建議」，第 6 題的全名另外給我。</p>
+  <p>要改的 → 寫題號＋你的答案，或直接說哪一段要改。</p>
+</div>
+
+<footer>需求文件正本：~/dzy/docs/personnel/requirements.md・2026-10-11 草稿 v1・本頁不含任何同仁姓名或個資</footer>
+</div>
