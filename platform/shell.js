@@ -53,8 +53,11 @@ const BADGE_TIMEOUT_MS = 5000;
 
 let rootEl = null;
 
-let navMobileEl = null;
 let navDesktopEl = null;
+let sideNavEl = null;
+let sideUserEl = null;
+let pageTitleEl = null;
+let pageSubEl = null;
 let viewNavEl = null;
 let viewContentEl = null;
 
@@ -291,6 +294,7 @@ async function loadBadge(manifest) {
     (n) => n.getAttribute && n.getAttribute('data-role') === 'badge' && n.getAttribute('data-module') === manifest.id
   );
   if (badgeEl) badgeEl.textContent = String(value);
+  setNavBadge(manifest.id, value);
 }
 
 // ============================================================
@@ -323,27 +327,63 @@ async function teardownCurrent() {
 // 導覽渲染（spec §6.2：兩層，事件委派各綁一次）
 // ============================================================
 
+/** 角色代號 → 中文（spec §4.3 平台層的角色表；查不到就顯示原代號，不讓畫面壞掉）。 */
+/** 各模組最近一次 badge() 的數字：側邊欄每次切頁都會重畫，要靠這份補回件數。 */
+const navBadgeCache = {};
+
+const ROLE_ZH = { admin: '系統管理者', manager: '部門主管', accountant: '會計', storelead: '店長', staff: '員工' };
+
+/**
+ * 左側深色側邊欄（外觀照門市營運系統 ~/mala-store-ops/web/js/shell.js sidebarHtml，2026-10-11）：
+ * 品牌 → 首頁 →「系統」標籤 → 有權限的模組 → 底部使用者區（改密碼／登出）。
+ * 手機（≤860px）由 CSS 改成「上排品牌＋使用者、下排圖示選單」，同一份 DOM，不另做第二份導覽。
+ */
 function renderTopNav() {
   const activeId = currentModule ? currentModule.id : '__home__';
+
+  const navItem = (id, label, iconNode) => el('button', {
+    type: 'button',
+    class: `nav-item${id === activeId ? ' is-active' : ''}`,
+    'data-nav': id,
+    'aria-current': id === activeId ? 'page' : null
+  }, [el('span', { class: 'ic', 'aria-hidden': 'true' }, [iconNode]), el('span', { class: 'lb', text: label })]);
+
+  clearChildren(sideNavEl);
+  sideNavEl.appendChild(navItem('__home__', '首頁', el('span', { text: '🏠' })));
+  if (permittedModules.length) sideNavEl.appendChild(el('div', { class: 'nav-label', text: '系統' }));
+  for (const m of permittedModules) {
+    // 圖示＝manifest.icon（資料），殼不對值做 if 判斷
+    sideNavEl.appendChild(navItem(m.id, m.name, el('img', { src: `assets/icons/${m.icon}.png`, alt: '' })));
+    if (navBadgeCache[m.id]) setNavBadge(m.id, navBadgeCache[m.id]);
+  }
+
+  const user = auth.getUser() || {};
+  clearChildren(sideUserEl);
+  sideUserEl.appendChild(el('div', { class: 'av', 'aria-hidden': 'true', text: '🙂' }));
+  sideUserEl.appendChild(el('div', { class: 'su-main' }, [
+    el('div', { class: 'nm', text: user.name || '' }),
+    el('div', { class: 'rl', text: ROLE_ZH[user.role] || user.role || '' })
+  ]));
   // 修改密碼是平台層自己的功能（不是模組），所有登入者都看得到，不需要任何權限碼。
-  const items = [{ id: '__home__', label: '首頁' }]
-    .concat(permittedModules.map((m) => ({ id: m.id, label: m.name })))
-    .concat([{ id: '__password__', label: '修改密碼' }, { id: '__logout__', label: '登出' }]);
+  sideUserEl.appendChild(el('div', { class: 'su-act' }, [
+    el('button', { type: 'button', 'data-nav': '__password__', text: '改密碼' }),
+    el('button', { type: 'button', 'data-nav': '__logout__', text: '登出' })
+  ]));
 
-  const buildButtons = () =>
-    items.map((it) =>
-      el('button', {
-        type: 'button',
-        class: `nav-item${it.id === activeId ? ' is-active' : ''}`,
-        'data-nav': it.id,
-        text: it.label
-      })
-    );
+  // 內容區頂端頁名：首頁顯示「首頁」、模組顯示模組名；副標＝登入者
+  pageTitleEl.textContent = currentModule ? currentModule.name : '首頁';
+  pageSubEl.textContent = [user.name, ROLE_ZH[user.role] || user.role].filter(Boolean).join('・');
+}
 
-  clearChildren(navMobileEl);
-  buildButtons().forEach((b) => navMobileEl.appendChild(b));
-  clearChildren(navDesktopEl);
-  buildButtons().forEach((b) => navDesktopEl.appendChild(b));
+/** 側邊欄模組名稱右側的待辦件數（與首頁卡片同一個 badge() 結果；0／沒數字不顯示）。 */
+function setNavBadge(moduleId, value) {
+  navBadgeCache[moduleId] = value;
+  const item = findDescendant(sideNavEl, (n) => n.getAttribute && n.getAttribute('data-nav') === moduleId);
+  if (!item) return;
+  const old = findDescendant(item, (n) => n.className === 'badge');
+  if (old) item.removeChild(old);
+  if (!value) return;
+  item.appendChild(el('i', { class: 'badge', text: String(value), 'aria-label': `${value} 件待處理` }));
 }
 
 function renderViewNav(manifest) {
@@ -364,6 +404,8 @@ function renderViewNav(manifest) {
 
 function renderHomeCards() {
   clearChildren(viewContentEl);
+  const grid = el('div', { class: 'module-grid' });
+  viewContentEl.appendChild(grid);
   for (const m of permittedModules) {
     const firstView = m.views.find(isViewPermitted);
     const target = firstView ? `#/${m.id}/${firstView.id}` : '#/home';
@@ -392,7 +434,7 @@ function renderHomeCards() {
         badgeEl
       ]
     );
-    viewContentEl.appendChild(card);
+    grid.appendChild(card);
   }
   for (const m of permittedModules) loadBadge(m);
 }
@@ -449,18 +491,30 @@ function onViewContentClick(e) {
 function ensureShellDom() {
   clearChildren(rootEl);
 
-  navMobileEl = el('nav', { class: 'bottom-nav', 'data-role': 'nav-mobile' });
-  navDesktopEl = el('aside', { class: 'sidebar', 'data-role': 'nav-desktop' });
-  viewNavEl = el('div', { class: 'section', 'data-role': 'view-nav' });
+  // 側邊欄（外觀正本：門市營運系統 ~/mala-store-ops/web/css/app.css .sidebar）
+  const brandEl = el('div', { class: 'brand' }, [
+    el('span', { class: 'brand-logo', text: '鼎兆元' }),
+    el('div', null, [
+      el('div', { class: 'bt', text: '鼎兆元管理系統' }),
+      el('div', { class: 'bs', text: 'DING ZHAO YUAN' })
+    ])
+  ]);
+  sideNavEl = el('nav', { class: 'side-nav', 'aria-label': '系統選單' });
+  sideUserEl = el('div', { class: 'side-user' });
+  navDesktopEl = el('aside', { class: 'sidebar', 'data-role': 'nav-desktop' }, [brandEl, sideNavEl, sideUserEl]);
+
+  pageTitleEl = el('h1', { class: 'page-title' });
+  pageSubEl = el('div', { class: 'sub' });
+  const topbarEl = el('div', { class: 'topbar' }, [pageTitleEl, pageSubEl]);
+  viewNavEl = el('div', { class: 'view-tabs', 'data-role': 'view-nav' });
   viewContentEl = el('div', { 'data-role': 'view-content' });
 
-  const pageEl = el('div', { class: 'page' }, [viewNavEl, viewContentEl]);
-  const mainEl = el('div', { class: 'app-main' }, [pageEl]);
-  const shellEl = el('div', { class: 'app-shell' }, [navMobileEl, navDesktopEl, mainEl]);
+  const pageEl = el('div', { class: 'page' }, [viewContentEl]);
+  const mainEl = el('div', { class: 'app-main' }, [topbarEl, viewNavEl, pageEl]);
+  const shellEl = el('div', { class: 'app-shell' }, [navDesktopEl, mainEl]);
 
   rootEl.appendChild(shellEl);
 
-  navMobileEl.addEventListener('click', onTopNavClick);
   navDesktopEl.addEventListener('click', onTopNavClick);
   viewNavEl.addEventListener('click', onViewNavClick);
   viewContentEl.addEventListener('click', onViewContentClick);
@@ -670,6 +724,7 @@ async function doLogout() {
   auth.logout();
   allManifests = [];
   permittedModules = [];
+  for (const k of Object.keys(navBadgeCache)) delete navBadgeCache[k];
   window.location.hash = '';
   showLogin();
 }

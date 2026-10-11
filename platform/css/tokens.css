@@ -69,6 +69,23 @@
   /* 深色底上的淡邊框（例如載入中的圓圈） */
   --line-on-dark: rgba(255, 255, 255, .35);
 
+  /* ---- 登入後外觀：照門市營運系統（~/mala-store-ops/web/css/tokens.css，2026-10-11 Eason 指示兩套長一樣） ----
+     深色側邊欄、選中項黃色膠囊、分頁列底線色。主要按鈕仍用 --brand 紅，不跟著換。 */
+  --sidebar: #1b1917;
+  --sidebar-2: #2a2623;
+  --sidebar-3: #3a3330;
+  --sidebar-line: #332e2a;
+  --side-txt: #b8afa5;
+  --side-txt-soft: #a89e94;
+  --side-label: #7a6f65;
+  --side-role: #7d736a;
+  --nav-pill: #FABE00;          /* 鼎兆元品牌黃（門市營運系統 hq 主題） */
+  --nav-pill-ink: #231815;
+  --logo-dzy: #1F4E8C;          /* 側邊欄「鼎兆元」字樣方塊 */
+  --tab-line: #EF856D;          /* 分頁列選中底線 */
+  --shadow-pill: 0 4px 12px rgba(0, 0, 0, .28);
+  --shadow-card-hover: 0 2px 10px rgba(35, 24, 21, .08);
+
   /* ---- 圓角階梯 ---- */
   --radius-sm: 6px;
   --radius-lg: 16px;
@@ -112,7 +129,7 @@
   /* ---- 版面尺寸：底部導覽列（手機）／側邊欄（桌機） ---- */
   --header-h: 56px;
   --bottom-nav-h: 56px;
-  --sidebar-w: 220px;
+  --sidebar-w: 252px;
 
   /* ---- 層級 ---- */
   --z-header: 100;

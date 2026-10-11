@@ -320,144 +320,429 @@ textarea.input:disabled {
 }
 
 /* ---------------------------------------------------------- */
-/* 導覽：手機底部列／桌機側邊欄                                  */
+/* 導覽：深色側邊欄＋頂端頁名＋白色分頁列                         */
+/* 外觀正本＝門市營運系統 ~/mala-store-ops/web/css/app.css（2026-10-11 */
+/* Eason 指示登入後介面兩套一樣）。桌機左側欄；≤860px 改成上排品牌＋ */
+/* 使用者、下排圖示選單，同一份 DOM。                              */
 /* ---------------------------------------------------------- */
 
 .app-shell {
+  display: flex;
   min-height: 100vh;
 }
 
 .app-main {
-  padding-bottom: var(--bottom-nav-h);
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: var(--z-nav);
+.sidebar {
+  width: var(--sidebar-w);
+  flex: none;
+  background: var(--sidebar);
+  color: var(--side-txt);
   display: flex;
-  height: var(--bottom-nav-h);
-  background: var(--card);
-  border-top: 1px solid var(--line);
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar .brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 22px 20px 18px;
+}
+.sidebar .brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--logo-dzy);
+  color: var(--ink-inverse);
+  font-size: var(--fs-xs);
+  font-weight: 900;
+}
+.sidebar .bt {
+  font-size: var(--fs-md);
+  font-weight: 900;
+  color: var(--ink-inverse);
+  line-height: 1.15;
+}
+.sidebar .bs {
+  font-size: var(--fs-xs);
+  letter-spacing: .02em;
+  color: var(--side-txt-soft);
+  font-weight: var(--fw-bold);
+  margin-top: 2px;
+  line-height: 1.15;
+}
+
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 12px 10px;
+  flex: 1;
+}
+.nav-label {
+  font-size: var(--fs-xs);
+  letter-spacing: .12em;
+  color: var(--side-label);
+  font-weight: 800;
+  padding: 14px 10px 6px;
 }
 
 .nav-item {
-  flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 2px;
-  color: var(--ink);
-  font-size: var(--fs-sm);       /* 08-17 由 xs 放大：手機底部列字太小不好點 */
-  font-weight: var(--fw-medium);
-  text-decoration: none;
-  background: transparent;
+  gap: 13px;
+  width: 100%;
+  text-align: left;
+  color: var(--side-txt);
+  font-size: 16.5px;
+  font-weight: var(--fw-bold);
+  padding: 11px 14px;
   border: none;
+  border-radius: 11px;
+  background: transparent;
   cursor: pointer;
 }
-
-.nav-item.is-active {
-  color: var(--brand);
+.side-nav .nav-item:hover {
+  background: var(--sidebar-2);
+  color: var(--ink-inverse);
+}
+.side-nav .nav-item.is-active {
+  background: var(--nav-pill);
+  color: var(--nav-pill-ink);
+  font-weight: 900;
+  box-shadow: var(--shadow-pill);
+}
+.nav-item .ic {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+.nav-item .ic img {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+.nav-item .lb {
+  flex: 1;
+  min-width: 0;
+}
+.nav-item .badge {
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  line-height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: var(--ink-inverse);
+  font-size: var(--fs-xs);
+  font-style: normal;
   font-weight: var(--fw-bold);
-  background: var(--brand-light);
+  text-align: center;
 }
 
-/* 模組內的分頁列（殼的 view-nav）：橫向膠囊，字放大、每顆都是明確的可點區塊
-   （Eason 08-17）。項目多時橫向捲動，不擠成兩行也不縮小字。 */
+.side-user {
+  margin-top: auto;
+  padding: 14px 18px;
+  border-top: 1px solid var(--sidebar-line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.side-user .av {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--sidebar-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex: none;
+}
+.side-user .su-main {
+  min-width: 0;
+  flex: 1;
+}
+.side-user .nm {
+  font-size: var(--fs-sm);
+  font-weight: 800;
+  color: var(--ink-inverse);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.side-user .rl {
+  font-size: 11px;
+  color: var(--side-role);
+}
+.su-act {
+  flex-basis: 100%;
+  display: flex;
+  gap: 8px;
+}
+.su-act button {
+  font-size: 12.5px;
+  font-weight: var(--fw-bold);
+  color: var(--ink-inverse);
+  background: var(--sidebar-2);
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.su-act button:hover {
+  background: var(--sidebar-3);
+}
+
+/* 內容區頂端：頁名＋副標（登入者） */
+.topbar {
+  padding: 24px 30px 4px;
+}
+.topbar .page-title {
+  font-size: 23px;
+  font-weight: 900;
+  letter-spacing: -.01em;
+  margin: 0;
+}
+.topbar .sub {
+  color: var(--brand);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  margin-top: 3px;
+}
+.topbar .sub:empty {
+  display: none;
+}
+
+/* 模組內的分頁列（殼的 view-nav）：白底、選中紅字＋底線，項目多時橫向捲動 */
 [data-role="view-nav"] {
   display: flex;
   flex-wrap: nowrap;
-  gap: var(--space-2);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: var(--space-1);
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  margin-top: 10px;
+  padding: 0 18px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 [data-role="view-nav"]:empty {
   display: none;
 }
 [data-role="view-nav"] .nav-item {
   flex: none;
-  flex-direction: row;
-  min-height: 44px;
-  padding: 0 var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--card);
-  font-size: var(--fs-md);
+  width: auto;
+  gap: 0;
+  padding: 13px 20px;
+  border-radius: 0;
+  border-bottom: 3px solid transparent;
+  color: var(--muted);
+  font-size: var(--fs-base);
   white-space: nowrap;
 }
 [data-role="view-nav"] .nav-item:hover {
-  border-color: var(--brand);
-  background: var(--brand-light);
+  color: var(--ink);
 }
 [data-role="view-nav"] .nav-item.is-active {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: var(--ink-inverse);
+  color: var(--brand);
+  border-bottom-color: var(--tab-line);
 }
 
-.sidebar {
-  display: none;
+/* 內容區：靠左、與頂端頁名對齊（覆蓋 base.css .page 的置中窄欄） */
+.app-main .page {
+  max-width: 1180px;
+  margin: 0;
+  padding: 14px 30px 70px;
 }
 
-@media (min-width: 768px) {
-  .bottom-nav {
+/* 首頁模組卡片：格狀排列、上緣品牌色條（照營運系統 .mcard） */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--gap);
+}
+.module-grid .card + .card {
+  margin-top: 0;
+}
+.module-grid .module-card {
+  border-radius: 12px;
+  border-top: 4px solid var(--nav-pill);
+  box-shadow: none;
+  cursor: pointer;
+}
+.module-grid .module-card:hover {
+  border-color: var(--tab-line);
+  box-shadow: var(--shadow-card-hover);
+}
+
+@media (max-width: 860px) {
+  .app-shell {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    overflow: visible;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "brand user" "nav nav";
+    align-items: center;
+  }
+  .sidebar .brand {
+    grid-area: brand;
+    padding: 10px 14px;
+    min-width: 0;
+  }
+  .sidebar .bt {
+    font-size: 15px;
+    white-space: nowrap;
+  }
+  .sidebar .bs,
+  .nav-label {
     display: none;
   }
-
-  .app-main {
-    padding-bottom: 0;
-    margin-left: var(--sidebar-w);
+  .sidebar .brand-logo {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    font-size: 10px;
+    letter-spacing: -.04em;
+    white-space: nowrap;
   }
-
-  .sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: var(--sidebar-w);
-    padding: var(--space-5) var(--space-3);
-    background: var(--card);
-    border-right: 1px solid var(--line);
-    overflow-y: auto;
-  }
-
-  /* 側邊欄入口：字放大、每一項是看得見的區塊（Eason 08-17：字大一點、
-     用區塊方便點選）。高度 56px 遠超過 44px 的可點擊下限，滑鼠與觸控都好按。 */
-  .sidebar .nav-item {
-    flex: none;              /* 覆蓋 .nav-item 基底的 flex:1，否則在 flex-column 側邊欄裡會被撐滿垂直空間 */
+  .side-nav {
+    grid-area: nav;
     flex-direction: row;
-    justify-content: flex-start;
-    gap: var(--space-2);
-    width: 100%;
-    min-height: 56px;
-    padding: 0 var(--space-4);
-    border-radius: var(--radius-sm);
-    font-size: var(--fs-lg);
-    font-weight: var(--fw-medium);
-    color: var(--ink);
-    background: var(--bg);              /* 每項都有底色＝看得出是一塊可點的區域 */
-    border: 1px solid var(--line);
-    text-align: left;
-    transition: background .12s ease, border-color .12s ease;
+    padding: 0 6px 8px;
+    gap: 2px;
   }
-
-  .sidebar .nav-item:hover {
-    background: var(--brand-light);
-    border-color: var(--brand);
+  .side-nav .nav-item {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding: 7px 2px 6px;
+    border-radius: 10px;
+    font-size: var(--fs-xs);
+    line-height: 1.15;
+    text-align: center;
+    white-space: nowrap;
+    letter-spacing: -.02em;
   }
-
-  .sidebar .nav-item.is-active {
-    background: var(--brand-light);
-    border-color: var(--brand);
-    color: var(--brand);
+  .side-nav .nav-item.is-active {
+    box-shadow: none;
+  }
+  .side-nav .nav-item .ic {
+    height: 22px;
+    font-size: 19px;
+  }
+  .side-nav .nav-item .lb {
+    flex: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .side-nav .nav-item .badge {
+    position: absolute;
+    top: 2px;
+    left: calc(50% + 6px);
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    font-size: 11px;
+    padding: 0 5px;
+  }
+  .side-user {
+    grid-area: user;
+    margin: 0;
+    border: 0;
+    padding: 8px 12px 8px 0;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 0;
+  }
+  .side-user .av,
+  .side-user .rl {
+    display: none;
+  }
+  .side-user .su-main {
+    flex: 0 1 auto;
+    text-align: right;
+    min-width: 0;
+  }
+  .side-user .nm {
+    font-size: 12.5px;
+    color: var(--side-txt);
     font-weight: var(--fw-bold);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .su-act {
+    flex: none;
+    flex-basis: auto;
+    gap: 6px;
+  }
+  .su-act button {
+    white-space: nowrap;
+    padding: 7px 10px;
+    min-height: 34px;
+  }
+  .topbar {
+    padding: 14px 16px 2px;
+  }
+  .topbar .page-title {
+    font-size: 21px;
+  }
+  [data-role="view-nav"] {
+    padding: 0 6px;
+    margin-top: 8px;
+  }
+  .app-main .page {
+    padding: 12px 16px 60px;
+  }
+  .module-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 400px) {
+  .side-nav .nav-item {
+    font-size: 11px;
+    letter-spacing: -.05em;
+  }
+}
+
+@media (max-width: 480px) {
+  [data-role="view-nav"] .nav-item {
+    padding: 12px 12px;
+    flex: 1 0 auto;
+    text-align: center;
+    justify-content: center;
   }
 }
 
