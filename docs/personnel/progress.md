@@ -32,7 +32,7 @@
 - [x] 2 掛進監看：不適用（沒有定時任務；後端與既有平台同一支，平台健康檢查 doGet 不變）
 - [x] 3 納入故障追蹤：不適用（沒有自動化執行紀錄可追；異常紀錄在 staff_log）
 - [x] 4 登錄資源：docs/resources.md ＋ ~/.claude/mala-ops/dispatch-resources.md 部署 @7、新分頁
-- [x] 5 建 skill 並登錄路由：沿用 dzy-admin skill，加「個人帳號管理」一節；CLAUDE.md 路由表與 dispatch-rules 第 30 列加關鍵詞
+- [x] 5 建 skill 並登錄路由：沿用 dzy-admin skill，加「個人帳號管理」一節；routing-full.md 與 dispatch-rules 第 30 列加關鍵詞（CLAUDE.md 2026-10-11 已改成只放索引）
 - [x] 6 寫一則記憶：memory/dzy-personnel-accounts.md＋MEMORY.md
 - [x] 7 進版控：dzy main 853e595 已推（前端上線）；~/.claude 已 commit push
 - [x] 8 回報未完成與等待事項：2026-10-11 回報
