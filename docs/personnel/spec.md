@@ -192,7 +192,7 @@ pending／rejected／active --unclaim（後台，冒用時用）--> unclaimed（
 
 ## 7. 前端
 ### 7.1 登入頁（`platform/views/login.js`）
-帳號欄提示改「DZY 編號或系統帳號」；表單下方加兩個連結：「第一次使用」「忘記密碼」→ 由 login.js 自己切畫面（同一個登入背景版型）。
+帳號欄提示「DZY 編號」（2026-10-12 Eason：不顯示「系統帳號」字樣；BOSS 等系統帳號照常可登入）；表單下方加兩個連結：「第一次使用」「忘記密碼」→ 由 login.js 自己切畫面（同一個登入背景版型）。
 用 hash `#/claim`、`#/forgot`：login.js 開機時讀 hash 決定顯示哪個畫面；shell 把 `claim`、`forgot` 列為保留字（不當模組 id、manifest-check 也擋這兩個 id）。認領成功後先清掉 hash 再呼叫 onSuccess，避免登入後 route() 把 `claim` 當模組找不到而跳「沒有權限」。
 
 ### 7.2 第一次使用（`platform/views/claim.js`）三步

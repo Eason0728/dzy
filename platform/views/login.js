@@ -121,7 +121,7 @@ function renderLoginForm(el, app) {
           <div class="field">
             <label class="field-label" for="login-username">帳號</label>
             <input class="input" id="login-username" name="username" type="text"
-                   placeholder="DZY 編號或系統帳號"
+                   placeholder="DZY 編號"
                    autocomplete="username" autocapitalize="off" autocorrect="off" required>
           </div>
           <div class="field">
