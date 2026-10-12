@@ -1,13 +1,14 @@
 /**
  * platform/views/claim.js — 第一次使用（docs/personnel/spec.md §7.2）
  *
- * 三步：輸入全名 → 看到自己的編號、設密碼、填個人資料 → 送出即登入。
+ * 三步：輸入全名 → 看到自己的編號、設密碼、填個人資料 → 送出，等單位主管審核通過才能登入
+ *（2026-10-12 Eason：認領只是核對編號，不自動登入）。
  * 登入前畫面，屬平台層（不是模組）；由 login.js 依 #/claim 掛進登入卡片。
  * 密碼只活在 submit handler 的區域變數，交給 auth.claimSubmit() 後就沒有副本（同 login.js 的規則）。
  */
 
 import { publicCall, claimSubmit } from '../auth.js';
-import { loading, toast } from '../ui.js';
+import { loading } from '../ui.js';
 import { esc } from '../fmt.js';
 import { orgFieldsHtml, bindOrgFields, readOrgFields } from './org-fields.js';
 
@@ -96,8 +97,8 @@ function stepForm(card, opts, name, empNo, org) {
         <label class="field-label" for="claim-address">居住地址</label>
         <input class="input" id="claim-address" type="text" autocomplete="street-address" required>
       </div>
-      <p class="field-hint">送出後要等後台確認，確認前只看得到「我的資料」。生日和手機是忘記密碼時確認本人用的，請填正確。</p>
-      <button class="btn btn-primary btn-block" type="submit" data-role="submit">送出並登入</button>
+      <p class="field-hint">送出後要等你的單位主管審核，通過後才能用編號登入。生日和手機是主管核對本人、以及忘記密碼時確認本人用的，請填正確。</p>
+      <button class="btn btn-primary btn-block" type="submit" data-role="submit">送出審核</button>
     </form>
     <div class="login-links"><button type="button" class="link-btn" data-role="back">這不是我，回上一步</button></div>`;
   card.querySelector('[data-role="back"]').addEventListener('click', () => stepName(card, opts));
@@ -130,10 +131,19 @@ function stepForm(card, opts, name, empNo, org) {
     } finally {
       loading(false);
       btn.disabled = false;
-      btn.textContent = '送出並登入';
+      btn.textContent = '送出審核';
     }
     if (!res.ok) return showError(card, res.error);
-    toast('資料已送出，等後台確認', 'ok');
-    opts.onSuccess();
+    stepSent(card, opts, empNo);
   });
+}
+
+/** 送出完成：不登入，告訴他等主管審核、之後怎麼登入 */
+function stepSent(card, opts, empNo) {
+  card.innerHTML = `
+    <h1 class="card-title">已送出</h1>
+    <div class="toast toast-ok" data-role="claim-sent">已送出，等你的單位主管審核通過後就能登入。</div>
+    <p class="pre-text">你的編號是 <span class="emp-no">${esc(empNo)}</span>。<br>審核通過後，回登入頁用這個編號和剛才設的密碼登入。<br>等很久沒消息，請直接問你的店長或主管。</p>
+    <button class="btn btn-primary btn-block" type="button" data-role="back">回登入頁</button>`;
+  card.querySelector('[data-role="back"]').addEventListener('click', () => opts.onBack(empNo));
 }

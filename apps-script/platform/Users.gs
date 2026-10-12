@@ -37,6 +37,18 @@ var USR_MSG_ACTIVE_INVALID = 'active 格式錯誤';
 var USR_MSG_PASSWORD_TOO_SHORT = '密碼至少需要 8 個字元';
 var USR_MSG_OLD_PASSWORD_WRONG = '目前密碼不正確';
 var USR_MSG_PASSWORD_SAME = '新密碼不能與目前密碼相同';
+var USR_MSG_STAFF_ELSEWHERE = '同仁帳號請到同仁名單操作';
+var USR_MSG_USERNAME_TOO_LONG = '帳號最多 64 個字';
+var USR_MSG_USERNAME_BAD_START = '帳號不能用 = + - @ 開頭';
+// minikit 假試算表會把純數字字串轉成數字，存一次就登不進去（GPT 複審第 5 條，2026-10-12）
+var USR_MSG_USERNAME_NEED_LETTER = '帳號至少要有一個英文字母';
+var USR_MSG_NAME_TOO_LONG = '姓名最多 50 個字';
+var USR_MSG_SELF_PW_LOCKED = '嘗試次數過多，請 15 分鐘後再試';
+
+// 本人驗密碼（改密碼、改手機）錯誤計數：同一 user 15 分鐘內錯 5 次鎖 15 分鐘（2026-10-12）
+var USR_SELF_PW_FAIL_LIMIT = 5;
+var USR_SELF_PW_WINDOW_SECONDS = 15 * 60;
+var USR_SELF_PW_LOCK_SECONDS = 15 * 60;
 
 // ============================================================
 // 0. 權限檢查（spec：token → verifyToken_ → 取角色 → getRolePerms_ → hasPerm_）
@@ -51,6 +63,47 @@ function requirePlatformUsers_(token) {
     return { ok: false, error: USR_MSG_NO_PERM };
   }
   return { ok: true, user: me.data.user, perms: me.data.perms };
+}
+
+// ============================================================
+// 0b. 本人驗密碼的錯誤計數（2026-10-12；changePassword 與 Staff.gs 的 saveMyProfile 共用）
+//     存 CacheService，key 用 user id（不是帳號，改名也不會歸零）。
+// ============================================================
+
+function usrSelfPwKey_(userId) { return 'usr_selfpw:' + String(userId); }
+
+function usrSelfPwState_(userId) {
+  var raw = CacheService.getScriptCache().get(usrSelfPwKey_(userId));
+  if (!raw) return { count: 0, since: 0, lockedUntil: 0 };
+  try {
+    var p = JSON.parse(raw);
+    return { count: Number(p.count) || 0, since: Number(p.since) || 0, lockedUntil: Number(p.lockedUntil) || 0 };
+  } catch (e) {
+    return { count: 0, since: 0, lockedUntil: 0 };
+  }
+}
+
+/**
+ * usrVerifySelfPassword_(userId, password, userValues) → {ok:true} | {ok:false, error}
+ * 先看是否鎖住（鎖住就不算雜湊、不再計次）；驗錯計一次，驗對清掉計數。
+ */
+function usrVerifySelfPassword_(userId, password, userValues) {
+  var nowSec = Math.floor(Date.now() / 1000);
+  var st = usrSelfPwState_(userId);
+  if (st.lockedUntil > nowSec) return { ok: false, error: USR_MSG_SELF_PW_LOCKED };
+  var cache = CacheService.getScriptCache();
+  // 常數時間比對（GPT 複審第 6 條；與 handleLogin_ 一致）
+  var good = String(userValues[USR_COL.hash] || '') !== '' &&
+    authSafeEqual_(hashPassword_(String(password), userValues[USR_COL.salt]), String(userValues[USR_COL.hash]));
+  if (good) {
+    cache.remove(usrSelfPwKey_(userId));
+    return { ok: true };
+  }
+  if (!st.since || nowSec - st.since >= USR_SELF_PW_WINDOW_SECONDS) st = { count: 0, since: nowSec, lockedUntil: 0 };
+  st.count += 1;
+  if (st.count >= USR_SELF_PW_FAIL_LIMIT) st.lockedUntil = nowSec + USR_SELF_PW_LOCK_SECONDS;
+  cache.put(usrSelfPwKey_(userId), JSON.stringify(st), USR_SELF_PW_WINDOW_SECONDS + USR_SELF_PW_LOCK_SECONDS);
+  return { ok: false, error: USR_MSG_OLD_PASSWORD_WRONG };
 }
 
 // ============================================================
@@ -131,6 +184,11 @@ function isValidNode_(node) {
   return node === '' || USR_VALID_NODES.indexOf(node) !== -1;
 }
 
+/** 把格子設成純文字（'@'）；minikit 假表／舊測試沙盒沒有 setNumberFormat 就略過（帳號另有「要有英文字母」把關） */
+function usrSetTextFormat_(range) {
+  if (range && typeof range.setNumberFormat === 'function') range.setNumberFormat('@');
+}
+
 function appendUsersRow_(rowValues) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
   sheet.appendRow(rowValues);
@@ -190,8 +248,14 @@ function handleSaveUser_(token, payload) {
 
   // ── 驗證（全部通過才寫）──────────────────────────────────
   if (!username) return { ok: false, error: USR_MSG_USERNAME_REQUIRED };
+  if (username.length > 64) return { ok: false, error: USR_MSG_USERNAME_TOO_LONG };
+  if (/^[=+\-@]/.test(username)) return { ok: false, error: USR_MSG_USERNAME_BAD_START };
+  if (!/[A-Za-z]/.test(username)) return { ok: false, error: USR_MSG_USERNAME_NEED_LETTER };
   if (!name) return { ok: false, error: USR_MSG_NAME_REQUIRED };
+  if (name.length > 50) return { ok: false, error: USR_MSG_NAME_TOO_LONG };
   if (!role) return { ok: false, error: USR_MSG_ROLE_REQUIRED };
+  // 同仁帳號（role staff）只能經「同仁名單」建立／修改，否則 staff 分頁與 users 狀態會脫鉤（2026-10-12）
+  if (role === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
   if (!roleExists_(role)) return { ok: false, error: USR_MSG_ROLE_NOT_FOUND };
   if (!isValidNode_(node)) return { ok: false, error: USR_MSG_NODE_INVALID };
 
@@ -206,6 +270,7 @@ function handleSaveUser_(token, payload) {
   } else {
     existingById = findUsrRowById_(id);
     if (!existingById) return { ok: false, error: USR_MSG_NOT_FOUND };
+    if (String(existingById.values[USR_COL.role]) === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
     if (existingByUsername && existingByUsername.row !== existingById.row) {
       return { ok: false, error: USR_MSG_USERNAME_TAKEN };
     }
@@ -221,7 +286,7 @@ function handleSaveUser_(token, payload) {
     var row = [];
     row[USR_COL.id] = newId;
     row[USR_COL.username] = username;
-    row[USR_COL.name] = name;
+    row[USR_COL.name] = authSafeCell_(name); // users 姓名欄不是純文字格式，防公式注入（2026-10-12）
     row[USR_COL.role] = role;
     row[USR_COL.node] = node;
     row[USR_COL.salt] = salt;
@@ -230,6 +295,8 @@ function handleSaveUser_(token, payload) {
     row[USR_COL.created_at] = createdAt;
     row[USR_COL.last_login_at] = '';
 
+    var usersSheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
+    usrSetTextFormat_(usersSheet.getRange(usersSheet.getLastRow() + 1, USR_COL.username + 1)); // 帳號欄純文字
     appendUsersRow_(row);
     return { ok: true, data: { id: newId } };
   }
@@ -237,7 +304,8 @@ function handleSaveUser_(token, payload) {
   // 修改：只寫 username／name／role／node 這四格（B:E）。整列回寫會把同一時間別人登入寫進去的
   // last_login_at、改密碼寫進去的 salt／hash 蓋回舊值（GPT 上線前審第 12 條）
   var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
-  sheet.getRange(existingById.row, USR_COL.username + 1, 1, 4).setValues([[username, name, role, node]]);
+  usrSetTextFormat_(sheet.getRange(existingById.row, USR_COL.username + 1)); // 帳號欄純文字（GPT 複審第 5 條）
+  sheet.getRange(existingById.row, USR_COL.username + 1, 1, 4).setValues([[username, authSafeCell_(name), role, node]]);
   return { ok: true, data: { id: existingById.values[USR_COL.id] } };
 }
 
@@ -256,6 +324,8 @@ function handleSetActive_(token, payload) {
 
   var found = findUsrRowById_(id);
   if (!found) return { ok: false, error: USR_MSG_NOT_FOUND };
+  // 同仁帳號停用／啟用要走 staffSetActive，才會同步 staff 分頁的狀態（2026-10-12）
+  if (String(found.values[USR_COL.role]) === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
 
   var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
   sheet.getRange(found.row, USR_COL.active + 1).setValue(payload.active ? 'TRUE' : 'FALSE');
@@ -283,6 +353,8 @@ function handleResetPassword_(token, payload) {
 
   var found = findUsrRowById_(id);
   if (!found) return { ok: false, error: USR_MSG_NOT_FOUND };
+  // 同仁帳號：admin 直接設密碼會讓「還沒認領」的編號跳過認領就能登入（2026-10-12）
+  if (String(found.values[USR_COL.role]) === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
 
   var newSalt = Utilities.getUuid();
   var newHash = hashPassword_(newPassword, newSalt);
@@ -304,8 +376,9 @@ function handleResetPassword_(token, payload) {
 //     **一定要驗舊密碼**，而且 id 一律取自 token（不收 payload 的 id）——
 //     少了任何一條，就會變成「登入任何帳號即可改他人密碼」的提權漏洞。
 //
-// 舊密碼錯誤的訊息刻意與登入失敗一致（不透露是哪個環節錯），也不動登入失敗鎖定計數
-// （那是防猜帳號密碼的機制，本人改密碼打錯字不該把自己鎖在外面）。
+// 舊密碼錯誤不動登入失敗鎖定計數（本人改密碼打錯字不該把自己鎖在登入門外），
+// 但另有一組「本人驗密碼」計數（2026-10-12，usrVerifySelfPassword_）：同一 user 15 分鐘錯 5 次，
+// 改密碼／改手機鎖 15 分鐘——否則偷到 token 的人可以無限次猜舊密碼。
 // ============================================================
 
 function handleChangePassword_(token, payload) {
@@ -324,11 +397,8 @@ function handleChangePassword_(token, payload) {
   var found = findUsrRowById_(me.data.user.id);
   if (!found) return { ok: false, error: USR_MSG_NOT_FOUND };
 
-  var currentSalt = found.values[USR_COL.salt];
-  var currentHash = found.values[USR_COL.hash];
-  if (hashPassword_(oldPassword, currentSalt) !== String(currentHash)) {
-    return { ok: false, error: USR_MSG_OLD_PASSWORD_WRONG };
-  }
+  var verified = usrVerifySelfPassword_(found.values[USR_COL.id], oldPassword, found.values);
+  if (!verified.ok) return verified;
   if (newPassword === oldPassword) {
     return { ok: false, error: USR_MSG_PASSWORD_SAME };
   }

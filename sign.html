@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<script>
+  // 防 clickjacking：被嵌進 iframe 時跳出框架，並先隱藏頁面避免被覆蓋誘導點擊
+  if (top !== self) { document.documentElement.style.display = 'none'; try { top.location = self.location; } catch (e) {} }
+</script>
 <title>宿舍租賃契約　線上簽署</title>
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/icon-180.png">
@@ -102,6 +106,7 @@ async function load() {
   if (!t) throw new Error('連結不完整，請向宿舍長索取正確的簽署連結。');
   const r = await fetch(API_URL + '?action=contract&token=' + encodeURIComponent(t));
   const j = await r.json();
+  if (j.state === 'expired') return j;  // 2026-10-12：連結過期，交給啟動段顯示專屬畫面
   if (!j.ok) throw new Error(j.error || '連結無效');
   return j;
 }
@@ -137,7 +142,7 @@ function renderTerms(t) {
   h += `<h2>${esc(t.annex1.title.replace('附件一　',''))}</h2>`;
   h += '<table><thead><tr><th>設備項目</th><th>數量</th><th style="text-align:right">賠償單價</th></tr></thead><tbody>';
   t.annex1.prices.forEach(p => {
-    h += `<tr><td>${esc(p.item)}</td><td>${p.qty}</td><td class="num">${p.price.toLocaleString()}</td></tr>`;
+    h += `<tr><td>${esc(p.item)}</td><td>${esc(p.qty)}</td><td class="num">${esc(Number(p.price).toLocaleString())}</td></tr>`;
   });
   h += '</tbody></table>';
   h += `<p class="clause" style="font-size:13.5px;color:#6f665f">${esc(t.annex1.footer)}</p></section>`;
@@ -250,13 +255,26 @@ async function submit(data) {
   showDone('簽署完成', j.pdf_url);
 }
 
+// 2026-10-12 安全修補：PDF 連結只接受 https 的 Google Drive／Docs 主機，其餘一律不顯示連結
+// （避免後端資料被竄改時塞入 javascript: 或釣魚網址）。
+function pdfLink(u, label) {
+  try {
+    const url = new URL(String(u || ''));
+    if (url.protocol !== 'https:') return '';
+    if (url.hostname !== 'drive.google.com' && url.hostname !== 'docs.google.com') return '';
+    return `<a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+  } catch {
+    return '';
+  }
+}
+
 function showDone(msg, pdfUrl) {
   document.getElementById('app').innerHTML = `
     <div class="done">
       <div class="tick">✓</div>
       <h1 style="font-size:20px;margin:10px 0 6px">${esc(msg)}</h1>
       <p style="color:#6f665f;font-size:14px">合約已成立，請下載並自行留存一份。</p>
-      ${pdfUrl ? `<a href="${pdfUrl}" target="_blank">下載我的合約 PDF</a>` : ''}
+      ${pdfLink(pdfUrl, '下載我的合約 PDF')}
     </div>`;
 }
 
@@ -265,12 +283,20 @@ function showDone(msg, pdfUrl) {
   const app = document.getElementById('app');
   try {
     const d = await load();
+    if (d.state === 'expired') {
+      app.innerHTML = `<div class="done"><div class="tick" style="color:#b8860b">!</div>
+        <h1 style="font-size:19px;margin:10px 0 6px">連結已過期</h1>
+        <p style="color:#6f665f;font-size:14px">${esc(d.error || '連結已過期，請洽管理員重發')}</p></div>`;
+      return;
+    }
     if (d.state === 'signed') {
-      app.innerHTML = renderCover(d.contract) + renderTerms(d.terms)
-        + `<div class="done"><div class="tick">✓</div>
+      // 2026-10-12：後端對已簽署連結只回狀態＋簽署時間＋姓名／房間／租期，不再回條文與個資，故只顯示完成畫面
+      const c = d.contract || {};
+      app.innerHTML = `<div class="done"><div class="tick">✓</div>
            <h1 style="font-size:19px;margin:10px 0 6px">這份合約已完成簽署</h1>
-           <p style="color:#6f665f;font-size:14px">簽署時間 ${esc(d.contract.signed_at||'')}</p>
-           ${d.contract.pdf_url ? `<a href="${d.contract.pdf_url}" target="_blank">下載合約 PDF</a>`:''}</div>`;
+           <p style="color:#6f665f;font-size:14px">簽署時間 ${esc(c.signed_at||'')}</p>
+           ${c.name ? `<p style="color:#6f665f;font-size:14px">${esc(c.name)}　${esc(c.room_bed||'')}<br>${esc(c.term_start||'')} 至 ${esc(c.term_end||'')}</p>` : ''}
+           <p style="color:#6f665f;font-size:13px">如需合約副本，請洽管理員。</p></div>`;
       return;
     }
     app.innerHTML = (MOCK ? '<div class="banner">本機預覽模式（mock）——資料是假的，送出不會寫入</div>' : '')

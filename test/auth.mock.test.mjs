@@ -304,7 +304,7 @@ function flipChar(str, index) {
 })();
 
 // ============================================================
-// C. 三種身分：secrets 依權限下發最低一級碼
+// C. 三種身分：依權限選最低一級碼（2026-10-12 起不再下發給瀏覽器，只給代轉用的 pickSecretFor_）
 // ============================================================
 (() => {
   const { sandbox } = freshApp();
@@ -313,31 +313,34 @@ function flipChar(str, index) {
   const accRes = sandbox.handleLogin_({ username: 'acc1', password: PW.acc1 });
   assertTrue(accRes.ok === true, 'C1a: 會計登入成功');
   assertEqual(accRes.data.perms, ['audit.read', 'audit.write'], 'C1b: 會計 perms 展開正確');
-  assertEqual(accRes.data.secrets.audit, 'FAKE-AUDIT-WRITE-CODE', 'C1c: 會計拿到 audit 的 write 碼');
+  assertEqual(sandbox.pickSecretFor_(accRes.data.perms, 'audit'), 'FAKE-AUDIT-WRITE-CODE', 'C1c: 會計對 audit 用 write 碼');
+  assertTrue(!('secrets' in accRes.data), 'C1e: login 回應不再有 secrets 欄位');
   assertEqual(accRes.data.user, { id: 'u001', name: '王會計', role: 'accountant', node: '' }, 'C1d: 會計 user 物件形狀正確（不含 username/salt/hash）');
 
   // C2：店長（只有 audit.read.own）→ 拿 audit 的 read 碼
   const leadRes = sandbox.handleLogin_({ username: 'lead1', password: PW.lead1 });
   assertTrue(leadRes.ok === true, 'C2a: 店長登入成功');
   assertEqual(leadRes.data.perms, ['audit.read.own'], 'C2b: 店長 perms 展開正確');
-  assertEqual(leadRes.data.secrets.audit, 'FAKE-AUDIT-READ-CODE', 'C2c: 店長拿到 audit 的 read 碼（不是 write 碼）');
+  assertEqual(sandbox.pickSecretFor_(leadRes.data.perms, 'audit'), 'FAKE-AUDIT-READ-CODE', 'C2c: 店長對 audit 用 read 碼（不是 write 碼）');
 
   // C3：店長拿不到 dorm 的任何碼
-  assertTrue(!Object.prototype.hasOwnProperty.call(leadRes.data.secrets, 'dorm'), 'C3: 店長 secrets 沒有 dorm 這個鍵');
-  assertEqual(Object.keys(leadRes.data.secrets), ['audit'], 'C3b: 店長 secrets 只有 audit 一個鍵');
+  assertEqual(sandbox.pickSecretFor_(leadRes.data.perms, 'dorm'), '', 'C3: 店長對 dorm 拿不到任何碼');
+  assertEqual(Object.keys(sandbox.pickSecrets_(leadRes.data.perms)), ['audit'], 'C3b: pickSecrets_ 對店長只有 audit 一個鍵');
 
   // 額外：admin（*）→ audit 給 write、dorm 只有 write 一列，也給 write
   const adminRes = sandbox.handleLogin_({ username: 'admin1', password: PW.admin1 });
   assertTrue(adminRes.ok === true, 'C4a: admin 登入成功');
   assertEqual(adminRes.data.perms, ['*'], 'C4b: admin perms 為萬用字元');
-  assertEqual(adminRes.data.secrets.audit, 'FAKE-AUDIT-WRITE-CODE', 'C4c: admin 拿到 audit 的 write 碼');
-  assertEqual(adminRes.data.secrets.dorm, 'FAKE-DORM-WRITE-CODE', 'C4d: admin 拿到 dorm 的 write 碼');
+  assertEqual(sandbox.pickSecretFor_(adminRes.data.perms, 'audit'), 'FAKE-AUDIT-WRITE-CODE', 'C4c: admin 對 audit 用 write 碼');
+  assertEqual(sandbox.pickSecretFor_(adminRes.data.perms, 'dorm'), 'FAKE-DORM-WRITE-CODE', 'C4d: admin 對 dorm 用 write 碼');
 
   // 額外：manager（audit.read、dorm.write）→ 兩個後端各拿不同 level，證明是逐後端判斷
   const mgrRes = sandbox.handleLogin_({ username: 'mgr1', password: PW.mgr1 });
   assertTrue(mgrRes.ok === true, 'C5a: manager 登入成功');
-  assertEqual(mgrRes.data.secrets.audit, 'FAKE-AUDIT-READ-CODE', 'C5b: manager 沒有 audit.write，audit 拿 read 碼');
-  assertEqual(mgrRes.data.secrets.dorm, 'FAKE-DORM-WRITE-CODE', 'C5c: manager 有 dorm.write，dorm 拿 write 碼');
+  assertEqual(sandbox.pickSecretFor_(mgrRes.data.perms, 'audit'), 'FAKE-AUDIT-READ-CODE', 'C5b: manager 沒有 audit.write，audit 用 read 碼');
+  assertEqual(sandbox.pickSecretFor_(mgrRes.data.perms, 'dorm'), 'FAKE-DORM-WRITE-CODE', 'C5c: manager 有 dorm.write，dorm 用 write 碼');
+  const allText = JSON.stringify([accRes, leadRes, adminRes, mgrRes]);
+  assertTrue(allText.indexOf('FAKE-') === -1, 'C6: 四種身分的 login 回應全文都不含任何通行碼字串');
 })();
 
 // ============================================================
@@ -417,7 +420,7 @@ function flipChar(str, index) {
   assertTrue(meRes.ok === true, 'G1: me 有效 token → ok:true');
   assertEqual(meRes.data.user, loginRes.data.user, 'G2: me 回傳的 user 與 login 一致');
   assertEqual(meRes.data.perms, loginRes.data.perms, 'G3: me 回傳的 perms 與 login 一致');
-  assertEqual(meRes.data.secrets, loginRes.data.secrets, 'G4: me 回傳的 secrets 與 login 一致');
+  assertTrue(!('secrets' in meRes.data) && JSON.stringify(meRes).indexOf('FAKE-') === -1, 'G4: me 回應沒有 secrets 欄位、全文不含任何通行碼字串');
   assertTrue(!Object.prototype.hasOwnProperty.call(meRes.data, 'token'), 'G5: me 回傳不含 token 欄位');
 
   assertEqual(sandbox.handleMe_('garbage-not-a-token'), { ok: false, error: '登入已失效，請重新登入' }, 'G6: 亂字串 token → 拒絕');

@@ -393,10 +393,10 @@ const TOKEN_KEY = 'dzy.token';
 
 /** 直接種一份「已登入」狀態：localStorage 放 token，auth transport 的 me 回這份身分。
  *  這樣 shell.js 自啟動時 auth.restore() 就會成功，不必真的跑一次 login.js 的表單流程。 */
-function seedSession(user, perms, secrets) {
+function seedSession(user, perms) {
   localStorage.setItem(TOKEN_KEY, 'tok-' + user.id);
   __setTransport(async (req) => {
-    if (req.action === 'me') return { ok: true, data: { user, perms, secrets: secrets || {} } };
+    if (req.action === 'me') return { ok: true, data: { user, perms } };
     return { ok: false, error: '(mock) 未預期的 action：' + req.action };
   });
 }
@@ -410,10 +410,14 @@ function seedSession(user, perms, secrets) {
  * navMobileEl 炸掉。換一份全新的 window／document 就讓舊監聽器綁在一個沒人再送事件
  * 進去的物件上，自然不會再被觸發。
  */
-function resetGlobalState() {
+async function resetGlobalState() {
   MODULES.length = 0;
   localStorage.clear();
-  authLogout();
+  // 2026-10-12：auth.logout() 會先呼叫後端 logout 再清本機（回 Promise），要等它清完才能種下一段的 session，
+  // 不然延後的清除會把新 session 蓋掉；用只回 ok 的假 transport，不落到真 fetch
+  __setTransport(async () => ({ ok: true, data: {} }));
+  await authLogout();
+  __setTransport(null);
   armFetchGuard();
 
   fakeDocument = new FakeDocument();
@@ -492,7 +496,7 @@ await at('未登入時：boot 顯示登入頁；手動改 hash 仍停在登入�
 // ============================================================
 
 await at('沒有權限的模組不出現在首頁；沒有權限的分頁不出現在導覽', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   const manifestA = makeManifest({
     id: 'demo-a',
@@ -547,8 +551,24 @@ await at('沒有權限的模組不出現在首頁；沒有權限的分頁不出�
 // 測試 3：badge 拋錯時該卡片無數字、其他卡片正常、首頁沒壞
 // ============================================================
 
+await at('2026-10-12 登出後整頁重載（location.replace），模組記憶體歸零；query 保留、hash 去掉', async () => {
+  seedSession({ id: 'u100', name: '測試員', role: 'storelead', node: '' }, ['demoa.read']);
+  let replaced = null;
+  fakeWindow.location.pathname = '/dzy/';
+  fakeWindow.location.search = '?dryrun=1';
+  fakeWindow.location.replace = (u) => { replaced = u; };
+  await freshShellImport();
+  await flush();
+  const appEl = getAppEl();
+  const logoutBtn = findDescendant(appEl, (n) => n.getAttribute && n.getAttribute('data-nav') === '__logout__');
+  assert.ok(logoutBtn, '要有登出鈕');
+  dispatchClick(logoutBtn);
+  await flush();
+  assert.equal(replaced, '/dzy/?dryrun=1');
+});
+
 await at('badge 拋錯時該卡片無數字、其他卡片正常、首頁沒壞', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   const manifestErr = makeManifest({
     id: 'demo-err',
@@ -594,7 +614,7 @@ await at('badge 拋錯時該卡片無數字、其他卡片正常、首頁沒壞'
 // ============================================================
 
 await at('badge 逾時（模擬 6 秒不回）→ 5 秒後放棄，首頁正常', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   const manifestTimeout = makeManifest({
     id: 'demo-timeout',
@@ -645,7 +665,7 @@ await at('badge 逾時（模擬 6 秒不回）→ 5 秒後放棄，首頁正常'
 // ============================================================
 
 await at('非法路由：模組不存在／分頁不存在／權限不足 → 導回 #/home 並 toast(沒有權限,warn)', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   const manifestX = makeManifest({
     id: 'demo-x',
@@ -688,7 +708,7 @@ await at('非法路由：模組不存在／分頁不存在／權限不足 → �
 // ============================================================
 
 await at('切換模組時前一個模組的 unmount 有被呼叫；mount 回傳的函式也視同 unmount 呼叫', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   const callLog = { aUnmountCalls: 0, aReturnedUnmountCalls: 0, bMountCalls: 0 };
 
@@ -751,7 +771,7 @@ await at('切換模組時前一個模組的 unmount 有被呼叫；mount 回傳�
 // ============================================================
 
 await at("ctx.api.call('假模組id', ...) 會轉成用該 manifest 的 backend 呼叫", async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   let capturedCall = null;
 
@@ -796,7 +816,9 @@ await at("ctx.api.call('假模組id', ...) 會轉成用該 manifest 的 backend 
   armFetchGuard();
 
   assert.ok(capturedCall, 'ctx.api.call 應該真的送出了一次請求');
-  assert.equal(capturedCall.url, BACKENDS.dorm, 'ctx.api.call("demo-target",...) 應該查到 demo-target 的 manifest.backend=dorm，打對網址（不是呼叫端自己的 backend）');
+  // 2026-10-12：dorm／audit 都走 Mac mini 代轉（同一個網址），靠 body.ns 分辨後端
+  assert.equal(capturedCall.url, BACKENDS.platform.replace(/\/api$/, '/proxy'), 'dorm 走代轉網址');
+  assert.equal(capturedCall.body.ns, 'dorm', 'ctx.api.call("demo-target",...) 應該查到 demo-target 的 manifest.backend=dorm（不是呼叫端自己的 backend audit）');
   assert.equal(capturedCall.body.action, 'ping', '送出的 action 正確帶到');
 });
 
@@ -810,7 +832,7 @@ await at("ctx.api.call('假模組id', ...) 會轉成用該 manifest 的 backend 
 // ============================================================
 
 await at("ctx.api.call('backend名', ...)（共用資料層的呼叫方式）也解析得到後端", async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   let capturedCall = null;
 
@@ -848,8 +870,56 @@ await at("ctx.api.call('backend名', ...)（共用資料層的呼叫方式）也
   armFetchGuard();
 
   assert.ok(capturedCall, "ctx.api.call('audit',...) 應該真的送出了一次請求（修法前這裡拿到「殼找不到這個模組」）");
-  assert.equal(capturedCall.url, BACKENDS.audit, "backend 名 'audit' 應該 fallback 解析到 BACKENDS.audit 的網址");
+  assert.equal(capturedCall.url, BACKENDS.platform.replace(/\/api$/, '/proxy'), "backend 名 'audit' 應該 fallback 解析到 audit 後端（走代轉網址）");
+  assert.equal(capturedCall.body.ns, 'audit', 'body.ns＝audit');
   assert.equal(capturedCall.body.action, 'getAll', '送出的 action 正確帶到');
+});
+
+// ============================================================
+// 測試 7c（2026-10-12 代轉）：代轉回 401 → 走登入過期：清本機 token、整頁重載回登入頁，
+// 而且**不打後端 logout**（token 已失效；也不能因此把這個人其他裝置一起登出）
+// ============================================================
+
+await at('代轉回 401 → 登入過期：清本機、重載回登入頁、不呼叫後端 logout', async () => {
+  await resetGlobalState();
+  const manifest = makeManifest({
+    id: 'demo-expire',
+    ns: 'audit',
+    requires: ['audit.read'],
+    views: [{ id: 'overview', name: '總覽', requires: [] }],
+    body: { mount: async (mountEl, ctx) => { await ctx.api.call('audit', 'getAll', {}); } }
+  });
+  MODULES.push({ load: () => Promise.resolve({ default: manifest }) });
+  localStorage.setItem(TOKEN_KEY, 'tok-u107');
+  const platformCalls = [];
+  __setTransport(async (req) => {
+    platformCalls.push(req.action);
+    if (req.action === 'me') return { ok: true, data: { user: { id: 'u107', name: '測試員', role: 'accountant', node: '' }, perms: ['audit.read'] } };
+    return { ok: true, data: {} };
+  });
+  let replaced = null;
+  fakeWindow.location.pathname = '/dzy/';
+  fakeWindow.location.search = '';
+  fakeWindow.location.replace = (u) => { replaced = u; };
+
+  await freshShellImport();
+  await flush();
+  const proxyCalls = [];
+  globalThis.fetch = async (url, opts) => {
+    proxyCalls.push(String(url));
+    return { status: 401, json: async () => ({ ok: false, error: '登入已失效，請重新登入', code: 'BAD_TOKEN' }) };
+  };
+  const appEl = getAppEl();
+  const card = findDescendant(appEl, (n) => n.getAttribute && n.getAttribute('data-module') === 'demo-expire' && n.getAttribute('data-role') === 'module-card');
+  dispatchClick(card);
+  await flush();
+  await flush();
+  armFetchGuard();
+
+  assert.equal(proxyCalls.length, 1, '模組真的打了一次代轉');
+  assert.equal(localStorage.getItem(TOKEN_KEY), null, '401 後本機 token 被清掉');
+  assert.equal(replaced, '/dzy/', '401 後整頁重載回登入頁');
+  assert.ok(platformCalls.indexOf('logout') === -1, '登入過期不呼叫後端 logout（不把其他裝置一起登出）');
 });
 
 // ============================================================
@@ -862,7 +932,7 @@ await at("ctx.api.call('backend名', ...)（共用資料層的呼叫方式）也
 // ============================================================
 
 await at('缺陷①：一次導覽（點卡片進模組）只會讓模組 mount 一次', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   let mountCalls = 0;
   const manifestOnce = makeManifest({
@@ -903,7 +973,7 @@ await at('缺陷①：一次導覽（點卡片進模組）只會讓模組 mount 
 // ============================================================
 
 await at('缺陷①：hash 沒有變化（點目前已經在的那一頁）仍然會正確重跑一次路由', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   let mountCalls = 0;
   const onRouteLog = [];
@@ -958,7 +1028,7 @@ await at('缺陷①：hash 沒有變化（點目前已經在的那一頁）仍�
 // ============================================================
 
 await at('缺陷②：同模組換分頁 → 模組手上那個 ctx 物件的 viewId／params 原地更新', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   let capturedCtx = null;
   const manifestTabs = makeManifest({
@@ -1008,7 +1078,7 @@ await at('缺陷②：同模組換分頁 → 模組手上那個 ctx 物件的 vi
 // ============================================================
 
 await at('缺陷②：模組有實作 onRoute(ctx) → 換分頁時被呼叫一次，拿到新的 viewId', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   const onRouteCalls = [];
   const manifestTabs = makeManifest({
@@ -1055,7 +1125,7 @@ await at('缺陷②：模組有實作 onRoute(ctx) → 換分頁時被呼叫一�
 // ============================================================
 
 await at('缺陷②：模組沒有實作 onRoute → 切分頁不會拋錯，行為不變（向後相容）', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   let mountCalls = 0;
   const manifestNoOnRoute = makeManifest({
@@ -1108,7 +1178,7 @@ await at('缺陷②：模組沒有實作 onRoute → 切分頁不會拋錯，行
 // ============================================================
 
 await at('alerts() 畫成首頁提醒列；拋錯只壞自己那組', async () => {
-  resetGlobalState();
+  await resetGlobalState();
 
   const mA = makeManifest({
     id: 'demo-al',

@@ -94,8 +94,8 @@ export async function getRooms(ctx) {
 
 /**
  * 合約清單（Api.gs doGet 第 28-30 行：case 'list' → requireAdmin(p); { ok:true, contracts: listContracts() }）。
- * 通行碼欄位是 pass（Api.gs 第 11-20 行 requireAdmin 讀 p.pass），但由 platform/api.js 的
- * buildRequestBody_() 依 backendId='dorm' 自動帶入 getSecret('dorm')，本檔不處理、也不接受
+ * 通行碼欄位是 pass（Api.gs 第 11-20 行 requireAdmin 讀 p.pass）。2026-10-12 起由 Mac mini 代轉時代帶
+ *（platform/api.js 打 /platform/proxy，spec §6.3），瀏覽器拿不到通行碼；本檔不處理、也不接受
  * 呼叫端夾帶同名欄位。
  * @param {object} ctx
  * @returns {Promise<{ok:true,data:{contracts:Array}}|{ok:false,error:string}>}

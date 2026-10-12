@@ -129,6 +129,8 @@ function makeSandbox(usersRows) {
     SpreadsheetApp: { getActive: () => ({ getSheetByName: () => sheet }) },
     // 被測函式依賴的既有函式，用最小替身（它們各自有自己的測試）
     hashPassword_: (pw, salt) => 'H(' + salt + ':' + pw + ')',
+    // 2026-10-12 GPT 複審第 6 條：驗舊密碼改走常數時間比對（Auth.gs authSafeEqual_）
+    authSafeEqual_: (a, b) => String(a) === String(b),
     handleMe_: (token) => sandbox.__meResult(token),
     hasPerm_: (perms, need) => Array.isArray(perms) && (perms.indexOf('*') !== -1 || perms.indexOf(need) !== -1),
     // 2026-10-11 個人帳號管理：改密碼後撤銷舊 token、換發新 token（Auth.gs 的函式，這裡用替身記錄呼叫）
@@ -140,7 +142,13 @@ function makeSandbox(usersRows) {
     rowToUser_: (v) => ({ id: v[0], username: v[1], name: v[2], role: v[3], node: v[4] }),
     issueToken_: (u) => 'new-token-for-' + u.id,
     __tokenAfterRows: [],
-    __sheet: sheet
+    __sheet: sheet,
+    // 2026-10-12：改密碼驗舊密碼錯誤要計次（存 CacheService），補假物件
+    CacheService: (() => {
+      const m = new Map();
+      const c = { get: (k) => (m.has(k) ? m.get(k) : null), put: (k, v) => { m.set(k, String(v)); }, remove: (k) => { m.delete(k); } };
+      return { getScriptCache: () => c, _map: m };
+    })()
   };
   vm.createContext(sandbox);
 

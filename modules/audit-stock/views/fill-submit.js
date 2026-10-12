@@ -15,6 +15,10 @@
  * 草稿沿用舊版做法直接用瀏覽器 localStorage（不透過 ctx.api，草稿本來就只是本機
  * 暫存，不是要送後端的資料）：key 規則 `draft_{store}_{month}`，只填異常項模式多
  * 後綴 `_anomaly`，兩種模式的草稿分開存互不覆蓋（同舊版 draftKeyFor()）。
+ * 2026-10-12 GPT 複審第 2 條：草稿 key 加使用者前綴 `dzy.u.<user id>.`（ctx.user.id），
+ * 只讀寫自己的；沒有 owner 一律當沒有草稿（不讀不寫）。舊格式（無前綴）的草稿一律不載入、不列出——
+ * 但**不刪**：舊獨立網址版 mala-audit 與本系統同在 eason0728.github.io 這個 origin、用同一組 key，
+ * 刪了會把仍在服務的舊站草稿一起刪掉。
  */
 'use strict';
 
@@ -208,6 +212,12 @@ export function buildDetails({ store, month, items, mode }) {
 // 草稿（localStorage；同舊版 key 規則）
 // ============================================================
 
+/** 使用者前綴（owner＝ctx.user.id）；沒有 owner 回 ''＝呼叫端一律不讀不寫 */
+export function ownerPrefix(owner) {
+  const id = owner === undefined || owner === null ? '' : String(owner).trim();
+  return id ? 'dzy.u.' + encodeURIComponent(id) + '.' : '';
+}
+
 function storage() {
   try {
     return typeof localStorage !== 'undefined' ? localStorage : null;
@@ -216,13 +226,17 @@ function storage() {
   }
 }
 
-export function draftKeyFor(store, month, mode) {
-  return 'draft_' + Format.recordKey(store, month) + (isAnomalyMode(mode) ? '_anomaly' : '');
+/** owner 的草稿 key；沒有 owner 回 ''（呼叫端當作沒有草稿） */
+export function draftKeyFor(owner, store, month, mode) {
+  const p = ownerPrefix(owner);
+  if (!p) return '';
+  return p + 'draft_' + Format.recordKey(store, month) + (isAnomalyMode(mode) ? '_anomaly' : '');
 }
 
-export function saveDraft(store, month, mode, items, vault) {
+export function saveDraft(owner, store, month, mode, items, vault) {
   const s = storage();
-  if (!s || !store || !month) return;
+  const key = store && month ? draftKeyFor(owner, store, month, mode) : '';
+  if (!s || !key) return;
   try {
     const payload = {
       store,
@@ -234,15 +248,16 @@ export function saveDraft(store, month, mode, items, vault) {
       })),
       vault
     };
-    s.setItem(draftKeyFor(store, month, mode), JSON.stringify(payload));
+    s.setItem(key, JSON.stringify(payload));
   } catch (e) { /* 儲存空間不可用時忽略，不擋操作 */ }
 }
 
-export function loadDraft(store, month, mode) {
+export function loadDraft(owner, store, month, mode) {
   const s = storage();
-  if (!s) return null;
+  const key = draftKeyFor(owner, store, month, mode);
+  if (!s || !key) return null;
   try {
-    const raw = s.getItem(draftKeyFor(store, month, mode));
+    const raw = s.getItem(key);
     return raw ? JSON.parse(raw) : null;
   } catch (e) {
     return null;
@@ -250,12 +265,12 @@ export function loadDraft(store, month, mode) {
 }
 
 /** 送出成功時兩種模式的草稿一起清，避免另一把舊 key 之後又冒出來（同舊版 clearDraft()）。 */
-export function clearDraft(store, month) {
+export function clearDraft(owner, store, month) {
   const s = storage();
-  if (!s) return;
+  if (!s || !ownerPrefix(owner)) return;
   try {
-    s.removeItem(draftKeyFor(store, month, MODE_FULL));
-    s.removeItem(draftKeyFor(store, month, MODE_ANOMALY));
+    s.removeItem(draftKeyFor(owner, store, month, MODE_FULL));
+    s.removeItem(draftKeyFor(owner, store, month, MODE_ANOMALY));
   } catch (e) { /* 忽略 */ }
 }
 
@@ -266,15 +281,16 @@ function draftHasContent(payload) {
   return !!(v.change_fund || v.petty_cash || v.tip_amount || v.tip_match || v.note);
 }
 
-/** 列出所有還沒送出的草稿（同舊版 listDrafts()，跨店月掃描 localStorage）。 */
-export function listDrafts() {
+/** 列出 owner 自己還沒送出的草稿（同舊版 listDrafts()，跨店月掃描 localStorage，只掃自己的前綴）。 */
+export function listDrafts(owner) {
   const s = storage();
   const out = [];
-  if (!s) return out;
+  const prefix = ownerPrefix(owner) ? ownerPrefix(owner) + 'draft_' : '';
+  if (!s || !prefix) return out;
   try {
     for (let i = 0; i < s.length; i++) {
       const k = s.key(i);
-      if (!k || k.indexOf('draft_') !== 0) continue;
+      if (!k || k.indexOf(prefix) !== 0) continue;
       let payload = null;
       try { payload = JSON.parse(s.getItem(k)); } catch (e) { payload = null; }
       if (!payload || !payload.store || !payload.month) continue;
@@ -296,24 +312,30 @@ export function listDrafts() {
 }
 
 /** 找某家店最近一份「有內容的未送出草稿」→ {month, mode}；沒有回 null（同舊版 latestDraftForStore()）。 */
-export function latestDraftForStore(store) {
+export function latestDraftForStore(owner, store) {
   if (!store) return null;
   let best = null;
-  listDrafts().filter((d) => d.store === store).forEach((d) => {
+  listDrafts(owner).filter((d) => d.store === store).forEach((d) => {
     if (!best || d.month > best.month) best = { month: d.month, mode: d.mode };
   });
   return best;
 }
 
-export function dropDraft(key) {
+/** key 必須是 owner 自己的草稿 key（listDrafts(owner) 給的）；別人的／舊格式一律不動 */
+function isOwnDraftKey(owner, key) {
+  const p = ownerPrefix(owner);
+  return !!p && typeof key === 'string' && key.indexOf(p + 'draft_') === 0;
+}
+
+export function dropDraft(owner, key) {
   const s = storage();
-  if (!s) return;
+  if (!s || !isOwnDraftKey(owner, key)) return;
   try { s.removeItem(key); } catch (e) { /* 忽略 */ }
 }
 
-export function readDraftByKey(key) {
+export function readDraftByKey(owner, key) {
   const s = storage();
-  if (!s) return null;
+  if (!s || !isOwnDraftKey(owner, key)) return null;
   try {
     const raw = s.getItem(key);
     return raw ? JSON.parse(raw) : null;

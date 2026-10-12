@@ -71,7 +71,8 @@ export function mountList(el, ctx) {
     return list.map((p) => {
       const [cls, txt] = STATUS[p.status] || ['tag', p.status];
       const change = p.has_pending_change ? `<div class="text-muted">${p.status === 'active' ? '要改成' : '填的是'}：${esc(orgText(p, 'p_'))}</div>` : '';
-      const reason = p.status === 'rejected' && p.reject_reason ? `<div class="text-muted">原因：${esc(p.reject_reason)}</div>` : '';
+      const reason = p.reject_reason && (p.status === 'rejected' || p.status === 'unclaimed')
+        ? `<div class="text-muted">${p.status === 'unclaimed' ? '上次退回' : '原因'}：${esc(p.reject_reason)}</div>` : '';
       const priv = showPrivate && p.status !== 'unclaimed'
         ? `<div class="text-muted">生日 ${esc(p.birthday)}・手機 ${esc(p.phone)}・${esc(p.address)}</div>` : '';
       return `<tr>
@@ -146,7 +147,10 @@ export function mountList(el, ctx) {
       const v = await ctx.ui.dialog({ title: `確認 ${who}`, body, actions: [{ label: '取消', value: null, variant: 'secondary' }, { label: '已核對，確認', value: 'ok', variant: 'primary' }] });
       if (v === 'ok') run('staffConfirm', { emp_no: p.emp_no }, '已確認');
     } else if (act === 'reject') {
-      const body = domOf(`<div class="field"><label class="field-label" for="rj-reason">退回原因（同仁會看到）</label><textarea class="input" id="rj-reason" rows="3"></textarea></div>`);
+      const body = domOf(p.status === 'pending'
+        ? `<div class="field"><label class="field-label" for="rj-reason">退回原因（留在後台紀錄）</label><textarea class="input" id="rj-reason" rows="3" maxlength="200"></textarea></div>
+          <p class="field-hint">退回後他填的資料與密碼會清空，要重新按「第一次使用」再送一次。原因請另外告訴他。</p>`
+        : `<div class="field"><label class="field-label" for="rj-reason">退回原因（同仁會看到）</label><textarea class="input" id="rj-reason" rows="3" maxlength="200"></textarea></div>`);
       const v = await ctx.ui.dialog({ title: `退回 ${who}`, body, actions: [{ label: '取消', value: null, variant: 'secondary' }, { label: '退回', value: 'ok', variant: 'danger' }] });
       if (v === 'ok') run('staffReject', { emp_no: p.emp_no, reason: body.querySelector('#rj-reason').value.trim() }, '已退回');
     } else if (act === 'edit') {

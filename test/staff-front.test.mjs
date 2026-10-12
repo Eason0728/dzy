@@ -30,7 +30,7 @@ ok(!validateManifest({ id: 'claim', ns: 'platform', backend: 'platform', name: '
 const reg = fs.readFileSync(path.join(ROOT, 'platform/registry.js'), 'utf8');
 ok(reg.includes("modules/me/manifest.js") && reg.includes("modules/staff/manifest.js"), 'registry 接上 me／staff');
 // 5. 模組沒有 import 平台內部
-for (const f of ['modules/me/index.js', 'modules/me/views/profile.js', 'modules/me/views/unit.js', 'modules/staff/index.js', 'modules/staff/views/list.js', 'modules/staff/views/import.js']) {
+for (const f of ['modules/me/index.js', 'modules/me/views/profile.js', 'modules/me/views/unit.js', 'modules/me/views/review.js', 'modules/staff/index.js', 'modules/staff/views/list.js', 'modules/staff/views/import.js']) {
   ok(!/from '\.\.\/(\.\.\/)?(\.\.\/)?platform\//.test(fs.readFileSync(path.join(ROOT, f), 'utf8')), `${f} 沒有 import platform/`);
 }
 console.log(`\n通過 ${passed}／${passed + failed}`);

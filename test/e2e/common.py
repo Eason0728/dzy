@@ -7,7 +7,10 @@
 正式試算表一筆資料都不會碰。
 
 mock 的形狀不是猜的，逐一對過：
-- platform login/me：platform/auth.js applySession()（token/user/perms/secrets）＋ spec §4.3 角色表
+- platform login/me：platform/auth.js applySession()（token/user/perms；2026-10-12 起不再有 secrets）＋ spec §4.3 角色表
+- /platform/proxy（2026-10-12 代轉）：照 ~/dzy-minikit/apps/dzy-platform/PROXY.md——驗 token、讀清單外要 <ns>.write、
+  由 mock 代帶通行碼（扁平展開，同 proxy-hook.js buildBody）再交給 audit／dorm mock；店長裁切同 filterResponse。
+  前端送來的 body 只要出現 code／pass（任何一層）就記進 leaked，八支 e2e 的「零流出」斷言會一起擋。
 - audit getAll：platform/api.js 檔頭（扁平 {ok, config, items, records, details, ops_records,
   ops_details}）；資料主體直接用 modules/audit-shared/mock-data.js 產的 fixtures/audit_getall.json
 - dorm：~/mala-dorm-contract/apps-script/Api.gs 各 action 的回傳；contract 用
@@ -85,7 +88,15 @@ def load_backend_urls():
     src = open(os.path.join(ROOT, 'platform', 'config.js'), encoding='utf-8').read()
     urls = dict(re.findall(r"(platform|audit|dorm):\s*'(https://[^']+)'", src))
     assert set(urls) == {'platform', 'audit', 'dorm'}, urls
+    # 代轉網址＝平台網址 …/api → …/proxy（同 platform/api.js proxyUrl()）
+    assert urls['platform'].endswith('/api'), urls['platform']
+    urls['proxy'] = urls['platform'][:-len('/api')] + '/proxy'
     return urls
+
+
+# 代轉的讀清單（同 Auth.gs PROXY_READ_ACTIONS／platform/dryrun.js READ_ACTIONS）
+PROXY_READ_ACTIONS = {'audit': ['getAll'], 'dorm': ['rooms', 'list', 'contract', 'handover']}
+PROXY_SECRET_FIELD = {'audit': 'code', 'dorm': 'pass'}
 
 
 # ------------------------------------------------------------
@@ -95,16 +106,17 @@ def load_backend_urls():
 AUDIT_SECRET = 'E2E-AUDIT-CODE'
 DORM_SECRET = 'E2E-DORM-PASS'
 
+PROXY_SECRETS = {'audit': AUDIT_SECRET, 'dorm': DORM_SECRET}  # 只在 mock 的「mini」那一側，前端拿不到
+
 USERS = {
     'admin': {'password': 'e2e-admin', 'user': {'id': 'u-admin', 'name': '管理者', 'role': 'admin', 'node': ''},
-              'perms': ['*'], 'secrets': {'audit': AUDIT_SECRET, 'dorm': DORM_SECRET}},
+              'perms': ['*']},
     'mgr':   {'password': 'e2e-mgr', 'user': {'id': 'u-mgr', 'name': '部門主管', 'role': 'manager', 'node': ''},
-              'perms': ['audit.read', 'dorm.read', 'dorm.write'],
-              'secrets': {'audit': AUDIT_SECRET, 'dorm': DORM_SECRET}},
+              'perms': ['audit.read', 'dorm.read', 'dorm.write']},
     'acct':  {'password': 'e2e-acct', 'user': {'id': 'u-acct', 'name': '王會計', 'role': 'accountant', 'node': ''},
-              'perms': ['audit.read', 'audit.write'], 'secrets': {'audit': AUDIT_SECRET}},
+              'perms': ['audit.read', 'audit.write']},
     'lead':  {'password': 'e2e-lead', 'user': {'id': 'u-lead', 'name': '光復店長', 'role': 'storelead', 'node': 'sxl-gf'},
-              'perms': ['audit.read.own'], 'secrets': {'audit': AUDIT_SECRET}},
+              'perms': ['audit.read.own']},
 }
 
 
@@ -160,15 +172,58 @@ class MockBackend:
                 from urllib.parse import urlparse, parse_qs
                 q = parse_qs(urlparse(req.url).query)
                 body = {k: v[0] for k, v in q.items()}
-            resp = self.dispatch(backend, body)
+            status = 200
+            if backend == 'proxy':
+                status, resp = self.proxy(body)
+            else:
+                resp = self.dispatch(backend, body)
         except Exception as e:  # mock 自己出錯要看得見，不是靜默 500
-            resp = {'ok': False, 'error': 'mock exception: %r' % e}
+            status, resp = 200, {'ok': False, 'error': 'mock exception: %r' % e}
         route.fulfill(
-            status=200,
+            status=status,
             headers={'Access-Control-Allow-Origin': '*'},
             content_type='application/json',
             body=json.dumps(resp),
         )
+
+    # ---- 代轉（2026-10-12，模擬 Mac mini /platform/proxy＋平台 proxyAuthorize_）----
+    def proxy(self, body):
+        def has_secret_field(o):
+            return isinstance(o, dict) and ('code' in o or 'pass' in o)
+        if has_secret_field(body) or has_secret_field(body.get('payload')):
+            self.leaked.append('SECRET_IN_PROXY_BODY: %r' % body)  # 前端不准再送通行碼
+            return 400, {'ok': False, 'error': 'BAD_REQUEST'}
+        ns, action = body.get('ns', ''), body.get('action', '')
+        self.proxy_calls = getattr(self, 'proxy_calls', []) + [(ns, action)]
+        if ns not in PROXY_SECRETS:
+            return 404, {'ok': False, 'error': 'UNKNOWN_NS'}
+        token = body.get('token') or ''
+        if not token:
+            return 401, {'ok': False, 'error': 'NO_TOKEN', 'code': 'NO_TOKEN'}
+        u = USERS.get(token.replace('e2e-token-', ''))
+        if not u:
+            return 401, {'ok': False, 'error': '登入已失效', 'code': 'BAD_TOKEN'}
+        perms = u['perms']
+        has = lambda p: '*' in perms or p in perms
+        is_write = action not in PROXY_READ_ACTIONS[ns]
+        allowed = has(ns + '.write') if is_write else (has(ns + '.write') or has(ns + '.read') or has(ns + '.read.own'))
+        if not allowed:
+            return 403, {'ok': False, 'error': '沒有權限', 'code': 'FORBIDDEN'}
+        flat = dict(body.get('payload') or {})
+        flat.pop('action', None)
+        flat['action'] = action
+        flat[PROXY_SECRET_FIELD[ns]] = PROXY_SECRETS[ns]
+        resp = self.dispatch(ns, flat)
+        if not has(ns + '.read') and has(ns + '.read.own') and isinstance(resp, dict):
+            node = u['user'].get('node') or ''
+            out = {}
+            for k, v in resp.items():
+                if isinstance(v, list) and v and any(isinstance(r, dict) and 'store' in r for r in v):
+                    out[k] = [r for r in v if isinstance(r, dict) and node and r.get('store') == node]
+                else:
+                    out[k] = v
+            resp = out
+        return 200, json.loads(json.dumps(resp).replace(PROXY_SECRETS[ns], '[REDACTED]'))
 
     # ---- 各後端 dispatch ----
     def dispatch(self, backend, body):
@@ -192,17 +247,25 @@ class MockBackend:
             u = USERS.get(payload.get('username'))
             if not u or u['password'] != payload.get('password'):
                 return {'ok': False, 'error': '帳號或密碼錯誤'}
+            # 2026-10-12：認領待審的同仁密碼對了也不能登入（Auth.gs authStaffGate_）
+            row = next((x for x in getattr(self, 'staff', []) if x['emp_no'] == payload.get('username')), None)
+            if row and row['status'] == 'pending':
+                return {'ok': False, 'error': '帳號還在等主管審核'}
             return {'ok': True, 'data': {
                 'token': 'e2e-token-' + payload['username'],
-                'user': u['user'], 'perms': u['perms'], 'secrets': u['secrets'],
+                'user': u['user'], 'perms': u['perms'],
             }}
+        if action == 'logout':
+            # 2026-10-12：登出＝全部裝置一起登出；mock 只記一筆，讓 e2e 斷言前端真的有送
+            self.logouts = getattr(self, 'logouts', []) + [body.get('token') or '']
+            return {'ok': True, 'data': {}}
         if action == 'me':
             token = body.get('token') or ''
             name = token.replace('e2e-token-', '')
             u = USERS.get(name)
             if not u:
                 return {'ok': False, 'error': 'token 無效'}
-            return {'ok': True, 'data': {'user': u['user'], 'perms': u['perms'], 'secrets': u['secrets']}}
+            return {'ok': True, 'data': {'user': u['user'], 'perms': u['perms']}}
         staff_res = self.staff_action(action, body)
         if staff_res is not None:
             return staff_res
@@ -271,11 +334,41 @@ class MockBackend:
                               'phone': p.get('phone'), 'address': p.get('address'), 'claimed_at': '2026-10-11 10:00:00'})
                     for f in ('brand', 'unit', 'dept', 'title'):
                         r['p_' + f] = p.get(f, '')
-                    USERS[r['emp_no']] = {'password': p.get('password'), 'perms': ['platform.self'], 'secrets': {},
+                    USERS[r['emp_no']] = {'password': p.get('password'), 'perms': ['platform.self'],
                                           'user': {'id': 'u-' + r['emp_no'], 'name': r['name'], 'role': 'staff', 'node': ''}}
-                    u = USERS[r['emp_no']]
-                    return {'ok': True, 'data': {'token': 'e2e-token-' + r['emp_no'], 'user': u['user'], 'perms': u['perms'], 'secrets': {}}}
+                    # 2026-10-12：認領送出不回 token、不登入，等單位主管審核
+                    return {'ok': True, 'pending': True, 'data': {'pending': True, 'emp_no': r['emp_no']}}
             return {'ok': False, 'error': '姓名與編號對不上，請重新輸入全名'}
+        if action in ('unitPending', 'unitApprove', 'unitReject'):
+            # 審核者＝同單位、已開通、店長以上（rank≥3）；規則正本在 Staff.gs stfManagerScope_／stfCanReviewRow_
+            me = next((x for x in self.staff if x['emp_no'] == who), None)
+            rank = next((t['rank'] for t in self.ORG['titles'] if t['code'] == (me or {}).get('title')), 0)
+            if not me or me['status'] != 'active' or rank < 3:
+                return {'ok': False, 'error': '只有單位主管可以審核'}
+            mine = [x for x in self.staff if x['status'] == 'pending' and x.get('p_unit') == me.get('unit') and x is not me]
+            if action == 'unitPending':
+                people = []
+                for x in mine:
+                    o = self._staff_obj(x)
+                    people.append({'emp_no': o['emp_no'], 'name': o['name'], 'birthday': o['birthday'], 'phone': o['phone'],
+                                   'address': o['address'], 'claimed_at': o['claimed_at'],
+                                   **{f: o['p_' + f] for f in ('brand', 'unit', 'dept', 'title')},
+                                   **{f + '_name': o['p_' + f + '_name'] for f in ('brand', 'unit', 'dept', 'title')}})
+                return {'ok': True, 'data': {'people': people, 'scope_name': self._org_name('unit', me.get('unit')), 'all_units': False}}
+            r = next((x for x in mine if x['emp_no'] == p.get('emp_no')), None)
+            if r is None:
+                return {'ok': False, 'error': '只有單位主管可以審核'}
+            if action == 'unitApprove':
+                for f in ('brand', 'unit', 'dept', 'title'):
+                    r[f] = r.get('p_' + f, '')
+                    r['p_' + f] = ''
+                r['status'] = 'active'
+            else:
+                if not (p.get('reason') or '').strip():
+                    return {'ok': False, 'error': '請填寫退回原因'}
+                r.update({'status': 'unclaimed', 'reject_reason': p['reason'], 'birthday': '', 'phone': '', 'address': ''})
+                USERS.pop(r['emp_no'], None)
+            return {'ok': True, 'data': {'emp_no': r['emp_no']}}
         if action in ('myProfile', 'myUnit', 'saveMyProfile'):
             r = next((x for x in self.staff if x['emp_no'] == who), None)
             if r is None:
