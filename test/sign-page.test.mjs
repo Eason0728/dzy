@@ -589,6 +589,29 @@ await at('已簽署狀態（state==="signed"）：直接顯示完成摘要，不
   assert.equal(page.doc.getElementById('submit'), null, '已簽署狀態不該再出現送出鈕');
 });
 
+await at('2026-10-12 pdf_url 白名單：簽署完成後只有 https 的 drive／docs.google.com 顯示連結，其餘一律不顯示', async () => {
+  const cases = [
+    ['https://drive.google.com/file/d/abc/view', 1],
+    ['https://docs.google.com/document/d/abc', 1],
+    ['javascript:alert(1)', 0],
+    ['http://drive.google.com/file/d/abc', 0],
+    ['https://evil.example.com/x.pdf', 0],
+    ['https://drive.google.com.evil.com/x', 0],
+    ['https://example.test/signed.pdf', 0],
+    ['', 0]
+  ];
+  for (const [u, n] of cases) {
+    const page = await openSignPage({ fetchOptions: { signResponse: { ok: true, pdf_url: u } } });
+    fillField(page.idInput, 'a123456789');
+    fillField(page.phoneInput, '0912345678');
+    fillField(page.mailInput, '新竹市某路1號');
+    drawSignature(page.canvas, page.win);
+    await page.submit.onclick();
+    assert.equal(page.doc.querySelectorAll('.done').length > 0, true, '應顯示完成畫面');
+    assert.equal(page.doc.querySelectorAll('.done a').length, n, 'pdf_url=' + JSON.stringify(u));
+  }
+});
+
 // ── 收尾：印出結果 ──────────────────────────────────────
 if (failed > 0) {
   console.error('\n失敗清單：');

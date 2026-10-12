@@ -106,7 +106,7 @@ function load(seed) {
   };
   vm.createContext(sandbox);
   SRC.forEach(([f, code]) => vm.runInContext(code, sandbox, { filename: f }));
-  return { sb: sandbox, sheets, cache };
+  return { sb: sandbox, sheets, cache, props };
 }
 
 function post(sb, action, payload, token) {
@@ -141,11 +141,21 @@ function adminToken(sb) {
 }
 const FAKE_NAMES = ['測試甲', '測試乙', '測試丙', '測試丁'];
 const PROFILE = { brand: 'mzt', unit: 'mzt-gf', dept: '', title: 'pt', birthday: '1995-05-05', phone: '0911222333', address: '新竹市測試路一段1號' };
+// 2026-10-12：認領後要審核通過才開通——這裡用後台確認（staffConfirm）開通後再登入，
+// 回傳形狀維持 { emp, claim:{data:{token}} } 讓既有測試不必改
+function claimAndApprove(sb, tok, who, pw, profile) {
+  const lk = post(sb, 'claimLookup', { name: who });
+  const sub = post(sb, 'claimSubmit', Object.assign({ name: who, emp_no: lk.data.emp_no, password: pw || 'fake-staff-pw-1' }, profile || PROFILE));
+  if (!sub.ok) throw new Error('claimSubmit 失敗 ' + sub.error);
+  const cf = post(sb, 'staffConfirm', { emp_no: lk.data.emp_no }, tok);
+  if (!cf.ok) throw new Error('staffConfirm 失敗 ' + cf.error);
+  const lg = post(sb, 'login', { username: lk.data.emp_no, password: pw || 'fake-staff-pw-1' });
+  if (!lg.ok) throw new Error('開通後登入失敗 ' + lg.error);
+  return { emp: lk.data.emp_no, claim: lg };
+}
 function seedAndClaim(sb, tok, who) {
   post(sb, 'staffImport', { names: FAKE_NAMES }, tok);
-  const lk = post(sb, 'claimLookup', { name: who || '測試甲' });
-  const r = post(sb, 'claimSubmit', Object.assign({ name: who || '測試甲', emp_no: lk.data.emp_no, password: 'fake-staff-pw-1' }, PROFILE));
-  return { emp: lk.data.emp_no, claim: r };
+  return claimAndApprove(sb, tok, who || '測試甲');
 }
 const staffRow = (sheets, emp) => sheets.staff._rows().find((r) => r[0] === emp);
 const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
@@ -228,18 +238,23 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   ok(!post(sb, 'claimSubmit', Object.assign({ name: '測試甲', emp_no: 'DZY001', password: 'short' }, PROFILE)).ok, 'A4 密碼太短 → 擋');
   ok(!post(sb, 'claimSubmit', Object.assign({}, PROFILE, { name: '測試甲', emp_no: 'DZY001', password: 'fake-staff-pw-1', unit: 'yiwu-js' })).ok, 'A4 單位不屬於品牌 → 擋');
   const r = post(sb, 'claimSubmit', Object.assign({ name: '測試甲', emp_no: 'dzy001', password: 'fake-staff-pw-1' }, PROFILE));
-  ok(r.ok && r.data.token && r.data.perms.join() === 'platform.self', 'A4 認領成功直接登入，權限只有 platform.self', r);
+  ok(r.ok && r.pending === true && r.data.pending === true && !r.data.token && !('token' in r) && !r.data.perms, 'A4 ★認領送出不回 token、不自動登入（等主管審核）', r);
   const row = staffRow(sheets, 'DZY001');
   ok(row[COL('status')] === 'pending' && row[COL('p_unit')] === 'mzt-gf' && row[COL('unit')] === '', 'A4 狀態 pending、組織欄進 p_*');
   ok(sheets.staff._fmt[2] === '@', 'A4 寫入前該列設成純文字');
-  ok(post(sb, 'claimLookup', { name: '測試甲' }).error === '這個名字已經開通，請用編號登入', 'A4 已認領的名字');
+  ok(post(sb, 'claimLookup', { name: '測試甲' }).error === '這個名字已經送出開通申請，等單位主管審核通過就能用編號登入', 'A4 已送出待審的名字');
   ok(!post(sb, 'claimSubmit', Object.assign({ name: '測試甲', emp_no: 'DZY001', password: 'attacker-pw-1' }, PROFILE)).ok, 'A4 已認領後不能再認領一次');
-  ok(post(sb, 'login', { username: 'dzy001', password: 'fake-staff-pw-1' }).ok, 'A4 小寫編號可登入');
+  ok(post(sb, 'login', { username: 'dzy001', password: 'fake-staff-pw-1' }).error === '帳號還在等主管審核', 'A4 ★待審核登入被擋，訊息說明原因');
+  ok(post(sb, 'login', { username: 'dzy001', password: 'wrong-pw-123' }).error === '帳號或密碼錯誤', 'A4 待審核＋密碼錯 → 照舊回帳密錯（不先洩漏狀態）');
+  post(sb, 'staffConfirm', { emp_no: 'DZY001' }, tok);
+  const lg = post(sb, 'login', { username: 'dzy001', password: 'fake-staff-pw-1' });
+  ok(lg.ok && lg.data.perms.join() === 'platform.self', 'A4 審核通過後小寫編號可登入，權限只有 platform.self', lg);
   // 鎖定計數：大小寫共用
   for (let i = 0; i < 2; i++) post(sb, 'login', { username: 'dzy002', password: 'x1234567' });
   post(sb, 'login', { username: 'DZY002', password: 'x1234567' });
   ok(post(sb, 'login', { username: 'Dzy002', password: 'x1234567' }).error === '嘗試次數過多，請 15 分鐘後再試', 'A4 dzy002／DZY002 共用同一個鎖定計數（未認領也計入）');
-  ok(post(sb, 'login', { username: 'boss', password: ADMIN_PW }).ok === false, 'A4 非 DZY 帳號維持原樣比對（boss ≠ BOSS）');
+  // 2026-10-12 改：所有帳號登入都不分大小寫（人員管理建帳號防重複本來就不分大小寫，保證唯一）
+  ok(post(sb, 'login', { username: 'boss', password: ADMIN_PW }).ok === true, 'A4 帳號不分大小寫（boss＝BOSS）');
   ok(post(sb, 'login', { username: 'BOSS', password: ADMIN_PW }).ok, 'A4 BOSS 原樣可登入');
 })();
 
@@ -255,15 +270,17 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   ok(p.ok && p.data.emp_no === 'DZY001' && p.data.birthday === '1995-05-05' && !('reset_locked' in p.data), 'A5 myProfile 回自己、不含 reset 欄');
   ok(post(sb, 'myProfile', {}, tok).data.none === true, 'A5 系統帳號（admin）沒有 staff 列 → none');
   // 夾帶別人的 emp_no
-  post(sb, 'saveMyProfile', Object.assign({}, PROFILE, { emp_no: 'DZY002', user_id: 'u004', phone: '0999888777' }), me);
+  // 2026-10-12：改手機要帶 current_password
+  post(sb, 'saveMyProfile', Object.assign({}, PROFILE, { emp_no: 'DZY002', user_id: 'u004', phone: '0999888777', current_password: 'fake-staff-pw-1' }), me);
   ok(staffRow(sheets, 'DZY001')[COL('phone')] === '0999888777' && staffRow(sheets, 'DZY002')[COL('phone')] === '', 'A5 payload 夾帶 emp_no 被忽略，只改到自己');
-  post(sb, 'saveMyProfile', Object.assign({}, PROFILE, { birthday: '2000-01-01' }), me);
+  const PROFILE2 = Object.assign({}, PROFILE, { phone: '0999888777' }); // 手機已改，之後不帶密碼的呼叫維持新手機
+  post(sb, 'saveMyProfile', Object.assign({}, PROFILE2, { birthday: '2000-01-01' }), me);
   ok(staffRow(sheets, 'DZY001')[COL('birthday')] === '1995-05-05', 'A5 本人改不了生日');
   post(sb, 'staffConfirm', { emp_no: 'DZY001' }, tok);
-  post(sb, 'saveMyProfile', Object.assign({}, PROFILE, { title: 'ft' }), me);
+  post(sb, 'saveMyProfile', Object.assign({}, PROFILE2, { title: 'ft' }), me);
   const row = staffRow(sheets, 'DZY001');
   ok(row[COL('title')] === 'pt' && row[COL('p_title')] === 'ft', 'A5 已開通改職稱只進 p_*，正式值不變');
-  post(sb, 'saveMyProfile', Object.assign({}, PROFILE), me);
+  post(sb, 'saveMyProfile', Object.assign({}, PROFILE2), me);
   ok(staffRow(sheets, 'DZY001')[COL('p_title')] === '', 'A5 改回跟正式值一樣 → p_* 清空');
   ok(post(sb, 'myUnit', {}, me).error.indexOf('只有店長') === 0, 'A5 計時同仁看不到單位通訊錄');
   post(sb, 'staffEdit', { emp_no: 'DZY001', title: 'sm' }, tok);
@@ -281,11 +298,18 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   const tok = adminToken(sb);
   const { claim } = seedAndClaim(sb, tok);
   const me = claim.data.token;
-  ok(post(sb, 'staffReject', { emp_no: 'DZY001' }, tok).error === '請填寫退回原因', 'A6 退回要原因');
-  ok(post(sb, 'staffReject', { emp_no: 'DZY001', reason: '單位選錯' }, tok).ok && staffRow(sheets, 'DZY001')[COL('status')] === 'rejected', 'A6 pending → rejected');
-  post(sb, 'saveMyProfile', PROFILE, me);
-  ok(staffRow(sheets, 'DZY001')[COL('status')] === 'pending' && staffRow(sheets, 'DZY001')[COL('reject_reason')] === '', 'A6 rejected 重送 → pending、清原因');
-  ok(post(sb, 'staffConfirm', { emp_no: 'DZY001' }, tok).ok && staffRow(sheets, 'DZY001')[COL('unit')] === 'mzt-gf', 'A6 確認：p_* 搬進正式欄');
+  ok(post(sb, 'staffReject', { emp_no: 'DZY001', reason: '單位選錯' }, tok).error === '這位同仁沒有待確認的資料', 'A6 已開通且沒有變更 → 不能退回');
+  post(sb, 'claimSubmit', Object.assign({ name: '測試丙', emp_no: 'DZY003', password: 'fake-staff-pw-3' }, PROFILE));
+  ok(post(sb, 'staffReject', { emp_no: 'DZY003' }, tok).error === '請填寫退回原因', 'A6 退回要原因');
+  ok(post(sb, 'staffReject', { emp_no: 'DZY003', reason: '單位選錯' }, tok).ok, 'A6 後台退回認領待審');
+  const rj = staffRow(sheets, 'DZY003');
+  ok(rj[COL('status')] === 'unclaimed' && rj[COL('reject_reason')] === '單位選錯' && rj[COL('phone')] === '' && rj[COL('p_unit')] === '',
+    'A6 退回＝回 unclaimed、清個資、留原因（可重新認領）');
+  ok(sheets.users._rows().find((u) => u[1] === 'DZY003')[6] === '', 'A6 退回清掉密碼');
+  ok(post(sb, 'claimLookup', { name: '測試丙' }).ok, 'A6 退回後可重新查到編號');
+  ok(post(sb, 'claimSubmit', Object.assign({ name: '測試丙', emp_no: 'DZY003', password: 'fake-staff-pw-3' }, PROFILE)).ok &&
+    staffRow(sheets, 'DZY003')[COL('reject_reason')] === '', 'A6 重新認領 → pending、清原因');
+  ok(post(sb, 'staffConfirm', { emp_no: 'DZY003' }, tok).ok && staffRow(sheets, 'DZY003')[COL('unit')] === 'mzt-gf', 'A6 確認：p_* 搬進正式欄');
   ok(post(sb, 'staffConfirm', { emp_no: 'DZY001' }, tok).error === '這位同仁沒有待確認的資料', 'A6 沒有待確認時不能再確認');
   ok(post(sb, 'staffConfirm', { emp_no: 'DZY002' }, tok).ok === false, 'A6 unclaimed 不能確認');
   // 停用／啟用
@@ -293,15 +317,14 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   ok(staffRow(sheets, 'DZY001')[COL('status')] === 'disabled' && post(sb, 'myProfile', {}, me).ok === false, 'A6 停用後舊登入失效');
   post(sb, 'staffSetActive', { emp_no: 'DZY001', active: true }, tok);
   ok(staffRow(sheets, 'DZY001')[COL('status')] === 'active', 'A6 啟用回到停用前的 active');
-  post(sb, 'staffSetActive', { emp_no: 'DZY003', active: false }, tok);
-  post(sb, 'staffSetActive', { emp_no: 'DZY003', active: true }, tok);
-  ok(staffRow(sheets, 'DZY003')[COL('status')] === 'unclaimed', 'A6 unclaimed 停用再啟用仍是 unclaimed（Fable 第 9 條）');
+  post(sb, 'staffSetActive', { emp_no: 'DZY004', active: false }, tok);
+  post(sb, 'staffSetActive', { emp_no: 'DZY004', active: true }, tok);
+  ok(staffRow(sheets, 'DZY004')[COL('status')] === 'unclaimed', 'A6 unclaimed 停用再啟用仍是 unclaimed（Fable 第 9 條）');
   // 冒用撤回：舊 token 不能讀真人重新認領後的資料
-  const lk2 = post(sb, 'claimLookup', { name: '測試乙' });
-  const imp = post(sb, 'claimSubmit', Object.assign({ name: '測試乙', emp_no: lk2.data.emp_no, password: 'impostor-pw-1' }, PROFILE)).data.token;
+  const imp = claimAndApprove(sb, tok, '測試乙', 'impostor-pw-1').claim.data.token; // 冒用者騙過審核、已登入
   ok(post(sb, 'staffUnclaim', { emp_no: 'DZY002' }, tok).ok && staffRow(sheets, 'DZY002')[COL('status')] === 'unclaimed' && staffRow(sheets, 'DZY002')[COL('phone')] === '', 'A6 撤回認領：回 unclaimed、清個資');
-  const real = post(sb, 'claimSubmit', Object.assign({}, PROFILE, { name: '測試乙', emp_no: 'DZY002', password: 'real-owner-pw-1', phone: '0955666777' }));
-  ok(real.ok, 'A6 真人可重新認領');
+  const real = claimAndApprove(sb, tok, '測試乙', 'real-owner-pw-1', Object.assign({}, PROFILE, { phone: '0955666777' })).claim;
+  ok(real.ok, 'A6 真人可重新認領（審核後登入）');
   const leak = post(sb, 'myProfile', {}, imp);
   ok(leak.ok === false, 'A6 ★冒用者的舊 token 讀不到真人資料（Fable 第 1 條）', leak);
   ok(post(sb, 'myProfile', {}, real.data.token).ok, 'A6 真人新 token 可用');
@@ -392,7 +415,8 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   post(sb, 'setActive', { id: 'u002', active: true }, tok);
   ok(post(sb, 'me', {}, accTok2).ok === false, 'A9-5 停用再啟用後舊 token 不復活');
   // 第 6 條：人員管理手動建過 DZY 帳號 → 匯入不撞號
-  post(sb, 'saveUser', { username: 'DZY001', name: '手動建的', role: 'staff', node: '', password: 'manual-pw-123' }, tok);
+  // 2026-10-12：saveUser 不再能建 role staff（同仁帳號只走同仁名單），改用系統角色建一個 DZY 名稱的帳號
+  post(sb, 'saveUser', { username: 'DZY001', name: '手動建的', role: 'accountant', node: '', password: 'manual-pw-123' }, tok);
   const im = post(sb, 'staffImport', { names: ['測試甲'] }, tok);
   ok(im.ok && im.data.created[0].emp_no === 'DZY002', 'A9-6 已有 DZY001 帳號 → 匯入從 DZY002 起', im);
   ok(sheets.users._rows().filter((u) => u[1] === 'DZY002').length === 1, 'A9-6 users 沒有重複帳號');
@@ -465,6 +489,220 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   const raced = post(sb, 'login', { username: lk.data.emp_no, password: 'race-pw-1234' });
   sb.hashPassword_ = origHash;
   ok(raced.ok === false, 'A11-1 雜湊期間被撤回 → 不簽發 token', raced);
+})();
+
+// ============================================================
+// A12 認領後主管審核（Eason 2026-10-12：送交各單位主管審核完畢才開通）
+// ============================================================
+(() => {
+  const { sb, sheets } = fresh();
+  const tok = adminToken(sb);
+  // 名單：甲＝申請人（光復）、乙＝光復店長、丙＝他店（金山）店長、丁＝光復計時同仁、
+  //       戊＝總部資訊部主管、己＝總部資訊部申請人、庚＝總部財務部申請人、辛＝光復第二位申請人
+  post(sb, 'staffImport', { names: ['審甲', '審乙', '審丙', '審丁', '審戊', '審己', '審庚', '審辛'] }, tok);
+  const emp = (n) => sheets.staff._rows().find((r) => r[2] === n)[0];
+  const HQ = (dept, title) => ({ brand: 'dzy', unit: 'dzy-hq', dept, title, birthday: '1990-03-03', phone: '0922333444', address: '新竹市測試總部路3號' });
+  const tokB = claimAndApprove(sb, tok, '審乙', 'mgr-b-pw-1', Object.assign({}, PROFILE, { title: 'sm' })).claim.data.token;
+  const tokC = claimAndApprove(sb, tok, '審丙', 'mgr-c-pw-1', Object.assign({}, PROFILE, { unit: 'mzt-js', title: 'sm' })).claim.data.token;
+  const tokD = claimAndApprove(sb, tok, '審丁', 'crew-d-pw-1').claim.data.token;
+  const tokE = claimAndApprove(sb, tok, '審戊', 'mgr-e-pw-1', HQ('it', 'hm')).claim.data.token;
+  const sub = (n, pw, prof) => post(sb, 'claimSubmit', Object.assign({ name: n, emp_no: emp(n), password: pw }, prof || PROFILE));
+  ok(sub('審甲', 'apply-a-pw-1').ok && sub('審己', 'apply-f-pw-1', HQ('it', 'hs')).ok && sub('審庚', 'apply-g-pw-1', HQ('fin', 'hs')).ok && sub('審辛', 'apply-h-pw-1').ok, 'A12 四位申請人送出');
+
+  // 登入閘門＋衍生權限
+  ok(post(sb, 'login', { username: emp('審甲'), password: 'apply-a-pw-1' }).error === '帳號還在等主管審核', 'A12 ★待審核登不進去');
+  const lgB = post(sb, 'login', { username: emp('審乙'), password: 'mgr-b-pw-1' });
+  ok(lgB.data.perms.indexOf('platform.review') !== -1, 'A12 店長登入帶 platform.review（讓待審核分頁出現）');
+  ok(post(sb, 'login', { username: emp('審丁'), password: 'crew-d-pw-1' }).data.perms.join() === 'platform.self', 'A12 一般同仁沒有 platform.review');
+  ok(post(sb, 'me', {}, tokB).data.perms.indexOf('platform.review') !== -1, 'A12 me 也帶 platform.review（重新整理後分頁還在）');
+
+  // 待審名單
+  const pB = post(sb, 'unitPending', {}, tokB);
+  const a = pB.ok && pB.data.people.find((x) => x.emp_no === emp('審甲'));
+  ok(a && a.birthday === '1995-05-05' && a.phone === '0911222333' && a.address === '新竹市測試路一段1號' && a.unit === 'mzt-gf' && a.title_name === '計時同仁', 'A12 ★同單位店長看得到待審名單，含生日手機地址與填的單位職稱', pB);
+  ok(pB.data.people.map((x) => x.name).sort().join() === '審甲,審辛', 'A12 店長只看到自己單位的待審（不含他店、總部、已開通）', pB.data.people);
+  ok(post(sb, 'unitPending', {}, tokC).data.people.length === 0, 'A12 ★他店店長看不到這家的待審');
+  ok(post(sb, 'unitPending', {}, tokD).error === '只有單位主管可以審核', 'A12 ★一般同仁不能看待審名單');
+  const pE = post(sb, 'unitPending', {}, tokE);
+  ok(pE.ok && pE.data.people.map((x) => x.name).join() === '審己', 'A12 總部部門主管只看同單位同部門（資訊部看不到財務部）', pE);
+
+  // 審核權限
+  ok(post(sb, 'unitApprove', { emp_no: emp('審甲') }, tokC).error === '只有單位主管可以審核', 'A12 ★他店店長不能審');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審甲') }, tokD).error === '只有單位主管可以審核', 'A12 ★一般同仁不能審');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審乙') }, tokB).error === '不能審核自己', 'A12 ★不能審自己');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審庚') }, tokE).error === '只有單位主管可以審核', 'A12 總部資訊部主管不能審財務部');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審丁') }, tokB).error === '這位同仁不在等待審核', 'A12 已開通的人不能再審');
+  ok(staffRow(sheets, emp('審甲'))[COL('status')] === 'pending', 'A12 被擋的審核沒有改到資料');
+
+  // 退回 → 重新認領 → 通過 → 登入
+  ok(post(sb, 'unitReject', { emp_no: emp('審甲') }, tokB).error === '請填寫退回原因', 'A12 退回要原因');
+  ok(post(sb, 'unitReject', { emp_no: emp('審甲'), reason: '職稱填錯' }, tokB).ok, 'A12 同單位店長退回');
+  const ra = staffRow(sheets, emp('審甲'));
+  ok(ra[COL('status')] === 'unclaimed' && ra[COL('reject_reason')] === '職稱填錯' && ra[COL('birthday')] === '' && ra[COL('p_unit')] === '', 'A12 ★退回＝回未開通、清個資、留原因');
+  ok(post(sb, 'login', { username: emp('審甲'), password: 'apply-a-pw-1' }).ok === false, 'A12 退回後舊密碼登不進去');
+  ok(post(sb, 'claimLookup', { name: '審甲' }).data.emp_no === emp('審甲'), 'A12 ★退回後可以重新認領（查得到編號）');
+  ok(sub('審甲', 'apply-a-pw-2').ok && staffRow(sheets, emp('審甲'))[COL('status')] === 'pending', 'A12 重新送出 → 待審');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審甲') }, tokB).ok, 'A12 ★同單位店長通過');
+  const fa = staffRow(sheets, emp('審甲'));
+  ok(fa[COL('status')] === 'active' && fa[COL('unit')] === 'mzt-gf' && fa[COL('p_unit')] === '' && fa[COL('confirmed_at')] !== '', 'A12 通過＝p_* 搬正式欄、status active');
+  const la = post(sb, 'login', { username: emp('審甲'), password: 'apply-a-pw-2' });
+  ok(la.ok && post(sb, 'myProfile', {}, la.data.token).data.status === 'active', 'A12 ★通過後可以登入');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審己') }, tokE).ok, 'A12 總部部門主管可審同部門');
+
+  // 人資（platform.staff）一律可審（單位還沒有主管時的備援）
+  sheets.roles._data.push(['hr', '人資', 'platform.staff']);
+  post(sb, 'saveUser', { username: 'hr1', name: '假人資', role: 'hr', node: '', password: 'fake-hr-pw-01' }, tok);
+  const tokHr = post(sb, 'login', { username: 'hr1', password: 'fake-hr-pw-01' }).data.token;
+  const pHr = post(sb, 'unitPending', {}, tokHr);
+  ok(pHr.ok && pHr.data.all_units === true && pHr.data.people.map((x) => x.name).sort().join() === '審庚,審辛', 'A12 人資看得到全部單位的待審', pHr);
+  ok(post(sb, 'unitApprove', { emp_no: emp('審庚') }, tokHr).ok, 'A12 ★人資可審（財務部沒有主管也能開通）');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審辛') }, tok).ok, 'A12 admin（*）也可審');
+
+  // 紀錄只寫事件不寫個資
+  const logs = sheets.staff_log._rows().filter((r) => r[4] === 'unit_review');
+  ok(logs.length === 5 && logs.filter((r) => r[2] === 'confirm').length === 4 && logs.filter((r) => r[2] === 'reject').length === 1, 'A12 staff_log 記了 4 筆通過、1 筆退回', logs);
+  const all = sheets.staff_log._rows().map((r) => r.join('|')).join('\n');
+  ok(all.indexOf('0911222333') === -1 && all.indexOf('1995-05-05') === -1 && all.indexOf('職稱填錯') === -1, 'A12 staff_log 不含個資與退回原因');
+  // Code.gs：讀取不上鎖、寫入上鎖
+  const src = SRC.find(([f]) => f === 'Code.gs')[1];
+  const mut = /MUTATING_ACTIONS = \{([\s\S]*?)\};/.exec(src)[1];
+  ok(mut.indexOf('unitApprove: 1') !== -1 && mut.indexOf('unitReject: 1') !== -1 && mut.indexOf('logout: 1') !== -1 && mut.indexOf('unitPending') === -1, 'A12 審核與登出上寫入鎖，待審名單不上鎖');
+})();
+
+// ============================================================
+// A13 上線轉換：舊流程已能登入的 pending／rejected，token 也一起擋
+// ============================================================
+(() => {
+  const { sb, sheets } = fresh();
+  const tok = adminToken(sb);
+  const { emp, claim } = seedAndClaim(sb, tok);
+  const old = claim.data.token;
+  const idx = sheets.staff._data.findIndex((r) => r[0] === emp);
+  sheets.staff._data[idx][COL('status')] = 'pending'; // 模擬上線前舊流程認領、手上已有 token 的人
+  ok(post(sb, 'me', {}, old).error === '帳號還在等主管審核', 'A13 ★舊流程 pending 的 token 上線後一律失效');
+  ok(post(sb, 'myProfile', {}, old).ok === false, 'A13 舊 pending token 讀不到個資');
+  sheets.staff._data[idx][COL('status')] = 'rejected';
+  ok(post(sb, 'login', { username: emp, password: 'fake-staff-pw-1' }).error === '帳號資料被退回，請找人資重新開通', 'A13 舊流程 rejected 登入被擋並說明');
+  sheets.staff._data[idx][COL('status')] = 'active';
+  sheets.staff._data[idx][COL('p_title')] = 'ft'; // 已開通、改了職稱待確認 ≠ 認領待審
+  ok(post(sb, 'me', {}, old).ok, 'A13 ★已開通＋待確認變更（p_*）照常可用，不被當成待審');
+})();
+
+// ============================================================
+// A14 登出＝全部裝置一起登出（Eason 2026-10-12）
+// ============================================================
+(() => {
+  const { sb, sheets } = fresh();
+  const tok = adminToken(sb);
+  const { emp, claim } = seedAndClaim(sb, tok);
+  const phone = claim.data.token;
+  const laptop = post(sb, 'login', { username: emp, password: 'fake-staff-pw-1' }).data.token;
+  const before = sheets.users._rows().find((u) => u[1] === emp);
+  ok(post(sb, 'logout', {}, laptop).ok, 'A14 logout 成功');
+  ok(post(sb, 'me', {}, laptop).ok === false && post(sb, 'me', {}, phone).ok === false, 'A14 ★登出後這台與其他裝置的舊 token 都失效');
+  const after = sheets.users._rows().find((u) => u[1] === emp);
+  ok(after.length === 11 && typeof after[10] === 'number' && after.slice(0, 10).join('|') === before.slice(0, 10).join('|'), 'A14 只寫 token_after 那一格（users 11 欄，其他不動）', [before, after]);
+  ok(post(sb, 'logout', {}, phone).ok === false, 'A14 已失效的 token 再登出 → 回失效（前端照樣清本機）');
+  ok(post(sb, 'logout', {}, '').ok === false, 'A14 沒 token 不能登出別人');
+  ok(post(sb, 'login', { username: emp, password: 'fake-staff-pw-1' }).ok && post(sb, 'me', {}, post(sb, 'login', { username: emp, password: 'fake-staff-pw-1' }).data.token).ok, 'A14 登出後重新登入照常');
+  const adminLaptop = post(sb, 'login', { username: 'BOSS', password: ADMIN_PW }).data.token;
+  post(sb, 'logout', {}, tok);
+  ok(post(sb, 'me', {}, adminLaptop).ok === false, 'A14 系統帳號（BOSS）登出也是全部裝置');
+})();
+
+// ============================================================
+// A15 GPT 上線前複審（2026-10-12）第 1、4、5、6 條
+// ============================================================
+(() => {
+  // ── 第 1 條：LEGACY_SECRETS 過渡旗標 ──
+  const { sb, sheets, props } = fresh();
+  sheets.module_secrets._data.push(['audit', 'read', 'FAKE-LEG-AUDIT-R'], ['audit', 'write', 'FAKE-LEG-AUDIT-W'], ['dorm', 'write', 'FAKE-LEG-DORM-W']);
+  const run = () => {
+    const lg = post(sb, 'login', { username: 'acc1', password: 'fake-acc-pw-01' });
+    const me = post(sb, 'me', {}, lg.data.token);
+    return { lg, me };
+  };
+  let r = run();
+  ok(r.lg.ok && !('secrets' in r.lg.data) && !('secrets' in r.me.data), 'A15-1 旗標未設：login／me 都不回 secrets', r);
+  props.LEGACY_SECRETS = '0';
+  r = run();
+  ok(!('secrets' in r.lg.data) && !('secrets' in r.me.data), 'A15-1 旗標＝0：不回 secrets');
+  props.LEGACY_SECRETS = '1';
+  r = run();
+  ok(r.lg.ok && r.lg.data.secrets && r.lg.data.secrets.audit === 'FAKE-LEG-AUDIT-W' && !('dorm' in r.lg.data.secrets), 'A15-1 旗標＝1：login 照舊回 secrets（會計拿 audit write 碼、沒有 dorm）', r.lg.data);
+  ok(r.me.ok && r.me.data.secrets && r.me.data.secrets.audit === 'FAKE-LEG-AUDIT-W', 'A15-1 旗標＝1：me 照舊回 secrets', r.me.data);
+  delete props.LEGACY_SECRETS;
+  r = run();
+  ok(!('secrets' in r.lg.data) && !('secrets' in r.me.data), 'A15-1 旗標刪掉後立刻不回 secrets');
+})();
+
+(() => {
+  // ── 第 4 條：總部有部門、主管部門空白 → 不具審核／通訊錄資格 ──
+  const { sb, sheets } = fresh();
+  const tok = adminToken(sb);
+  post(sb, 'staffImport', { names: ['空部甲', '空部乙', '空部丙'] }, tok);
+  const emp = (n) => sheets.staff._rows().find((r) => r[2] === n)[0];
+  const HQ = (dept, title) => ({ brand: 'dzy', unit: 'dzy-hq', dept, title, birthday: '1990-03-03', phone: '0922333444', address: '新竹市測試總部路3號' });
+  const tokM = claimAndApprove(sb, tok, '空部甲', 'mgr-blank-pw-1', HQ('it', 'hm')).claim.data.token;
+  ok(post(sb, 'claimSubmit', Object.assign({ name: '空部乙', emp_no: emp('空部乙'), password: 'apply-fin-pw-1' }, HQ('fin', 'hs'))).ok, 'A15-4 財務部申請人送出');
+  // 對照組：有部門時只看得到同部門（財務部看不到）
+  const before = post(sb, 'unitPending', {}, tokM);
+  ok(before.ok && before.data.people.length === 0, 'A15-4 對照：資訊部主管看不到財務部待審', before);
+  // 試算表直接把主管的部門清空（舊資料／部門清單後來才加）
+  const ri = sheets.staff._rows().findIndex((r) => r[0] === emp('空部甲'));
+  sheets.staff._data[ri][COL('dept')] = '';
+  const pend = post(sb, 'unitPending', {}, tokM);
+  ok(pend.ok === false && pend.error === '只有單位主管可以審核', 'A15-4 ★部門空白的總部主管不能看待審（不放大成全總部）', pend);
+  ok(post(sb, 'unitApprove', { emp_no: emp('空部乙') }, tokM).ok === false, 'A15-4 ★部門空白的總部主管不能審財務部');
+  const mu = post(sb, 'myUnit', {}, tokM);
+  ok(mu.ok === false, 'A15-4 ★部門空白的總部主管看不到整個總部通訊錄（myUnit 同一套判斷）', mu);
+  const lg = post(sb, 'login', { username: emp('空部甲'), password: 'mgr-blank-pw-1' });
+  ok(lg.ok && lg.data.perms.indexOf('platform.review') === -1, 'A15-4 部門空白就不帶 platform.review', lg.data && lg.data.perms);
+  ok(staffRow(sheets, emp('空部乙'))[COL('status')] === 'pending', 'A15-4 被擋的審核沒有改到資料');
+})();
+
+(() => {
+  // ── 第 5 條：帳號至少要有一個英文字母；帳號欄寫入設純文字 ──
+  const { sb, sheets } = fresh();
+  const tok = adminToken(sb);
+  const ins = (username) => post(sb, 'saveUser', { username, name: '數字帳號', role: 'accountant', node: '', password: 'fake-num-pw-01' }, tok);
+  const n0 = sheets.users._rows().length;
+  for (const u of ['12345', '0912345678', '１２３', '123-456', '中文帳號']) {
+    const r = ins(u);
+    ok(r.ok === false && r.error === '帳號至少要有一個英文字母', 'A15-5 ★新增帳號「' + u + '」被擋', r);
+  }
+  ok(sheets.users._rows().length === n0, 'A15-5 被擋的新增沒有寫入任何列');
+  const okIns = ins('acc0912');
+  ok(okIns.ok === true, 'A15-5 含英文字母（acc0912）可以新增', okIns);
+  const newRow = sheets.users._rows().length;
+  ok(sheets.users._fmt[newRow] === '@', 'A15-5 新增時帳號欄設成純文字', sheets.users._fmt);
+  const ed = post(sb, 'saveUser', { id: okIns.data.id, username: '0912', name: '數字帳號', role: 'accountant', node: '' }, tok);
+  ok(ed.ok === false && ed.error === '帳號至少要有一個英文字母', 'A15-5 ★修改成純數字帳號被擋', ed);
+  ok(sheets.users._rows()[newRow - 1][1] === 'acc0912', 'A15-5 被擋的修改沒有改到帳號');
+  delete sheets.users._fmt[2];
+  const ed2 = post(sb, 'saveUser', { id: 'u002', username: 'acc2', name: '假會計', role: 'accountant', node: '' }, tok);
+  ok(ed2.ok && sheets.users._fmt[3] === '@', 'A15-5 修改時帳號欄也設純文字', sheets.users._fmt);
+  ok(post(sb, 'login', { username: 'acc0912', password: 'fake-num-pw-01' }).ok, 'A15-5 含數字的英數帳號登得進去');
+})();
+
+(() => {
+  // ── 第 6 條：改密碼／改手機驗目前密碼走 authSafeEqual_（常數時間） ──
+  const { sb, sheets } = fresh();
+  const tok = post(sb, 'login', { username: 'acc1', password: 'fake-acc-pw-01' }).data.token;
+  const orig = sb.authSafeEqual_;
+  let calls = 0;
+  // 只算「拿來比密碼雜湊」的呼叫（verifyToken_ 驗簽章也會用 authSafeEqual_，不能混進來）
+  sb.authSafeEqual_ = function (a, b) {
+    const stored = String(sheets.users._rows().find((u) => u[0] === 'u002')[6]);
+    if (String(b) === stored) calls++;
+    return orig(a, b);
+  };
+  const bad = post(sb, 'changePassword', { oldPassword: 'wrong-old-pw-1', newPassword: 'fake-new-pw-0001' }, tok);
+  ok(bad.ok === false && calls >= 1, 'A15-6 ★驗舊密碼（錯）呼叫 authSafeEqual_', { bad, calls });
+  calls = 0;
+  const good = post(sb, 'changePassword', { oldPassword: 'fake-acc-pw-01', newPassword: 'fake-new-pw-0001' }, tok);
+  ok(good.ok === true && calls >= 1, 'A15-6 驗舊密碼（對）也走 authSafeEqual_、改密碼成功', { good, calls });
+  sb.authSafeEqual_ = orig;
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

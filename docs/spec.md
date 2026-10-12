@@ -65,7 +65,7 @@
 |---|---|---|
 | S1 | **ES modules＋動態 `import()`** 載入模組 | 瀏覽器原生、零建置、真封裝（不靠全域變數）；加模組只改 `registry.js`。代價：本機測試必須跑 http server（不能 `file://`），沿用既有 `.command` 腳本即可。備案：若日後遇到相容問題，退回「動態建立 `<script>` ＋全域註冊」，`registry.js` 介面不變 |
 | S2 | **Hash 路由** `#/<模組>/<分頁>` | GitHub Pages 是純靜態，hash 不需要 404 rewrite，重新整理不會 404。例：`#/audit/ops`、`#/dorm/list` |
-| S3 | **平台代管既有系統的通行碼**（見 §6.3） | 既有兩支後端**一行都不用改**，完全滿足 §0 鐵規。使用者不再知道通行碼，離職只要停用帳號、不必換碼 |
+| S3 | **平台代管既有系統的通行碼**（見 §6.3；2026-10-12 起改由 Mac mini 代轉，瀏覽器拿不到通行碼） | 既有兩支後端**一行都不用改**，完全滿足 §0 鐵規。使用者不再知道通行碼，離職只要停用帳號、不必換碼（代轉上線後才真正成立，且上線後須換一次舊碼，見 §6.3） |
 | S4 | 所有後端呼叫用 `POST` ＋ `Content-Type: text/plain` | 沿用稽核既有做法，避開 CORS preflight（Apps Script 對 OPTIONS 回應不完整） |
 | S5 | Session 用 **無狀態簽章 token**（HMAC-SHA256），有效期 7 天 | 後端不必存 session 表；停用帳號的即時性靠每次呼叫查一次 `active` 旗標補上 |
 | S6 | 密碼用 **每帳號隨機 salt ＋ SHA-256 迭代 10,000 次** | Apps Script 沒有 bcrypt／PBKDF2；配合「帳號僅內部發放＋錯誤 5 次鎖 15 分鐘」對內部系統足夠。**明碼永不落地** |
@@ -319,8 +319,8 @@ UI 元件一律使用 `platform/css/components.css` 既有的 class，不得自�
 
 | action | payload | 回傳 data | 需要權限 |
 |---|---|---|---|
-| `login` | `{username, password}` | `{token, user, perms, secrets}` | — |
-| `me` | `{}`（token 在外層） | `{user, perms, secrets}` | 有效 token |
+| `login` | `{username, password}` | `{token, user, perms}`（2026-10-12 起不再有 `secrets`） | — |
+| `me` | `{}`（token 在外層） | `{user, perms}`（同上） | 有效 token |
 | `listUsers` | `{}` | `{users:[…]}`（不含 salt/hash） | `platform.users` |
 | `saveUser` | `{id?, username, name, role, node}` | `{id}` | `platform.users` |
 | `setActive` | `{id, active}` | `{}` | `platform.users` |
@@ -340,9 +340,11 @@ UI 元件一律使用 `platform/css/components.css` 既有的 class，不得自�
 （例「系統忙碌中，請稍後再試」），細節只寫進伺服器端記錄。原本把 `err.message` 原文送出去，
 會洩漏分頁名、函式名這類內部結構。
 
-- `secrets`：以 `backend_id` 為鍵，只回傳「這個使用者有權限的後端」的通行碼，例 `{"audit":"5678"}`。沒權限的後端不下發。
-- **一律下發符合其權限的最低一級通行碼**：有 `<ns>.write` 才給 `level=write` 的碼，只有 `read`／`read.own` 一律給 `level=read` 的碼。
-  實際效果：店長與部門主管拿到的是稽核的「主管唯讀碼」，就算拿去開舊網址也**只能看、不能填不能改**。
+- ~~`secrets`~~：**2026-10-12 起 login／me 不再下發任何通行碼**（改由 Mac mini 代轉，§6.3）。
+  過渡期例外：ScriptProperties `LEGACY_SECRETS`＝`'1'` 時 login／me 照舊回 `secrets`（只為換版期間的舊 JS；預設不回，部署順序見 §6.3）。
+- 選碼規則沿用（現在只在代轉時用，`Auth.gs pickSecretFor_`）：有 `<ns>.write` 才用 `level=write` 的碼，
+  只有 `read`／`read.own` 一律用 `level=read` 的碼。
+- `proxyAuthorize_(token, ns, action)` 是**全域函式、不在 doPost 分派表**，只給 mini 執行器在佇列內直接呼叫（§6.3）。
 - 登入失敗 **3 次** → 該 `username` 鎖 15 分鐘，回 `{"ok":false,"error":"嘗試次數過多，請 15 分鐘後再試"}`。
   （Eason 2026-08-14 指定「給連續輸入三次錯誤的機會」，門檻由 5 改為 3。
   前端 `platform/views/login.js` 的 `THROTTLE_AFTER_FAILURES` 必須同步，兩邊不一致會出現
@@ -372,22 +374,39 @@ SECRET 存 Apps Script 的 Script Properties，**不進 repo**。
 - 第一層（平台）：模組之間切換。手機＝底部列，桌機＝左側欄。
 - 第二層（模組）：模組內分頁切換，由 `manifest.views` 動態產生——**這正是稽核 `js/app.js:163 renderNav()` 現在的做法，往上提一層而已**，既有邏輯可直接沿用。
 
-### 6.3 平台代管通行碼（S3 的細節）
+### 6.3 平台代管通行碼（S3 的細節）——2026-10-12 起改為 Mac mini 代轉
+
+> 2026-10-12 Eason 拍板：瀏覽器不再拿到舊後端通行碼。稽核、宿舍舊 Apps Script 後端**一行不改**。
+> 契約正本：`~/dzy-minikit/apps/dzy-platform/PROXY.md`（第 2 節 `proxyAuthorize_`、第 3、4 節前端改法）。
 
 ```
-使用者輸入 帳號＋密碼
-      ↓
-平台後端驗證 → 回 {token, user, perms, secrets:{audit:"****"}}
-      ↓
-前端把 secrets 存在記憶體（不寫 localStorage）
-      ↓
-稽核模組呼叫既有後端時，自動帶上 secrets.audit 當通行碼
-      ↓
-既有稽核後端完全不知道有平台這回事，行為零改變
+瀏覽器 POST <平台主機>/platform/proxy   text/plain：{token, ns:'audit'|'dorm', action, payload}
+      ↓                                  （payload 原樣；瀏覽器沒有、也不送 code／pass）
+mini 執行器（kit/runner/proxy.js）：限流 → 在途上限 → 佇列內呼叫 Code.gs 全域函式 proxyAuthorize_
+      ↓  proxyAuthorize_：驗 token（每次重查 active、token_after、同仁認領閘門，同 me）
+      ↓                   讀清單外的 action 一律要 <ns>.write；選碼；店長回 filterNode
+mini 佇列外帶通行碼打舊後端（網址在 mini .env：PROXY_URL_AUDIT／PROXY_URL_DORM）
+      ↓  filterNode 不是 null → 裁成只剩自己節點（proxy-hook.js，規則＝前端 filterOwnNode_）
+      ↓  回應中整個字串＝通行碼的值一律換成 [REDACTED]
+回 200＋舊後端原本的扁平 JSON（前端 transformResponse_ 照用；前端裁切留著當第二道）
 ```
 
-- `secrets` **只存記憶體**，重新整理就重取（靠 `me`）——不落地到 localStorage，降低外洩面。
+- **讀清單**（`Auth.gs PROXY_READ_ACTIONS`＝`platform/dryrun.js READ_ACTIONS` 的 audit／dorm，兩邊要一起改，
+  `test/proxy-authorize.test.mjs` 有比對）：audit `getAll`；dorm `rooms`／`list`／`contract`／`handover`。其餘一律算寫入。
+- **HTTP 狀態 → 前端訊息**（`platform/api.js`）：401 登入已失效（清本機 token、回登入頁，**不打後端 logout**）／
+  403 沒有權限／429・503 系統忙碌／504 舊系統回應逾時／502 舊系統暫時無法連線／501 代轉尚未啟用。逾時 35 秒。
+- `sign.html`（簽約頁，簽署人只有簽約 token、本來就不帶通行碼）照舊直接打宿舍舊後端，不經代轉。
+- **「離職只要停用帳號、不必換碼」現在才真的成立**：停用帳號後下一次代轉立刻 401，瀏覽器手上也沒有碼可以拿去開舊網址。
+  **但代轉上線後必須換一次舊碼**（稽核、宿舍舊後端的設定值與 `module_secrets` 同步換新）：
+  上線前通行碼已下發到各瀏覽器記憶體、可能被抄走，不換等於舊碼還在外面。換碼後，舊碼才真正收回。
 - 既有後端的 `REQUIRE_PASSCODE` 開關維持 `true`，不動。
+- **部署順序**（2026-10-12 GPT 複審第 1 條，取代原本「前端→緊接平台後端」的順序；那個順序中間必有一段新前端 501 或舊前端壞掉）：
+  1. mini `.env` 填 `PROXY_URL_AUDIT`／`PROXY_URL_DORM` 與 `GAS_PROP_LEGACY_SECRETS=1`（app.json `props` 須列 `LEGACY_SECRETS`）→ 重啟。
+  2. 同步新平台後端（`sync-gas.sh dzy-platform`→mini pull→重啟）：旗標＝1，login／me 照舊回 secrets，**新舊前端都能用**。
+  3. push 前端（新前端不讀 secrets，稽核／宿舍一律走代轉）。
+  4. 實測稽核（店長、會計）與宿舍（主管）；大家 Cmd+Shift+R。
+  5. 大家重整完 → 刪掉 `LEGACY_SECRETS`（`.env` 刪那行→重啟），login／me 不再回 secrets。
+  6. 最後換稽核、宿舍舊碼（舊後端設定值與 `module_secrets` 同步換新）。旗標沒刪之前換碼＝新碼又被下發。
 
 ### 6.4 兩張稽核卡片、一次後端呼叫
 
@@ -413,13 +432,11 @@ modules/audit-shared/api.js
 
 **已知且已接受的兩個限制**（Eason 2026-08-14 選定「接受，不做代理」，本節即為交付說明，不得省略）：
 
-1. 這是前端過濾。會按 F12 開開發者工具、看得懂 JSON 的人，能在網路紀錄裡看到原始回應中的別店資料
-   （合格率、逐項核定結果、異常說明、稽核日期與人員、盤點數量差異、金庫金額差異）。
-2. 平台會把稽核通行碼下發到瀏覽器（§6.3），店長因此可拿該碼去開舊網址 `/mala-audit` 看到全部節點。
-   **緩解**：店長與部門主管一律只拿到 `level=read` 的主管唯讀碼（§5.2），所以最壞情況是「看得到全部、但不能填不能改」。
+1. ~~這是前端過濾~~（**2026-10-12 已解除**：mini 代轉時就先裁好，瀏覽器網路紀錄裡只剩自己店；前端裁切留著當第二道）。
+2. ~~平台會把稽核通行碼下發到瀏覽器~~（**2026-10-12 已解除**：login／me 不再下發，§6.3；
+   上線前已下發過的舊碼要換掉才算收回）。
 
-**未來要真正擋住的路**：新增一支平台代理後端（前端 → 平台後端 → 稽核後端，由平台後端持碼並裁切），
-店長那條路改走代理即可，前端介面不用改。列為未來升級路徑，本期不做。
+**「未來要真正擋住的路」已在 2026-10-12 做成**：Mac mini 代轉（§6.3），前端介面未改。
 
 > 對應調整：requirements.md §10 該條驗收條件的措辭收斂為
 > 「改網址參數拿不到別店資料；devtools 層級不設防，已知並接受」。
@@ -479,7 +496,7 @@ modules/audit-shared/api.js
 
 | 問題 | 決定 |
 |---|---|
-| 平台代管通行碼（§6.3） | **同意**。既有兩支後端一行都不用改 |
+| 平台代管通行碼（§6.3） | **同意**。既有兩支後端一行都不用改（2026-10-12 Eason 再拍板：改由 Mac mini 代轉，瀏覽器不再拿到通行碼） |
 | 店長隔離（§7） | **接受前端過濾的限制，不做代理後端**。限制內容已寫進 §7，屬交付說明的一部分 |
 | 稽核卡片數（§11 T1） | **首頁兩張卡片**，因此拆成 `audit-ops`／`audit-stock` 兩個模組 |
 | 新增雲端資源 | **現在建**：1 支 Apps Script ＋ 1 份 Google 試算表（帳號權限用） |

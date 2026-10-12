@@ -1,8 +1,14 @@
 /**
  * platform/api.js — 後端呼叫封裝＋回傳格式轉接（T1-7）
  *
- * 正本規格：docs/spec.md §4.8（送出與回傳格式）、§6.3（平台代管通行碼）、
+ * 正本規格：docs/spec.md §4.8（送出與回傳格式）、§6.3（通行碼代管＝Mac mini 代轉）、
  * §7（店長節點裁切）、§3 S4（為什麼用 text/plain）。
+ *
+ * 【2026-10-12 起：稽核／宿舍改由 Mac mini 代轉，瀏覽器拿不到通行碼】
+ * audit／dorm 一律 POST 到 <平台主機>/platform/proxy，body {token, ns, action, payload}；
+ * 通行碼由 mini 代帶（契約正本：~/dzy-minikit/apps/dzy-platform/PROXY.md）。
+ * 下面「audit／dorm 真實送出格式」那段（code／pass 扁平展開）現在由 mini 的 proxy-hook.js 組，
+ * 這裡只送 payload 原樣（呼叫端夾帶的 token／code／pass 照舊刪掉）。
  *
  * 這是前端呼叫後端的唯一通道。三支後端回傳格式各不相同，這一層把它們轉成
  * 同一個形狀 {ok:true,data:{...}} | {ok:false,error:string}，模組不必各自處理。
@@ -35,7 +41,12 @@
 'use strict';
 
 import { BACKENDS } from './config.js';
-import { getUser, can, getSecret, getToken } from './auth.js';
+import { getUser, can, getToken } from './auth.js';
+import { isDryRun, isReadAction, notifyDryRun } from './dryrun.js';
+
+// 代轉逾時 35 秒：mini 對舊後端等 30 秒，再留 5 秒餘裕（PROXY.md 第 3 節）
+const PROXY_TIMEOUT_MS = 35000;
+const PROXY_NS = { audit: true, dorm: true };
 
 // 45 秒（2026-08-17 由 15 秒放寬，與 auth.js 同一個理由：Apps Script 本來就慢，
 // 稽核 getAll 還要一次讀回五個分頁的整年資料，行動網路上 15 秒不夠用）。
@@ -47,9 +58,14 @@ export function __setTimeoutMs(ms) {
   timeoutMs = (typeof ms === 'number' && ms > 0) ? ms : DEFAULT_TIMEOUT_MS;
 }
 
-// 既有兩支後端的通行碼參數名（讀程式碼確認，見檔頭說明）。platform 不在這張表裡，
-// 它的 token 走 §4.8 的殼（見 buildRequestBody_）。
-const LEGACY_SECRET_FIELD = { audit: 'code', dorm: 'pass' };
+/**
+ * 代轉網址：從平台後端網址推（…/platform/api → …/platform/proxy），config.js 不另存一份。
+ * 推不出來（網址不是 /api 結尾）回 ''＝當作沒設定。
+ */
+export function proxyUrl() {
+  const u = BACKENDS.platform || '';
+  return /\/api$/.test(u) ? u.replace(/\/api$/, '/proxy') : '';
+}
 
 /**
  * 依 backendId 組出真正要送出的 request body。
@@ -63,35 +79,30 @@ function buildRequestBody_(backendId, action, payload) {
 
   if (backendId === 'platform') {
     // spec §4.8 的殼：{action, token, payload}。
-    // token 一律由 getToken() 自動帶（2026-08-14 改）——與下面既有後端的通行碼同一套規則：
-    // 憑證只認目前登入身分持有的那一份，不採信呼叫端 payload 裡夾帶的同名欄位。
-    // 呼叫端若還是塞了 payload.token，一律丟棄，避免「用別人的 token 打 API」這條路存在。
+    // token 一律由 getToken() 自動帶（2026-08-14 改）：憑證只認目前登入身分持有的那一份，
+    // 不採信呼叫端 payload 裡夾帶的同名欄位。呼叫端若還是塞了 payload.token，一律丟棄。
     const rest = { ...p };
     delete rest.token;
     return { action, token: getToken(), payload: rest };
   }
 
-  // audit／dorm：既有後端的真實格式，欄位與 action 同層扁平展開，通行碼用各自的參數名，
-  // 一律用 getSecret() 自動帶，不採信呼叫端 payload 裡可能夾帶的同名欄位（安全考量：
-  // 通行碼只認目前登入身分下發的那一份，不給呼叫端覆寫的機會）。
-  // 2026-08-15 對抗審查修正：原本是 `{ action, ...p }`——展開順序讓呼叫端能用
-  // payload 裡的同名欄位把 action 蓋掉，等於模組可以自己決定去打後端的哪個動作。
-  // 通行碼因為是在後面才寫入所以擋得住，action 擋不住。
-  // 改成：先清掉 payload 裡的保留欄位，最後才寫入平台決定的值。
-  const body = { ...p };
-  delete body.action;
-  const secretField = LEGACY_SECRET_FIELD[backendId];
-  if (secretField) delete body[secretField];
-
-  body.action = action;
-  if (secretField) body[secretField] = getSecret(backendId);
-  return body;
+  // audit／dorm（2026-10-12 代轉）：{token, ns, action, payload}。
+  // payload 裡呼叫端夾帶的 action／code／pass 一律刪掉——通行碼只在 mini 那邊帶，
+  // 瀏覽器既沒有、也不准送；action 由平台決定（2026-08-15 對抗審查：不給 payload 覆寫 action）。
+  // ⚠ payload.token **不能刪**：那是宿舍的「簽約／點交單 token」（handover／contract 要用），
+  //   不是登入 token；登入 token 在外層 body.token，一律由 getToken() 帶，兩者不會混。
+  //  （mini 的 proxy-hook.js buildBody 也只刪 action 與通行碼欄位，兩邊一致。）
+  const rest = { ...p };
+  delete rest.action;
+  delete rest.code;
+  delete rest.pass;
+  return { token: getToken(), ns: backendId, action, payload: rest };
 }
 
 /** 帶逾時的 POST；逾時用 AbortController 中斷，fetch 會丟出 name==='AbortError' 的例外 */
-async function postJson_(url, body) {
+async function postJson_(url, body, ms) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), ms || timeoutMs);
   try {
     return await fetch(url, {
       method: 'POST',
@@ -114,7 +125,10 @@ function filterOwnNode_(data, node) {
   const out = {};
   for (const key of Object.keys(data)) {
     const val = data[key];
-    out[key] = isStoreRowArray_(val) ? val.filter((row) => row.store === node) : val;
+    // 沒有 store 欄位的列（含 null／非物件）一律丟掉：往關的方向失敗
+    out[key] = isStoreRowArray_(val)
+      ? val.filter((row) => row && typeof row === 'object' && row.store === node)
+      : val;
   }
   return out;
 }
@@ -160,10 +174,14 @@ function emptyRows_(data) {
   return out;
 }
 
-/** 判斷一個值是不是「一列一店」的資料陣列（每一列都帶 store 欄位） */
+/**
+ * 判斷一個值是不是「一列一店」的資料陣列：只要有任一列帶 store 欄位就算（2026-10-12 修）。
+ * 原本要求「每一列」都有 store，混入一列沒 store 就整批不裁切＝往開的方向失敗。
+ * 沒有 store 的列由 filterOwnNode_ 丟掉。空陣列照舊不算。
+ */
 function isStoreRowArray_(val) {
   return Array.isArray(val) && val.length > 0
-    && val.every((row) => row && typeof row === 'object' && 'store' in row);
+    && val.some((row) => row && typeof row === 'object' && 'store' in row);
 }
 
 /** 轉接只在這一處做（spec §4.8）：依 backendId 決定既有回傳長怎樣、要怎麼包進 data。 */
@@ -200,6 +218,24 @@ function transformResponse_(backendId, json) {
   return { ok: true, data };
 }
 
+// 代轉回 401（token 失效／帳號停用）時要走「登入過期」流程：shell 開機時註冊處理函式
+let sessionExpiredHandler = null;
+/** shell.js 註冊：代轉回 401 時呼叫（清本機 session、回登入頁）。傳非函式＝取消註冊。 */
+export function setSessionExpiredHandler(fn) {
+  sessionExpiredHandler = (typeof fn === 'function') ? fn : null;
+}
+
+/** 代轉的 HTTP 狀態 → 給人看的訊息（PROXY.md 第 3 節）。200 不在表內。 */
+const PROXY_STATUS_MSG = {
+  401: '登入已失效，請重新登入',
+  403: '沒有權限',
+  429: '系統忙碌，請稍後再試',
+  503: '系統忙碌，請稍後再試',
+  504: '舊系統回應逾時，請稍後再試',
+  502: '舊系統暫時無法連線',
+  501: '代轉尚未啟用'
+};
+
 /**
  * 前端呼叫後端的唯一通道。
  * @param {string} backendId 'platform' | 'audit' | 'dorm'
@@ -208,22 +244,37 @@ function transformResponse_(backendId, json) {
  * @returns {Promise<{ok:true,data:object}|{ok:false,error:string}>}
  */
 export async function call(backendId, action, payload = {}) {
-  const url = BACKENDS[backendId];
+  const viaProxy = PROXY_NS[backendId] === true;
+  const url = viaProxy ? proxyUrl() : BACKENDS[backendId];
   if (!url) {
     return { ok: false, error: `後端尚未設定：${backendId}` };
+  }
+
+  // 試跑模式（?dryrun=1）中央攔截：白名單（platform/dryrun.js）外的 action 一律不送出。
+  // 拿不準的當寫入擋（往關的方向失敗）。回 ok:true 讓畫面流程走完，data.dryRun 供模組辨識。
+  if (isDryRun() && !isReadAction(backendId, action, payload)) {
+    notifyDryRun(backendId, action, payload);
+    return { ok: true, dryrun: true, data: { dryRun: true, action, payload } };
   }
 
   const body = buildRequestBody_(backendId, action, payload);
 
   let res;
   try {
-    res = await postJson_(url, body);
+    res = await postJson_(url, body, viaProxy ? PROXY_TIMEOUT_MS : timeoutMs);
   } catch (err) {
     const timedOut = !!(err && err.name === 'AbortError');
     return {
       ok: false,
       error: timedOut ? '請求逾時，請稍後再試' : ((err && err.message) || '網路連線失敗，請稍後再試')
     };
+  }
+
+  if (viaProxy && res && typeof res.status === 'number' && res.status !== 200) {
+    if (res.status === 401 && sessionExpiredHandler) {
+      try { sessionExpiredHandler(); } catch { /* 處理函式出錯不影響回傳 */ }
+    }
+    return { ok: false, error: PROXY_STATUS_MSG[res.status] || '代轉失敗，請稍後再試', status: res.status };
   }
 
   let json;

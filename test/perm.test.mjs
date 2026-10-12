@@ -1,10 +1,10 @@
-// node test/perm.test.mjs —— T1-6 驗收：platform/auth.js（身分層：login／restore／logout／can／getSecret）
+// node test/perm.test.mjs —— T1-6 驗收：platform/auth.js（身分層：login／restore／logout／can）
 //
 // 這一層判斷錯，整個系統的權限就是假的，所以測試重點放在 can() 的邊界：
 //   · admin 的 '*' 要對任何 perm 都放行
 //   · audit.read 與 audit.read.own 是兩個完全獨立的權限碼，互不相等、互不包含
 //   · 絕不能用 startsWith 前綴比對（會讓 audit.read 誤放行 audit.readonly）
-// 以及安全規則：token 進 localStorage，secrets 永遠只留在記憶體，logout() 兩邊都要清乾淨。
+// 以及安全規則：token 進 localStorage，瀏覽器不持有通行碼（2026-10-12 代轉），logout() 清乾淨 token 與身分。
 //
 // 後端（apps-script/platform/Auth.gs）還沒部署，所以全程用 __setTransport() 注入假的
 // transport 函式，不打真的網路。
@@ -44,7 +44,15 @@ class MemoryStorage {
 }
 globalThis.localStorage = new MemoryStorage();
 
-import { login, restore, logout, getUser, can, getSecret, __setTransport } from '../platform/auth.js';
+import { login, restore, logout, getUser, can, __setTransport } from '../platform/auth.js';
+import * as authModule from '../platform/auth.js';
+
+// 2026-10-12：logout() 改成先呼叫後端 logout（全部裝置登出）再清本機、回 Promise。
+// 測試裡的登出一律換上「只回 ok 的假 transport」並 await，不讓它落到預設的真 fetch，也不讓延後的清除蓋掉下一段的登入
+async function quietLogout() {
+  __setTransport(async () => ({ ok: true, data: {} }));
+  try { await logout(); } finally { __setTransport(null); }
+}
 
 let passed = 0;
 let failed = 0;
@@ -94,11 +102,11 @@ function makeMockTransport(handlers) {
   assertEqual(getUser(), null, 'A1: 從未登入，getUser() 回 null');
   assertEqual(can('audit.read'), false, 'A2: 從未登入，can() 一律 false');
   assertEqual(can('*'), false, 'A3: 從未登入，can(\'*\') 也是 false（沒有 currentPerms 可言）');
-  assertEqual(getSecret('audit'), '', 'A4: 從未登入，getSecret() 回空字串');
+  assertEqual(typeof authModule.getSecret, 'undefined', 'A4: auth.js 已沒有 getSecret（2026-10-12 代轉：瀏覽器不持有通行碼）');
 })();
 
 // ============================================================
-// B. admin 的 '*' 對任何 perm 都要 true；login 成功要寫 token、設 user/secrets
+// B. admin 的 '*' 對任何 perm 都要 true；login 成功要寫 token、設 user
 // ============================================================
 await (async function sectionB() {
   const transport = makeMockTransport({
@@ -113,8 +121,7 @@ await (async function sectionB() {
         data: {
           token: 'tok-admin-aaa',
           user: { id: 'u001', name: '系統管理者', role: 'admin', node: '' },
-          perms: ['*'],
-          secrets: { audit: 'secret-audit-111', dorm: 'secret-dorm-222' }
+          perms: ['*']
         }
       };
     }
@@ -130,16 +137,12 @@ await (async function sectionB() {
   assertTrue(can('platform.users') === true, "B6: admin 的 '*' → can('platform.users') true");
   assertTrue(can('audit.read.own') === true, "B7: admin 的 '*' → 三段權限碼一樣 true");
 
-  assertEqual(getSecret('audit'), 'secret-audit-111', 'B8: getSecret(\'audit\') 拿到後端下發的通行碼');
-  assertEqual(getSecret('dorm'), 'secret-dorm-222', 'B9: getSecret(\'dorm\') 拿到後端下發的通行碼');
-  assertEqual(getSecret('no-such-backend'), '', 'B10: 拿不到的 backendId 回空字串');
 
   assertEqual(localStorage.getItem(TOKEN_KEY), 'tok-admin-aaa', 'B11: login() 成功後 token 寫進 localStorage');
 
-  logout();
+  await quietLogout();
   assertEqual(getUser(), null, 'B12: logout() 後 getUser() 回 null');
   assertEqual(can('audit.write'), false, 'B13: logout() 後 can() 回 false（即使原本是 admin）');
-  assertEqual(getSecret('audit'), '', 'B14: logout() 後 getSecret() 回空字串');
   assertEqual(localStorage.getItem(TOKEN_KEY), null, 'B15: logout() 後 localStorage 沒有 token');
 })();
 
@@ -154,8 +157,7 @@ await (async function sectionC() {
         data: {
           token: 'tok-storelead-bbb',
           user: { id: 'u010', name: '店長', role: 'storelead', node: 'sxl-gf' },
-          perms: ['audit.read.own'],
-          secrets: { audit: 'secret-read-only-999' }
+          perms: ['audit.read.own']
         }
       })
     })
@@ -168,7 +170,7 @@ await (async function sectionC() {
   assertEqual(can('audit.readonly'), false, "C4: can('audit.readonly') 在只有 ['audit.read.own'] 時為 false（形似字串反例）");
   assertEqual(can('dorm.read'), false, 'C5: 沒有的 ns 一律 false');
 
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
@@ -182,8 +184,7 @@ await (async function sectionD() {
         data: {
           token: 'tok-accountant-ccc',
           user: { id: 'u020', name: '會計', role: 'accountant', node: '' },
-          perms: ['audit.read', 'audit.write'],
-          secrets: { audit: 'secret-write-level-333' }
+          perms: ['audit.read', 'audit.write']
         }
       })
     })
@@ -196,7 +197,7 @@ await (async function sectionD() {
   assertEqual(can('audit.readonly'), false, "D4: can('audit.readonly') 在只有 ['audit.read'] 時為 false（★核心反例：前綴誤判）");
   assertEqual(can('audit.write'), true, 'D5: 完全相符的另一個 perm 仍正常判斷');
 
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
@@ -258,7 +259,7 @@ await (async function sectionG() {
   assertEqual(localStorage.getItem(TOKEN_KEY), null, 'G2c: token 失效 → restore() 順手清掉 localStorage 的舊 token');
   assertEqual(getUser(), null, 'G2d: token 失效 → 不設定身分');
 
-  // G3：有效 token → restore() 回 true，且身分/權限/secrets 都套用成功
+  // G3：有效 token → restore() 回 true，且身分/權限都套用成功
   localStorage.setItem(TOKEN_KEY, 'tok-valid-yyy');
   __setTransport(
     makeMockTransport({
@@ -267,8 +268,7 @@ await (async function sectionG() {
         data: {
           // 照 spec §5.2，me 回傳不含 token 欄位——原本的 token 應該繼續沿用
           user: { id: 'u030', name: '部門主管', role: 'manager', node: '' },
-          perms: ['audit.read', 'dorm.read', 'dorm.write'],
-          secrets: { dorm: 'secret-dorm-restore-444' }
+          perms: ['audit.read', 'dorm.read', 'dorm.write']
         }
       })
     })
@@ -278,14 +278,13 @@ await (async function sectionG() {
   assertEqual(getUser(), { id: 'u030', name: '部門主管', role: 'manager', node: '' }, 'G3b: restore() 成功後 getUser() 是 me 回傳的身分');
   assertEqual(can('dorm.write'), true, 'G3c: restore() 成功後 can() 依 me 回傳的 perms 判斷');
   assertEqual(can('audit.write'), false, 'G3d: manager 沒有 audit.write');
-  assertEqual(getSecret('dorm'), 'secret-dorm-restore-444', 'G3e: restore() 成功後 getSecret() 生效');
   assertEqual(localStorage.getItem(TOKEN_KEY), 'tok-valid-yyy', 'G3f: restore() 成功後原本的 token 仍留在 localStorage（沒被誤刪或誤改）');
 
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
-// H. secrets 絕不落地：在有 secrets 的情況下，翻遍 localStorage 的所有 key/value 都找不到
+// H. 舊後端若仍夾帶 secrets（換版過渡期）：前端忽略，翻遍 localStorage 也找不到
 // ============================================================
 await (async function sectionH() {
   const marker = 'SECRET-MARKER-should-never-touch-storage-8f3a1c';
@@ -303,12 +302,13 @@ await (async function sectionH() {
     })
   );
   await login('acc2', 'pw');
-  assertEqual(getSecret('audit'), marker, 'H1: 登入後 getSecret() 確實拿得到剛剛下發的通行碼');
+  // 舊版後端（換版過渡期）若仍夾帶 secrets：前端一律忽略——沒有 getter、也不落地
+  assertEqual(typeof authModule.getSecret, 'undefined', 'H1: 沒有任何取通行碼的出口');
 
   const hit = localStorage.values().some((v) => v.includes(marker));
   assertEqual(hit, false, 'H2: localStorage 裡任何一個值都不含 secrets 的內容（只存 token，不存通行碼）');
 
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================

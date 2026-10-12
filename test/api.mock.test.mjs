@@ -4,7 +4,7 @@
 //   · 三支後端回傳格式不同 → 轉接後模組看到的一律是 {ok:true,data:{...}} | {ok:false,error}
 //   · 店長節點裁切（spec §7）：只有一處過濾，裁完才交給呼叫端
 //   · 網路錯誤／逾時／非 JSON 一律回 {ok:false}，絕不拋例外
-//   · 呼叫 audit／dorm 時通行碼有沒有正確帶上（欄位名照既有後端程式碼，不是猜的）
+//   · 呼叫 audit／dorm 改走 Mac mini 代轉（2026-10-12）：body 是 {token,ns,action,payload}，絕不含通行碼
 //
 // ⚠ 這支測試全程用假的 fetch（覆寫 globalThis.fetch），一次真實網路請求都不打——
 // 三支後端現在全部是活的正式系統（platform 剛部署、audit/dorm 是正式資料），打下去會出事。
@@ -42,7 +42,15 @@ class MemoryStorage {
 globalThis.localStorage = new MemoryStorage();
 
 import { login, logout, __setTransport } from '../platform/auth.js';
-import { call, __setTimeoutMs } from '../platform/api.js';
+import { call, __setTimeoutMs, proxyUrl, setSessionExpiredHandler } from '../platform/api.js';
+import { BACKENDS } from '../platform/config.js';
+
+// 2026-10-12：logout() 改成先呼叫後端 logout（全部裝置登出）再清本機、回 Promise。
+// 測試裡的登出一律換上「只回 ok 的假 transport」並 await，不讓它落到預設的真 fetch，也不讓延後的清除蓋掉下一段的登入
+async function quietLogout() {
+  __setTransport(async () => ({ ok: true, data: {} }));
+  try { await logout(); } finally { __setTransport(null); }
+}
 
 let passed = 0;
 let failed = 0;
@@ -106,7 +114,7 @@ function makeFetchMock(handlersByAction) {
   return fn;
 }
 
-/** 建一個假 auth transport：login 一次就回指定的身分/權限/secrets（沿用 perm.test.mjs 的做法）。 */
+/** 建一個假 auth transport：login 一次就回指定的身分/權限（沿用 perm.test.mjs 的做法）。 */
 function makeAuthTransport(sessionData) {
   return async (req) => {
     if (req.action === 'login') return { ok: true, data: sessionData };
@@ -161,8 +169,7 @@ await (async function test1() {
   await loginAs({
     token: 'tok-acct-1',
     user: { id: 'u020', name: '會計', role: 'accountant', node: '' },
-    perms: ['audit.read', 'audit.write'],
-    secrets: { audit: 'secret-acct-audit-001' }
+    perms: ['audit.read', 'audit.write']
   });
 
   const auditResp = buildAuditGetAllResponse();
@@ -179,7 +186,7 @@ await (async function test1() {
   assertEqual(Object.keys(res).sort(), ['data', 'ok'], '1h: 回傳只有 ok/data 兩個 key');
 
   armGuard();
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
@@ -189,8 +196,7 @@ await (async function test2() {
   await loginAs({
     token: 'tok-mgr-1',
     user: { id: 'u030', name: '部門主管', role: 'manager', node: '' },
-    perms: ['audit.read', 'dorm.read', 'dorm.write'],
-    secrets: { dorm: 'secret-mgr-dorm-002' }
+    perms: ['audit.read', 'dorm.read', 'dorm.write']
   });
 
   const listResp = {
@@ -224,7 +230,7 @@ await (async function test2() {
   );
 
   armGuard();
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
@@ -234,8 +240,7 @@ await (async function test3() {
   await loginAs({
     token: 'tok-acct-2',
     user: { id: 'u021', name: '會計', role: 'accountant', node: '' },
-    perms: ['audit.read', 'audit.write'],
-    secrets: { audit: 'secret-acct-003' }
+    perms: ['audit.read', 'audit.write']
   });
 
   globalThis.fetch = makeFetchMock({
@@ -257,7 +262,7 @@ await (async function test3() {
   assertEqual(res2.data && res2.data.code, 401, '3b-3: 後端多回的欄位保留在 data，沒有被丟掉');
 
   armGuard();
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
@@ -343,8 +348,7 @@ await (async function test7() {
   await loginAs({
     token: 'tok-lead-1',
     user: { id: 'u010', name: '店長', role: 'storelead', node: 'sxl-gf' },
-    perms: ['audit.read.own'],
-    secrets: { audit: 'secret-lead-004' }
+    perms: ['audit.read.own']
   });
 
   const auditResp = buildAuditGetAllResponse();
@@ -370,7 +374,7 @@ await (async function test7() {
   );
 
   armGuard();
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
@@ -380,8 +384,7 @@ await (async function test8() {
   await loginAs({
     token: 'tok-acct-3',
     user: { id: 'u022', name: '會計', role: 'accountant', node: '' },
-    perms: ['audit.read', 'audit.write'],
-    secrets: { audit: 'secret-acct-005' }
+    perms: ['audit.read', 'audit.write']
   });
 
   const auditResp = buildAuditGetAllResponse();
@@ -393,18 +396,18 @@ await (async function test8() {
   assertEqual(res.data.items.length, 5, '8c: items 也是五個節點都在');
 
   armGuard();
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
-// 9. 呼叫 audit 時通行碼有被帶上（檢查送出的 body）；順便驗證欄位名是 `code`，不是 `token`／`passcode`
+// 9. 呼叫 audit 改走代轉（2026-10-12）：打 <platform 主機>/platform/proxy，
+//    body＝{token, ns, action, payload}，payload 原樣巢狀，**不含 code／pass**
 // ============================================================
 await (async function test9() {
   await loginAs({
     token: 'tok-acct-4',
     user: { id: 'u023', name: '會計', role: 'accountant', node: '' },
-    perms: ['audit.read', 'audit.write'],
-    secrets: { audit: 'secret-check-body-006' }
+    perms: ['audit.read', 'audit.write']
   });
 
   const mock = makeFetchMock({ getAll: () => buildAuditGetAllResponse() });
@@ -413,16 +416,18 @@ await (async function test9() {
   await call('audit', 'getAll', { year: '2026' });
   assertEqual(mock.calls.length, 1, '9a: 送出了一次請求');
   const sentBody = mock.calls[0].body;
-  assertEqual(sentBody.code, 'secret-check-body-006', '9b: 送出的 body.code 就是目前登入身分的稽核通行碼（欄位名照 Code.gs 的 payload.code）');
-  assertEqual(sentBody.action, 'getAll', '9c: body.action 正確');
-  assertEqual(sentBody.year, '2026', '9d: 呼叫端傳入的業務欄位（year）與 action/code 同層扁平展開，不是包在巢狀 payload 裡');
+  assertEqual(mock.calls[0].url, BACKENDS.platform.replace(/\/api$/, '/proxy'), '9b: 打的是平台主機的 /platform/proxy，不是舊後端網址');
+  assertEqual(sentBody, { token: 'tok-acct-4', ns: 'audit', action: 'getAll', payload: { year: '2026' } },
+    '9c: body 剛好是 {token, ns, action, payload}，業務欄位留在 payload 裡');
+  assertTrue(!('code' in sentBody) && !('pass' in sentBody) && !('code' in sentBody.payload) && !('pass' in sentBody.payload),
+    '9d: body 與 payload 都沒有 code／pass（瀏覽器不再持有通行碼）');
 
   // 同時驗證 Content-Type 與 method（spec §3 S4：text/plain 避開 CORS preflight）
   assertEqual(mock.calls[0].opts.method, 'POST', '9e: 一律用 POST');
   assertEqual(mock.calls[0].opts.headers['Content-Type'], 'text/plain', '9f: Content-Type 是 text/plain');
 
   armGuard();
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
@@ -441,8 +446,7 @@ await (async function test10() {
   await loginAs({
     token: 'tok-dual-1',
     user: { id: 'u099', name: '雙權限測試帳號', role: 'accountant', node: 'sxl-gf' },
-    perms: ['audit.read', 'audit.read.own'],
-    secrets: { audit: 'secret-dual-007' }
+    perms: ['audit.read', 'audit.read.own']
   });
 
   const auditResp = buildAuditGetAllResponse();
@@ -453,7 +457,7 @@ await (async function test10() {
   assertEqual(res.data.records.map((r) => r.store).sort(), [...STORE_CODES].sort(), '10b: 五個節點代碼都在（有 audit.read 的人一律不裁切，spec §7）');
 
   armGuard();
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
@@ -465,8 +469,7 @@ await (async function test11() {
     data: {
       token: 'tok-new-login',
       user: { id: 'u001', name: '系統管理者', role: 'admin', node: '' },
-      perms: ['*'],
-      secrets: { audit: 'x', dorm: 'y' }
+      perms: ['*']
     }
   };
   globalThis.fetch = makeFetchMock({ login: () => platformResp });
@@ -496,8 +499,7 @@ await (async function test14() {
   await loginAs({
     token: 'tok-acct-9',
     user: { id: 'u090', name: '會計', role: 'accountant', node: '' },
-    perms: ['audit.read', 'audit.write'],
-    secrets: { audit: 'real-secret-014' }
+    perms: ['audit.read', 'audit.write']
   });
 
   const mock = makeFetchMock({ getAll: () => buildAuditGetAllResponse() });
@@ -506,14 +508,23 @@ await (async function test14() {
   await call('audit', 'getAll', {
     year: '2026',
     action: 'submitAudit',          // 想把動作換掉
-    code: 'attacker-supplied-code'  // 想把通行碼換掉
+    code: 'attacker-supplied-code', // 想夾帶通行碼
+    pass: 'attacker-pass',
+    token: 'someone-elses-token'    // 想用別人的 token
   });
 
   const sent = mock.calls[0].body;
   assertEqual(sent.action, 'getAll', '14a: payload 裡的 action 不得覆寫平台指定的 action');
-  assertEqual(sent.code, 'real-secret-014', '14b: payload 裡的 code 不得覆寫平台下發的通行碼');
-  assertEqual(sent.year, '2026', '14c: 一般業務欄位照常帶上');
-  logout();
+  assertEqual(sent.payload, { year: '2026', token: 'someone-elses-token' }, '14b: payload 夾帶的 action／code／pass 刪掉；payload.token 原樣留著（宿舍的簽約／點交單 token 要用）');
+  assertEqual(sent.token, 'tok-acct-9', '14c: 外層 token 一律是目前登入身分的，payload.token 蓋不掉它');
+
+  // 宿舍點交單：payload.token 是點交單 token，必須原樣送到（e2e t6 抓到過）
+  globalThis.fetch = makeFetchMock({ handover: () => ({ ok: true, state: 'pending' }) });
+  const mock2 = globalThis.fetch;
+  await call('dorm', 'handover', { token: 'hand-tok-1' });
+  assertEqual(mock2.calls[0].body.payload, { token: 'hand-tok-1' }, '14d: dorm handover 的 payload.token（點交單 token）原樣送出');
+  assertEqual(mock2.calls[0].body.token, 'tok-acct-9', '14e: 外層 token 仍是登入 token');
+  await quietLogout();
 })();
 
 // ============================================================
@@ -525,8 +536,7 @@ await (async function test15() {
   await loginAs({
     token: 'tok-lead-9',
     user: { id: 'u091', name: '沒有節點的店長', role: 'storelead', node: '' },
-    perms: ['audit.read.own'],
-    secrets: { audit: 'secret-015' }
+    perms: ['audit.read.own']
   });
 
   const mock = makeFetchMock({ getAll: () => buildAuditGetAllResponse() });
@@ -541,7 +551,7 @@ await (async function test15() {
     Array.isArray(res.data.config && res.data.config.stores) && res.data.config.stores.length > 0,
     '15e: 設定與對照表（config.stores）保留，只清「一列一店」的資料'
   );
-  logout();
+  await quietLogout();
 })();
 
 // ============================================================
@@ -554,8 +564,7 @@ await (async function test16() {
   await loginAs({
     token: 'tok-mgr-9',
     user: { id: 'u092', name: '部門主管', role: 'manager', node: '' },
-    perms: ['dorm.read', 'dorm.write'],
-    secrets: { dorm: 'secret-016' }
+    perms: ['dorm.read', 'dorm.write']
   });
 
   globalThis.fetch = makeFetchMock({
@@ -566,7 +575,65 @@ await (async function test16() {
   assertTrue(res.ok === false, '16a: 軟性警告仍算失敗（不會誤當成建立成功）');
   assertEqual(res.error, '二樓四人房1號床已有人，確定要建立嗎？', '16b: 沒有 error 時改用 message，不是通用的「請求失敗」');
   assertEqual(res.data && res.data.warn, '床位重複', '16c: warn 保留在 data，模組才判斷得出這是可強制建立的情況');
-  logout();
+  await quietLogout();
+})();
+
+// ============================================================
+// 17. 代轉（2026-10-12）：dorm 也走代轉；HTTP 狀態對應訊息（PROXY.md 第 3 節）；401 走登入過期
+// ============================================================
+await (async function test17() {
+  assertEqual(proxyUrl(), BACKENDS.platform.replace(/\/api$/, '/proxy'), '17a: proxyUrl() 從平台後端網址推（…/api → …/proxy）');
+  await loginAs({
+    token: 'tok-mgr-17',
+    user: { id: 'u170', name: '部門主管', role: 'manager', node: '' },
+    perms: ['dorm.read', 'dorm.write']
+  });
+  const mock = makeFetchMock({ terminate: () => ({ ok: true }) });
+  globalThis.fetch = mock;
+  const r0 = await call('dorm', 'terminate', { contract_id: 'C1', pass: 'x' });
+  assertTrue(r0.ok === true, '17b: dorm 經代轉回 200 照舊轉接成 {ok:true}');
+  assertEqual(mock.calls[0].body, { token: 'tok-mgr-17', ns: 'dorm', action: 'terminate', payload: { contract_id: 'C1' } },
+    '17c: dorm 的 body 也是 {token,ns,action,payload}，呼叫端夾帶的 pass 被刪掉');
+
+  let expiredCalls = 0;
+  setSessionExpiredHandler(() => { expiredCalls++; });
+  const cases = [
+    [401, '登入已失效，請重新登入'], [403, '沒有權限'], [429, '系統忙碌，請稍後再試'],
+    [503, '系統忙碌，請稍後再試'], [504, '舊系統回應逾時，請稍後再試'], [502, '舊系統暫時無法連線'],
+    [501, '代轉尚未啟用']
+  ];
+  for (const [status, msg] of cases) {
+    globalThis.fetch = async () => ({ status, json: async () => ({ ok: false, error: 'RAW_' + status, code: 'X' }) });
+    const r = await call('audit', 'getAll', {});
+    assertTrue(r.ok === false && r.error === msg, '17d: HTTP ' + status + ' → 「' + msg + '」（不把 mini 的原始代碼丟給使用者）');
+  }
+  assertEqual(expiredCalls, 1, '17e: 只有 401 會觸發登入過期處理，其他狀態不會');
+
+  // 200＋舊後端自己的 ok:false（例如通行碼錯）照舊轉接
+  globalThis.fetch = async () => ({ status: 200, json: async () => ({ ok: false, error: '權限不足' }) });
+  const r2 = await call('audit', 'submitAudit', {});
+  assertEqual(r2.error, '權限不足', '17f: 200＋舊後端 ok:false 照舊用舊後端訊息');
+
+  // platform 的非 200 不走代轉的對應表（platform 照舊解析 JSON）
+  globalThis.fetch = async () => ({ status: 500, json: async () => ({ ok: false, error: '系統忙碌中，請稍後再試' }) });
+  const r3 = await call('platform', 'me', {});
+  assertEqual(r3.error, '系統忙碌中，請稍後再試', '17g: platform 照舊讀 JSON 訊息，不受代轉狀態對應影響');
+  assertEqual(expiredCalls, 1, '17h: platform 回錯不會觸發代轉的登入過期');
+  setSessionExpiredHandler(null);
+
+  // 逾時：代轉用 35 秒（不是 45 秒）——攔 setTimeout 看實際排的毫秒數
+  const realSetTimeout = globalThis.setTimeout;
+  const seen = [];
+  globalThis.setTimeout = (fn, ms) => { seen.push(ms); return realSetTimeout(() => {}, 0); };
+  globalThis.fetch = async () => ({ status: 200, json: async () => ({ ok: true }) });
+  try {
+    await call('audit', 'getAll', {});
+    await call('platform', 'me', {});
+  } finally { globalThis.setTimeout = realSetTimeout; }
+  assertEqual(seen, [35000, 45000], '17i: 代轉逾時 35 秒；platform 照舊 45 秒');
+
+  armGuard();
+  await quietLogout();
 })();
 
 // ============================================================

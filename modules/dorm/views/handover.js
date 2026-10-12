@@ -385,9 +385,54 @@ export function mountHandover(root, ctx) {
   // 載入資料（見檔頭「入口參數」說明）
   // ------------------------------------------------------------
 
-  async function loadHandover() {
+  // 2026-10-12 安全修補：網址帶 contract_id 進頁不再自動 handoverCreate（連結被轉貼、
+  // 預覽、重整都會誤建點交單）。先顯示合約資訊與「建立點交單」按鈕，點了＋確認才建。
+  async function renderCreateConfirm() {
+    clearContainer();
+    container.appendChild(el('div', { class: 'card-title', text: '退宿點交' }));
+    const info = el('p', { class: 'field-hint', id: 'dorm-handover-info' });
+    info.textContent = '合約編號：' + paramContractId;
+    container.appendChild(info);
+
+    // 盡力顯示合約資訊（讀取）；失敗不影響建立流程
+    ctx.ui.loading(true);
+    try {
+      const listRes = await ctx.api.call(BACKEND_ID, 'list', {});
+      if (destroyed) return;
+      const contracts = listRes && listRes.ok === true && listRes.data && Array.isArray(listRes.data.contracts)
+        ? listRes.data.contracts : [];
+      const c = contracts.find((x) => x && String(x.contract_id) === String(paramContractId));
+      if (c) {
+        const room = c.room_bed_display || [c.room, c.bed].filter(Boolean).join(' ');
+        const parts = ['承租人：' + (c.name || ''), '房床：' + (room || ''),
+          '期間：' + (c.term_start || '') + ' 至 ' + (c.term_end || '')];
+        parts.forEach((t) => container.appendChild(el('p', { text: t })));
+      }
+    } catch { /* 略過 */ } finally {
+      if (!destroyed) ctx.ui.loading(false);
+    }
+    if (destroyed) return;
+
+    const btn = el('button', { class: 'btn btn-primary', type: 'button', id: 'dorm-handover-create', text: '建立點交單' });
+    btn.addEventListener('click', async () => {
+      let ok = true;
+      if (ctx.ui && typeof ctx.ui.confirm === 'function') {
+        try { ok = await ctx.ui.confirm('確定要為合約 ' + paramContractId + ' 建立點交單嗎？'); } catch { ok = false; }
+      }
+      if (!ok || destroyed) return;
+      btn.disabled = true;
+      loadHandover(true);
+    });
+    container.appendChild(btn);
+  }
+
+  async function loadHandover(confirmed) {
     if (!paramToken && !paramContractId) {
       renderMissingParam();
+      return;
+    }
+    if (!paramToken && !confirmed) {
+      await renderCreateConfirm();
       return;
     }
     ctx.ui.loading(true);

@@ -64,23 +64,41 @@ export function mountProfile(el, ctx) {
           <div class="field"><label class="field-label" for="me-address">居住地址</label>
             <input class="input" id="me-address" type="text" value="${esc(p.address)}"></div>
         </div>
+        <div class="field" data-role="curpw-wrap" hidden>
+          <label class="field-label" for="me-curpw">目前的密碼（改手機要輸入）</label>
+          <input class="input" id="me-curpw" type="password" autocomplete="current-password">
+          <p class="field-hint">手機是忘記密碼時確認本人用的，改手機要先確認是你本人。</p>
+        </div>
         <button class="btn btn-primary" type="submit" data-role="submit">${p.status === 'rejected' ? '送出' : '儲存'}</button>
       </form>`;
     bindOrgFields(el, 'me', org, initial);
     const form = el.querySelector('[data-role="form"]');
     const box = el.querySelector('[data-role="error"]');
+    // 改手機要帶目前密碼（2026-10-12 後端修正：防偷到登入的人改手機再走忘記密碼搶帳號）
+    const phoneEl = el.querySelector('#me-phone');
+    const curpwWrap = el.querySelector('[data-role="curpw-wrap"]');
+    const curpwEl = el.querySelector('#me-curpw');
+    const cleanPhone = () => phoneEl.value.replace(/[\s-]/g, '');
+    const phoneChanged = () => cleanPhone() !== String(p.phone || '');
+    phoneEl.addEventListener('input', () => { curpwWrap.hidden = !phoneChanged(); });
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const payload = Object.assign(readOrgFields(el, 'me'), {
-        phone: el.querySelector('#me-phone').value.replace(/[\s-]/g, ''),
+        phone: cleanPhone(),
         address: el.querySelector('#me-address').value.trim()
       });
+      if (phoneChanged()) {
+        curpwWrap.hidden = false;
+        if (!curpwEl.value) { box.textContent = '改手機要輸入目前的密碼'; box.hidden = false; curpwEl.focus(); return; }
+        payload.current_password = curpwEl.value;
+      }
       box.hidden = true;
       ctx.ui.loading(true);
       let r;
       try { r = await ctx.api.call('me', 'saveMyProfile', payload); } finally { ctx.ui.loading(false); }
       if (!alive) return;
-      if (!r.ok) { box.textContent = r.error; box.hidden = false; return; }
+      // 後端訊息原樣顯示（「改手機要輸入目前的密碼」「目前密碼不正確」「嘗試次數過多，請 15 分鐘後再試」）
+      if (!r.ok) { box.textContent = r.error || '儲存失敗，請稍後再試'; box.hidden = false; return; }
       ctx.ui.toast(r.data.has_pending_change || r.data.status === 'pending' ? '已送出，等後台確認' : '已儲存', 'ok');
       draw(r.data, org);
     });

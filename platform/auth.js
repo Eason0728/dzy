@@ -3,18 +3,17 @@
  *
  * 正本規格：docs/spec.md §4.2（權限碼格式）、§4.3（角色/權限對照）、
  * §4.4（節點代號）、§4.7（ctx 形狀）、§5.2（後端 login/me 回什麼）、
- * §6.1（開機流程）、§6.3（平台代管通行碼）。
+ * §6.1（開機流程）、§6.3（通行碼代管＝Mac mini 代轉）。
  *
  * 這一層判斷錯，整個系統的權限就是假的，所以規則寫死在這裡、不接受任何模組覆寫：
  *
  * 【儲存規則（安全相關）】
  * - token：存 localStorage。後端簽的是 7 天效期的無狀態 token（spec §5.3），
  *   前端只是原樣保存/取出，效期由後端 me 驗證，不在前端重算。
- * - secrets（既有系統的通行碼，spec §6.3）：**只存在這個模組的記憶體變數**，
- *   絕對不寫進 localStorage／sessionStorage／cookie／DOM。重新整理就靠 restore()
- *   重新用 token 換一次，這是刻意的設計（降低外洩面，見 spec §6.3）。
- * - logout()：同時清 localStorage 的 token，
- *   以及記憶體裡的 user／perms／通行碼（secrets 那份記憶體狀態）。
+ * - 既有系統（稽核／宿舍）的通行碼：2026-10-12 起**瀏覽器完全拿不到**——
+ *   login／me 不再回 secrets，api.js 改打 Mac mini 的 /platform/proxy 由 mini 代帶（spec §6.3）。
+ *   本檔不存、也不接受任何通行碼。
+ * - logout()：同時清 localStorage 的 token 與記憶體裡的 user／perms。
  *
  * 【can(perm) 規則（spec §4.2）】
  * - 持有 '*'（僅 admin）→ 任何 perm 都 true。
@@ -31,6 +30,8 @@
 
 /** localStorage 存 token 用的 key */
 const TOKEN_STORAGE_KEY = 'dzy.token';
+/** 離線登出沒送到後端時，暫存「那一個」舊 token，下次開頁補送 logout（GPT 複審第 3 條，2026-10-12） */
+export const PENDING_LOGOUT_KEY = 'dzy.pendingLogout';
 
 // 平台後端網址一律取自 config.js，這裡不留第二份。
 // 2026-08-14 踩過的雷：本檔原本自帶 `const BACKEND_URL = ''`（寫的時候後端還沒部署，
@@ -38,13 +39,13 @@ const TOKEN_STORAGE_KEY = 'dzy.token';
 // 於是 JSON.parse 收到 '<!DOCTYPE' 而爆掉。單元測試抓不到，因為測試注入的是假 transport。
 // 教訓：設定值只能有一份正本；「之後再填」的空字串等於一顆定時炸彈。
 import { BACKENDS } from './config.js';
+import { isDryRun, isReadAction, notifyDryRun, DRYRUN_MESSAGE } from './dryrun.js';
 
 // ============================================================
-// 記憶體狀態 —— secrets 永遠、只、活在這裡，不落地
+// 記憶體狀態
 // ============================================================
 let currentUser = null; // { id, name, role, node } | null
 let currentPerms = []; // string[]，可能含 '*'
-let secrets = {}; // { [backendId]: secret } —— 絕不寫進任何持久化儲存
 let currentToken = null; // 記憶體快取的 token（來源仍是 localStorage）
 
 // ============================================================
@@ -134,20 +135,18 @@ function clearTokenFromStorage() {
 // session 狀態的套用／清除（login 與 restore 共用）
 // ============================================================
 
-/** @param {{token?:string, user:object, perms:string[], secrets?:object}} data */
+/** @param {{token?:string, user:object, perms:string[]}} data（後端舊版若仍夾帶 secrets，一律忽略） */
 function applySession(data) {
   if (data && typeof data.token === 'string' && data.token) {
     currentToken = data.token;
   }
   currentUser = (data && data.user) || null;
   currentPerms = Array.isArray(data && data.perms) ? data.perms.slice() : [];
-  secrets = (data && data.secrets && typeof data.secrets === 'object') ? { ...data.secrets } : {};
 }
 
 function clearSession() {
   currentUser = null;
   currentPerms = [];
-  secrets = {};
   currentToken = null;
 }
 
@@ -162,6 +161,8 @@ function clearSession() {
  * @returns {Promise<{ok:boolean, error?:string}>}
  */
 export async function login(username, password) {
+  // 先補送上次沒送到的登出（成功才刪）：要在 login 之前，否則補送的 logout 會把這次新簽的 token 一起撤掉
+  await flushPendingLogout();
   let res;
   try {
     res = await transport({ action: 'login', token: '', payload: { username, password } });
@@ -189,6 +190,8 @@ export async function login(username, password) {
  * @returns {Promise<boolean>}
  */
 export async function restore() {
+  // 開頁先在背景補送上次沒送到的登出（不擋開機；成功才刪）
+  lastFlush = flushPendingLogout();
   const token = readTokenFromStorage();
   if (!token) return false;
 
@@ -209,11 +212,84 @@ export async function restore() {
   return true;
 }
 
-/** 登出：清 localStorage 的 token，
- *  也清記憶體裡的 user／perms／通行碼（secrets 那份記憶體狀態）。 */
-export function logout() {
+/** 登出後端的等待上限（毫秒）：逾時就不等了，照樣清本機 */
+const LOGOUT_TIMEOUT_MS = 5000;
+
+/**
+ * 登出（2026-10-12 Eason：登出＝全部裝置一起登出）。
+ * 先呼叫後端 logout（把這個帳號的 token_after 設成現在，所有裝置上的舊登入一起失效），
+ * 等到回應或 5 秒逾時——不管成功、失敗、斷網、逾時——都再清本機：
+ * localStorage 的 token、記憶體裡的 user／perms。
+ * 試跑模式（?dryrun=1）也照樣送出：登出不是資料寫入（dryrun.js 白名單已放行 logout）。
+ * 呼叫端（shell.js doLogout）要 await 這支，等它回來才整頁重載。
+ * @returns {Promise<void>}
+ */
+export async function logout() {
+  const token = getToken();
+  if (token) {
+    const res = await sendLogout(token);
+    // 斷網／逾時／伺服器忙：其他裝置還沒被撤銷 → 記下這一個 token，下次開頁補送（只存這一個，不存其他東西）
+    if (!isLogoutSettled(res)) writePendingLogout(token);
+  }
   clearTokenFromStorage();
   clearSession();
+}
+
+/** 送一次 logout，最多等 LOGOUT_TIMEOUT_MS；逾時或丟錯回 null */
+async function sendLogout(token) {
+  let timer = null;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => transport({ action: 'logout', token, payload: {} })),
+      new Promise((resolve) => { timer = setTimeout(() => resolve(null), LOGOUT_TIMEOUT_MS); })
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * 後端「確定處理過了」：ok:true（已撤銷），或後端明確說這個 token 已失效／帳號已停用（再送也沒用）。
+ * 其他（逾時 null、連線失敗、回應格式錯、RATE_LIMIT、BUSY…）都算沒送到，要補送。
+ */
+const LOGOUT_SETTLED_ERRORS = ['登入已失效，請重新登入', '帳號已停用'];
+function isLogoutSettled(res) {
+  if (!res || typeof res !== 'object') return false;
+  if (res.ok === true) return true;
+  return LOGOUT_SETTLED_ERRORS.indexOf(String(res.error || '')) !== -1;
+}
+
+function readPendingLogout() {
+  try { return localStorage.getItem(PENDING_LOGOUT_KEY) || ''; } catch { return ''; }
+}
+function writePendingLogout(token) {
+  try { localStorage.setItem(PENDING_LOGOUT_KEY, String(token)); } catch { /* 存不了就算了 */ }
+}
+function clearPendingLogout(token) {
+  try {
+    // 只刪「剛剛送成功的那一個」：送的期間若又寫了別的 token，留著下次補送
+    if (localStorage.getItem(PENDING_LOGOUT_KEY) === token) localStorage.removeItem(PENDING_LOGOUT_KEY);
+  } catch { /* 忽略 */ }
+}
+
+let lastFlush = Promise.resolve(false);
+/** 測試用：restore() 在背景補送的那個 Promise */
+export function __lastFlush() { return lastFlush; }
+
+/**
+ * 補送上次沒送到後端的登出（dzy.pendingLogout）。成功（或後端明確說 token 已失效）才刪；
+ * 失敗留著，下次開頁再送。回 true＝這次處理掉了。
+ * @returns {Promise<boolean>}
+ */
+export async function flushPendingLogout() {
+  const token = readPendingLogout();
+  if (!token) return false;
+  const res = await sendLogout(token);
+  if (!isLogoutSettled(res)) return false;
+  clearPendingLogout(token);
+  return true;
 }
 
 /** @returns {{id:string, name:string, role:string, node:string}|null} 未登入回 null */
@@ -234,14 +310,9 @@ export function can(perm) {
 }
 
 /**
- * 拿既有系統的通行碼（spec §6.3），只存在記憶體。
- * @param {string} backendId 例：'audit'、'dorm'
- * @returns {string} 拿不到回空字串
- */
-/**
  * 目前 session 的 token（給 api.js 呼叫平台後端時自動帶上，模組不該直接用到它）。
  *
- * 為什麼要有這支（2026-08-14 整合時補）：既有系統的通行碼是由 api.js 自動帶的，
+ * 為什麼要有這支（2026-08-14 整合時補；2026-10-12 起代轉也用它）：既有系統的通行碼當時是由 api.js 自動帶的，
  * 平台後端的 token 卻要呼叫端自己塞進 payload——兩套規則不一致，模組作者遲早會忘記帶而收到
  * 「登入已失效」，那種錯誤訊息完全指不到真正的原因。統一成「兩者都由 api.js 自動帶」。
  *
@@ -251,9 +322,14 @@ export function getToken() {
   return currentToken || readTokenFromStorage() || '';
 }
 
-export function getSecret(backendId) {
-  if (!backendId) return '';
-  return secrets[backendId] || '';
+/**
+ * 登入過期（2026-10-12）：代轉回 401（token 失效／帳號停用）時由 shell 呼叫。
+ * 只清本機（localStorage 的 token、記憶體的 user／perms），**不打後端 logout**——
+ * token 已經失效，再打 logout 沒有意義；也不能讓一次過期把這個人其他裝置一起登出。
+ */
+export function expireLocal() {
+  clearTokenFromStorage();
+  clearSession();
 }
 
 /**
@@ -271,6 +347,10 @@ export function getSecret(backendId) {
  * @returns {Promise<{ok:boolean, error?:string}>}
  */
 export async function changePassword(oldPassword, newPassword) {
+  if (isDryRun()) {
+    notifyDryRun('platform', 'changePassword', {});
+    return { ok: false, dryrun: true, error: DRYRUN_MESSAGE };
+  }
   let res;
   try {
     res = await transport({
@@ -299,6 +379,10 @@ export async function changePassword(oldPassword, newPassword) {
  * @param {object} payload
  */
 export async function publicCall(action, payload) {
+  if (isDryRun() && !isReadAction('platform', action, payload)) {
+    notifyDryRun('platform', action, {});
+    return { ok: false, dryrun: true, error: DRYRUN_MESSAGE };
+  }
   try {
     const res = await transport({ action, token: '', payload: payload || {} });
     return res && typeof res === 'object' ? res : { ok: false, error: '伺服器回應格式錯誤' };
@@ -308,15 +392,15 @@ export async function publicCall(action, payload) {
 }
 
 /**
- * 第一次使用：送出認領表單，成功即登入（後端回與 login 相同的形狀）。
+ * 第一次使用：送出認領表單。
+ * 2026-10-12 Eason：認領只是核對編號，送出後要等單位主管審核通過才開通——
+ * 後端不再回 token，這裡也**不登入、不存任何東西**，只回 {ok:true, pending:true}。
  * 密碼只經過這個函式的參數交給 transport，不留副本。
  */
 export async function claimSubmit(payload) {
   const res = await publicCall('claimSubmit', payload);
-  if (!res || res.ok !== true) return { ok: false, error: (res && res.error) || '送出失敗' };
-  const data = res.data || {};
-  if (!data.token || !data.user) return { ok: false, error: '伺服器回應格式錯誤' };
-  applySession(data);
-  writeTokenToStorage(data.token);
-  return { ok: true };
+  if (!res || res.ok !== true) {
+    return res && res.dryrun ? { ok: false, dryrun: true, error: res.error } : { ok: false, error: (res && res.error) || '送出失敗' };
+  }
+  return { ok: true, pending: true };
 }
