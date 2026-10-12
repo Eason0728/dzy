@@ -364,7 +364,7 @@ function loginToken(sandbox, username, password) {
 
   const rSave = callDoPost(sandbox, {
     action: 'saveUser', token: accToken,
-    payload: { username: 'sneaky', name: '偷渡', role: 'accountant', node: '', password: 'whatever1' }
+    payload: { username: 'sneaky', name: '偷渡', role: 'staff', node: '', password: 'whatever1' }
   });
   assertEqual(rSave, { ok: false, error: '沒有權限' }, 'B2: 無權限帳號呼叫 saveUser 被拒');
 
@@ -457,7 +457,7 @@ function loginToken(sandbox, username, password) {
   variants.forEach((variant, i) => {
     const res = callDoPost(sandbox, {
       action: 'saveUser', token: adminToken,
-      payload: { username: variant, name: '重複測試' + i, role: 'accountant', node: '', password: 'longenoughpwX' }
+      payload: { username: variant, name: '重複測試' + i, role: 'staff', node: '', password: 'longenoughpwX' }
     });
     assertTrue(res.ok === false, 'E' + i + ": username 變形「" + variant + "」重複被拒");
   });
@@ -465,7 +465,7 @@ function loginToken(sandbox, username, password) {
   // 對照組：真的沒重複的帳號應該成功
   const okRes = callDoPost(sandbox, {
     action: 'saveUser', token: adminToken,
-    payload: { username: 'brandnewname', name: '真的沒重複', role: 'accountant', node: '', password: 'longenoughpwY' }
+    payload: { username: 'brandnewname', name: '真的沒重複', role: 'staff', node: '', password: 'longenoughpwY' }
   });
   assertTrue(okRes.ok === true, 'E-ok: 沒有重複的帳號可以正常新增（對照組）');
 })();
@@ -583,7 +583,7 @@ function loginToken(sandbox, username, password) {
 
   const shortRes = callDoPost(sandbox, {
     action: 'saveUser', token: adminToken,
-    payload: { username: 'onedigit', name: '一位數密碼', role: 'accountant', node: '', password: 'x' }
+    payload: { username: 'onedigit', name: '一位數密碼', role: 'staff', node: '', password: 'x' }
   });
   assertTrue(shortRes.ok === false, 'I1: 新增帳號密碼只有 1 個字元被拒');
   assertEqual(
@@ -593,13 +593,13 @@ function loginToken(sandbox, username, password) {
 
   const sevenRes = callDoPost(sandbox, {
     action: 'saveUser', token: adminToken,
-    payload: { username: 'sevenchar', name: '七字元密碼', role: 'accountant', node: '', password: 'short7x' }
+    payload: { username: 'sevenchar', name: '七字元密碼', role: 'staff', node: '', password: 'short7x' }
   });
   assertTrue(sevenRes.ok === false, 'I2: 新增帳號密碼 7 個字元（差一個字元）被拒');
 
   const emptyRes = callDoPost(sandbox, {
     action: 'saveUser', token: adminToken,
-    payload: { username: 'nopw', name: '沒帶密碼', role: 'accountant', node: '' } // 完全不帶 password 欄
+    payload: { username: 'nopw', name: '沒帶密碼', role: 'staff', node: '' } // 完全不帶 password 欄
   });
   assertTrue(emptyRes.ok === false, 'I3: 新增帳號完全不帶 password 欄位被拒');
 
@@ -609,7 +609,7 @@ function loginToken(sandbox, username, password) {
   // 邊界：剛好 8 個字元要能通過
   const eightRes = callDoPost(sandbox, {
     action: 'saveUser', token: adminToken,
-    payload: { username: 'eightchar', name: '八字元密碼', role: 'accountant', node: '', password: 'exact8ch' }
+    payload: { username: 'eightchar', name: '八字元密碼', role: 'staff', node: '', password: 'exact8ch' }
   });
   assertTrue(eightRes.ok === true, 'I5: 新增帳號密碼剛好 8 個字元可以成功（邊界）');
 })();

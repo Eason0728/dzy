@@ -124,9 +124,6 @@ export function mountFill(root, ctx, moduleState) {
     };
   }
 
-  // 草稿只認目前登入者（GPT 複審第 2 條）：換人登入看不到前一個人的草稿
-  const draftOwner = ctx.user && ctx.user.id ? String(ctx.user.id) : '';
-
   // ---- 資料狀態 ----
   let config = { stores: [] };
   let opsData = { ops_records: [], ops_details: [] };
@@ -219,7 +216,7 @@ export function mountFill(root, ctx, moduleState) {
   function renderDrafts() {
     while (draftsEl.firstChild) draftsEl.removeChild(draftsEl.firstChild);
     const currentKey = Format.recordKey(store, month);
-    const others = FillSubmit.listDrafts(draftOwner).filter((d) => d.record_key !== currentKey);
+    const others = FillSubmit.listDrafts().filter((d) => d.record_key !== currentKey);
     if (!others.length) {
       draftsEl.hidden = true;
       return;
@@ -382,12 +379,12 @@ export function mountFill(root, ctx, moduleState) {
   // ============================================================
 
   function saveDraftNow() {
-    FillSubmit.saveDraft(draftOwner, store, month, auditor, entries);
+    FillSubmit.saveDraft(store, month, auditor, entries);
   }
 
   function loadEntriesForCurrent() {
     hideMessage();
-    const loaded = FillSubmit.loadEntriesFor(draftOwner, store, month, opsData);
+    const loaded = FillSubmit.loadEntriesFor(store, month, opsData);
     entries = loaded.entries;
     auditor = loaded.auditor;
     source = loaded.from;
@@ -431,7 +428,7 @@ export function mountFill(root, ctx, moduleState) {
       if (res && res.ok) {
         // submit() 成功時已經呼叫過 invalidate()（見 audit-shared/api.js），下一次進報告頁
         // 呼叫 getAll() 就會拿到剛送出的新資料，不必像舊版 app.reload() 那樣手動重抓一次。
-        FillSubmit.clearDraft(draftOwner, record.record_key);
+        FillSubmit.clearDraft(record.record_key);
         hideMessage();
         ctx.ui.toast('營運稽核已送出', 'ok');
         ctx.nav('report', { store, month });

@@ -98,9 +98,7 @@ def main():
             check(page.locator('#store-list tbody tr').count() == 6, '新增後清單變六家')
             w = mock.writes[-1]
             check(w.get('action') == 'addStore' and w.get('name') == '測試新店' and w.get('code') == AUDIT_SECRET,
-                  'addStore 送出格式正確（action/name；通行碼由 mini 代轉時帶），實際：%s' % w)
-            check(('audit', 'addStore') in getattr(mock, 'proxy_calls', []),
-                  'addStore 走 /platform/proxy 代轉（2026-10-12），實際：%s' % getattr(mock, 'proxy_calls', []))
+                  'addStore 送出格式正確（action/name/通行碼由平台帶），實際：%s' % w)
 
             # 改名
             page.click('#store-list tr[data-store="st-01"] .store-rename')

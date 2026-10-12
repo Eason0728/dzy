@@ -42,7 +42,7 @@ const DEFAULT_SECRETS = [
 /** 要鎖成純文字的欄（1-based）。日期欄不鎖會被 Google 自動轉成 Date——稽核系統踩過這個雷 */
 const TEXT_COLUMNS = {
   users: [9, 10],
-  login_log: [1, 2]   // 第 2 欄 username 是使用者自由輸入，鎖純文字防公式注入（2026-10-12）
+  login_log: [1]
 };
 
 /** 主初始化：建四個分頁、寫表頭、填預設列、鎖文字格式、產 HMAC 金鑰 */

@@ -132,9 +132,6 @@ export function mountFill(root, ctx, moduleState) {
     };
   }
 
-  // 草稿只認目前登入者（GPT 複審第 2 條）：換人登入看不到前一個人的草稿
-  const draftOwner = ctx.user && ctx.user.id ? String(ctx.user.id) : '';
-
   // ---- 資料狀態（destroyed 之前都可能被 loadData() 更新）----
   let config = { stores: [], reasons: [] };
   let allItems = [];
@@ -500,7 +497,7 @@ export function mountFill(root, ctx, moduleState) {
   // ============================================================
 
   function saveDraft() {
-    FillSubmit.saveDraft(draftOwner, currentStore, currentMonth, mode, items, vaultState);
+    FillSubmit.saveDraft(currentStore, currentMonth, mode, items, vaultState);
   }
 
   function applyDraft(draft) {
@@ -521,7 +518,7 @@ export function mountFill(root, ctx, moduleState) {
   }
 
   function tryRestoreOrReset() {
-    const draft = FillSubmit.loadDraft(draftOwner, currentStore, currentMonth, mode);
+    const draft = FillSubmit.loadDraft(currentStore, currentMonth, mode);
     if (draft) {
       applyDraft(draft);
     } else {
@@ -545,7 +542,7 @@ export function mountFill(root, ctx, moduleState) {
   }
 
   function renderDrafts() {
-    const others = FillSubmit.listDrafts(draftOwner).filter(
+    const others = FillSubmit.listDrafts().filter(
       (d) => !(d.store === currentStore && d.month === currentMonth && d.mode === mode)
     );
     while (draftsList.firstChild) draftsList.removeChild(draftsList.firstChild);
@@ -565,7 +562,7 @@ export function mountFill(root, ctx, moduleState) {
         type: 'button', class: 'btn btn-danger audit-draft-drop', 'data-key': d.key, text: '丟棄'
       });
       dropBtn.addEventListener('click', () => {
-        FillSubmit.dropDraft(draftOwner, d.key);
+        FillSubmit.dropDraft(d.key);
         renderDrafts();
       });
 
@@ -574,7 +571,7 @@ export function mountFill(root, ctx, moduleState) {
   }
 
   function resumeDraft(key) {
-    const payload = FillSubmit.readDraftByKey(draftOwner, key);
+    const payload = FillSubmit.readDraftByKey(key);
     if (!payload) return;
     saveDraft(); // 先保住目前這一份
     currentStore = payload.store;
@@ -622,7 +619,7 @@ export function mountFill(root, ctx, moduleState) {
         // submit() 成功時已經呼叫過 invalidate()（見 audit-shared/api.js），下一次
         // 進報告頁（T2-4）呼叫 getAll() 就會拿到剛送出的新資料，不必像舊版
         // app.reload() 那樣在這裡手動重抓一次。
-        FillSubmit.clearDraft(draftOwner, currentStore, currentMonth);
+        FillSubmit.clearDraft(currentStore, currentMonth);
         ctx.ui.toast('稽核已送出', 'ok');
         ctx.nav('report', { store: currentStore, month: currentMonth });
       } else {
@@ -732,7 +729,7 @@ export function mountFill(root, ctx, moduleState) {
       // 不是從別處帶 month 進來、也沒有可用的 moduleState 月份時，若這家店有未送出的草稿，
       // 落在那份草稿的月份與模式上（同舊版 latestDraftForStore()：否則只回到店、月份卻是
       // 當月，看起來像內容不見了）。
-      const resumeTarget = (params.month || useCarriedMonth) ? null : FillSubmit.latestDraftForStore(draftOwner, currentStore);
+      const resumeTarget = (params.month || useCarriedMonth) ? null : FillSubmit.latestDraftForStore(currentStore);
       const now = new Date();
       const realMonthStr = String(now.getFullYear()) + '-' + pad2(now.getMonth() + 1);
       currentMonth = params.month

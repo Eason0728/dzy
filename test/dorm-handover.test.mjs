@@ -243,7 +243,7 @@ function makeFakeCtx(overrides) {
     ui: {
       toast: (message, type) => { state.toasts.push({ message, type }); },
       loading: (on) => { state.loadingCalls.push(on); },
-      confirm: async () => { state.confirmCalls = (state.confirmCalls || 0) + 1; return state.confirmAnswer !== false; },
+      confirm: async () => { throw new Error('不該呼叫 ctx.ui.confirm()：handover.js 沒有需要二次確認的動作'); },
       dialog: () => { throw new Error('不該呼叫 ctx.ui.dialog()：handover.js 用不到對話框'); },
       signaturePad: (canvasEl) => {
         state.signaturePadCalls++;
@@ -415,30 +415,6 @@ await at('缺少 contract_id 與 token：顯示提示訊息，不呼叫後端', 
 });
 
 // ============================================================
-// D2. 2026-10-12 安全修補：網址帶 contract_id 不自動建單，點按鈕＋確認才建
-// ============================================================
-
-await at('contract_id 進頁：只顯示合約資訊與按鈕，不呼叫 handoverCreate；取消確認也不建', async () => {
-  const root = new FakeElement('div');
-  const { ctx, state } = makeFakeCtx({ params: { contract_id: 'C-SEC-1' } });
-  state.apiHandlers.list = () => ({ ok: true, data: { contracts: [{ contract_id: 'C-SEC-1', name: '測試同仁', room_bed_display: '101-A', term_start: '2026-01-01', term_end: '2026-12-31' }] } });
-  state.apiHandlers.handoverCreate = () => { throw new Error('不該在未確認時建立點交單'); };
-  const unmount = mountHandover(root, ctx);
-  await flush();
-  assert.equal(state.apiCalls.filter((c) => c.action === 'handoverCreate').length, 0, '進頁不該建立點交單');
-  const container = byId(root, 'dorm-handover-container');
-  assert.ok(findDescendant(container, (n) => (n.textContent || '').includes('測試同仁')), '應顯示合約資訊');
-  const btn = byId(root, 'dorm-handover-create');
-  assert.ok(btn, '應有「建立點交單」按鈕');
-  state.confirmAnswer = false;
-  fireClick(btn);
-  await flush();
-  assert.equal(state.confirmCalls, 1, '點按鈕要先 confirm');
-  assert.equal(state.apiCalls.filter((c) => c.action === 'handoverCreate').length, 0, '取消確認不該建單');
-  unmount();
-});
-
-// ============================================================
 // E. DOM：完整流程——handoverCreate → handover → 逐項點選 → 簽名 → handoverSign
 // ============================================================
 
@@ -470,9 +446,6 @@ await at('完整流程：全部點完＋簽名後送出 → 呼叫 handoverSign�
   };
 
   const unmount = mountHandover(root, ctx);
-  await flush();
-  assert.equal(state.apiCalls.filter((c) => c.action === 'handoverCreate').length, 0, '進頁不該自動 handoverCreate');
-  fireClick(byId(root, 'dorm-handover-create'));
   await flush();
 
   assert.equal(state.signaturePadCalls, 1, '表單畫出來時應該建立一次簽名板');
@@ -511,8 +484,6 @@ await at('簽名為空時被擋：設備都點完但沒簽名 → 顯示錯誤�
 
   const unmount = mountHandover(root, ctx);
   await flush();
-  fireClick(byId(root, 'dorm-handover-create'));
-  await flush();
 
   markAllItemsOk(root);
   // state.padEmpty 維持預設 true（沒簽名）
@@ -542,8 +513,6 @@ await at('unmount 呼叫 signaturePad.destroy()：只呼叫一次，且發生在
   state.apiHandlers.handover = () => apiHandoverDataOk();
 
   const unmount = mountHandover(root, ctx);
-  await flush();
-  fireClick(byId(root, 'dorm-handover-create'));
   await flush();
   assert.equal(state.signaturePadCalls, 1, '簽名板應該只建立一次');
   assert.equal(state.padDestroyCalls, 0, 'unmount 之前不該呼叫 destroy');

@@ -18,9 +18,7 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   // 個人帳號管理（2026-10-11，docs/personnel/spec.md §6）
   'orgOptions', 'claimLookup', 'claimSubmit', 'forgotReset', 'myProfile', 'saveMyProfile', 'myUnit',
   'staffList', 'staffImport', 'staffAdd', 'staffConfirm', 'staffReject', 'staffSetActive', 'staffUnclaim',
-  'staffUnlockReset', 'staffEdit',
-  // 2026-10-12：登出全部裝置、認領後主管審核（docs/personnel/spec.md §6.8／§6.9）
-  'logout', 'unitPending', 'unitApprove', 'unitReject'];
+  'staffUnlockReset', 'staffEdit'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -65,47 +63,31 @@ function dispatch_(e) {
 
   var token = body.token;
   var payload = (body.payload && typeof body.payload === 'object') ? body.payload : {};
-  var ipHash = codeIpHash_(e);
 
   // 會寫入試算表的動作要拿全域鎖：Apps Script 允許並發執行，
   // 兩個管理者同時建帳號會各自用 appendRow 前的列數推 id，撞出重複資料列。
   // 唯讀動作（login/me/listUsers/listRoles）不上鎖，登入速度不受影響。
   var MUTATING_ACTIONS = { saveUser: 1, setActive: 1, resetPassword: 1, changePassword: 1,
     claimSubmit: 1, forgotReset: 1, saveMyProfile: 1, staffImport: 1, staffAdd: 1, staffConfirm: 1,
-    staffReject: 1, staffSetActive: 1, staffUnclaim: 1, staffUnlockReset: 1, staffEdit: 1,
-    logout: 1, unitApprove: 1, unitReject: 1 };
+    staffReject: 1, staffSetActive: 1, staffUnclaim: 1, staffUnlockReset: 1, staffEdit: 1 };
   if (MUTATING_ACTIONS[action]) {
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) {
       return { ok: false, error: CODE_MSG_INTERNAL_ERROR };
     }
     try {
-      return dispatchAction_(action, token, payload, ipHash);
+      return dispatchAction_(action, token, payload);
     } finally {
       lock.releaseLock();
     }
   }
-  return dispatchAction_(action, token, payload, ipHash);
+  return dispatchAction_(action, token, payload);
 }
 
-/**
- * 來源雜湊（2026-10-12）：Apps Script 拿不到 client IP，回空字串（login 改用全域桶）。
- * 執行環境若在事件物件放了 e.clientIp（字串；例如 minikit 執行器從 X-Forwarded-For 最後一段取出），
- * 就取 SHA-256 前 12 bytes 的十六進位（24 字，純英數字，不會觸發公式防護），原始 IP 不落地。
- */
-function codeIpHash_(e) {
-  var ip = e && typeof e.clientIp === 'string' ? e.clientIp.trim().slice(0, 64) : '';
-  if (!ip) return '';
-  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'dzy-ip:' + ip);
-  var hex = '';
-  for (var i = 0; i < 12; i++) hex += ((digest[i] + 256) % 256 + 256).toString(16).slice(1);
-  return hex;
-}
-
-function dispatchAction_(action, token, payload, ipHash) {
+function dispatchAction_(action, token, payload) {
   switch (action) {
     case 'login':
-      return handleLogin_(payload, ipHash);
+      return handleLogin_(payload);
     case 'me':
       return handleMe_(token);
     case 'listUsers':
@@ -137,10 +119,6 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'staffUnclaim': return handleStaffUnclaim_(token, payload);
     case 'staffUnlockReset': return handleStaffUnlockReset_(token, payload);
     case 'staffEdit': return handleStaffEdit_(token, payload);
-    case 'logout': return handleLogout_(token);
-    case 'unitPending': return handleUnitPending_(token);
-    case 'unitApprove': return handleUnitApprove_(token, payload);
-    case 'unitReject': return handleUnitReject_(token, payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };

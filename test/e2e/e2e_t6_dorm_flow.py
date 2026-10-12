@@ -93,11 +93,6 @@ def main():
             check('在住' in row_text, '合約清單看得到「在住」狀態，實際：%r' % row_text[:80])
 
             page.click('[data-action="open-handover"]')
-            # 2026-10-12：進頁不再自動建點交單，要先按「建立點交單」並確認
-            page.wait_for_selector('#dorm-handover-create', timeout=8000)
-            page.click('#dorm-handover-create')
-            page.wait_for_selector('.dialog .btn-primary', timeout=5000)
-            page.click('.dialog .btn-primary')
             page.wait_for_selector('#dorm-handover-items li', timeout=8000)
             items = page.locator('#dorm-handover-items > li')
             n = items.count()

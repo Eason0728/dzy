@@ -14,10 +14,6 @@
  * 直接用瀏覽器 localStorage（不透過 ctx.api，草稿本來就只是本機暫存）：
  * key 規則 `ops_draft_{record_key}`（同舊版 DRAFT_PREFIX），記住上次那家店用
  * `ops_last_store`（同舊版 LAST_STORE_KEY）——刻意沿用舊版原本的 key 名稱，不是新取一組。
- * 2026-10-12 GPT 複審第 2 條：草稿 key 加使用者前綴 `dzy.u.<user id>.`（ctx.user.id），
- * 只讀寫自己的；沒有 owner 一律當沒有草稿（不讀不寫）。舊格式（無前綴）的草稿一律不載入、不列出——
- * 但**不刪**：舊獨立網址版 mala-audit 與本系統同在 eason0728.github.io 這個 origin、用同一組 key，
- * 刪了會把仍在服務的舊站草稿一起刪掉。
  */
 'use strict';
 
@@ -150,12 +146,6 @@ export function buildDetails({ store, month, details }) {
 // 草稿（localStorage；同舊版 key 規則）
 // ============================================================
 
-/** 使用者前綴（owner＝ctx.user.id）；沒有 owner 回 ''＝呼叫端一律不讀不寫 */
-export function ownerPrefix(owner) {
-  const id = owner === undefined || owner === null ? '' : String(owner).trim();
-  return id ? 'dzy.u.' + encodeURIComponent(id) + '.' : '';
-}
-
 function storage() {
   try {
     return typeof localStorage !== 'undefined' ? localStorage : null;
@@ -164,52 +154,46 @@ function storage() {
   }
 }
 
-/** owner 的草稿 key；沒有 owner 回 ''（呼叫端當作沒有草稿） */
-export function draftKeyOf(owner, recordKey) {
-  const p = ownerPrefix(owner);
-  return p ? p + DRAFT_PREFIX + recordKey : '';
+export function draftKeyOf(recordKey) {
+  return DRAFT_PREFIX + recordKey;
 }
 
-export function saveDraft(owner, store, month, auditor, entries) {
+export function saveDraft(store, month, auditor, entries) {
   const s = storage();
-  const key = store && month ? draftKeyOf(owner, recordKeyOf(store, month)) : '';
-  if (!s || !key) return;
+  if (!s || !store || !month) return;
   try {
-    s.setItem(key, JSON.stringify({ store, month, auditor, entries }));
+    s.setItem(draftKeyOf(recordKeyOf(store, month)), JSON.stringify({ store, month, auditor, entries }));
   } catch (e) { /* 儲存空間不可用時忽略，不擋操作 */ }
 }
 
-export function loadDraft(owner, recordKey) {
+export function loadDraft(recordKey) {
   const s = storage();
-  const key = draftKeyOf(owner, recordKey);
-  if (!s || !key) return null;
+  if (!s) return null;
   try {
-    const raw = s.getItem(key);
+    const raw = s.getItem(draftKeyOf(recordKey));
     return raw ? JSON.parse(raw) : null;
   } catch (e) {
     return null;
   }
 }
 
-export function clearDraft(owner, recordKey) {
+export function clearDraft(recordKey) {
   const s = storage();
-  const key = draftKeyOf(owner, recordKey);
-  if (!s || !key) return;
-  try { s.removeItem(key); } catch (e) { /* 忽略 */ }
+  if (!s) return;
+  try { s.removeItem(draftKeyOf(recordKey)); } catch (e) { /* 忽略 */ }
 }
 
-/** 列出 owner 自己未送出的營運稽核草稿 → [{record_key, store, month}]（同舊版 listDrafts()，只掃自己的前綴）。 */
-export function listDrafts(owner) {
+/** 列出所有未送出的營運稽核草稿 → [{record_key, store, month}]（同舊版 listDrafts()）。 */
+export function listDrafts() {
   const s = storage();
   const out = [];
-  const prefix = ownerPrefix(owner) ? ownerPrefix(owner) + DRAFT_PREFIX : '';
-  if (!s || !prefix) return out;
+  if (!s) return out;
   try {
     for (let i = 0; i < s.length; i++) {
       const k = s.key(i);
-      if (!k || k.indexOf(prefix) !== 0) continue;
-      const recordKey = k.slice(prefix.length);
-      const d = loadDraft(owner, recordKey);
+      if (!k || k.indexOf(DRAFT_PREFIX) !== 0) continue;
+      const recordKey = k.slice(DRAFT_PREFIX.length);
+      const d = loadDraft(recordKey);
       if (d && d.store && d.month) out.push({ record_key: recordKey, store: d.store, month: d.month });
     }
   } catch (e) { /* 存取不到就當沒有草稿 */ }
@@ -230,15 +214,14 @@ export function persistLastStore(store) {
 
 /**
  * 依「草稿優先，其次已送出紀錄，都沒有就空白」載入某店某月的內容（同舊版 loadEntriesFor()）。
- * @param {string} owner ctx.user.id（草稿只讀自己的）
  * @param {string} store
  * @param {string} month
  * @param {{ops_records:object[], ops_details:object[]}} data ctx.api getAll() 回傳的 data
  * @returns {{entries:object, auditor:string, from:'draft'|'submitted'|'new'}}
  */
-export function loadEntriesFor(owner, store, month, data) {
+export function loadEntriesFor(store, month, data) {
   const key = recordKeyOf(store, month);
-  const draft = loadDraft(owner, key);
+  const draft = loadDraft(key);
   if (draft && draft.entries) {
     const merged = blankEntries();
     Object.keys(merged).forEach((id) => {

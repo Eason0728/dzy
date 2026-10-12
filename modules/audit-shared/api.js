@@ -52,9 +52,7 @@ const GET_ALL_ACTION = 'getAll';
 const TTL_MS = 5 * 60 * 1000;
 const STALE_MS = 30 * 60 * 1000;
 
-let cache = null;     // { result, expiresAt, uid } —— result 一定是成功的 {ok:true,...}；uid＝抓取當下的使用者 id
-let currentUid;       // 最近一次 getAll 看到的使用者 id；換人（共用電腦登出再登入）就丟掉舊快取
-
+let cache = null;     // { result, expiresAt } —— result 一定是成功的 {ok:true,...}
 let inFlight = null;  // 目前進行中的 getAll() Promise；同時發起的呼叫共用它，不重複發請求
 let now_ = () => Date.now();
 
@@ -75,15 +73,6 @@ export function __setClock(fn) {
  * @returns {Promise<{ok:true,data:object}|{ok:false,error:string}>}
  */
 export async function getAll(ctx) {
-  // 2026-10-12 安全修補：快取記住抓取當下的使用者；換人一律丟棄快取與 in-flight，
-  // 避免共用電腦登出後，下一個帳號在 TTL 內看到上一個人（例如會計）抓到的全節點資料。
-  // （shell 登出另外會整頁重載，這裡是第二層保險。模組不能 import platform，所以只靠 ctx.user。）
-  const uid = uidOf_(ctx);
-  if (uid !== currentUid) {
-    cache = null;
-    inFlight = null;
-    currentUid = uid;
-  }
   const nowMs = now_();
 
   // ① 新鮮：直接回，切分頁不等待
@@ -96,18 +85,17 @@ export async function getAll(ctx) {
   //    不該因此跳錯誤打擾使用者；下一次 getAll() 自然會再試。
   if (cache && nowMs < cache.expiresAt + (STALE_MS - TTL_MS)) {
     if (!inFlight) {
-      let myFlight = null;
-      inFlight = myFlight = (async () => {
+      inFlight = (async () => {
         try {
           const res = await ctx.api.call(BACKEND_ID, GET_ALL_ACTION, {});
-          if (res && res.ok === true && uid === currentUid) {
-            cache = { result: res, expiresAt: now_() + TTL_MS, uid };
+          if (res && res.ok === true) {
+            cache = { result: res, expiresAt: now_() + TTL_MS };
           }
           return res;
         } catch (err) {
           return { ok: false, error: (err && err.message) || '背景更新失敗' };
         } finally {
-          if (inFlight === myFlight) inFlight = null;
+          inFlight = null;
         }
       })();
     }
@@ -119,28 +107,21 @@ export async function getAll(ctx) {
     return inFlight;
   }
 
-  let myFlight = null;
-  inFlight = myFlight = (async () => {
+  inFlight = (async () => {
     try {
       const res = await ctx.api.call(BACKEND_ID, GET_ALL_ACTION, {});
-      // 回來時使用者已經換人（currentUid 變了）就不寫入快取
-      if (res && res.ok === true && uid === currentUid) {
-        cache = { result: res, expiresAt: now_() + TTL_MS, uid };
+      if (res && res.ok === true) {
+        cache = { result: res, expiresAt: now_() + TTL_MS };
       }
       // {ok:false} 不進快取（任務指示第 4 點）：這裡不動 cache，維持它原本的狀態
       // （會走到這裡代表舊快取本來就已經過期或不存在，效果上就是「沒有快取可用」）。
       return res;
     } finally {
-      if (inFlight === myFlight) inFlight = null;
+      inFlight = null;
     }
   })();
 
   return inFlight;
-}
-
-function uidOf_(ctx) {
-  const u = ctx && ctx.user;
-  return (u && u.id != null) ? String(u.id) : undefined;
 }
 
 /** 清掉快取與 in-flight 標記，下次 getAll() 一定重抓。 */

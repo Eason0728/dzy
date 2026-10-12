@@ -37,8 +37,7 @@
 'use strict';
 
 import * as auth from './auth.js';
-import { call as backendCall, setSessionExpiredHandler } from './api.js';
-import { setDryRunNotifier } from './dryrun.js';
+import { call as backendCall } from './api.js';
 import * as ui from './ui.js';
 import * as fmt from './fmt.js';
 import { loadManifests } from './registry.js';
@@ -219,7 +218,6 @@ function callModuleBackend(moduleId, action, payload) {
 }
 
 const sharedApi = { call: callModuleBackend };
-setDryRunNotifier((msg) => ui.toast(msg, 'warn'));
 
 /**
  * @param {object} manifest
@@ -826,44 +824,15 @@ function showLogin() {
   renderLogin(loginRoot, { onSuccess: () => { enterApp(); } });
 }
 
-/**
- * @param {{expired?:boolean}} [opts] expired＝登入過期（代轉回 401，2026-10-12）：
- *   只清本機、不打後端 logout（token 已失效；也不該因此把其他裝置一起登出）。
- */
-async function doLogout(opts) {
-  const expired = !!(opts && opts.expired);
+async function doLogout() {
   await teardownCurrent();
-  if (expired) {
-    auth.expireLocal();
-  } else {
-    ui.loading(true); // 等後端登出最多 5 秒，期間顯示載入中
-    // 2026-10-12：登出＝全部裝置一起登出。auth.logout() 先等後端（最多 5 秒）再清本機，
-    // 一定要 await，否則下面的整頁重載會把還在路上的登出請求砍掉
-    try { await auth.logout(); } finally { ui.loading(false); }
-  }
+  auth.logout();
   allManifests = [];
   permittedModules = [];
   for (const k of Object.keys(navBadgeCache)) delete navBadgeCache[k];
   window.location.hash = '';
   showLogin();
-  // 2026-10-12 安全修補：共用電腦登出後整頁重載，讓所有模組的記憶體（稽核快取、in-flight、
-  // 各模組閉包裡的資料）一次歸零，下一個登入的帳號不可能看到上一個人的資料。
-  // 保留 query（?dryrun=1 這類開關），去掉 hash。
-  try {
-    const loc = window.location;
-    if (typeof loc.replace === 'function') loc.replace(loc.pathname + loc.search);
-    else if (typeof loc.reload === 'function') loc.reload();
-  } catch { /* 非瀏覽器環境（node 測試）沒有 location 可重載，略過 */ }
 }
-
-// 代轉回 401（token 失效／帳號被停用）→ 走登入過期流程。同時多支請求都 401 只處理一次。
-let expiring = false;
-setSessionExpiredHandler(() => {
-  if (expiring || !auth.getUser()) return;
-  expiring = true;
-  try { ui.toast('登入已失效，請重新登入', 'warn'); } catch { /* ignore */ }
-  doLogout({ expired: true }).finally(() => { expiring = false; });
-});
 
 export async function boot(mountEl) {
   rootEl = mountEl;

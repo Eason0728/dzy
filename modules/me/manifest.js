@@ -14,10 +14,7 @@ export default {
   requires: ['platform.self'],
   views: [
     { id: 'profile', name: '個人資料', requires: ['platform.self'] },
-    { id: 'unit', name: '單位通訊錄', requires: ['platform.self'] },
-    // 2026-10-12：認領後主管審核。platform.review 是後端依職級自動加的衍生權限（單位主管才有），
-    // platform.staff（人資）也能審；兩者都沒有的人看不到這個分頁
-    { id: 'review', name: '待審核', requires: ['platform.review', 'platform.staff'] }
+    { id: 'unit', name: '單位通訊錄', requires: ['platform.self'] }
   ],
   entry: () => import('./index.js')
 };
