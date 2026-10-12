@@ -4,7 +4,7 @@
 
 | 項目 | 值 |
 |---|---|
-| 正式網址 | https://eason0728.github.io/dzy/ |
+| 正式網址 | https://dzy.mozhuting.com/ |
 | repo | `Eason0728/dzy`（public） |
 | Pages 設定 | main branch／root，legacy build；push main 即部署，build 約 1 分鐘 |
 | 上線前掃描 | repo 零機密（密碼只在試算表與 Script Properties）、路徑全相對 |
