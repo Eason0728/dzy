@@ -20,7 +20,11 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'staffList', 'staffImport', 'staffAdd', 'staffConfirm', 'staffReject', 'staffSetActive', 'staffUnclaim',
   'staffUnlockReset', 'staffEdit',
   // 2026-10-12：登出全部裝置、認領後主管審核（docs/personnel/spec.md §6.8／§6.9）
-  'logout', 'unitPending', 'unitApprove', 'unitReject'];
+  'logout', 'unitPending', 'unitApprove', 'unitReject',
+  // 2026-10-13：員工名單統一（StaffClock.gs，契約 docs/personnel/master-data/api.md）；內部函式（結尾底線）不在這裡
+  'staffCreateByUnit', 'staffLeave', 'staffLeaveCancel', 'staffRename', 'staffReinstate', 'staffUnitList',
+  'clockMapBuild', 'clockMapList', 'clockMapDecide', 'clockCandidateCreate', 'clockCandidateDismiss',
+  'clockOutboxRetry', 'clockOldHomeDecide', 'clockLink', 'clockJobStatus', 'clockAlerts', 'svcDirectory'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -73,7 +77,10 @@ function dispatch_(e) {
   var MUTATING_ACTIONS = { saveUser: 1, setActive: 1, resetPassword: 1, changePassword: 1,
     claimSubmit: 1, forgotReset: 1, saveMyProfile: 1, staffImport: 1, staffAdd: 1, staffConfirm: 1,
     staffReject: 1, staffSetActive: 1, staffUnclaim: 1, staffUnlockReset: 1, staffEdit: 1,
-    logout: 1, unitApprove: 1, unitReject: 1 };
+    logout: 1, unitApprove: 1, unitReject: 1,
+    staffCreateByUnit: 1, staffLeave: 1, staffLeaveCancel: 1, staffRename: 1, staffReinstate: 1,
+    clockMapBuild: 1, clockMapDecide: 1, clockCandidateCreate: 1, clockCandidateDismiss: 1,
+    clockOutboxRetry: 1, clockOldHomeDecide: 1, clockLink: 1 };
   if (MUTATING_ACTIONS[action]) {
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) {
@@ -141,6 +148,23 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'unitPending': return handleUnitPending_(token);
     case 'unitApprove': return handleUnitApprove_(token, payload);
     case 'unitReject': return handleUnitReject_(token, payload);
+    case 'staffCreateByUnit': return handleStaffCreateByUnit_(token, payload);
+    case 'staffLeave': return handleStaffLeave_(token, payload);
+    case 'staffLeaveCancel': return handleStaffLeaveCancel_(token, payload);
+    case 'staffRename': return handleStaffRename_(token, payload);
+    case 'staffReinstate': return handleStaffReinstate_(token, payload);
+    case 'staffUnitList': return handleStaffUnitList_(token, payload);
+    case 'clockMapBuild': return handleClockMapBuild_(token);
+    case 'clockMapList': return handleClockMapList_(token);
+    case 'clockMapDecide': return handleClockMapDecide_(token, payload);
+    case 'clockCandidateCreate': return handleClockCandidateCreate_(token, payload);
+    case 'clockCandidateDismiss': return handleClockCandidateDismiss_(token, payload);
+    case 'clockOutboxRetry': return handleClockOutboxRetry_(token, payload);
+    case 'clockOldHomeDecide': return handleClockOldHomeDecide_(token, payload);
+    case 'clockLink': return handleClockLink_(token, payload);
+    case 'clockJobStatus': return handleClockJobStatus_(token, payload);
+    case 'clockAlerts': return handleClockAlerts_(token);
+    case 'svcDirectory': return handleSvcDirectory_(payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };

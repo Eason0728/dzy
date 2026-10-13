@@ -698,11 +698,14 @@ function stfReviewTarget_(token, payload) {
 function handleUnitApprove_(token, payload) {
   var t = stfReviewTarget_(token, payload);
   if (!t.ok) return t;
+  var oldUnit = stfStr_(t.v[STF_COL.unit]);
   var err = stfApplyConfirm_(t.v, t.rv.org);
   if (err) return { ok: false, error: err };
   t.v[STF_COL.updated_at] = stfNowText_();
   stfWriteRow_(STF_SHEET, t.hit.row, t.v, STF_COL_COUNT);
   stfLog_(t.emp, 'confirm', t.rv.user.id, 'unit_review');
+  // 調店：確認後單位換了 → 新單位有打卡就開 add 單（StaffClock.gs；沒有那支檔案時略過）
+  if (typeof clkAfterConfirm_ === 'function') clkAfterConfirm_(t.emp, oldUnit, stfStr_(t.v[STF_COL.unit]), t.rv.user.id);
   return { ok: true, data: { emp_no: t.emp } };
 }
 
@@ -791,7 +794,10 @@ function handleStaffList_(token) {
     try { setupStaff(); } finally { lock.releaseLock(); }
   }
   var org = stfReadOrg_();
-  return { ok: true, data: { staff: stfAllRows_().map(function (r) { return stfToObj_(r.values, org, true); }) } };
+  var list = stfAllRows_().map(function (r) { return stfToObj_(r.values, org, true); });
+  // 員工名單統一（StaffClock.gs）：多帶 hire_date／last_day／打卡對照摘要；沒有那支檔案時照舊
+  if (typeof clkDecorateStaffList_ === 'function') list = clkDecorateStaffList_(list);
+  return { ok: true, data: { staff: list } };
 }
 
 function handleStaffImport_(token, payload) {
@@ -871,9 +877,12 @@ function handleStaffConfirm_(token, payload) {
   if (!t.ok) return t;
   var hasP = STF_ORG_FIELDS.some(function (f) { return stfStr_(t.v[STF_COL['p_' + f]]) !== ''; });
   if (!(t.status === 'pending' || (t.status === 'active' && hasP))) return { ok: false, error: STF_MSG.NO_PENDING };
+  var oldUnit = stfStr_(t.v[STF_COL.unit]);
   var err = stfApplyConfirm_(t.v, stfReadOrg_());
   if (err) return { ok: false, error: err };
-  return stfSave_(t, 'confirm', '');
+  var saved = stfSave_(t, 'confirm', '');
+  if (typeof clkAfterConfirm_ === 'function') clkAfterConfirm_(t.emp, oldUnit, stfStr_(t.v[STF_COL.unit]), t.auth.user.id);
+  return saved;
 }
 
 function handleStaffReject_(token, payload) {
@@ -1080,5 +1089,7 @@ function setupStaff() {
 
   var users = ss.getSheetByName(USR_SHEET_USERS);
   users.getRange(1, AUTH_USERS_COL.token_after + 1).setValue('token_after');
+  // 員工名單統一（StaffClock.gs）：clock_stores／staff_clock／clock_outbox 三分頁＋staff 右側 hire_date、last_day（只補不覆蓋）
+  if (typeof clkSetup_ === 'function') clkSetup_(ss);
   return { ok: true };
 }
