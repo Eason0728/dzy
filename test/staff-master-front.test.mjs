@@ -160,8 +160,15 @@ ok(L.personActions({ emp_no: 'DZY010', status: 'active', clock_total: 1, is_self
   const mkp = (o) => ({ emp_no: 'DZY050', status: 'active', clock_total: 1, clock_stopped: 0, last_day: '', clocks: [], ...o });
   ok(L.personFilter('overdue', mkp({ last_day: '2026-10-01' }), '2026-10-13') && !L.personFilter('overdue', mkp({ last_day: '2026-10-01', status: 'disabled' }), '2026-10-13') && !L.personFilter('overdue', mkp({ last_day: '2026-10-20' }), '2026-10-13'), '#15 篩選 overdue：離職日已過且還沒停用');
   ok(L.personFilter('homestopped', mkp({ clocks: [{ role: 'home', roster_active: false }] }), 'x') && !L.personFilter('homestopped', mkp({ clocks: [{ role: 'support', roster_active: false }] }), 'x') && !L.personFilter('homestopped', mkp({ last_day: '2026-10-31', clocks: [{ role: 'home', roster_active: false }] }), 'x'), '#15 篩選 homestopped：在職、沒登記離職、主店被停');
-  const lst = fs.readFileSync(path.join(ROOT, 'modules/staff/views/list.js'), 'utf8');
-  ok(/'overdue'/.test(lst) && /'homestopped'/.test(lst), '#15 同仁名單有這兩個篩選選項');
+  // 下拉選項清單（匯出的 FILTERS，也是畫面實際用來產生 <option> 的那份）：首頁提醒用到的每個篩選值都要在裡面
+  const { FILTERS } = await import('../modules/staff/views/list.js');
+  const optVals = FILTERS.map((x) => x[0]);
+  for (const v of ['left', 'nohome', 'overdue', 'homestopped']) ok(optVals.includes(v), `#15 同仁名單下拉有篩選選項 ${v}`, optVals);
+  const lstSrc = fs.readFileSync(path.join(ROOT, 'modules/staff/views/list.js'), 'utf8');
+  ok(/FILTERS\.map\(/.test(lstSrc), '#15 下拉選項確實由 FILTERS 產生');
+  // 首頁提醒導到名單的每個 f 參數，名單都得有對應選項（或是已知的特例 namediff＝看全部）
+  const fVals = L.alertRows({ left_but_active: [1], leave_overdue: [1], home_stopped: [1], no_home_map: [1], name_diff: [1] }, hq).filter((r) => r.view === 'list').map((r) => r.params.f);
+  ok(fVals.every((v) => optVals.includes(v) || v === 'namediff'), '#15 提醒導到名單的 f 參數都有下拉選項', fVals);
 }
 // #19 姓名上限 20
 ok(L.NAME_MAX === 20 && L.addFormErrors({ ...good, name: 'x'.repeat(20) }, '2026-10-13').length === 0 && L.addFormErrors({ ...good, name: 'x'.repeat(21) }, '2026-10-13').length === 1, '#19 姓名 20 字可、21 字擋下');

@@ -18,7 +18,7 @@ const STATUS = {
   active: ['tag tag-ok', '已開通'],
   disabled: ['tag', '已停用']
 };
-const FILTERS = [
+export const FILTERS = [
   ['todo', '待處理'], ['all', '全部'], ['unclaimed', '未開通'], ['pending', '待確認'],
   ['rejected', '已退回'], ['active', '已開通'], ['disabled', '已停用'], ['locked', '忘記密碼鎖住'],
   ['left', '已離職但打卡未停'], ['nohome', '沒有打卡編號'],
