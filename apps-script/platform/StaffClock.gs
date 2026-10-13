@@ -28,16 +28,17 @@ var CLK_OUTBOX_HEADERS = ['job_id', 'kind', 'emp_no', 'store_code', 'emp_id', 'n
   'state', 'tries', 'next_at', 'lease_until', 'last_error', 'created_at', 'updated_at', 'done_at'];
 var CLK_STAFF_EXTRA = ['hire_date', 'last_day'];
 
-// 預設六列：[store_code, store_name, 品牌代碼, 單位名稱, payroll_store]；unit_code 由 STF_DEFAULT_ORG 依品牌＋單位名稱查，查不到留空。
+// 預設六列：[store_code, store_name, [[品牌代碼, 單位名稱]…], payroll_store]；unit_code 由 STF_DEFAULT_ORG 依品牌＋單位名稱查（多個單位以逗號串起來），查不到的留空。
 // payroll_store＝薪資模組自己的門市代碼（SSLGF＝打卡 Payroll.gs PAY_DEFAULT_STORE；CF／HQ／MZTJS／MZTLZL 見 mala-clock-in、mala-payroll skill 的薪酬門市表紀錄）；
 // 墨竹亭光復 mztgf：文件記載「不在薪酬門市表」、無代碼證據，留空（空白時退回用 store_code 比對）
 var CLK_DEFAULT_STORES = [
-  ['gf', '小辛辣 新竹光復', 'mala', '新竹光復', 'SSLGF'],
-  ['mztjs', '墨竹亭 新竹金山', 'mzt', '新竹金山', 'MZTJS'],
-  ['mztgf', '墨竹亭 新竹光復', 'mzt', '新竹光復', ''],
-  ['mztlzl', '墨竹亭 台北六張犁', 'mzt', '台北六張犁', 'MZTLZL'],
-  ['hq', '鼎兆元 總部', 'dzy', '鼎兆元總部', 'HQ'],
-  ['cf', '中央廚房', 'ck', '央廚', 'CF']
+  ['gf', '小辛辣 新竹光復', [['mala', '新竹光復']], 'SSLGF'],
+  ['mztjs', '墨竹亭 新竹金山', [['mzt', '新竹金山']], 'MZTJS'],
+  ['mztgf', '墨竹亭 新竹光復', [['mzt', '新竹光復']], ''],
+  ['mztlzl', '墨竹亭 台北六張犁', [['mzt', '台北六張犁']], 'MZTLZL'],
+  // 總部：管理系統有三個總部單位（Eason 2026-10-14），打卡共用同一套總部打卡 → unit_code 逗號分隔三個
+  ['hq', '鼎兆元 總部', [['dzy', '鼎兆元總部'], ['mzt', '墨竹亭總部'], ['mala', '小辛辣總部']], 'HQ'],
+  ['cf', '中央廚房', [['ck', '央廚']], 'CF']
 ];
 
 var CLK_KINDS = ['add', 'deactivate', 'reactivate', 'link', 'build'];
@@ -181,11 +182,13 @@ function clkSheetsReady_() {
 /** 預設六列 clock_stores；unit_code 由 STF_DEFAULT_ORG 依「品牌＋單位名稱」對上，查不到留空 */
 function clkDefaultStoreRows_() {
   return CLK_DEFAULT_STORES.map(function (s) {
-    var unit = '';
-    STF_DEFAULT_ORG.forEach(function (r) {
-      if (!unit && r[0] === 'unit' && r[3] === s[2] && r[2] === s[3]) unit = r[1];
+    var units = [];
+    s[2].forEach(function (pair) {
+      STF_DEFAULT_ORG.forEach(function (r) {
+        if (r[0] === 'unit' && r[3] === pair[0] && r[2] === pair[1] && units.indexOf(r[1]) === -1) units.push(r[1]);
+      });
     });
-    return [s[0], s[1], unit, 'TRUE', s[4]];
+    return [s[0], s[1], units.join(','), 'TRUE', s[3]];
   });
 }
 
@@ -219,10 +222,10 @@ function clkEnsureStoresExtra_(ss) {
   if (String(sh.getRange(1, n, 1, 1).getValues()[0][0]).trim() !== '') return;
   sh.getRange(1, n, 1, 1).setValues([[CLK_STORES_HEADERS[n - 1]]]);
   CLK_DEFAULT_STORES.forEach(function (d) {   // 只補空白：舊表的光復列補 SSLGF
-    if (!d[4]) return;
+    if (!d[3]) return;
     var last = sh.getLastRow();
     for (var r = 2; r <= last; r++) {
-      if (clkCode_(sh.getRange(r, 1, 1, 1).getValues()[0][0]) === d[0]) sh.getRange(r, n, 1, 1).setValues([[d[4]]]);
+      if (clkCode_(sh.getRange(r, 1, 1, 1).getValues()[0][0]) === d[0]) sh.getRange(r, n, 1, 1).setValues([[d[3]]]);
     }
   });
 }
@@ -233,7 +236,26 @@ function clkSetup_(ss) {
   stfEnsureSheet_(ss, CLK_SHEET_MAP, CLK_MAP_HEADERS, []);
   stfEnsureSheet_(ss, CLK_SHEET_OUTBOX, CLK_OUTBOX_HEADERS, []);
   clkEnsureStaffExtra_(ss);
+  clkUpgradeHqUnits_(ss);
+  var conflict = clkUnitConflict_();
+  if (conflict) throw new Error('分頁「clock_stores」設定衝突，停止初始化：' + conflict);
   return { ok: true };
+}
+
+/**
+ * 升級：舊預設 hq 列的 unit_code 只有 dzy-hq → 補成三個總部單位（dzy-hq,mzt-hq,mala-hq）。
+ * 只動「恰好等於舊預設」的值；總部已自訂成別的值就不碰。
+ */
+function clkUpgradeHqUnits_(ss) {
+  var sh = ss.getSheetByName(CLK_SHEET_STORES);
+  if (!sh) return;
+  var want = clkDefaultStoreRows_().filter(function (r) { return r[0] === 'hq'; })[0];
+  if (!want || want[2].split(',').length < 2) return;   // org 預設查不到多個單位時不升級
+  var last = sh.getLastRow();
+  for (var r = 2; r <= last; r++) {
+    var row = sh.getRange(r, 1, 1, 3).getValues()[0];
+    if (clkCode_(row[0]) === 'hq' && stfStr_(row[2]) === 'dzy-hq') sh.getRange(r, 3, 1, 1).setValues([[want[2]]]);
+  }
 }
 
 /** 三個新分頁＋staff 右側兩欄的表頭是否和程式一致；回 ''＝一致，否則回說明 */
@@ -246,7 +268,7 @@ function clkHeaderProblem_() {
     if (cur.join('|') !== checks[i][1].join('|')) return '分頁「' + checks[i][0] + '」的表頭與程式不一致：' + cur.join(',');
   }
   if (!clkStaffExtraReady_()) return '分頁「staff」右側缺 hire_date、last_day 表頭';
-  return '';
+  return clkUnitConflict_() ? ('clock_stores 設定衝突：' + clkUnitConflict_()) : '';
 }
 
 /** 每支 action 開頭：分頁沒建就建；建完（或本來就有）再核對表頭，不一致就停下回錯，不寫任何資料 */
@@ -307,11 +329,29 @@ function clkStoreByCode_(code) {
   for (var i = 0; i < all.length; i++) if (all[i].store_code === c) return all[i];
   return null;
 }
+/** unit_code 欄可放多個單位（逗號分隔，如總部三單位共用 hq） */
+function clkUnitsOf_(store) {
+  return stfStr_(store && store.unit_code).split(',').map(function (u) { return stfStr_(u); }).filter(function (u) { return u; });
+}
+/** 單位 → 店：這個單位在某家啟用的店的 unit_code 清單裡就算 */
 function clkStoreOfUnit_(unit) {
   if (!unit) return null;
   var all = clkStores_();
-  for (var i = 0; i < all.length; i++) if (all[i].enabled && all[i].unit_code === unit) return all[i];
+  for (var i = 0; i < all.length; i++) if (all[i].enabled && clkUnitsOf_(all[i]).indexOf(unit) !== -1) return all[i];
   return null;
+}
+/** 設定檢查：同一個單位不得出現在兩家店；回說明字串或 ''（停用的店也算，避免之後啟用才爆） */
+function clkUnitConflict_() {
+  var seen = {};
+  var all = clkStores_();
+  for (var i = 0; i < all.length; i++) {
+    var us = clkUnitsOf_(all[i]);
+    for (var k = 0; k < us.length; k++) {
+      if (seen[us[k]] && seen[us[k]] !== all[i].store_code) return '單位「' + us[k] + '」同時出現在店 ' + seen[us[k]] + ' 與 ' + all[i].store_code + ' 的 unit_code';
+      seen[us[k]] = all[i].store_code;
+    }
+  }
+  return '';
 }
 
 // staff_clock
@@ -865,7 +905,13 @@ function handleClockCandidateCreate_(token, payload) {
   (ms.candidates || []).forEach(function (c) { if (c.key === stfStr_(payload.candidate_key)) cand = c; });
   if (!cand) return clkErr_('not_found', '找不到這個候選新人');
   var unit = stfStr_(payload.unit);
-  if (!unit && cand.entries[0]) { var s0 = clkStoreByCode_(cand.entries[0].store_code); unit = s0 ? s0.unit_code : ''; }
+  if (!unit && cand.entries[0]) {
+    // 店 → 單位：該店只對一個單位才可預設；總部這種對到多個單位的店不得自動猜，要總部指定
+    var s0 = clkStoreByCode_(cand.entries[0].store_code);
+    var us0 = s0 ? clkUnitsOf_(s0) : [];
+    if (us0.length > 1) return clkErr_('bad_input', '這家店對應多個單位（' + us0.join('、') + '），請指定單位');
+    unit = us0[0] || '';
+  }
   var o = clkResolveOrg_(a, { unit: unit, title: payload.title, dept: payload.dept });
   if (!o.ok) return o;
   var hire = stfStr_(payload.hire_date);
