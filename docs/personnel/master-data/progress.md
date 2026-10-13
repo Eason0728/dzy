@@ -3,7 +3,7 @@
 - 分級：完整
 - 分級依據：排程=是 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
 - 現在在：⑤
-- 等 Eason：無（2026-10-14 總部已建立並全部確認打卡對照，「需總部處理」「候選新人」皆空；店長不必確認）
+- 等 Eason：總部在打卡對照逐一按「設為主店」（13 位，名單在對話中）
 
 ## ① 查（2026-10-13）
 - 規劃稿 ~/dzy/docs/personnel/master-data-plan.md（v1，方向與六題已定）；記憶 staff-master-direction.md 已記方向
@@ -37,6 +37,7 @@
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
 |---|---|---|---|---|---|
+| 2026-10-14 | ⑤ mini 更新 1 | 無單位推主店＋店長依打卡店可見＋總部指定主店 clockSetHome | mini 回報 health green、jobs 啟動、NO_SUCH_FUNCTION 0；外網探針 clockSetHome 回「登入已失效」；前端 7b8481b 上線（node 0 fail、e2e 九支） | 1 | minikit 0cb80b6、dzy 7b8481b |
 | 2026-10-14 | ⑤ 上線第 2、3 段 | 六店 STAFF_SVC_KEY＋mini 只讀上線＋管理系統新畫面 | mini 回報 health green、六店每日同步 ok（六張犁名冊空屬正常）、jobs 啟動、log 無網址金鑰；外網探針新 action 回「登入已失效」（已認得）；前端 5adc6ee 上線（node 0 fail、e2e 九支通過、正式登入頁無錯誤） | 1 | mini 回報（minikit d11b9f3）、dzy 5adc6ee |
 | 2026-10-14 | ⑤ 上線第 1 段 | 六店打卡 SvcStaff＋光復 LineHub 7A（開關關閉） | 三方比對一致→補丁式部署（只套本案修改）→拉回逐檔比對一致；探針 svc_roster 錯金鑰全回 unauthorized、whoami／mgr_day 照常；光復 @155、金山 @22、墨竹亭光復 @16、六張犁 @11、總部 @36、央廚 @34；值班核定頁新版上線（開關未開，行為不變） | 1 | mala-gas 168ab59、mala-clock-in 1fa6c73 |
 | 2026-10-13 | ④ 階段關 第 5 輪＋上線前關第 2 場＋結關 | 7A 打卡端＋佈告欄＋全部跨 repo 契約 | Fable 8 條＋GPT 12 條（G4 可接受）全修、四組跨 repo 契約逐欄一致；**M4 階段關通過** | 5 | dzy issue #1、prelaunch-review.md |
