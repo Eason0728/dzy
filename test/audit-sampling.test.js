@@ -107,7 +107,15 @@ var currentNames = current5.map(function (it) { return it.name; });
 var replacement = Sampling.redrawOne(currentNames, sxlItems, sxlDetails);
 assertTrue(!!replacement, 'redrawOne 有可換品項時回傳非 null');
 assertTrue(currentNames.indexOf(replacement.name) === -1, 'redrawOne 換到的品項不在現有清單中');
-assertTrue(typeof replacement.unit === 'string' && !!replacement.unit, 'redrawOne 回傳含 unit');
+// unit 同 drawSample：可為空字串。sxl-gf 有 1 項單位留空，換到它的機率約 1/38，
+// 舊斷言要求非空 → 連跑約 40 次失敗一次（2026-10-13 修）。
+assertTrue(typeof replacement.unit === 'string', 'redrawOne 回傳含 unit 欄位（可為空字串）');
+
+// --- redrawOne：單位留空的品項原樣帶出空字串（畫面靠它標「缺單位」）---
+var emptyUnitPick = Sampling.redrawOne(
+  sxlItems.filter(function (it) { return !!it.unit; }).map(function (it) { return it.name; }),
+  sxlItems, sxlDetails);
+assertTrue(!!emptyUnitPick && emptyUnitPick.unit === '', 'redrawOne 換到單位留空的品項時 unit 為空字串');
 
 // --- redrawOne：窮盡（currentNames 涵蓋全部品項庫）→ 回 null ---
 var allNames = sxlItems.map(function (it) { return it.name; });
