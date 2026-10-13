@@ -129,6 +129,7 @@ B 店值班核定頁：created_by 是「LINE 自動」的人，名字旁標「�
 - 打卡上在職但沒對照的人（含店長從值班核定舊按鈕新增的）
 - DZY 已離職但某家打卡仍在職
 - 待店長確認的對照數
+- （v2 審查新增）DZY 在職但主店打卡已停（home_stopped）、登記離職過期仍未停（leave_overdue）、調店開新店失敗（transfer_failed）；待辦單可由總部結案（clockOutboxCancel）
 連續 7 天零異常＝成功指標。
 
 ### 4.6 佈告欄改讀管理系統（F6）
