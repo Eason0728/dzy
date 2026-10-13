@@ -34,7 +34,7 @@
 ## 1. 資料（新增／變更的分頁）
 表頭逐字如下（`setupStaff` 自動建立，只補不覆蓋；表頭不一致丟錯停下，action 回 `setup_failed`）。
 - `staff` 最右邊補兩欄（第 25、26 欄）：`hire_date`（到職日）、`last_day`（最後上班日，有值＝已登記離職）。原 24 欄不動。
-- `clock_stores`：`store_code, store_name, unit_code, enabled, payroll_store`。`payroll_store`＝薪資模組自己的門市代碼（打卡 Payroll.gs 的 `PAY_DEFAULT_STORE`＝`SSLGF` 只對得上光復；其他五店的薪資代碼在各自 payroll_store 分頁資料裡，程式查不到，預設留空，總部查到後填入；留空時退回用 store_code 比對）。舊 4 欄表由 setupStaff 補欄並把光復補成 SSLGF。預設六列（`enabled=TRUE`）：
+- `clock_stores`：`store_code, store_name, unit_code, enabled, payroll_store`。`payroll_store`＝薪資模組自己的門市代碼（打卡 Payroll.gs 的 `PAY_DEFAULT_STORE`＝`SSLGF` 只對得上光復；CF、HQ、MZTJS、MZTLZL 依 skill 薪酬門市表紀錄預填，mztgf 無證據留空待總部查；留空時退回用 store_code 比對）。舊 4 欄表由 setupStaff 補欄並把光復補成 SSLGF。預設六列（`enabled=TRUE`）：
 
 | store_code | store_name | unit_code（依 org 預設單位對上，六個都查得到） |
 |---|---|---|

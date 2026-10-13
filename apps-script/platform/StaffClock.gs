@@ -29,15 +29,15 @@ var CLK_OUTBOX_HEADERS = ['job_id', 'kind', 'emp_no', 'store_code', 'emp_id', 'n
 var CLK_STAFF_EXTRA = ['hire_date', 'last_day'];
 
 // 預設六列：[store_code, store_name, 品牌代碼, 單位名稱, payroll_store]；unit_code 由 STF_DEFAULT_ORG 依品牌＋單位名稱查，查不到留空。
-// payroll_store＝薪資模組自己的門市代碼（打卡 Payroll.gs 的 PAY_DEFAULT_STORE＝SSLGF 只對得上光復）；
-// 其他店的代碼在各自的 payroll_store 分頁資料裡、程式查不到，留空（空白時退回用 store_code 比對）
+// payroll_store＝薪資模組自己的門市代碼（SSLGF＝打卡 Payroll.gs PAY_DEFAULT_STORE；CF／HQ／MZTJS／MZTLZL 見 mala-clock-in、mala-payroll skill 的薪酬門市表紀錄）；
+// 墨竹亭光復 mztgf：文件記載「不在薪酬門市表」、無代碼證據，留空（空白時退回用 store_code 比對）
 var CLK_DEFAULT_STORES = [
   ['gf', '小辛辣 新竹光復', 'mala', '新竹光復', 'SSLGF'],
-  ['mztjs', '墨竹亭 新竹金山', 'mzt', '新竹金山', ''],
+  ['mztjs', '墨竹亭 新竹金山', 'mzt', '新竹金山', 'MZTJS'],
   ['mztgf', '墨竹亭 新竹光復', 'mzt', '新竹光復', ''],
-  ['mztlzl', '墨竹亭 台北六張犁', 'mzt', '台北六張犁', ''],
-  ['hq', '鼎兆元 總部', 'dzy', '鼎兆元總部', ''],
-  ['cf', '中央廚房', 'ck', '央廚', '']
+  ['mztlzl', '墨竹亭 台北六張犁', 'mzt', '台北六張犁', 'MZTLZL'],
+  ['hq', '鼎兆元 總部', 'dzy', '鼎兆元總部', 'HQ'],
+  ['cf', '中央廚房', 'ck', '央廚', 'CF']
 ];
 
 var CLK_KINDS = ['add', 'deactivate', 'reactivate', 'link', 'build'];
