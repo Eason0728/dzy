@@ -20,21 +20,24 @@ var CLK_SHEET_STORES = 'clock_stores';
 var CLK_SHEET_MAP = 'staff_clock';
 var CLK_SHEET_OUTBOX = 'clock_outbox';
 
-var CLK_STORES_HEADERS = ['store_code', 'store_name', 'unit_code', 'enabled'];
+var CLK_STORES_HEADERS = ['store_code', 'store_name', 'unit_code', 'enabled', 'payroll_store'];
+var CLK_NAME_MAX = 20;   // 會進打卡的姓名上限（與打卡端 svc_add／mgr_add_employee 一致）
 var CLK_MAP_HEADERS = ['emp_no', 'store_code', 'emp_id', 'role', 'state', 'source', 'roster_active',
   'last_punch', 'confirmed_by', 'confirmed_at', 'updated_at'];
 var CLK_OUTBOX_HEADERS = ['job_id', 'kind', 'emp_no', 'store_code', 'emp_id', 'name', 'op_id', 'expect_json',
   'state', 'tries', 'next_at', 'lease_until', 'last_error', 'created_at', 'updated_at', 'done_at'];
 var CLK_STAFF_EXTRA = ['hire_date', 'last_day'];
 
-// 預設六列：[store_code, store_name, 品牌代碼, 單位名稱]；unit_code 由 STF_DEFAULT_ORG 依品牌＋單位名稱查，查不到留空
+// 預設六列：[store_code, store_name, 品牌代碼, 單位名稱, payroll_store]；unit_code 由 STF_DEFAULT_ORG 依品牌＋單位名稱查，查不到留空。
+// payroll_store＝薪資模組自己的門市代碼（打卡 Payroll.gs 的 PAY_DEFAULT_STORE＝SSLGF 只對得上光復）；
+// 其他店的代碼在各自的 payroll_store 分頁資料裡、程式查不到，留空（空白時退回用 store_code 比對）
 var CLK_DEFAULT_STORES = [
-  ['gf', '小辛辣 新竹光復', 'mala', '新竹光復'],
-  ['mztjs', '墨竹亭 新竹金山', 'mzt', '新竹金山'],
-  ['mztgf', '墨竹亭 新竹光復', 'mzt', '新竹光復'],
-  ['mztlzl', '墨竹亭 台北六張犁', 'mzt', '台北六張犁'],
-  ['hq', '鼎兆元 總部', 'dzy', '鼎兆元總部'],
-  ['cf', '中央廚房', 'ck', '央廚']
+  ['gf', '小辛辣 新竹光復', 'mala', '新竹光復', 'SSLGF'],
+  ['mztjs', '墨竹亭 新竹金山', 'mzt', '新竹金山', ''],
+  ['mztgf', '墨竹亭 新竹光復', 'mzt', '新竹光復', ''],
+  ['mztlzl', '墨竹亭 台北六張犁', 'mzt', '台北六張犁', ''],
+  ['hq', '鼎兆元 總部', 'dzy', '鼎兆元總部', ''],
+  ['cf', '中央廚房', 'ck', '央廚', '']
 ];
 
 var CLK_KINDS = ['add', 'deactivate', 'reactivate', 'link', 'build'];
@@ -52,6 +55,7 @@ var CLK_PERMANENT_ERRORS = ['unauthorized', 'bad_version', 'bad_input', 'duplica
 
 var CLK_PROP_MAP_STATE = 'CLOCK_MAP_STATE';        // 建對照結果：candidates／needs_hq／excluded
 var CLK_PROP_SYNC_PREFIX = 'CLOCK_SYNC_';           // + store_code：每店同步結果（未對照、姓名不同、薪資姓名不同）
+var CLK_PROP_TRANSFER_FAIL = 'CLOCK_TRANSFER_FAIL';  // 調店開 add 單失敗的 emp_no
 var CLK_PROP_TRANSFER_ASK = 'CLOCK_TRANSFER_ASK';   // 調店後待總部決定要不要停用舊店
 var CLK_CACHE_LINK_PREFIX = 'clk_link_';
 var CLK_PROP_SVC_KEY = 'BULLETIN_SVC_KEY';
@@ -61,7 +65,7 @@ var CLK_MSG = {
   NOT_FOUND: '找不到這位同仁',
   BAD_INPUT: '資料格式不對',
   NAME_REQUIRED: '請填姓名',
-  NAME_TOO_LONG: '姓名最多 30 個字',
+  NAME_TOO_LONG: '姓名最多 20 個字（打卡系統的限制）',
   NAME_CLASH_UNIT: '這個單位已經有同名的在職同仁，請在姓名後加註（例如「姓名-B」）區分',
   NAME_CLASH_UNCLAIMED: '名單上已有同名、還沒認領的人，請在姓名後加註（例如「姓名-B」）區分',
   PHONE: '手機要是 09 開頭的 10 碼數字',
@@ -129,7 +133,8 @@ function clkValidYmd_(s) {
   var t = new Date(Date.UTC(y, mo - 1, d));
   return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d;
 }
-function clkEid_(v) { return stfStr_(v).toUpperCase(); }
+/** 打卡編號以打卡名冊原字串為準（只去頭尾空白，不改大小寫；打卡端比對區分大小寫） */
+function clkEid_(v) { return stfStr_(v); }
 function clkCode_(v) { return stfStr_(v).toLowerCase(); }
 function clkNormName_(v) { return String(v === undefined || v === null ? '' : v).replace(/[\s　]+/g, ''); }
 function clkTruthy_(v) { return v === true || String(v).trim().toUpperCase() === 'TRUE'; }
@@ -174,7 +179,7 @@ function clkDefaultStoreRows_() {
     STF_DEFAULT_ORG.forEach(function (r) {
       if (!unit && r[0] === 'unit' && r[3] === s[2] && r[2] === s[3]) unit = r[1];
     });
-    return [s[0], s[1], unit, 'TRUE'];
+    return [s[0], s[1], unit, 'TRUE', s[4]];
   });
 }
 
@@ -196,7 +201,28 @@ function clkEnsureStaffExtra_(ss) {
 }
 
 /** 由 setupStaff 呼叫（只補不覆蓋；表頭不一致丟錯停下） */
+function clkEnsureStoresExtra_(ss) {
+  var sh = ss.getSheetByName(CLK_SHEET_STORES);
+  if (!sh) return;
+  var n = CLK_STORES_HEADERS.length;
+  var head = sh.getRange(1, 1, 1, 4).getValues()[0].map(function (v) { return String(v).trim(); });
+  if (head.join('|') !== CLK_STORES_HEADERS.slice(0, 4).join('|')) return;   // 空表或不一致：交給 stfEnsureSheet_ 處理
+  if (typeof sh.getMaxColumns === 'function' && sh.getMaxColumns() < n && typeof sh.insertColumnsAfter === 'function') {
+    sh.insertColumnsAfter(sh.getMaxColumns(), n - sh.getMaxColumns());
+  }
+  if (String(sh.getRange(1, n, 1, 1).getValues()[0][0]).trim() !== '') return;
+  sh.getRange(1, n, 1, 1).setValues([[CLK_STORES_HEADERS[n - 1]]]);
+  CLK_DEFAULT_STORES.forEach(function (d) {   // 只補空白：舊表的光復列補 SSLGF
+    if (!d[4]) return;
+    var last = sh.getLastRow();
+    for (var r = 2; r <= last; r++) {
+      if (clkCode_(sh.getRange(r, 1, 1, 1).getValues()[0][0]) === d[0]) sh.getRange(r, n, 1, 1).setValues([[d[4]]]);
+    }
+  });
+}
+
 function clkSetup_(ss) {
+  clkEnsureStoresExtra_(ss);
   stfEnsureSheet_(ss, CLK_SHEET_STORES, CLK_STORES_HEADERS, clkDefaultStoreRows_());
   stfEnsureSheet_(ss, CLK_SHEET_MAP, CLK_MAP_HEADERS, []);
   stfEnsureSheet_(ss, CLK_SHEET_OUTBOX, CLK_OUTBOX_HEADERS, []);
@@ -220,7 +246,7 @@ function clkHeaderProblem_() {
 /** 每支 action 開頭：分頁沒建就建；建完（或本來就有）再核對表頭，不一致就停下回錯，不寫任何資料 */
 function clkReady_() {
   try {
-    if (!stfSheetsReady_() || !clkSheetsReady_() || !clkStaffExtraReady_()) setupStaff();
+    if (!stfSheetsReady_() || !clkSheetsReady_() || !clkStaffExtraReady_() || clkHeaderProblem_()) setupStaff();
     var problem = clkHeaderProblem_();
     if (problem) return clkErr_('setup_failed', '分頁初始化失敗：' + problem);
     return { ok: true };
@@ -491,7 +517,7 @@ function handleStaffCreateByUnit_(token, payload) {
   var a = clkNeedActor_(token);
   if (!a.ok) return a;
   payload = payload || {};
-  if (stfTooLong_(payload.name, STF_MAX.name)) return clkErr_('bad_input', CLK_MSG.NAME_TOO_LONG);
+  if (stfTooLong_(payload.name, CLK_NAME_MAX)) return clkErr_('bad_input', CLK_MSG.NAME_TOO_LONG);
   if (clkPayloadTooLong_(payload, ['title', 'unit', 'dept'], STF_MAX.org)) return clkErr_('bad_input', CLK_MSG.BAD_INPUT);
   if (stfTooLong_(payload.phone, STF_MAX.phone) || stfTooLong_(payload.hire_date, STF_MAX.birthday)) return clkErr_('bad_input', CLK_MSG.BAD_INPUT);
   var ready = clkReady_();
@@ -499,7 +525,7 @@ function handleStaffCreateByUnit_(token, payload) {
 
   var name = stfStr_(payload.name);
   if (!name) return clkErr_('bad_input', CLK_MSG.NAME_REQUIRED);
-  if (name.length > STF_MAX.name) return clkErr_('bad_input', CLK_MSG.NAME_TOO_LONG);
+  if (name.length > CLK_NAME_MAX) return clkErr_('bad_input', CLK_MSG.NAME_TOO_LONG);
   var o = clkResolveOrg_(a, payload);
   if (!o.ok) return o;
   var phone = stfPhone_(payload.phone);
@@ -586,7 +612,7 @@ function handleStaffRename_(token, payload) {
   var a = clkNeedHq_(token);
   if (!a.ok) return a;
   payload = payload || {};
-  if (stfTooLong_(payload.name, STF_MAX.name)) return clkErr_('bad_input', CLK_MSG.NAME_TOO_LONG);
+  if (stfTooLong_(payload.name, CLK_NAME_MAX)) return clkErr_('bad_input', CLK_MSG.NAME_TOO_LONG);
   var ready = clkReady_();
   if (!ready.ok) return ready;
   var s = clkStaffByEmp_(payload.emp_no);
@@ -826,6 +852,7 @@ function handleClockCandidateCreate_(token, payload) {
   var hire = stfStr_(payload.hire_date);
   if (hire && !clkValidYmd_(hire)) return clkErr_('bad_input', CLK_MSG.HIRE_DATE);
   var name = stfStr_(cand.name);
+  if (name.length > CLK_NAME_MAX) return clkErr_('bad_input', CLK_MSG.NAME_TOO_LONG);
   var clash = clkNameClash_(name, o.unit, '');
   if (clash) return clash;
   var n = stfMaxEmpNum_() + 1;
@@ -877,13 +904,36 @@ function handleClockOutboxRetry_(token, payload) {
   var jobs = clkJobs_();
   var j = clkJobById_(jobs, stfStr_(payload && payload.job_id));
   if (!j) return clkErr_('no_job', CLK_MSG.NO_JOB);
-  var stuck = j.state === 'failed' || (j.state === 'pending' && j.tries >= CLK_ALERT_TRIES);
+  var stuck = j.state === 'failed' || (CLK_OPEN_STATES.indexOf(j.state) !== -1 && j.tries >= CLK_ALERT_TRIES);
   if (!stuck) return clkErr_('not_retryable', CLK_MSG.NOT_RETRYABLE);
   var d = new Date();
   j.state = 'pending'; j.tries = 0; j.next_at = clkNowText_(d); j.lease_until = ''; j.last_error = '';
   clkJobSave_(j, d);
   stfLog_(j.emp_no, 'outbox_retry', a.user.id, j.job_id);
   return { ok: true, data: { job_id: j.job_id, state: 'pending' } };
+}
+
+/**
+ * 結案：永久失敗（或卡住）的單不會自己消失，總部確認不用做了就取消（failed → cancelled，記原因與 staff_log）。
+ * 輸入 {job_id, reason?}。只有 failed，或未完成且 tries≥3 的單可取消。
+ */
+function handleClockOutboxCancel_(token, payload) {
+  var a = clkNeedHq_(token);
+  if (!a.ok) return a;
+  var ready = clkReady_();
+  if (!ready.ok) return ready;
+  payload = payload || {};
+  var j = clkJobById_(clkJobs_(), stfStr_(payload.job_id));
+  if (!j) return clkErr_('no_job', CLK_MSG.NO_JOB);
+  var stuck = j.state === 'failed' || (CLK_OPEN_STATES.indexOf(j.state) !== -1 && j.tries >= CLK_ALERT_TRIES);
+  if (!stuck) return clkErr_('not_retryable', CLK_MSG.NOT_RETRYABLE);
+  var reason = stfStr_(payload.reason).slice(0, 100);
+  var d = new Date();
+  j.state = 'cancelled'; j.lease_until = ''; j.next_at = ''; j.done_at = clkNowText_(d);
+  j.last_error = authSafeCell_('總部取消' + (reason ? '：' + reason : '') + '（原錯誤 ' + stfStr_(j.last_error).slice(0, 80) + '）');
+  clkJobSave_(j, d);
+  stfLog_(j.emp_no, 'outbox_cancel', a.user.id, j.kind + ' ' + j.job_id);
+  return { ok: true, data: { job_id: j.job_id, state: 'cancelled' } };
 }
 
 /** 這個人（emp_no）的單位，呼叫者管不管得到；build 單只有總部 */
@@ -1012,20 +1062,29 @@ function clockOutboxClaim_(now, limit, kinds) {
         cancelled.push(j.job_id);
         continue;
       }
-      if (j.kind === 'add') {   // 排隊期間改過名 → 用現在的姓名建
+      var sendName = j.name;
+      if (j.kind === 'add') {   // 排隊期間改過名 → 用現在的姓名建；給打卡端的是原字串（待辦單格子裡的 authSafeCell_ 前導單引號不外送）
         var nm = clkStaffName_(staff[j.emp_no]);
-        if (nm && nm !== j.name) j.name = authSafeCell_(nm);
+        if (nm) { sendName = nm; if (nm !== j.name && authSafeCell_(nm) !== j.name) j.name = authSafeCell_(nm); }
+        else sendName = clkUnquote_(j.name);
+      }
+      if (j.state === 'running') {   // 上一次撿走後 5 分鐘沒回填（同步員當掉）：算一次失敗，才到得了紅燈
+        j.tries = (Number(j.tries) || 0) + 1;
+        j.last_error = 'lease_expired';
       }
       j.state = 'running';
       j.lease_until = clkNowText_(clkAddMinutes_(d, CLK_LEASE_MINUTES));
       clkJobSave_(j, d);
       var ex = clkJson_(j.expect_json, {});
       out.push({ job_id: j.job_id, kind: j.kind, emp_no: j.emp_no, store_code: j.store_code, emp_id: j.emp_id,
-        name: j.name, op_id: j.op_id, tries: j.tries, by: ex.by || '' });
+        name: sendName, op_id: j.op_id, tries: j.tries, by: ex.by || '' });
     }
     return { ok: true, data: { jobs: out, cancelled: cancelled } };
   });
 }
+
+/** 去掉 authSafeCell_ 為防公式加的前導單引號（只在後面接 = + - @ 時） */
+function clkUnquote_(v) { var t = String(v); return /^'[=+\-@]/.test(t) ? t.slice(1) : t; }
 
 function clkRetryDelay_(tries) {
   return tries <= CLK_RETRY_MINUTES.length ? CLK_RETRY_MINUTES[tries - 1] : CLK_RETRY_LATER_MINUTES;
@@ -1071,7 +1130,7 @@ function clockOutboxDone_(job_id, result, now) {
       var maps = clkMaps_();
       if (j.kind === 'add') {
         var eid = clkEid_(result.emp_id);
-        if (!/^[A-Z0-9_-]{1,32}$/.test(eid)) return clkFail_(j, 'bad_input', '打卡端沒有回有效的打卡編號', false, d);
+        if (!/^[A-Za-z0-9_-]{1,32}$/.test(eid)) return clkFail_(j, 'bad_input', '打卡端沒有回有效的打卡編號', false, d);
         var existing = clkMapFind_(maps, j.store_code, eid);
         if (existing && existing.emp_no !== j.emp_no) return clkFail_(j, 'conflict', '這個打卡編號已經對給別人', false, d);
         var other = maps.filter(function (m) { return m.emp_no === j.emp_no && m.store_code === j.store_code && m.state === 'confirmed' && m.emp_id !== eid; });
@@ -1199,7 +1258,9 @@ function clockRosterApply_(store_code, rows, payrollNames, now) {
     // 薪資主檔姓名一致檢查（B8b）
     var payrollDiff = [];
     (Array.isArray(payrollNames) ? payrollNames : []).forEach(function (p) {
-      if (!p || clkCode_(p.store) !== store) return;
+      // 薪資模組的門市代碼（如 SSLGF）≠ 契約 store_code（gf）：用 clock_stores.payroll_store 對；該店沒填才退回比 store_code
+      var want = stfStr_(st.payroll_store).toUpperCase() || store.toUpperCase();
+      if (!p || stfStr_(p.store).toUpperCase() !== want) return;
       var r = inRoster[clkEid_(p.emp_id)];
       if (r && clkTruthy_(r.active) && clkNormName_(r.name) !== clkNormName_(p.name)) {
         payrollDiff.push({ emp_id: clkEid_(p.emp_id), roster_name: stfStr_(r.name), payroll_name: stfStr_(p.name) });
@@ -1244,7 +1305,11 @@ function clockDailyApply_(today) {
     clkStaffAll_().forEach(function (s) {
       if (!s.last || s.last >= todayText || clkStaffStatus_(s) === 'disabled') return;
       var res = clkDisableStaff_(s, 'daily', 'last_day', d);
-      if (!res.ok) { out.disable_errors.push({ emp_no: s.emp, code: res.code }); return; }
+      if (!res.ok) {
+        out.disable_errors.push({ emp_no: s.emp, code: res.code });
+        stfLog_(s.emp, 'disable_failed', 'daily', res.code || '');   // 首頁 alerts.leave_overdue 也會列出，直到處理好
+        return;
+      }
       out.disabled.push(s.emp);
       needDeactivate(s.emp, out.jobs);
     });
@@ -1430,7 +1495,7 @@ function clockAutoSupportRecord_(params, now) {
   return clkWithLock_(function () {
     var p = params || {};
     var b = clkCode_(p.store_code), eid = clkEid_(p.emp_id);
-    if (!/^[A-Z0-9_-]{1,32}$/.test(eid)) return clkErr_('bad_input', CLK_MSG.BAD_INPUT);
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(eid)) return clkErr_('bad_input', CLK_MSG.BAD_INPUT);
     var d = clkDate_(now);
     var maps = clkMaps_();
     var existing = clkMapFind_(maps, b, eid);
@@ -1483,7 +1548,13 @@ function clkAfterConfirm_(empNo, oldUnit, newUnit, byLabel) {
     return { mode: 'add' };
   } catch (e) {
     console.error('[clkAfterConfirm_] ' + (e && e.message ? e.message : e));
-    return null;
+    try {   // 不讓確認失敗，但留痕跡：staff_log 與 alerts.transfer_failed（直到他有主店對照或進行中的 add 單）
+      stfLog_(stfNormEmp_(empNo), 'transfer_add_failed', 'system', '調店開單失敗');
+      var tf = clkGetState_(CLK_PROP_TRANSFER_FAIL, { items: [] });
+      if (tf.items.indexOf(stfNormEmp_(empNo)) === -1) tf.items.push(stfNormEmp_(empNo));
+      clkSetState_(CLK_PROP_TRANSFER_FAIL, tf);
+    } catch (e2) { console.error('[clkAfterConfirm_] 記錄失敗 ' + e2); }
+    return { mode: 'failed', warning: 'transfer_add_failed' };
   }
 }
 
@@ -1583,7 +1654,7 @@ function handleClockAlerts_(token) {
   var a = clkNeedActor_(token);
   if (!a.ok) return a;
   var empty = { counts: {}, outbox_failed: [], unmapped: [], left_but_active: [], pending_confirm: { count: 0, items: [] }, no_home_map: [],
-    name_diff: [], payroll_diff: [], transfer_ask: [], needs_hq_count: 0, candidates_count: 0, last_sync: {} };
+    name_diff: [], payroll_diff: [], leave_overdue: [], home_stopped: [], transfer_failed: [], transfer_ask: [], needs_hq_count: 0, candidates_count: 0, last_sync: {} };
   if (!clkSheetsReady_()) return { ok: true, data: empty };
   var staff = clkStaffIndex_(), maps = clkMaps_(), jobs = clkJobs_(), stores = clkStores_();
   var today = clkTodayOf_(new Date());
@@ -1594,7 +1665,7 @@ function handleClockAlerts_(token) {
   };
   var out = empty;
   out.outbox_failed = jobs.filter(function (j) {
-    var bad = j.state === 'failed' || (j.state === 'pending' && j.tries >= CLK_ALERT_TRIES);
+    var bad = j.state === 'failed' || (CLK_OPEN_STATES.indexOf(j.state) !== -1 && j.tries >= CLK_ALERT_TRIES);
     return bad && (j.emp_no ? mine(j.emp_no) : a.isHq);
   }).map(function (j) { return { job_id: j.job_id, kind: j.kind, emp_no: j.emp_no, store_code: j.store_code, state: j.state, tries: j.tries, last_error: stfStr_(j.last_error) }; });
   out.left_but_active = maps.filter(function (m) {
@@ -1603,7 +1674,16 @@ function handleClockAlerts_(token) {
   }).map(function (m) { return { emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id }; });
   var sug = maps.filter(function (m) { return m.state === 'suggested' && m.emp_no && mine(m.emp_no); });
   out.pending_confirm = { count: sug.length, items: sug.map(function (m) { return { emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id }; }) };
-  out.no_home_map = clkNoHomeMap_(clkStaffAll_(), maps, jobs, today).filter(function (s) { return mine(s.emp); }).map(function (s) { return s.emp; });
+  var staffAll = clkStaffAll_();
+  out.no_home_map = clkNoHomeMap_(staffAll, maps, jobs, today).filter(function (s) { return mine(s.emp); }).map(function (s) { return s.emp; });
+  // 離職日已過、卻還沒停用（連動停用失敗，例如帳號列遺失）
+  out.leave_overdue = staffAll.filter(function (s) { return s.last && s.last < today && clkStaffStatus_(s) !== 'disabled' && mine(s.emp); }).map(function (s) { return s.emp; });
+  // DZY 在職、沒登記離職，但主店打卡被停（例如店長在打卡端用舊按鈕停用）
+  out.home_stopped = maps.filter(function (m) {
+    var s = staff[m.emp_no];
+    return s && m.state === 'confirmed' && m.role === 'home' && m.roster_active === 'FALSE' && clkStaffStatus_(s) !== 'disabled' && !s.last && mine(m.emp_no);
+  }).map(function (m) { return { emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id }; });
+  out.transfer_failed = [];
   stores.forEach(function (st) {
     var ss = clkSyncState_(st.store_code);
     if (ss.at) out.last_sync[st.store_code] = ss.at;
@@ -1615,13 +1695,17 @@ function handleClockAlerts_(token) {
   });
   if (a.isHq) {
     out.transfer_ask = clkGetState_(CLK_PROP_TRANSFER_ASK, { items: [] }).items;
+    var noHome = {};
+    out.no_home_map.forEach(function (e) { noHome[e] = true; });
+    out.transfer_failed = (clkGetState_(CLK_PROP_TRANSFER_FAIL, { items: [] }).items || []).filter(function (e) { return noHome[e]; });
     var ms = clkGetState_(CLK_PROP_MAP_STATE, { candidates: [], needs_hq: [] });
     out.needs_hq_count = (ms.needs_hq || []).length;
     out.candidates_count = (ms.candidates || []).length;
   }
   out.counts = {
     outbox_failed: out.outbox_failed.length, unmapped: out.unmapped.length, left_but_active: out.left_but_active.length,
-    pending_confirm: out.pending_confirm.count, no_home_map: out.no_home_map.length, name_diff: out.name_diff.length,
+    pending_confirm: out.pending_confirm.count, no_home_map: out.no_home_map.length, leave_overdue: out.leave_overdue.length,
+    home_stopped: out.home_stopped.length, transfer_failed: out.transfer_failed.length, name_diff: out.name_diff.length,
     payroll_diff: out.payroll_diff.length, transfer_ask: out.transfer_ask.length, needs_hq: out.needs_hq_count, candidates: out.candidates_count
   };
   return { ok: true, data: out };
@@ -1656,4 +1740,12 @@ function clkKeepOrgOnClear_(v) {
   var s = clkStaffByEmp_(empNo);
   if (s && s.hire) return true;
   return clkMapsOf_(clkMaps_(), empNo).some(function (m) { return m.state === 'confirmed'; });
+}
+
+/** Staff.gs staffSetActive(true) 的掛勾：有 last_day 的人回提示文字（走復職），否則 null */
+function clkLeaveBlocksEnable_(empNo) {
+  if (!clkSheetsReady_()) return null;
+  var s = clkStaffByEmp_(empNo);
+  if (s && s.last) return '這位同仁登記過離職日（' + s.last + '），請用「復職」恢復，才會一併清掉離職日並恢復打卡';
+  return null;
 }

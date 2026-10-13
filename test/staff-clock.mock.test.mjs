@@ -206,7 +206,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const app = fresh();
   const { sb, sheets } = app;
   sb.setupStaff(); sb.setupStaff();
-  ok(sheets.clock_stores._rows()[0].join() === 'store_code,store_name,unit_code,enabled', 'B1 clock_stores 表頭逐字');
+  ok(sheets.clock_stores._rows()[0].join() === 'store_code,store_name,unit_code,enabled,payroll_store', 'B1 clock_stores 表頭逐字（含 payroll_store）');
   ok(sheets.staff_clock._rows()[0].join() === 'emp_no,store_code,emp_id,role,state,source,roster_active,last_punch,confirmed_by,confirmed_at,updated_at', 'B1 staff_clock 表頭逐字（spec §2.3）');
   ok(sheets.clock_outbox._rows()[0].join() === 'job_id,kind,emp_no,store_code,emp_id,name,op_id,expect_json,state,tries,next_at,lease_until,last_error,created_at,updated_at,done_at', 'B1 clock_outbox 表頭逐字（spec §2.4 v2）');
   const stores = sheets.clock_stores._rows().slice(1);
@@ -413,6 +413,8 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(sb.clockOutboxClaim_(nowT(3)).data.jobs.length === 0, 'B4 running 還沒過期（lease 內）不重撿');
   const reclaim = sb.clockOutboxClaim_(nowT(8));
   ok(reclaim.data.jobs.length === 1 && reclaim.data.jobs[0].job_id === jobId, 'B4 ★running 超過 5 分鐘視為可再撿');
+  ok(jr().tries === 1 && jr().last_error === 'lease_expired', 'FIX6 ★lease 過期被重撿：tries+1、last_error=lease_expired', jr());
+  setCell(app, 'clock_outbox', 1, 'tries', 0); setCell(app, 'clock_outbox', 1, 'last_error', '');   // 歸零，接著測失敗排程
   // 鎖
   const realLock = sb.LockService;
   sb.LockService = { getScriptLock: () => ({ tryLock: () => false, releaseLock() {} }) };
@@ -464,7 +466,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   // 唯一鍵：同一個打卡編號不能對給兩個人；同人同店不能有兩個 confirmed
   const c2 = post(sb, 'staffCreateByUnit', { name: '單新人二', title: 'pt', hire_date: dayT(0), phone: '0933000112' }, mgr.token);
   sb.clockOutboxClaim_(nowT(1));
-  const dupId = sb.clockOutboxDone_(c2.data.job_id, { ok: true, emp_id: 't7' }, nowT(2));
+  const dupId = sb.clockOutboxDone_(c2.data.job_id, { ok: true, emp_id: 'T7' }, nowT(2));
   ok(dupId.data.state === 'failed' && mapOf(app, c2.data.emp_no).length === 0 && maps(app).filter((x) => x.store_code === 'mztgf' && x.emp_id === 'T7').length === 1, 'B4 ★唯一鍵 store_code+emp_id：同一打卡編號不會對給兩個人', dupId);
   // 驗證打卡端回的編號
   const c3 = post(sb, 'staffCreateByUnit', { name: '單新人三', title: 'pt', hire_date: dayT(0), phone: '0933000113' }, mgr.token);
@@ -1088,6 +1090,172 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const rj2 = post(sb, 'unitReject', { emp_no: emp, reason: '資料不對' }, mgr.token);
   const g = staffOf(app, emp);
   ok(rj2.ok && g.status === 'unclaimed' && g.unit === '' && g.brand === '' && g.title === '' && g.dept === '', 'KEEP (b) 一般同仁（無到職日、無對照）被退回：組織四欄照舊清空（第一期行為不變）', g);
+})();
+
+// ============================================================
+// Fable 第 1 輪審查修正（issue #1：1、2、3、4、5、6、7、10、11、14）
+// ============================================================
+(() => {
+  // ── 1 薪資門市代碼 ──
+  const app = fresh();
+  const { sb, sheets, tok } = app;
+  const gfRows = sheets.clock_stores._rows();
+  ok(gfRows[0][4] === 'payroll_store' && gfRows.find((r) => r[0] === 'gf')[4] === 'SSLGF' && gfRows.filter((r) => r[0] !== 'gf' && r[0] !== 'store_code').every((r) => r[4] === ''), 'FIX1 clock_stores.payroll_store：光復＝SSLGF（Payroll.gs PAY_DEFAULT_STORE），其他五店查不到留空');
+  const p = claimApprove(app, '薪光復甲', 'pw-fix1-pw-01', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+  giveMap(app, p.emp, 'gf', 'E5', 'home');
+  const real = sb.clockRosterApply_('gf', [rosterRow('E5', '薪光復甲')], [{ store: 'SSLGF', emp_id: 'E5', name: '薪光復甲打錯' }], nowT(0));
+  ok(real.data.payroll_diff === 1 && post(sb, 'clockAlerts', {}, tok).data.payroll_diff[0].payroll_name === '薪光復甲打錯', 'FIX1 ★用真實薪資代碼 SSLGF 餵：姓名不同被抓到', real);
+  const fake = sb.clockRosterApply_('gf', [rosterRow('E5', '薪光復甲')], [{ store: 'gf', emp_id: 'E5', name: '薪光復甲打錯' }], nowT(1));
+  ok(fake.data.payroll_diff === 0, 'FIX1 用契約 store_code（gf）餵不再算數（薪資代碼才對）');
+  // 舊試算表（clock_stores 只有 4 欄）→ setupStaff 補第 5 欄並把光復補 SSLGF
+  const old = load(freshSeed(HASHER));
+  old.sb.setupStaff();
+  old.sheets.clock_stores._data.forEach((r) => { r.length = 4; });
+  old.sb.setupStaff();
+  ok(old.sheets.clock_stores._rows()[0][4] === 'payroll_store' && old.sheets.clock_stores._rows().find((r) => r[0] === 'gf')[4] === 'SSLGF' && old.sheets.clock_stores._rows().length === 7, 'FIX1 舊 4 欄 clock_stores 補欄不重複列');
+
+  // ── 2 姓名上限 20 ──
+  const mgr = claimApprove(app, '修店長', 'mgr-fix-pw-01', MZT_GF('sm'));
+  const body = (o) => Object.assign({ name: '修新人', title: 'pt', hire_date: dayT(0), phone: '0911000222' }, o || {});
+  const n20 = '二'.repeat(20), n21 = '二'.repeat(21);
+  ok(post(sb, 'staffCreateByUnit', body({ name: n20 }), mgr.token).ok, 'FIX2 20 字可以');
+  const r21 = post(sb, 'staffCreateByUnit', body({ name: n21, phone: '0911000223' }), mgr.token);
+  ok(r21.ok === false && r21.code === 'bad_input' && r21.error.indexOf('20') !== -1, 'FIX2 ★新增 21 字姓名 → bad_input（不會建出打卡永遠建不出來的人）', r21);
+  const crew = post(sb, 'staffCreateByUnit', body({ name: '修改名', phone: '0911000224' }), mgr.token);
+  ok(post(sb, 'staffRename', { emp_no: crew.data.emp_no, name: n21 }, tok).code === 'bad_input', 'FIX2 ★改名 21 字被擋');
+  ok(post(sb, 'staffRename', { emp_no: crew.data.emp_no, name: '三'.repeat(20) }, tok).ok, 'FIX2 改成 20 字 OK');
+  app.props.CLOCK_MAP_STATE = JSON.stringify({ candidates: [{ key: 'gf:LONG1', name: n21, entries: [{ store_code: 'gf', emp_id: 'LONG1' }] }], needs_hq: [], excluded: [] });
+  ok(post(sb, 'clockCandidateCreate', { candidate_key: 'gf:LONG1', unit: 'mala-gf', title: 'pt' }, tok).code === 'bad_input', 'FIX2 候選新人姓名超過 20 字不建');
+
+  // ── 3 結案 ──
+  const c = post(sb, 'staffCreateByUnit', body({ name: '修結案', phone: '0911000225' }), mgr.token);
+  sb.clockOutboxClaim_(nowT(1));
+  sb.clockOutboxDone_(c.data.job_id, { ok: false, error: 'duplicate_name', message: '同名' }, nowT(2));
+  ok(jobs(app).find((j) => j.job_id === c.data.job_id).state === 'failed', 'FIX3 （一張永久失敗的單）');
+  ok(post(sb, 'clockOutboxCancel', { job_id: c.data.job_id }, mgr.token).code === 'no_perm', 'FIX3 店長不能結案');
+  ok(post(sb, 'clockOutboxCancel', { job_id: jobs(app)[0].job_id }, tok).code === 'not_retryable', 'FIX3 沒卡住的單不能取消');
+  const cc = post(sb, 'clockOutboxCancel', { job_id: c.data.job_id, reason: '打卡端已有同名' }, tok);
+  const cj = jobs(app).find((j) => j.job_id === c.data.job_id);
+  ok(cc.ok && cj.state === 'cancelled' && cj.last_error.indexOf('打卡端已有同名') !== -1 && cj.done_at !== '', 'FIX3 ★總部取消 failed 單：轉 cancelled、記原因', cj);
+  ok(!post(sb, 'clockAlerts', {}, tok).data.outbox_failed.some((x) => x.job_id === c.data.job_id), 'FIX3 取消後從首頁紅燈消失');
+  ok(sheets.staff_log._rows().some((r) => r[2] === 'outbox_cancel'), 'FIX3 寫 staff_log');
+  ok(post(sb, 'clockOutboxCancel', { job_id: c.data.job_id }, tok).code === 'not_retryable', 'FIX3 取消過的不能再取消');
+})();
+
+(() => {
+  // ── 4 舊「啟用」按鈕 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const w = claimApprove(app, '修復職', 'pw-fix4-pw-01', MZT_GF('pt'));
+  giveMap(app, w.emp, 'mztgf', 'F4', 'home');
+  post(sb, 'staffLeave', { emp_no: w.emp, last_day: dayT(-1) }, tok);
+  sb.clockDailyApply_(dayT(0));
+  ok(staffOf(app, w.emp).status === 'disabled', 'FIX4 （離職連動已停用）');
+  const old = post(sb, 'staffSetActive', { emp_no: w.emp, active: true }, tok);
+  ok(old.ok === false && old.code === 'use_reinstate' && old.error.indexOf('復職') !== -1 && staffOf(app, w.emp).status === 'disabled', 'FIX4 ★有 last_day 的人用舊「啟用」被擋並導向復職', old);
+  ok(sb.clockDailyApply_(dayT(1)).data.disabled.length === 0, 'FIX4 沒被啟用，也沒有重複停用');
+  ok(post(sb, 'staffReinstate', { emp_no: w.emp, stores: ['mztgf'] }, tok).ok && staffOf(app, w.emp).last_day === '', 'FIX4 走復職：清 last_day');
+  ok(sb.clockDailyApply_(dayT(2)).data.disabled.length === 0 && staffOf(app, w.emp).status !== 'disabled', 'FIX4 ★復職後隔天不再停用');
+  // 沒有 last_day 的（人資手動停用）舊按鈕照常可啟用
+  const z = claimApprove(app, '修手動', 'pw-fix4-pw-02', MZT_GF('pt'));
+  post(sb, 'staffSetActive', { emp_no: z.emp, active: false }, tok);
+  ok(post(sb, 'staffSetActive', { emp_no: z.emp, active: true }, tok).ok, 'FIX4 沒登記離職日的舊啟用照常');
+})();
+
+(() => {
+  // ── 5 停用失敗進 alerts ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const w = claimApprove(app, '修停失敗', 'pw-fix5-pw-01', MZT_GF('pt'));
+  giveMap(app, w.emp, 'mztgf', 'F5', 'home');
+  post(sb, 'staffLeave', { emp_no: w.emp, last_day: dayT(-1) }, tok);
+  setStaff(app, w.emp, 'user_id', 'u9999');   // users 列遺失
+  const d = sb.clockDailyApply_(dayT(0));
+  ok(d.data.disable_errors.length === 1 && staffOf(app, w.emp).status !== 'disabled', 'FIX5 （停用失敗，人仍在職）', d);
+  const al = post(sb, 'clockAlerts', {}, tok);
+  ok(al.data.leave_overdue.join() === w.emp && al.data.counts.leave_overdue === 1, 'FIX5 ★停用失敗的人進 alerts.leave_overdue', al.data);
+  ok(sheets_has(app, 'disable_failed'), 'FIX5 ★寫 staff_log（disable_failed）');
+  ok(post(sb, 'clockAlerts', {}, claimApprove(app, '修店長五', 'mgr-fix5-pw-1', MZT_GF('sm')).token).data.leave_overdue.join() === w.emp, 'FIX5 店長看得到自己單位的');
+  function sheets_has(a, ev) { return a.sheets.staff_log._rows().some((r) => r[2] === ev); }
+})();
+
+(() => {
+  // ── 6 lease 過期連續三次進紅燈 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const mgr = claimApprove(app, '修店長六', 'mgr-fix6-pw-1', MZT_GF('sm'));
+  const c = post(sb, 'staffCreateByUnit', { name: '修掛單', title: 'pt', hire_date: dayT(0), phone: '0911000226' }, mgr.token);
+  const jr = () => jobs(app).find((j) => j.job_id === c.data.job_id);
+  sb.clockOutboxClaim_(nowT(1));
+  for (let i = 1; i <= 3; i++) sb.clockOutboxClaim_(nowT(1 + i * 6));
+  ok(jr().tries === 3 && jr().state === 'running' && jr().last_error === 'lease_expired', 'FIX6 連續三次 lease 過期：tries=3', jr());
+  ok(post(sb, 'clockAlerts', {}, tok).data.outbox_failed.some((x) => x.job_id === c.data.job_id), 'FIX6 ★進 alerts（running 且 tries≥3）');
+  ok(post(sb, 'clockOutboxRetry', { job_id: c.data.job_id }, tok).ok && jr().state === 'pending' && jr().tries === 0, 'FIX6 卡住的單可手動重試');
+})();
+
+(() => {
+  // ── 7 DZY 在職但主店打卡已停 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const w = claimApprove(app, '修主店停', 'pw-fix7-pw-01', MZT_GF('pt'));
+  const v = claimApprove(app, '修支援停', 'pw-fix7-pw-02', MZT_GF('pt'));
+  giveMap(app, w.emp, 'mztgf', 'F7', 'home'); giveMap(app, v.emp, 'mztgf', 'F8', 'home'); giveMap(app, v.emp, 'mztjs', 'F9', 'support');
+  sb.clockRosterApply_('mztgf', [rosterRow('F7', '修主店停', { active: false }), rosterRow('F8', '修支援停')], undefined, nowT(0));
+  sb.clockRosterApply_('mztjs', [rosterRow('F9', '修支援停', { active: false })], undefined, nowT(0));
+  const al = post(sb, 'clockAlerts', {}, tok);
+  ok(al.data.home_stopped.length === 1 && al.data.home_stopped[0].emp_no === w.emp && al.data.counts.home_stopped === 1, 'FIX7 ★在職者主店打卡被停 → alerts.home_stopped（支援店停不算）', al.data.home_stopped);
+  post(sb, 'staffLeave', { emp_no: w.emp, last_day: dayT(3) }, tok);
+  ok(post(sb, 'clockAlerts', {}, tok).data.home_stopped.length === 0, 'FIX7 已登記離職的人不算異常');
+})();
+
+(() => {
+  // ── 10 打卡編號大小寫以名冊為準 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const mgr = claimApprove(app, '修店長十', 'mgr-fix10-pw-1', MZT_GF('sm'));
+  const c = post(sb, 'staffCreateByUnit', { name: '修小寫', title: 'pt', hire_date: dayT(0), phone: '0911000227' }, mgr.token);
+  sb.clockOutboxClaim_(nowT(1));
+  sb.clockOutboxDone_(c.data.job_id, { ok: true, emp_id: 'e12x' }, nowT(2));
+  ok(mapOf(app, c.data.emp_no)[0].emp_id === 'e12x', 'FIX10 ★平台不改打卡編號大小寫');
+  post(sb, 'staffLeave', { emp_no: c.data.emp_no, last_day: dayT(-1) }, tok);
+  sb.clockDailyApply_(dayT(0));
+  const cl = sb.clockOutboxClaim_(nowT(3));
+  ok(cl.data.jobs.length === 1 && cl.data.jobs[0].emp_id === 'e12x', 'FIX10 deactivate 單送給同步員的編號與名冊原字串一致', cl);
+  const up = giveMap, other = claimApprove(app, '修大寫', 'pw-fix10-pw-02', MZT_GF('pt'));
+  up(app, other.emp, 'mztgf', 'E12X', 'home');
+  ok(maps(app).filter((m) => m.emp_id.toLowerCase() === 'e12x').length === 2, 'FIX10 大小寫不同視為不同編號（與打卡端比對一致）');
+})();
+
+(() => {
+  // ── 11 調店開單例外要留痕 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const t = claimApprove(app, '修調店', 'pw-fix11-pw-01', MZT_GF('pt'));
+  giveMap(app, t.emp, 'mztgf', 'T11', 'home');
+  const ti = app.sheets.staff._data.findIndex((r) => r[0] === t.emp);
+  const head = app.sheets.staff._data[0];
+  ['p_brand', 'p_unit', 'p_title'].forEach((h, i) => { app.sheets.staff._data[ti][head.indexOf(h)] = ['mzt', 'mzt-js', 'pt'][i]; });
+  const orig = sb.clkEnqueue_;
+  sb.clkEnqueue_ = () => { throw new Error('模擬寫單失敗'); };
+  const cf = post(sb, 'staffConfirm', { emp_no: t.emp }, tok);
+  sb.clkEnqueue_ = orig;
+  ok(cf.ok && staffOf(app, t.emp).unit === 'mzt-js', 'FIX11 確認照常成功');
+  ok(app.sheets.staff_log._rows().some((r) => r[1] === t.emp && r[2] === 'transfer_add_failed'), 'FIX11 ★開單失敗寫 staff_log（transfer_add_failed）');
+  const al = post(sb, 'clockAlerts', {}, tok);
+  ok(al.data.transfer_failed.join() === t.emp && al.data.counts.transfer_failed === 1, 'FIX11 ★alerts.transfer_failed 看得到', al.data);
+})();
+
+(() => {
+  // ── 14 送給打卡端的姓名不帶前導單引號 ──
+  const app = fresh();
+  const { sb } = app;
+  const mgr = claimApprove(app, '修店長十四', 'mgr-fix14-pw-1', MZT_GF('sm'));
+  const c = post(sb, 'staffCreateByUnit', { name: '-B修加註', title: 'pt', hire_date: dayT(0), phone: '0911000228' }, mgr.token);
+  const cell = jobs(app).find((j) => j.job_id === c.data.job_id).name;
+  ok(cell === "'-B修加註", 'FIX14 （待辦單格子內為了防公式有前導單引號）', cell);
+  const cl = sb.clockOutboxClaim_(nowT(1));
+  ok(cl.data.jobs[0].name === '-B修加註', 'FIX14 ★claim 給同步員的姓名是原字串，不帶單引號', cl.data.jobs[0]);
+  ok(staffOf(app, c.data.emp_no).name === '-B修加註', 'FIX14 staff 姓名本身是原字串');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

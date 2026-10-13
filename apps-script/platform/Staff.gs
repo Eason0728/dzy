@@ -917,6 +917,11 @@ function handleStaffSetActive_(token, payload) {
   var userRow = findUsrRowById_(stfStr_(t.v[STF_COL.user_id]));
   if (!userRow) return { ok: false, error: STF_MSG.NOT_FOUND };
   var usersSheet = stfSheet_(USR_SHEET_USERS);
+  // 員工名單統一：登記過離職日的人用舊「啟用」會被隔天 00:10 又停用——擋下，請走復職（staffReinstate，會清離職日並恢復打卡）
+  if (payload.active === true && typeof clkLeaveBlocksEnable_ === 'function') {
+    var blocked = clkLeaveBlocksEnable_(t.emp);
+    if (blocked) return { ok: false, error: blocked, code: 'use_reinstate' };
+  }
   if (payload.active === false) {
     if (t.status === 'disabled') return { ok: false, error: STF_MSG.BAD_STATE };
     t.v[STF_COL.prev_status] = t.status;

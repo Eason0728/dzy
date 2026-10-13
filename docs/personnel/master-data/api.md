@@ -34,7 +34,7 @@
 ## 1. 資料（新增／變更的分頁）
 表頭逐字如下（`setupStaff` 自動建立，只補不覆蓋；表頭不一致丟錯停下，action 回 `setup_failed`）。
 - `staff` 最右邊補兩欄（第 25、26 欄）：`hire_date`（到職日）、`last_day`（最後上班日，有值＝已登記離職）。原 24 欄不動。
-- `clock_stores`：`store_code, store_name, unit_code, enabled`。預設六列（`enabled=TRUE`）：
+- `clock_stores`：`store_code, store_name, unit_code, enabled, payroll_store`。`payroll_store`＝薪資模組自己的門市代碼（打卡 Payroll.gs 的 `PAY_DEFAULT_STORE`＝`SSLGF` 只對得上光復；其他五店的薪資代碼在各自 payroll_store 分頁資料裡，程式查不到，預設留空，總部查到後填入；留空時退回用 store_code 比對）。舊 4 欄表由 setupStaff 補欄並把光復補成 SSLGF。預設六列（`enabled=TRUE`）：
 
 | store_code | store_name | unit_code（依 org 預設單位對上，六個都查得到） |
 |---|---|---|
@@ -58,7 +58,7 @@
 ### 2.1 staffCreateByUnit — 店長／總部新增新人
 - 權限：店長（自己單位）、總部（任一單位）。
 - 輸入 `payload`：`{name, title, hire_date, phone, unit?, dept?}`
-  - `name` 必填 ≤30 字；`title` 職稱代碼（org，如 `pt`）；`hire_date` `yyyy-MM-dd`（2000-01-01 ~ 今天+365）；`phone` 09 開頭 10 碼。
+  - `name` 必填 **≤20 字**（會進打卡的姓名：staffCreateByUnit、clockCandidateCreate、staffRename 都是 20，與打卡端 svc_add 一致）；`title` 職稱代碼（org，如 `pt`）；`hire_date` `yyyy-MM-dd`（2000-01-01 ~ 今天+365）；`phone` 09 開頭 10 碼。
   - `unit`、`dept` **只有總部看**；店長夾帶的 `unit` 一律忽略（建在自己單位）。總部單位（有部門清單）時總部要給 `dept`。
 - 動作（同一支呼叫內寫完）：users 帳號＋staff 列（`status=unclaimed`，組織四欄直接填正式欄）＋（單位有對應打卡時）一張 `add` 單＋staff_log（`add_by_unit`，只寫單位代碼與 job_id）。DZY 編號＝全表（staff＋users）最大號 +1，寫入前再檢查 staff／users 都沒有該號，撞到整筆拒絕 `emp_conflict`。
 - 輸出：`{ok:true, data:{emp_no, job_id|null, unit, store_code|null}}`；單位沒對應打卡（例：美村）→ `job_id=null`。
@@ -125,6 +125,10 @@
 - 輸入：`{job_id}`。只有 `state=failed`，或 `pending 且 tries≥3` 的單可重試；重試＝回 pending、`next_at`＝現在、`tries` 歸零。
 - 輸出：`{job_id, state:'pending'}`。錯誤：`no_perm`、`no_job`、`not_retryable`。
 
+### 2.11b clockOutboxCancel — 結案（只有總部）
+- 輸入：`{job_id, reason?}`。只有 `failed`，或未完成（pending／running）且 `tries≥3` 的單可取消 → `cancelled`（記原因與 staff_log `outbox_cancel`），從首頁紅燈消失、不再擋 `clockMapBuild` 前置檢查。輸出 `{job_id, state:'cancelled'}`。錯誤：`no_perm`、`no_job`、`not_retryable`。
+- `clockOutboxRetry` 的可重試條件同步放寬為：`failed`，或未完成且 `tries≥3`。
+
 ### 2.12 clockOldHomeDecide — 調店後舊主店要不要停用（只有總部）
 - 輸入：`{emp_no, store_code, deactivate:boolean}`。待決定清單見 `clockAlerts.transfer_ask`。
 - `deactivate:true`：發一張 `deactivate` 單（`expect.staff=active, then=reject`）；成功後該對照 `roster_active=FALSE`、`state=rejected`。`false`：保留（維持 support）。兩者都從待決定清單移除。
@@ -149,6 +153,9 @@
   - `left_but_active:[{emp_no,store_code,emp_id}]`：DZY 已離職但某家打卡仍在職。
   - `pending_confirm:{count, items:[{emp_no,store_code,emp_id}]}`：待確認（suggested）對照。
   - `no_home_map:[emp_no]`：打卡單位在職者沒有 home 對照、也沒有進行中的 add 單。
+  - `leave_overdue:[emp_no]`：離職日已過卻還沒停用（連動停用失敗，如帳號列遺失；同時寫 staff_log `disable_failed`）。
+  - `home_stopped:[{emp_no,store_code,emp_id}]`：DZY 在職、沒登記離職，但主店 confirmed 對照 `roster_active=FALSE`（例如打卡端店長用舊按鈕停用）。
+  - `transfer_failed:[emp_no]`：調店確認時開 add 單失敗（總部才有；他有主店或進行中的 add 單後消失；同時寫 staff_log `transfer_add_failed`）。
   - `name_diff:[{emp_no,store_code,emp_id}]`：打卡名冊姓名≠管理系統姓名（改名後）。
   - `payroll_diff:[{store_code,emp_id,roster_name,payroll_name}]`：薪資主檔姓名≠打卡名冊姓名，請會計改成一致（總部才有）。
   - `transfer_ask:[{emp_no,store_code}]`、`needs_hq_count`、`candidates_count`（總部才有）。
@@ -173,7 +180,8 @@ pending/running ──claim 時重驗不過──► cancelled（不送）
 ### 3.2 clockOutboxClaim_(now, limit?, kinds?)
 - 撿 `state=pending 且 next_at≤now`，或 `state=running 且 lease_until<now` 的單（最多 `limit`，預設 10、上限 50；`kinds` 選填，例 `['link','build']`，不在清單的 kind 不碰、保持 pending）。
 - 先**重驗 expect_json**（見 3.3）；不通過 → `cancelled`（`last_error` 寫原因、`done_at`），不回傳。
-- 通過 → `running`、`lease_until`＝now+5 分鐘。`add` 單若排隊期間改過名，`name` 換成現在的姓名。
+- 通過 → `running`、`lease_until`＝now+5 分鐘。若這張單是 running 且 lease 已過期（上一次撿走後沒回填），重撿時 `tries+1`、`last_error='lease_expired'`，連續三次會進 `outbox_failed` 紅燈（不會無限重撿而無人知道）。
+- 回給同步員的 `name`（add）一律是原字串；待辦單格子內為防公式而加的前導單引號不外送。`add` 單若排隊期間改過名，`name` 換成現在的姓名。
 - 輸出：`{ok:true, data:{jobs:[{job_id, kind, emp_no, store_code, emp_id, name, op_id, tries, by}], cancelled:[job_id…]}}`。
 - 同步員依 kind 打對應的打卡 svc：
   - `add`→`svc_add {name, op_id, created_by:'管理系統:'+by}`；`deactivate`→`svc_set_active {emp_id, active:false, op_id, by}`；`reactivate`→`svc_set_active {…active:true…}`；`link`→`svc_link {emp_id}`；`build`→對每個啟用的店 `svc_roster`，彙整成 `{store_code:[rows]}` 呼叫 `clockMapBuildApply_`。
@@ -188,6 +196,7 @@ pending/running ──claim 時重驗不過──► cancelled（不送）
 
 ### 3.4 clockOutboxDone_(job_id, result, now?)
 - `result` 成功：`{ok:true, emp_id?(add), link_key?(link)}`；失敗：`{ok:false, error:<打卡端代碼|network|timeout|…>, message?, retry?:false}`。
+- 打卡編號（emp_id）以打卡名冊原字串為準：平台只去頭尾空白，**不改大小寫**（`E5`≠`e5`，和打卡端比對一致）。
 - 已經 `done`／`cancelled` 的單重複回填 → 不改任何東西，回 `{ok:true, data:{job_id,state,already:true}}`（冪等）。
 - 成功：
   - `add`：`emp_id` 須符合 `^[A-Z0-9_-]{1,32}$`（不分大小寫，存成大寫）；寫 `staff_clock`＝`home／created／confirmed／roster_active=TRUE`（已有同鍵 suggested／rejected 列則改成 confirmed）。同鍵已對給別人、或該人此店已有別的 confirmed → 單轉 `failed`（`conflict`）。若 expect 有 `demote_old`（調店）：此人其他店的 home 改 support，並進 `transfer_ask`。
@@ -230,6 +239,9 @@ pending/running ──claim 時重驗不過──► cancelled（不送）
 - Check（唯讀）→ `{ok:true, data:{allowed:boolean, reason?, emp_no?, name?, store_code?}}`。全部成立才 `allowed:true`：來源對照 confirmed、對到的 DZY 在職且 `last_day` 空白、B 店啟用且≠來源店、B 店沒有此人的 rejected／停用（`roster_active=FALSE`）對照、B 店沒有已生效或待確認對照。
   `reason`：`bad_input`｜`not_ready`｜`store_disabled`｜`same_store`｜`source_not_confirmed`｜`staff_left`｜`leave_registered`｜`removed_before`｜`already_mapped`｜`suggested_exists`。**mini 只有 allowed:true 才可以用 B 店金鑰呼叫 svc_add**（`created_by`＝`LINE 自動（首次支援）`、帶 src_*）。
 - Record：同組再把關一次（防止檢查到寫入之間 DZY 被停用等）；寫 `support／auto_support／confirmed／roster_active=TRUE`、`confirmed_by=LINE 自動（首次支援）`。同一組重送冪等（回 `already:true`）。輸出 `{emp_no, store_code, emp_id}`。錯誤：`bad_input`、`not_allowed`（含 reason）、`conflict`（此編號已對給別人）。
+
+## 3.9 第一期 staffSetActive(true) 的限制
+有 `last_day` 的人（登記過離職）用舊「啟用」會被擋：`{ok:false, code:'use_reinstate', error:'…請用「復職」恢復…'}`，請走 `staffReinstate`（清 last_day＋恢復打卡）。沒有 last_day 的人（人資手動停用）舊啟用照常。
 
 ## 4. Hook（Staff.gs 內的小改動，沒有 StaffClock.gs 時自動略過）
 - `setupStaff` 結尾呼叫 `clkSetup_`（建三分頁＋staff 右側欄）。
