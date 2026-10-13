@@ -57,6 +57,7 @@ var CLK_PERMANENT_ERRORS = ['unauthorized', 'bad_version', 'bad_input', 'duplica
 var CLK_PROP_MAP_STATE = 'CLOCK_MAP_STATE';        // 建對照結果：candidates／needs_hq／excluded
 var CLK_PROP_SYNC_PREFIX = 'CLOCK_SYNC_';           // + store_code：每店同步結果（未對照、姓名不同、薪資姓名不同）
 var CLK_PROP_TRANSFER_FAIL = 'CLOCK_TRANSFER_FAIL';  // 調店開 add 單失敗的 emp_no
+var CLK_PROP_HOME_PIN = 'CLOCK_HOME_PIN';           // 總部指定主店（釘選）：{emp_no: store_code}
 var CLK_PROP_TRANSFER_ASK = 'CLOCK_TRANSFER_ASK';   // 調店後待總部決定要不要停用舊店
 var CLK_CACHE_LINK_PREFIX = 'clk_link_';
 var CLK_PROP_SVC_KEY = 'BULLETIN_SVC_KEY';
@@ -358,16 +359,24 @@ function clkUnitConflict_() {
 /**
  * 這個人的主店。順序：
  * 1) DZY 單位對得到打卡店 → 用它（by:'unit'；單位有值的人以單位為準，不被打卡資料覆蓋）
- * 2) 單位空（第一期匯入、尚未認領）或對不到店 → 用打卡對照推斷（by:'infer'）：
+ * 2) 總部指定主店（clockSetHome 釘選，且該店仍有未停用的 confirmed 對照）→ 釘選的店（by:'pin'）
+ * 3) 單位空（第一期匯入、尚未認領）或對不到店 → 用打卡對照推斷（by:'infer'）：
  *    只在一家名冊在職（roster_active≠FALSE、對照未被退回）＝那家；多家＝last_punch 較近者；
  *    同日或都沒有 → 目前已是 home 的那家，再不然 store_code 字母序最前。
  *    ※ 平台目前只存每個對照的 last_punch（最近一次打卡日），沒有近 60 天次數／名冊建立日，所以用最近打卡日。
  * 回 {store, by}；推斷不出來 store＝''。
  */
+function clkPins_() { return clkGetState_(CLK_PROP_HOME_PIN, {}); }
+
 function clkHomeStoreFor_(s, maps) {
   var unit = clkStaffUnit_(s);
   var us = unit ? clkStoreOfUnit_(unit) : null;
   if (us) return { store: us.store_code, by: 'unit' };
+  // 總部指定（釘選）：該店仍有未停用的 confirmed 對照才算數，停用／rejected 時自動失效（不刪表）
+  var pin = clkPins_()[s.emp];
+  if (pin && maps.some(function (m) { return m.emp_no === s.emp && m.store_code === pin && m.state === 'confirmed' && m.roster_active !== 'FALSE'; })) {
+    return { store: pin, by: 'pin' };
+  }
   var best = {};
   maps.forEach(function (m) {
     if (m.emp_no !== s.emp || m.state === 'rejected' || m.roster_active === 'FALSE') return;
@@ -835,7 +844,7 @@ function clkMapRowView_(m, s, org, stores) {
   return { emp_no: m.emp_no, name: s ? clkStaffName_(s) : '', unit: o.unit, unit_name: o.unit_name,
     store_code: m.store_code, store_name: st ? st.store_name : '', emp_id: m.emp_id, role: m.role, state: m.state,
     source: m.source, roster_active: m.roster_active === 'TRUE' ? true : (m.roster_active === 'FALSE' ? false : null),
-    last_punch: m.last_punch };
+    last_punch: m.last_punch, pinned: clkPins_()[m.emp_no] === m.store_code };
 }
 function clkStoreIndex_() { var o = {}; clkStores_().forEach(function (s) { o[s.store_code] = s; }); return o; }
 function clkStaffIndex_() { var o = {}; clkStaffAll_().forEach(function (s) { o[s.emp] = s; }); return o; }
@@ -954,6 +963,46 @@ function handleClockMapDecide_(token, payload) {
   }
   stfLog_(emp, 'map_confirm', a.user.id, store + ':' + eid + ' ' + role);
   return { ok: true, data: { emp_no: emp, store_code: store, emp_id: eid, role: role, state: 'confirmed' } };
+}
+
+/**
+ * 總部指定主店（釘選）。payload：{emp_no, store_code}；store_code 空字串＝清除釘選。
+ * 該人在該店必須有 confirmed 對照（bad_input）。立刻把那店 confirmed 對照設 home、其他 confirmed 設 support；
+ * 不改 state、不發任何打卡單。釘選存 Script Property CLOCK_HOME_PIN；每日重算與 build／decide 都尊重它
+ * （單位對得到店的人仍以單位為準；釘選的對照被停用或 rejected 時自動失效）。
+ */
+function handleClockSetHome_(token, payload) {
+  var a = clkNeedHq_(token);
+  if (!a.ok) return a;
+  payload = payload || {};
+  var ready = clkReady_();
+  if (!ready.ok) return ready;
+  var s = clkStaffByEmp_(payload.emp_no);
+  if (!s) return clkErr_('not_found', CLK_MSG.NOT_FOUND);
+  var store = clkCode_(payload.store_code);
+  var d = new Date();
+  var pins = clkPins_();
+  if (!store) {
+    delete pins[s.emp];
+    clkSetState_(CLK_PROP_HOME_PIN, pins);
+    var n = clkRecomputeRoles_(s.emp, d, 'unpin');
+    stfLog_(s.emp, 'home_pin', a.user.id, 'clear');
+    return { ok: true, data: { emp_no: s.emp, store_code: '', pinned: false, role_changes: n } };
+  }
+  var maps = clkMaps_();
+  if (!clkStoreByCode_(store) || !maps.some(function (m) { return m.emp_no === s.emp && m.store_code === store && m.state === 'confirmed'; })) {
+    return clkErr_('bad_input', '這位同仁在這家店沒有生效的打卡對照，不能指定為主店');
+  }
+  pins[s.emp] = store;
+  clkSetState_(CLK_PROP_HOME_PIN, pins);
+  var changed = 0;
+  maps.forEach(function (m) {
+    if (m.emp_no !== s.emp || m.state !== 'confirmed') return;
+    var want = m.store_code === store ? 'home' : 'support';
+    if (m.role !== want) { m.role = want; clkMapSave_(m, d); changed++; }
+  });
+  stfLog_(s.emp, 'home_pin', a.user.id, store);
+  return { ok: true, data: { emp_no: s.emp, store_code: store, pinned: true, role_changes: changed } };
 }
 
 /** 總部確認候選新人是真人 → 補 DZY（unclaimed）＋把他在各店的打卡編號全部 confirmed。payload：{candidate_key, unit, title, dept?, hire_date?} */
