@@ -102,7 +102,7 @@
 | 打卡套數 | ~/mala-clock-in/tools/stores.json | 6 套：小辛辣光復、墨竹亭金山／光復／六張犁、總部、央廚 | 對照最多 6 個來源 | F1 |
 | 名冊欄位 | Code.gs:58-69 | emp_id, name, key, device_id…, active, removed_at, line_user_id…；**無主店欄**（歸屬＝在哪本試算表） | 主店只能由管理系統記 | F1、F6 |
 | 新增同仁程式 | 部署副本 程式碼.js:1076-1084 | mgr_add_employee 有鎖（2026-10-12 @148）、擋在職同名；取號＝最大號＋1 | 可重用同一套取號＋鎖 | F2 打卡端新端點包同一把鎖 |
-| repo 與部署不一致 | grep LockService repo Code.gs vs ~/mala-gas/*/程式碼.js | repo 正本**沒有**新增同仁的鎖，六個部署副本都有 | 打卡 repo 正本落後部署 | 改打卡前先把正本補齊（列入 plan 第一步） |
+| repo 與部署不一致（2026-10-13 更正） | `git branch -a --contains f8f4d31`；diff origin/main 與六店部署副本（去 CONFIG） | 鎖在 **origin/main** 上（f8f4d31）；先前比的是本機停留的 autoschedule-line 分支，誤判為正本落後。光復部署＝main＋註解差異；其他五店落後 main 的近期光復功能（正常的部署落差） | 正本＝origin/main，不需回寫 | 打卡端開發從 origin/main 開分支（另有 session 在 autoschedule-line 上工作，不碰它） |
 | 現有對外唯讀端點 | Liff.gs:476 export_tables | 用管理金鑰、回名冊（去掉 key、裝置、LINE） | 沒有給外部系統用的「服務金鑰」 | 打卡端要新增一把專用服務金鑰，不拿管理金鑰給 mini |
 | 薪資主檔 | Payroll.gs:14-30、1564、402 | key＝emp_id＋store；**請假與工時用姓名對**；跨店各店一筆 | 同名會算錯錢 | F2 擋同店同名；薪資搬家另案 |
 | 佈告欄同步 | dzy-bulletin gas/Code.js:56-99、Service.js:292 | 手動按鈕讀六店 roster；鍵＝emp_id＋來源店；跨店主店判定表 CLOCK_PRIMARY_ 約 7 筆（gitignore） | 可整段換成讀管理系統 | F6 |

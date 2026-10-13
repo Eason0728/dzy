@@ -2,8 +2,8 @@
 - 開案日：2026-10-13
 - 分級：完整
 - 分級依據：排程=是 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
-- 現在在：③-方案
-- 等 Eason：設計審結果網頁＋1 題（薪資姓名不一致怎麼處理）
+- 現在在：④
+- 等 Eason：無
 
 ## ① 查（2026-10-13）
 - 規劃稿 ~/dzy/docs/personnel/master-data-plan.md（v1，方向與六題已定）；記憶 staff-master-direction.md 已記方向
@@ -17,9 +17,17 @@
 - 2026-10-13 Eason：六題照推薦，第 4 題改依實際打卡
 - 發現：打卡 repo 正本 Code.gs 缺新增同仁的鎖（六個部署副本都有）＝正本落後部署
 
+## ④ 開發位置
+- 打卡端：worktree ~/mala-clock-in-svcstaff（分支 feature/svc-staff，從 origin/main）
+- 平台後端與前端：worktree ~/dzy-wt-staffmaster（分支 feature/staff-master）
+- 同步員：worktree ~/dzy-minikit-wt-jobs（分支 feature/staff-master-jobs）
+- 階段關審查紀錄：dzy repo issue #1（https://github.com/Eason0728/dzy/issues/1）
+
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
 |---|---|---|---|---|---|
+| 2026-10-13 | ④ 階段關 第 2 輪 | 打卡＋平台＋同步員＋前端 | 第 1 輪 13 條已驗證、#12 文件未齊；新 8 條（中 2、低 6），無高；分派修正中 | 2 | dzy issue #1 |
+| 2026-10-13 | ④ 階段關 第 1 輪 | 打卡 SvcStaff＋平台 StaffClock | Fable 14 條（高 2、中 5、低 7），測試全綠、6 個變異全被抓到；分派修正中 | 1 | dzy issue #1 |
 | 2026-10-13 | ③→④ 設計審 | requirements＋spec v1＋plan＋task | GPT 21 條（高 19、中 2）：20 條直接改進 spec v2／plan／task（spec §11 對照表）；第 13 條（薪資姓名對人）Fable 複核＝部分成立（特休／年度額度／補休／核定頁額度四處用薪資主檔姓名比請假姓名），處理方式待 Eason | 1 | spec.md §11；GPT 原文存 scratchpad，不進 repo |
 
 ## 落地清單

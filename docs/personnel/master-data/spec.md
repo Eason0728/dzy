@@ -82,7 +82,7 @@
 | svc_set_active | emp_id, active, op_id, by | 同 mgr_set_active 的寫法（active、removed_at、removed_by） | `{ok, emp_id, active}` |
 | svc_link | emp_id | 只回該人打卡連結金鑰 | `{ok, key}` |
 
-- 名冊右側補三欄 `src_store, src_emp_id, origin_op`（冪等以名冊上的 origin_op 為準，不另開 svc_ops 存結果；svc_link 不記任何結果）（ensureRosterHeaders 只補不改）：7A 建的人記他從哪家來，管理系統不必猜姓名就能對上。
+- 名冊右側補四欄 `src_store, src_emp_id, origin_op, last_op`（由 SvcStaff.gs 自己的 svcEnsureHeaders_ 補，不改 Code.gs 的 ROSTER_HEADERS；svc_add 冪等以 origin_op 為準、svc_set_active 以 last_op 為準，不另開 svc_ops 存結果；svc_link 不記任何結果）（ensureRosterHeaders 只補不改）：7A 建的人記他從哪家來，管理系統不必猜姓名就能對上。
 - 打卡連結金鑰**管理系統不存**：店長按「顯示打卡連結」→ 平台寫一張 kind=link 的待辦單 → 同步員打 svc_link → 金鑰放 CacheService 120 秒 → 前端 clockJobStatus 取到一次即刪。只給該單位店長與總部。（clock_outbox 的 kind 因此多一個 `link`，該列不寫金鑰。）
 - 掛法：Code.gs 分派表後面併入 `SVC_STAFF_HANDLERS`（照 LIFF／LINE_HUB 的三行寫法）。回退＝刪那三行＋檔案。
 
@@ -129,6 +129,7 @@ B 店值班核定頁：created_by 是「LINE 自動」的人，名字旁標「�
 - 打卡上在職但沒對照的人（含店長從值班核定舊按鈕新增的）
 - DZY 已離職但某家打卡仍在職
 - 待店長確認的對照數
+- （v2 審查新增）DZY 在職但主店打卡已停（home_stopped）、登記離職過期仍未停（leave_overdue）、調店開新店失敗（transfer_failed）；待辦單可由總部結案（clockOutboxCancel）
 連續 7 天零異常＝成功指標。
 
 ### 4.6 佈告欄改讀管理系統（F6）
@@ -159,7 +160,7 @@ B 店值班核定頁：created_by 是「LINE 自動」的人，名字旁標「�
 - mini 停機：新增按不了（第 3 題接受）；停機前已寫的待辦單開機後自動接著做；00:10 沒跑到→開機後第一次撿單時補跑當天的每日同步。
 
 ## 7. 不改的東西（逐條在驗收時確認）
-- 打卡：打卡、裝置、核定、薪資、出勤班表的程式一行不改；改動只有：新增 SvcStaff.gs、分派表三行、ensureRosterHeaders 多兩欄、LineHub not_bound 前一段（4.4）、值班核定頁的新增按鈕與「首次支援」標記。
+- 打卡：打卡、裝置、核定、薪資、出勤班表的程式一行不改；改動只有：新增 SvcStaff.gs、分派表三行、SvcStaff.gs 自己補四欄（不改 ROSTER_HEADERS）、LineHub not_bound 前一段（4.4）、值班核定頁的新增按鈕與「首次支援」標記。
 - 薪資：不動。跨店時數照舊會計手填。
 - 第一期：認領、登入、忘記密碼、審核流程不動。
 
@@ -195,7 +196,7 @@ B 店值班核定頁：created_by 是「LINE 自動」的人，名字旁標「�
 | 10 | 7A 後立刻離職會漏停 | 7A 由 mini 先寫對照（§4.4）＋第 9 條每日對帳 |
 | 11 | 7A 沒檢查 DZY 在職 | §4.4 mini 把關 |
 | 12 | 7A 被定位造假後主管退回卡，名冊仍在 | §4.4「不是本店支援，移除」→ rejected，不再自動加 |
-| 13 | 薪資用姓名對人，加註 -B 可能對不到 | Fable 複核＝**部分成立**：工時與當月請假扣薪用打卡名冊的姓名→編號，不會錯；但特休已用、年度假別額度、補休已用、核定頁額度四處拿**薪資主檔的姓名**直接比請假紀錄的姓名，薪資主檔沒加註就漏算，或算到同店以前同名的人。這是薪資既有缺陷，任何姓名不一致都會中。處理方式待 Eason（設計審網頁第 1 題） |
+| 13 | 薪資用姓名對人，加註 -B 可能對不到 | Fable 複核＝**部分成立**：工時與當月請假扣薪用打卡名冊的姓名→編號，不會錯；但特休已用、年度假別額度、補休已用、核定頁額度四處拿**薪資主檔的姓名**直接比請假紀錄的姓名，薪資主檔沒加註就漏算，或算到同店以前同名的人。這是薪資既有缺陷，任何姓名不一致都會中。Eason 2026-10-13 照推薦：本期只加每日檢查「打卡名冊姓名≠薪資主檔姓名」→ 首頁待辦請會計改成一字不差（光復打卡新增唯讀 svc_payroll_names，只回 store／emp_id／name，不回任何金額）；改成用編號對人放薪資搬家案 |
 | 14 | 沒有改名、調店、復職 | 新增 §4.8 |
 | 15 | svc_ops 會存到打卡金鑰 | §3 svc_add 不回 key、不存結果；svc_link 不記錄；測試全表找不到金鑰 |
 | 16 | 7A 要把六店金鑰放進光復 | §4.4 改經 mini；光復只持 HUB_SVC_KEY |
