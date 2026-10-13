@@ -1,0 +1,158 @@
+<title>員工名單統一需求</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* 版型：單欄文件，左側深色編號條呼應管理系統側邊欄；黃色＝要你決定的地方 */
+:root{
+  --bg:#faf8f6; --card:#ffffff; --ink:#231815; --soft:#5d554f; --muted:#8a817a; --line:#e6e0da;
+  --side:#1b1917; --side-ink:#f3eee8; --gold:#FABE00; --gold-soft:#fff6d6; --red:#c8402c; --red-soft:#fbe9e6; --ok:#2f6b3a; --ok-soft:#e8f2ea;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#161413; --card:#1f1c1a; --ink:#f1ebe5; --soft:#c9c0b8; --muted:#958b82; --line:#34302c;
+  --side:#0e0d0c; --side-ink:#f3eee8; --gold:#f5c22b; --gold-soft:#3a2f0e; --red:#ef7a64; --red-soft:#3a1f1a; --ok:#8fc19c; --ok-soft:#1d2a20; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161413; --card:#1f1c1a; --ink:#f1ebe5; --soft:#c9c0b8; --muted:#958b82; --line:#34302c;
+  --side:#0e0d0c; --side-ink:#f3eee8; --gold:#f5c22b; --gold-soft:#3a2f0e; --red:#ef7a64; --red-soft:#3a1f1a; --ok:#8fc19c; --ok-soft:#1d2a20; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.75;margin:0}
+.wrap{max-width:46rem;margin:0 auto;padding-inline:16px;padding-block:2.2rem 4rem}
+header{background:var(--side);color:var(--side-ink);border-radius:14px;padding:1.4rem 1.4rem 1.3rem}
+.eyebrow{font-size:.78rem;letter-spacing:.14em;color:var(--gold);font-weight:700}
+h1{font-size:clamp(1.6rem,5vw,2.1rem);font-weight:900;margin:.3rem 0 .5rem;line-height:1.25;text-wrap:balance}
+header p{margin:0;color:#cfc6bd}
+.id{font-family:var(--mono);font-weight:700;background:var(--gold);color:#231815;border-radius:6px;padding:0 .4em;white-space:nowrap}
+section{margin-top:2.4rem}
+h2{font-size:1.25rem;font-weight:900;margin:0 0 .8rem;text-wrap:balance}
+h2 small{font-size:.8rem;font-weight:500;color:var(--muted);margin-left:.4rem}
+p{margin:0 0 .8rem}
+.phases{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ph{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.8rem .9rem;min-width:0}
+.ph.now{border:2px solid var(--gold)}
+.ph b{display:block;font-size:.85rem;color:var(--muted)}
+.ph.now b{color:var(--ink)}
+.ph span{font-weight:700;font-size:.95rem}
+ol.flow{list-style:none;margin:0;padding:0;display:grid;gap:8px;counter-reset:s}
+ol.flow li{counter-increment:s;display:grid;grid-template-columns:2rem 1fr;gap:.6rem;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;align-items:start}
+ol.flow li::before{content:counter(s);width:1.7rem;height:1.7rem;border-radius:50%;background:var(--side);color:var(--side-ink);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;margin-top:.15rem}
+ol.flow li div{min-width:0}
+.note{font-size:.9rem;color:var(--soft)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55rem .75rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:700;color:var(--soft);background:color-mix(in srgb,var(--line) 35%,var(--card));white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.y{color:var(--ok);font-weight:700}.n{color:var(--muted)}
+.ladder{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:.3rem 0 .9rem}
+.ladder span{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:.15rem .7rem;font-size:.9rem;font-weight:500}
+.ladder i{color:var(--muted);font-style:normal}
+ul.plain{margin:0;padding-left:1.2rem}ul.plain li{margin:.25rem 0}
+.dec{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--ok);border-radius:10px;padding:.8rem 1rem}
+.dec ul{margin:0;padding-left:1.1rem}.dec li{margin:.35rem 0}
+.q{background:var(--gold-soft);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:10px;padding:.85rem 1rem;margin-top:10px}
+.q h3{margin:0 0 .3rem;font-size:1rem;font-weight:900}
+.q .rec{margin:.35rem 0 0;font-size:.93rem}
+.q .rec b{color:var(--ink)}
+.risk{background:var(--red-soft);border-radius:10px;padding:.75rem 1rem;font-size:.92rem;margin-top:.8rem}
+.reply{margin-top:2.4rem;background:var(--side);color:var(--side-ink);border-radius:14px;padding:1.1rem 1.3rem}
+.reply p{margin:.2rem 0}
+footer{margin-top:2rem;font-size:.8rem;color:var(--muted)}
+@media (max-width:560px){.phases{grid-template-columns:1fr}}
+.opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:.45rem}
+.opt{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:.2rem .6rem;font-size:.9rem}
+.opt.pick{border:2px solid var(--gold);font-weight:700}
+.opt.pick::before{content:"推薦　";color:var(--soft);font-weight:500;font-size:.8rem}
+.why{font-size:.88rem;color:var(--soft);margin:.4rem 0 0}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">鼎兆元管理系統・員工名單統一・需求請確認</div>
+  <h1>新人只建一次檔，打卡和佈告欄自動跟上</h1>
+  <p>同一位同仁現在有四五份名單、各自編號。這一期讓管理系統的 <span class="id">DZY</span> 名單當正本：店長在這裡建檔，打卡名冊自動多一筆；按離職，所有店的打卡一起停。</p>
+</header>
+
+<section>
+  <h2>請回答這 6 題 <small>回「照推薦」就好，要改哪題直接講</small></h2>
+
+  <div class="q"><h3>1. 這一期做到哪裡？</h3>
+    <div class="opts"><span class="opt pick">只做名單、打卡、佈告欄；薪資搬家另開一案</span><span class="opt">五步全做（含薪資搬家）</span></div>
+    <p class="why">薪資系統的請假和工時現在是「用姓名」對人，搬家要兩邊並行一個月逐人比對，工作量比這一期全部加起來還大。分開做，這一期一個月內就能讓店長用。</p></div>
+
+  <div class="q"><h3>2. 店長按離職後，打卡什麼時候停？</h3>
+    <div class="opts"><span class="opt pick">填最後上班日，那天過完自動停</span><span class="opt">按下立刻停</span></div>
+    <p class="why">例：阿明 10/31 最後一班，店長 10/25 就能先登記，31 號晚上下班卡照打，11/1 起打不了。立刻停的話，店長要記得等最後一天下班後才按。</p></div>
+
+  <div class="q"><h3>3. 公司那台 Mac mini 停機時，新人怎麼建檔？</h3>
+    <div class="opts"><span class="opt pick">接受等它恢復，另案讓它開機自己啟動</span><span class="opt">值班核定的「新增同仁」永久留著當備用</span></div>
+    <p class="why">管理系統現在跑在那台 Mac mini 上，而且它重開機後<b>不會自己啟動</b>，要有人照說明手動開。留備用按鈕的話，停機那天建的人不會有 DZY 編號，事後要靠每日檢查補回來。</p></div>
+
+  <div class="q"><h3>4. 跨店支援（例：光復的人去金山支援）誰能加？</h3>
+    <div class="opts"><span class="opt pick">只有總部</span><span class="opt">主店店長也可以</span></div>
+    <p class="why">加一家支援店，那家的打卡名冊就會多一筆，會影響薪資算在哪家店。</p></div>
+
+  <div class="q"><h3>5. 第一次對編號時，誰確認「打卡上的這個人＝DZY 的這個人」？</h3>
+    <div class="opts"><span class="opt pick">各店店長確認自己店的，總部處理對不上的</span><span class="opt">總部一個人全部確認</span></div>
+    <p class="why">系統先用姓名配好，但<b>沒有人按確認就不生效</b>。店長最認得自己店的人；同名、一人對到兩筆的，丟給總部。</p></div>
+
+  <div class="q"><h3>6. 打卡上還在職、但 113 人名單沒有的人怎麼辦？</h3>
+    <div class="opts"><span class="opt pick">一律補建 DZY 編號</span><span class="opt">逐人問總部要不要建</span></div>
+    <p class="why">例：第一期刻意沒放進 113 人的「9 月沒領薪 6 人」「央廚其他 11 人」，如果還在打卡名冊上，不補就沒有正本，離職時也停不到他。</p></div>
+</section>
+
+<section>
+  <h2>做出來會怎樣</h2>
+  <p><b>新人報到（店長做）</b></p>
+  <ol class="flow">
+    <li><div>店長在管理系統「同仁名單」按新增，填姓名、職稱、到職日、手機。主店固定是自己店。</div></li>
+    <li><div>系統給他一個 <span class="id">DZY128</span>，同時在光復打卡名冊自動建 <span class="id">E23</span>。</div></li>
+    <li><div>畫面直接出現新人的打卡連結和 LINE 綁定方式，店長當場交給他。當天就能打卡。</div></li>
+    <li><div>佈告欄自動看得到他。薪資照舊由會計補（薪資系統本來就會標「本月新增」）。</div></li>
+  </ol>
+  <p class="note">打卡那邊萬一沒建成功，首頁「待辦與異常」會出現「DZY128 打卡未建，按這裡重試」，不會有人默默打不了卡。</p>
+
+  <p style="margin-top:1.2rem"><b>擋掉的情況</b></p>
+  <ul class="plain">
+    <li>同一家店已經有在職的「王小明」，再建一個王小明會被擋，要加註區分（例：王小明-B）。原因：薪資系統用姓名對請假和工時，同名會算錯錢。</li>
+    <li>值班核定裡原本的「新增同仁」按鈕，改成提示「請到管理系統新增」，跑順兩週後拿掉。</li>
+  </ul>
+
+  <p style="margin-top:1.2rem"><b>一個人對多家店</b></p>
+  <div class="tbl"><table>
+    <tr><th>DZY 編號</th><th>主店打卡</th><th>支援店打卡</th></tr>
+    <tr><td><span class="id">DZY014</span></td><td>墨竹亭光復 MZTGF07</td><td>墨竹亭金山 MZTJS12</td></tr>
+    <tr><td><span class="id">DZY052</span></td><td>小辛辣光復 E07</td><td>（無）</td></tr>
+  </table></div>
+  <p class="note">上表是示意，不是真實對照。各店打卡編號照舊不換。</p>
+</section>
+
+<section>
+  <h2>這一期不做</h2>
+  <ul class="plain">
+    <li>薪資系統搬進管理系統（看第 1 題）</li>
+    <li>排班月曆版（舊的那套）：它的名單存放處會公開員工電話、生日、薪資，已經是另案在處理。新的營運系統自動排班本來就讀打卡名冊，這期做完它自動跟上。</li>
+    <li>依職稱開系統、表單簽核：照原排序在這一期之後。</li>
+  </ul>
+  <div class="risk"><b>開工前要先完成：</b>第一期的「同仁名單 → 匯入 113 人」還沒做。這一期的對照要拿那 113 人去配。</div>
+</section>
+
+<section>
+  <h2>先查過的事</h2>
+  <div class="tbl"><table>
+    <tr><th>查了什麼</th><th>結果</th><th>影響</th></tr>
+    <tr><td>打卡有幾套</td><td>6 套：小辛辣光復、墨竹亭金山／光復／六張犁、總部、央廚</td><td>對照最多 6 個來源</td></tr>
+    <tr><td>打卡名冊有沒有記主店</td><td>沒有，人在哪本表就算哪家</td><td>主店只能由管理系統記</td></tr>
+    <tr><td>佈告欄怎麼拿名單</td><td>靠手動按「打卡同步」，跨店的人靠一張手寫判定表決定主店</td><td>這張表和按鈕都會拿掉</td></tr>
+    <tr><td>打卡程式的存檔和線上版</td><td>線上版有「兩人同時新增不會撞號」的保護，存檔正本沒有</td><td>動打卡前先把正本補齊，不然一更新就把保護洗掉</td></tr>
+    <tr><td>各店真實名冊人數、能和 113 人對上幾成</td><td><b>還不知道</b>：我要唯讀抓六店名冊時被電腦的自動權限擋下</td><td>寫規格前需要這個數字（見下方）</td></tr>
+  </table></div>
+</section>
+
+<div class="reply">
+  <p><b>你回我兩件事就能往下走：</b></p>
+  <p>① 6 題的答案（「照推薦」也行）</p>
+  <p>② 准不准我唯讀抓一次六店打卡名冊來試配對（只讀不寫，結果只存在本機、不進公開的程式庫）</p>
+</div>
+<footer>正本：~/dzy/docs/personnel/master-data/requirements.md・2026-10-13 v1</footer>
+</div>
