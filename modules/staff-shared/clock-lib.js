@@ -107,7 +107,9 @@ export function personActions(p, viewer) {
     link: !!can && active && (Number(p.clock_total) || 0) > 0,
     // 改名、復職：只有總部
     rename: !!v.isHq && p.status !== 'unclaimed', // 未開通者走既有「改姓名」(staffEdit)
-    reinstate: !!v.isHq && p.status === 'disabled'
+    reinstate: !!v.isHq && p.status === 'disabled',
+    // 在主店建打卡帳號：只有總部，且後端判定在 no_home_map（no_home＝true）
+    addHome: !!v.isHq && active && p.no_home === true
   };
 }
 
@@ -228,7 +230,8 @@ export function staleSyncStores(lastSync, now) {
 export function personFilter(f, p, today) {
   switch (f) {
     case 'left': return (p.status === 'disabled' || !!p.last_day) && (p.clock_total || 0) > (p.clock_stopped || 0);
-    case 'nohome': return p.status === 'active' && !p.clock_total && !p.clock_job;
+    // 後端有帶 no_home（與首頁 no_home_map 同一套判斷）就用它；舊後端沒帶時退回舊判斷
+    case 'nohome': return typeof p.no_home === 'boolean' ? p.no_home : (p.status === 'active' && !p.clock_total && !p.clock_job);
     case 'namediff': return p.name_diff === true;
     case 'overdue': return !!p.last_day && p.last_day < today && p.status !== 'disabled';
     case 'homestopped': return p.status === 'active' && !p.last_day && (p.clocks || []).some((c) => c.role === 'home' && c.roster_active === false);

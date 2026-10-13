@@ -138,6 +138,21 @@ ok(L.personActions({ emp_no: 'DZY010', status: 'active', clock_total: 1, is_self
   ok(!/btn btn-primary" data-act="cm-yes"/.test(ui) && /data-act="cm-yes"/.test(ui), '「對」不是紅色主按鈕（改用 --ok 綠）');
 }
 
+// ---- 第 4 段：在主店建打卡帳號（總部，no_home_map 異常列）----
+ok(L.personActions(p({ no_home: true, clock_total: 1 }), hq).addHome, '總部看 no_home 列有「在主店建打卡帳號」');
+ok(!L.personActions(p({ no_home: true }), lead).addHome, '★店長看不到「在主店建打卡帳號」');
+ok(!L.personActions(p({ no_home: false }), hq).addHome && !L.personActions(p({}), hq).addHome, '不在 no_home_map 的列沒有這顆鈕');
+ok(!L.personActions(p({ no_home: true, status: 'disabled' }), hq).addHome, '已停用沒有這顆鈕');
+ok(L.personFilter('nohome', { status: 'unclaimed', clock_total: 1, no_home: true }, '2026-10-14') && !L.personFilter('nohome', { status: 'active', clock_total: 0, no_home: false }, '2026-10-14'), 'nohome 篩選：後端有帶 no_home 就照它（與首頁 no_home_map 一致）');
+ok(L.personFilter('nohome', { status: 'active', clock_total: 0 }, '2026-10-14') && !L.personFilter('nohome', { status: 'active', clock_total: 1 }, '2026-10-14'), 'nohome 篩選：舊後端沒帶 no_home → 退回舊判斷');
+{
+  const { isReadAction } = await import('../platform/dryrun.js');
+  ok(!isReadAction('platform', 'clockAddHome', { emp_no: 'DZY001' }), 'dryrun 擋 clockAddHome（寫入）');
+  const ui = fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-ui.js'), 'utf8');
+  ok(/'add-home'/.test(ui) && /在主店建打卡帳號/.test(ui) && /'clockAddHome'/.test(ui) && /openAddHome[\s\S]*ctx\.ui\.dialog[\s\S]*clockAddHome[\s\S]*env\.reload\(\)/.test(ui), '「在主店建打卡帳號」鈕：先 dialog 確認、送 clockAddHome、成功後重新整理');
+}
+
+
 // ---- 第 2 輪審查修正（issue #1）----
 // #15 後端 clockAlerts 的每個 key，前端都要有對應的一列（後端新增 key 沒接前端 → 這條紅）
 {

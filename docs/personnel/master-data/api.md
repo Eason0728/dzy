@@ -132,6 +132,12 @@
 - 輸入：`{job_id, reason?}`。只有 `failed`，或未完成（pending／running）且 `tries≥3` 的單可取消 → `cancelled`（記原因與 staff_log `outbox_cancel`），從首頁紅燈消失、不再擋 `clockMapBuild` 前置檢查。輸出 `{job_id, state:'cancelled'}`。錯誤：`no_perm`、`no_job`、`not_retryable`。
 - `clockOutboxRetry` 的可重試條件同步放寬為：`failed`，或未完成且 `tries≥3`。
 
+### 2.11c clockAddHome — 在主店建打卡帳號（只有總部，2026-10-14 第 4 段）
+- 用途：`no_home_map` 異常列（同仁名單「沒有打卡編號」篩選）的「在主店建打卡帳號」鈕。輸入：`{emp_no}`。
+- 條件：未停用、離職日未過、有單位、單位對得到啟用的打卡店、該店沒有 confirmed 對照、沒有同店未完成的 add 單 → 寫一張 `add` 單（store＝主店，expect 同 `staffCreateByUnit` 另加 `demote_old:true`：成功後別家舊主店改 support 並進 `transfer_ask`），staff_log `add_home`。CLOCK_WRITE=0 時單停在 pending（畫面顯示「打卡建檔中…」）。
+- 輸出：`{emp_no, job_id, store_code, state:'pending'}`。錯誤：`no_perm`、`not_found`、`already_disabled`、`already_left`、`no_unit`、`no_clock_store`、`dup_confirmed`、`job_open`、`setup_failed`。寫入動作（上全域鎖，dryrun 擋）。
+- `staffList`／`staffUnitList` 每列多 `no_home:boolean`（與 `clockAlerts.no_home_map` 同一套判斷），前端「沒有打卡編號」篩選以它為準。
+
 ### 2.12 clockOldHomeDecide — 調店後舊主店要不要停用（只有總部）
 - 輸入：`{emp_no, store_code, deactivate:boolean}`。待決定清單見 `clockAlerts.transfer_ask`。
 - `deactivate:true`：發一張 `deactivate` 單（`expect.staff=active, then=reject`）；成功後該對照 `roster_active=FALSE`、`state=rejected`。`false`：保留（維持 support）。兩者都從待決定清單移除。

@@ -1808,5 +1808,79 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(mut.indexOf('clockSetHome: 1') !== -1, 'PIN clockSetHome 上全域寫入鎖');
 })();
 
+(() => {
+  // ── 第 4 段：總部在主店補建打卡帳號 clockAddHome（no_home_map 異常列）──
+  const app = fresh();
+  const { sb, sheets, tok } = app;
+  const mgr = claimApprove(app, '補建店長', 'mgr-addh-pw-01', MZT_GF('sm'));
+  post(sb, 'staffImport', { names: ['補建總部甲', '補建有對照乙', '補建無單位丙', '補建停用丁', '補建離職戊', '補建美村己'] }, tok);
+  const E = (n) => sheets.staff._rows().find((r) => r[2] === n)[0];
+  const a = E('補建總部甲'), b = E('補建有對照乙'), c = E('補建無單位丙'), dd = E('補建停用丁'), ee = E('補建離職戊'), ff = E('補建美村己');
+  const setUnit = (emp, o) => { const r = post(sb, 'staffEdit', Object.assign({ emp_no: emp, dept: '' }, o), tok); if (!r.ok) throw new Error('staffEdit ' + r.error); };
+  setUnit(a, { brand: 'mzt', unit: 'mzt-hq', title: 'hs' });
+  setUnit(b, { brand: 'mzt', unit: 'mzt-gf', title: 'pt' });
+  setUnit(dd, { brand: 'mzt', unit: 'mzt-gf', title: 'pt' });
+  setUnit(ee, { brand: 'mzt', unit: 'mzt-gf', title: 'pt' });
+  setUnit(ff, { brand: 'mzt', unit: 'mzt-mc', title: 'pt' });
+  ok(staffOf(app, a).unit === 'mzt-hq', 'ADDH （前置：甲單位＝墨竹亭總部）', staffOf(app, a));
+  giveMap(app, a, 'mztgf', 'H1', 'home', { last_punch: '' });     // 只在別店有一個沒打過卡的帳號
+  giveMap(app, b, 'mztgf', 'H2', 'support');                       // 主店已有 confirmed（只是 role 不對）
+  post(sb, 'staffSetActive', { emp_no: dd, active: false }, tok);
+  setStaff(app, ee, 'last_day', dayT(-2));
+  const nh = post(sb, 'clockAlerts', {}, tok).data.no_home_map;
+  ok(nh.indexOf(a) !== -1, 'ADDH 甲在 no_home_map（總部打卡沒帳號、只有別店對照）', nh);
+  const row = (emp, t) => post(sb, 'staffList', {}, t || tok).data.staff.find((p) => p.emp_no === emp);
+  ok(row(a).no_home === true && row(c).no_home === false && row(dd).no_home === false, 'ADDH ★staffList 每列帶 no_home，與 no_home_map 同一套判斷', [row(a).no_home, row(c).no_home]);
+  ok(post(sb, 'staffUnitList', { unit: 'mzt-hq' }, tok).data.people.find((p) => p.emp_no === a).no_home === true, 'ADDH staffUnitList 也帶 no_home');
+
+  const jobsBefore = jobs(app).length;
+  // 店長被擋
+  const byMgr = post(sb, 'clockAddHome', { emp_no: b }, mgr.token);
+  ok(byMgr.ok === false && byMgr.code === 'no_perm' && jobs(app).length === jobsBefore, 'ADDH ★店長（即使是同單位）被擋 no_perm、不開單', byMgr);
+  ok(post(sb, 'clockAddHome', { emp_no: a }, '').ok === false && jobs(app).length === jobsBefore, 'ADDH 沒登入被擋');
+  // 各種不符合
+  const r404 = post(sb, 'clockAddHome', { emp_no: 'DZY999' }, tok);
+  ok(r404.code === 'not_found', 'ADDH 找不到同仁 → not_found', r404);
+  const rB = post(sb, 'clockAddHome', { emp_no: b }, tok);
+  ok(rB.ok === false && rB.code === 'dup_confirmed' && rB.error.indexOf('mztgf:H2') !== -1, 'ADDH ★主店已有 confirmed 對照 → dup_confirmed（訊息帶店與編號）', rB);
+  const rC = post(sb, 'clockAddHome', { emp_no: c }, tok);
+  ok(rC.ok === false && rC.code === 'no_unit' && /單位/.test(rC.error), 'ADDH ★沒有單位 → no_unit', rC);
+  const rD = post(sb, 'clockAddHome', { emp_no: dd }, tok);
+  ok(rD.ok === false && rD.code === 'already_disabled', 'ADDH ★已停用 → already_disabled', rD);
+  const rE = post(sb, 'clockAddHome', { emp_no: ee }, tok);
+  ok(rE.ok === false && rE.code === 'already_left' && /離職/.test(rE.error), 'ADDH ★離職日已過 → already_left', rE);
+  const rF = post(sb, 'clockAddHome', { emp_no: ff }, tok);
+  ok(rF.ok === false && rF.code === 'no_clock_store', 'ADDH 單位沒有對應打卡店（美村）→ no_clock_store', rF);
+  ok(jobs(app).length === jobsBefore, 'ADDH 以上全部沒有寫任何待辦單');
+
+  // 總部成功
+  const r = post(sb, 'clockAddHome', { emp_no: a }, tok);
+  ok(r.ok && r.data.emp_no === a && r.data.store_code === 'hq' && r.data.state === 'pending' && /^J\d{14}-[0-9a-f]{4}$/.test(r.data.job_id), 'ADDH ★總部成功：回 job_id、store hq、pending', r);
+  const j = jobs(app).find((x) => x.job_id === r.data.job_id);
+  const ex = JSON.parse(j.expect_json);
+  ok(j.kind === 'add' && j.emp_no === a && j.store_code === 'hq' && j.name === '補建總部甲' && j.op_id === 'dzy:' + j.job_id && j.emp_id === '', 'ADDH ★add 單欄位照 staffCreateByUnit 寫法（kind add、主店、姓名、op_id）', j);
+  ok(ex.emp_no === a && ex.store_code === 'hq' && ex.name === '補建總部甲' && ex.uid === 'u001' && ex.demote_old === true && ex.by !== '', 'ADDH expect 帶 emp_no／store／name／by／uid＋demote_old', ex);
+  ok(sheets.staff_log._rows().some((x) => x[1] === a && x[2] === 'add_home' && String(x[4]).indexOf(j.job_id) !== -1), 'ADDH 寫 staff_log（add_home，含待辦單號）');
+  ok(mapOf(app, a).length === 1 && mapOf(app, a)[0].role === 'home', 'ADDH 開單當下不動既有對照');
+  ok(row(a).no_home === false && row(a).clock_job && row(a).clock_job.job_id === j.job_id, 'ADDH 開單後 no_home 轉 false、名單顯示建檔中（clock_job）');
+  ok(post(sb, 'clockAlerts', {}, tok).data.no_home_map.indexOf(a) === -1, 'ADDH 開單後從 no_home_map 消失');
+  // 已有未完成的 add 單 → 擋
+  const again = post(sb, 'clockAddHome', { emp_no: a }, tok);
+  ok(again.ok === false && again.code === 'job_open' && again.error.indexOf(j.job_id) !== -1 && jobs(app).length === jobsBefore + 1, 'ADDH ★同店已有未完成 add 單 → job_open、不重複開', again);
+  // 同步員做完 → hq home confirmed；原 home（mztgf）改 support 並問總部
+  sb.clockOutboxClaim_(nowT(1));
+  const done = sb.clockOutboxDone_(j.job_id, { ok: true, emp_id: 'HQ77' }, nowT(2));
+  ok(done.ok && done.data.state === 'done', 'ADDH 同步員回填成功', done);
+  const ms = mapOf(app, a).map((m) => m.store_code + ':' + m.emp_id + ':' + m.role + ':' + m.state).sort().join();
+  ok(ms === 'hq:HQ77:home:confirmed,mztgf:H1:support:confirmed', 'ADDH ★建好後 hq 為 home、舊主店改 support', ms);
+  ok(post(sb, 'clockAlerts', {}, tok).data.transfer_ask.some((x) => x.emp_no === a && x.store_code === 'mztgf'), 'ADDH 舊主店進 transfer_ask 讓總部決定要不要停');
+  const after = post(sb, 'clockAddHome', { emp_no: a }, tok);
+  ok(after.code === 'dup_confirmed', 'ADDH 建好後再按 → dup_confirmed', after);
+  // 註冊、上鎖
+  ok(sb.CODE_ALLOWED_ACTIONS.indexOf('clockAddHome') !== -1, 'ADDH 分派白名單有 clockAddHome');
+  const mut = /MUTATING_ACTIONS = \{([\s\S]*?)\};/.exec(SRC.find(([f]) => f === 'Code.gs')[1])[1];
+  ok(mut.indexOf('clockAddHome: 1') !== -1, 'ADDH clockAddHome 上全域寫入鎖');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

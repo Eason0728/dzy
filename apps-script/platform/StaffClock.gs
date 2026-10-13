@@ -102,7 +102,11 @@ var CLK_MSG = {
   NAME_START: '姓名開頭不能是 = + - @ 這四個符號（會被試算表當成公式），請改寫或加註在後面',
   JOB_OPEN: '這個打卡編號還有送出中的待辦單，請等它完成再改',
   EMPTY_ROSTER: '打卡端回了空名冊，但這家店已有生效對照——疑似打錯分頁或網址，不套用',
-  SUPPORT_LINK_HQ: '支援店的打卡連結只給總部'
+  SUPPORT_LINK_HQ: '支援店的打卡連結只給總部',
+  ADD_HOME_LEFT: '這位同仁離職日已過，不能建打卡帳號',
+  ADD_HOME_NO_UNIT: '這位同仁還沒有單位，請先用「改資料」設定單位',
+  ADD_HOME_HAS_MAP: '這位同仁在主店已經有生效的打卡編號，不用再建；要改主店請到打卡對照處理',
+  ADD_HOME_JOB_OPEN: '主店打卡帳號已經在建檔中，請等它完成'
 };
 
 // ============================================================
@@ -1116,6 +1120,41 @@ function handleClockOutboxCancel_(token, payload) {
   return { ok: true, data: { job_id: j.job_id, state: 'cancelled' } };
 }
 
+/**
+ * 在主店建打卡帳號（2026-10-14，第 4 段；只有總部）：給 no_home_map 異常列用。
+ * 輸入 {emp_no}。條件：在職（未停用、離職日未過）、有單位、單位對得到啟用的打卡店、那家沒有 confirmed 對照、
+ * 沒有同店未完成的 add 單 → 開一張 add 單（role home；寫法同 staffCreateByUnit，另帶 demote_old：成功後別家舊主店改 support 並問總部）。
+ * CLOCK_WRITE=0 時同步員不送，單停在 pending，畫面顯示「打卡建檔中」（同一般 add 單）。
+ * 錯誤：no_perm、not_found、already_disabled、already_left、no_unit、no_clock_store、dup_confirmed、job_open、setup_failed。
+ */
+function handleClockAddHome_(token, payload) {
+  var a = clkNeedHq_(token);
+  if (!a.ok) return a;
+  payload = payload || {};
+  if (stfTooLong_(payload.emp_no, STF_MAX.emp_no)) return clkErr_('not_found', CLK_MSG.NOT_FOUND);
+  var ready = clkReady_();
+  if (!ready.ok) return ready;
+  var s = clkStaffByEmp_(payload.emp_no);
+  if (!s) return clkErr_('not_found', CLK_MSG.NOT_FOUND);
+  var d = new Date();
+  if (clkStaffStatus_(s) === 'disabled') return clkErr_('already_disabled', CLK_MSG.ALREADY_DISABLED);
+  if (s.last && s.last < clkTodayOf_(d)) return clkErr_('already_left', CLK_MSG.ADD_HOME_LEFT);
+  var unit = clkStaffUnit_(s);
+  if (!unit) return clkErr_('no_unit', CLK_MSG.ADD_HOME_NO_UNIT);
+  var store = clkStoreOfUnit_(unit);
+  if (!store) return clkErr_('no_clock_store', CLK_MSG.NO_CLOCK_STORE);
+  var here = clkConfirmedOf_(clkMaps_(), s.emp).filter(function (m) { return m.store_code === store.store_code; })[0];
+  if (here) return clkErr_('dup_confirmed', CLK_MSG.ADD_HOME_HAS_MAP + '（' + store.store_code + ':' + here.emp_id + '）');
+  var jobs = clkJobs_();
+  var open = clkOpenJob_(jobs, 'add', s.emp, store.store_code, '');
+  if (open) return clkErr_('job_open', CLK_MSG.ADD_HOME_JOB_OPEN + '（' + open.job_id + '）');
+  var name = clkStaffName_(s);
+  var job = clkEnqueue_({ kind: 'add', emp_no: s.emp, store_code: store.store_code, name: name,
+    expect: { emp_no: s.emp, store_code: store.store_code, name: name, by: clkActorLabel_(a), uid: String(a.user.id), demote_old: true } }, d, clkUsedIds_(jobs));
+  stfLog_(s.emp, 'add_home', a.user.id, '單位 ' + unit + '；待辦單 ' + job.job_id);
+  return { ok: true, data: { emp_no: s.emp, job_id: job.job_id, store_code: store.store_code, state: job.state } };
+}
+
 /** 這個人（emp_no）的單位，呼叫者管不管得到；build 單只有總部 */
 function clkCanSeeJob_(a, j) {
   if (a.isHq) return true;
@@ -1959,6 +1998,13 @@ function clkPersonClock_(empNo, maps, jobs, stores) {
   };
 }
 
+/** clkNoHomeMap_ 結果轉成 {emp_no:true}（名單加欄用） */
+function clkNoHomeSet_(staffAll, maps, jobs) {
+  var o = {};
+  clkNoHomeMap_(staffAll, maps, jobs, clkTodayOf_(new Date())).forEach(function (s) { o[s.emp] = true; });
+  return o;
+}
+
 /** 打卡名冊姓名≠管理系統姓名的同仁（各店同步狀態 name_diff 合併）：{emp_no:true} */
 function clkNameDiffEmps_() {
   var o = {};
@@ -1976,7 +2022,9 @@ function clkDecorateStaffList_(list, token) {
   if (token) { var act = clkActor_(token); if (act.ok) selfEmp = act.selfEmp; }
   var nameDiff = clkNameDiffEmps_();
   var maps = clkMaps_(), jobs = clkJobs_(), stores = clkStoreIndex_(), extra = {};
-  clkStaffAll_().forEach(function (s) { extra[s.emp] = s; });
+  var all = clkStaffAll_();
+  all.forEach(function (s) { extra[s.emp] = s; });
+  var noHome = clkNoHomeSet_(all, maps, jobs);
   return list.map(function (p) {
     var s = extra[p.emp_no];
     var c = clkPersonClock_(p.emp_no, maps, jobs, stores);
@@ -1984,6 +2032,7 @@ function clkDecorateStaffList_(list, token) {
     p.clocks = c.clocks; p.clock_total = c.clock_total; p.clock_stopped = c.clock_stopped; p.clock_job = c.clock_job;
     p.is_self = !!selfEmp && p.emp_no === selfEmp;
     p.name_diff = !!nameDiff[p.emp_no];
+    p.no_home = !!noHome[p.emp_no];   // 與 clockAlerts.no_home_map 同一套判斷（前端「沒有打卡編號」篩選用）
     return p;
   });
 }
@@ -2001,7 +2050,9 @@ function handleStaffUnitList_(token, payload) {
   var today = clkTodayOf_(new Date());
   var nameDiff = clkSheetsReady_() ? clkNameDiffEmps_() : {};
   var myStoreU = (!a.isHq && a.scope) ? clkStoreOfUnit_(a.scope.unit) : null;
-  var people = clkStaffAll_().filter(function (s) {
+  var staffAll = clkStaffAll_();
+  var noHome = clkSheetsReady_() ? clkNoHomeSet_(staffAll, maps, jobs) : {};
+  var people = staffAll.filter(function (s) {
     if (!unit || clkStaffUnit_(s) === unit) return true;
     // 店長：單位還是空的（未認領）、但在他那家店有對照的人也要看得到
     return !a.isHq && clkStaffUnit_(s) === '' && !!myStoreU && maps.some(function (m) { return m.emp_no === s.emp && m.store_code === myStoreU.store_code && m.state !== 'rejected'; });
@@ -2011,7 +2062,7 @@ function handleStaffUnitList_(token, payload) {
     return { emp_no: s.emp, name: o.name, status: o.status, unit: o.unit, unit_name: o.unit_name, title: o.title, title_name: o.title_name,
       hire_date: s.hire, last_day: s.last, can_cancel_leave: !!s.last && s.last >= today && o.status !== 'disabled',
       clocks: c.clocks, clock_total: c.clock_total, clock_stopped: c.clock_stopped, clock_job: c.clock_job,
-      is_self: !!a.selfEmp && s.emp === a.selfEmp, name_diff: !!nameDiff[s.emp], unit_empty: clkStaffUnit_(s) === '' };
+      is_self: !!a.selfEmp && s.emp === a.selfEmp, name_diff: !!nameDiff[s.emp], unit_empty: clkStaffUnit_(s) === '', no_home: !!noHome[s.emp] };
   });
   return { ok: true, data: { people: people, unit: unit } };
 }
