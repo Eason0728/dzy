@@ -26,6 +26,9 @@
 - ⚠ 光復部署前：另一個 session 的 autoschedule-line 有兩個 commit（sched_day_roster，光復 @154）已上線但未併 main，部署前要先併進本分支，否則會洗掉
 - 階段關審查紀錄：dzy repo issue #1（https://github.com/Eason0728/dzy/issues/1）
 
+## Eason 決定紀錄
+- 2026-10-14：同步員不需每分鐘撿單 → 改成「按下當下立即送＋失敗的每 15 分鐘補撿」；每日 00:10 對帳不變。確認：DZY 編號全集團連號、打卡編號各店照舊；自動檢查跑在 Mac mini 本機，不用 AI、不耗 token。
+
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
 |---|---|---|---|---|---|
