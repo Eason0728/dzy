@@ -72,7 +72,7 @@
 5. 墨竹亭光復 MZTGF 薪資門市表未建 → 該店不做姓名一致檢查（已知，可接受）。
 開關步驟：mini `.env` 改 `CLOCK_WRITE=1`、加 `HUB_SVC_KEY`（16 字以上）→ 重啟；光復打卡指令碼屬性 `STAFF_HUB_URL`（mini Funnel 的 /platform/svc/auto-support 完整網址）＋`STAFF_HUB_KEY`（同 HUB_SVC_KEY）；六店指令碼屬性 `STAFF_MASTER_ADD_REDIRECT=1`。
 開關後的個案（2026-10-14 Eason 指定）：
-- 蔡昕恩 DZY058：單位＝墨竹亭總部（mzt-hq），實際在總部辦公室打卡；目前只有墨竹亭光復 MZTGF03（從未打卡）、總部打卡沒有帳號。現行規則「單位從空設成有值、該店無對照 → 不開 add 單，只進 no_home_map 異常」，所以第 4 段要先加小功能：總部在 no_home_map 異常列按「在主店建打卡帳號」→ 開 add 單（kind add、role home、需 CLOCK_WRITE=1）；建好後停用 MZTGF03。她的單位要等她認領時選墨竹亭總部，或開通後由總部「改資料」設定。
+- 個案 A（DZY058，姓名只在 mini 資料內）：單位＝墨竹亭總部（mzt-hq），實際在總部辦公室打卡；目前只有墨竹亭光復 MZTGF03（從未打卡）、總部打卡沒有帳號。現行規則「單位從空設成有值、該店無對照 → 不開 add 單，只進 no_home_map 異常」，所以第 4 段要先加小功能：總部在 no_home_map 異常列按「在主店建打卡帳號」→ 開 add 單（kind add、role home、需 CLOCK_WRITE=1）；建好後停用 MZTGF03。她的單位要等她認領時選墨竹亭總部，或開通後由總部「改資料」設定。
 驗收（task E4）：用測試名字在一家店走「店長新增→打卡名冊出現→登記離職→隔天 00:10 停用」，測完把測試列停用；7A 用一位已綁 LINE 的同仁實測一次（先問 Eason）。
 通知店長的 LINE 文字要先給 Eason 看（發訊息到群組＝要先問）。
 落地清單 1–8 在第 4 段結束時逐項完成（skill：dzy-admin 加一節＋mala-clock-in 加一節、dispatch-resources 登錄版號與 .env 變數名、守門、累犯摘要來源、記憶更新）。
