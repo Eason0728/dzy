@@ -21,6 +21,9 @@
 - 打卡端：worktree ~/mala-clock-in-svcstaff（分支 feature/svc-staff，從 origin/main）
 - 平台後端與前端：worktree ~/dzy-wt-staffmaster（分支 feature/staff-master）
 - 同步員：worktree ~/dzy-minikit-wt-jobs（分支 feature/staff-master-jobs）
+- 佈告欄：worktree ~/dzy-bulletin-wt-staffmaster（分支 feature/staff-master）
+- 7A 打卡端與值班核定改動：同打卡端分支 feature/svc-staff（以指令碼屬性 STAFF_HUB_URL／STAFF_HUB_KEY、STAFF_MASTER_ADD_REDIRECT 控制，未設＝今天行為）
+- ⚠ 光復部署前：另一個 session 的 autoschedule-line 有兩個 commit（sched_day_roster，光復 @154）已上線但未併 main，部署前要先併進本分支，否則會洗掉
 - 階段關審查紀錄：dzy repo issue #1（https://github.com/Eason0728/dzy/issues/1）
 
 ## 關卡紀錄
