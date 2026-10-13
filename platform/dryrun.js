@@ -15,8 +15,9 @@
 export const READ_ACTIONS = {
   platform: ['login', 'me', 'listUsers', 'listRoles', 'orgOptions', 'claimLookup',
     'myProfile', 'myUnit', 'staffList', 'unitPending',
-    // 員工名單統一（2026-10-13）：單位名單、打卡對照清單、待辦單狀態、首頁提醒都是純讀取
-    'staffUnitList', 'clockMapList', 'clockJobStatus', 'clockAlerts',
+    // 員工名單統一（2026-10-13）：單位名單、打卡對照清單、首頁提醒是純讀取
+    // clockJobStatus 刻意不列：查 link 單會從快取取走並刪掉一次性金鑰（有副作用）；試跑時新增／取連結本來就被攔，前端不輪詢
+    'staffUnitList', 'clockMapList', 'clockAlerts',
     // logout 不是資料寫入（只讓自己的登入失效），試跑模式也要真的登出（2026-10-12）
     'logout'],
   audit: ['getAll'],

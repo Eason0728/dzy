@@ -29,7 +29,7 @@
 - 店長新增同仁時，職稱的職級不得高於自己（`no_perm`）。
 
 ### 0.4 錯誤代碼（`code`）
-`no_perm` 沒權限｜`not_found` 找不到同仁｜`bad_input` 輸入格式不對｜`duplicate_name` 同名｜`emp_conflict` 取號撞到已存在的編號（整筆拒絕、什麼都沒寫）｜`full` 編號用到 DZY999｜`setup_failed` 分頁建立／表頭核對失敗（停下、不寫資料）｜`self_leave` 對自己登記離職｜`already_disabled` 已停用｜`not_disabled` 沒停用（復職用）｜`last_day_past` 超過可往回補的 7 天｜`last_day_far` 離職日太遠｜`no_leave` 沒登記離職｜`leave_passed` 最後上班日已過不能撤銷｜`no_job` 找不到／看不到待辦單｜`not_retryable` 這張單不能重試｜`no_map` 沒有生效的打卡對照｜`dup_confirmed` 同人同店已有生效編號｜`emp_id_taken` 該打卡編號已確認給別人｜`home_exists` 已有主店｜`dead_state` 目前狀態不能做｜`no_change` 沒變｜`unauthorized` 服務金鑰錯｜`precheck_baseline`／`precheck_dup_name`／`precheck_outbox`／`precheck_no_store` 建對照前置檢查沒過｜`not_allowed` 不符 7A 條件｜`conflict` 打卡編號衝突｜`busy` 拿不到鎖。
+`no_perm` 沒權限｜`not_found` 找不到同仁｜`bad_input` 輸入格式不對｜`duplicate_name` 同名｜`emp_conflict` 取號撞到已存在的編號（整筆拒絕、什麼都沒寫）｜`full` 編號用到 DZY999｜`setup_failed` 分頁建立／表頭核對失敗（停下、不寫資料）｜`self_leave` 對自己登記離職｜`already_disabled` 已停用｜`not_disabled` 沒停用（復職用）｜`last_day_past` 超過可往回補的 7 天｜`last_day_far` 離職日太遠｜`no_leave` 沒登記離職｜`leave_passed` 最後上班日已過不能撤銷｜`no_job` 找不到／看不到待辦單｜`not_retryable` 這張單不能重試｜`no_map` 沒有生效的打卡對照｜`dup_confirmed` 同人同店已有生效編號｜`emp_id_taken` 該打卡編號已確認給別人｜`home_exists` 已有主店｜`dead_state` 目前狀態不能做｜`no_change` 沒變｜`unauthorized` 服務金鑰錯｜`precheck_baseline`／`precheck_dup_name`／`precheck_outbox`／`precheck_no_store` 建對照前置檢查沒過｜`not_allowed` 不符 7A 條件｜`conflict` 打卡編號衝突｜`busy` 拿不到鎖｜`disabled` 同仁已停用（clockLink 等需要在職的動作回）｜`use_reinstate` 這個人登記過離職（有 last_day），第一期「啟用」不能用，請改走 staffReinstate（見 §3.9）。
 
 ## 1. 資料（新增／變更的分頁）
 表頭逐字如下（`setupStaff` 自動建立，只補不覆蓋；表頭不一致丟錯停下，action 回 `setup_failed`）。
@@ -45,7 +45,7 @@
 | hq | 鼎兆元 總部 | dzy-hq |
 | cf | 中央廚房 | ck |
   `unit_code` 空白＝這家店不綁單位（新增不會自動開打卡單）。一個單位只取第一個啟用的店。
-- `staff_clock`：`emp_no, store_code, emp_id, role(home|support), state(suggested|confirmed|rejected), source(name_match|created|auto_support|roster_seen), roster_active(TRUE|FALSE|空), last_punch, confirmed_by, confirmed_at, updated_at`。唯一鍵 `store_code+emp_id`（store_code 小寫、emp_id 大寫）。
+- `staff_clock`：`emp_no, store_code, emp_id, role(home|support), state(suggested|confirmed|rejected), source(name_match|created|auto_support|roster_seen), roster_active(TRUE|FALSE|空), last_punch, confirmed_by, confirmed_at, updated_at`。唯一鍵 `store_code+emp_id`（store_code 小寫；emp_id **以打卡名冊的原字串為準，只 trim、不轉大小寫**，打卡端區分大小寫）。
 - `clock_outbox`：`job_id, kind, emp_no, store_code, emp_id, name, op_id, expect_json, state(pending|running|done|failed|cancelled), tries, next_at, lease_until, last_error, created_at, updated_at, done_at`。
   - `kind`：`add`｜`deactivate`｜`reactivate`｜`link`｜**`build`**（本期新增：建立打卡對照的請求，無 emp_no／store_code）。
   - `job_id`＝`J`＋台北 `yyyyMMddHHmmss`＋`-`＋4 位小寫十六進位；`op_id`＝`dzy:`＋job_id。
@@ -201,12 +201,12 @@ pending/running ──claim 時重驗不過──► cancelled（不送）
 - 打卡編號（emp_id）以打卡名冊原字串為準：平台只去頭尾空白，**不改大小寫**（`E5`≠`e5`，和打卡端比對一致）。
 - 已經 `done`／`cancelled` 的單重複回填 → 不改任何東西，回 `{ok:true, data:{job_id,state,already:true}}`（冪等）。
 - 成功：
-  - `add`：`emp_id` 須符合 `^[A-Z0-9_-]{1,32}$`（不分大小寫，存成大寫）；寫 `staff_clock`＝`home／created／confirmed／roster_active=TRUE`（已有同鍵 suggested／rejected 列則改成 confirmed）。同鍵已對給別人、或該人此店已有別的 confirmed → 單轉 `failed`（`conflict`）。若 expect 有 `demote_old`（調店）：此人其他店的 home 改 support，並進 `transfer_ask`。
+  - `add`：`emp_id` 須符合 `^[A-Za-z0-9_-]{1,32}$`（保留原字串，不轉大小寫）；寫 `staff_clock`＝`home／created／confirmed／roster_active=TRUE`（已有同鍵 suggested／rejected 列則改成 confirmed）。同鍵已對給別人、或該人此店已有別的 confirmed → 單轉 `failed`（`conflict`）。若 expect 有 `demote_old`（調店）：此人其他店的 home 改 support，並進 `transfer_ask`。
   - `deactivate`／`reactivate`：該對照 `roster_active` 立刻改 FALSE／TRUE（`expect.then=reject` 的另外把 state 標 rejected）。
   - `link`：`link_key` 只進 CacheService（`clk_link_<job_id>`、120 秒）；沒給金鑰 → `failed`。
   - 單轉 `done`、`done_at`、`next_at` 清空。
 - 失敗：`tries+1`、`last_error` 記代碼與訊息（≤200 字）。
-  - 永久性（`unauthorized, bad_version, bad_input, duplicate_name, not_found, disabled, conflict`，或 `retry:false`）→ `failed`，不自動重試。
+  - 永久性（`unauthorized, bad_version, bad_input, duplicate_name, not_found, disabled, conflict`，或 `retry:false`）→ `failed`，不自動重試。打卡端另會回 `unknown_action`／`bad_json`／`server_error`（該店 SvcStaff 沒部署、或打卡端例外），一律視為**暫時性**：走下面的重試排程（1／5／30 分鐘、之後每 6 小時）。
   - 其他 → 回 `pending`，`next_at`＝現在＋1／5／30 分鐘（第 1／2／3 次失敗）、之後每 6 小時。`tries≥3` 進 `clockAlerts.outbox_failed`。
 - 輸出：`{ok:true, data:{job_id, state, tries?, next_at?, emp_id?}}`。
 

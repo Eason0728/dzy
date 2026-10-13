@@ -22,6 +22,8 @@ export const POLL_INTERVAL_MS = 3000;
 export const POLL_MAX_MS = 60000;
 export const LEAVE_BACK_DAYS = 7;
 export const LEAVE_FAR_DAYS = 365;
+/** 姓名上限：平台 CLK_NAME_MAX＝打卡端 svc_add 的上限（20） */
+export const NAME_MAX = 20;
 
 const pad = (n) => (n < 10 ? '0' : '') + n;
 
@@ -120,7 +122,7 @@ export function addFormErrors(f, today) {
   const e = [];
   const name = String((f && f.name) || '').trim();
   if (!name) e.push('請填姓名');
-  else if (name.length > 30) e.push('姓名最多 30 字');
+  else if (name.length > NAME_MAX) e.push(`姓名最多 ${NAME_MAX} 字`);
   if (!f.title) e.push('請選職稱');
   if (!parseYmd(f.hire_date)) e.push('請選到職日');
   else if (f.hire_date < '2000-01-01' || f.hire_date > addDays(today, LEAVE_FAR_DAYS)) e.push('到職日不合理，請確認');
@@ -195,6 +197,9 @@ export function alertRows(d, viewer) {
   add('outbox_failed', 'error', n(d.outbox_failed), '{n} 筆打卡待辦單失敗（打卡未建或停用失敗）', go('clockmap', 'team'), v.isHq ? { t: 'jobs' } : { f: 'jobs' }, { retry: true });
   add('unmapped', 'warn', n(d.unmapped), '{n} 位打卡上在職、但沒有對照到同仁', 'clockmap', { t: 'needs' });
   add('left_but_active', 'error', n(d.left_but_active), '{n} 筆同仁已離職、打卡卻還在職', go('list', 'team'), { f: 'left' });
+  add('leave_overdue', 'error', n(d.leave_overdue), '{n} 位同仁離職日已過、卻還沒停用成功', go('list', 'team'), { f: 'overdue' });
+  add('home_stopped', 'warn', n(d.home_stopped), '{n} 位在職同仁的主店打卡被停掉了', go('list', 'team'), { f: 'homestopped' });
+  if (v.isHq) add('transfer_failed', 'error', n(d.transfer_failed), '{n} 位調店同仁的新店打卡沒開成功', 'clockmap', { t: 'all' });
   const pc = d.pending_confirm && Number(d.pending_confirm.count) ? Number(d.pending_confirm.count) : 0;
   add('pending_confirm', 'warn', pc, '{n} 筆打卡對照等你確認', go('clockmap', 'clock'), { t: 'suggested' });
   add('no_home_map', 'warn', n(d.no_home_map), '{n} 位同仁還沒有主店打卡編號', go('list', 'team'), { f: 'nohome' });
@@ -217,4 +222,26 @@ export function staleSyncStores(lastSync, now) {
     if (!isNaN(ms) && t - ms > 26 * 3600 * 1000) out.push(k);
   });
   return out;
+}
+
+/** 名單篩選（總部名單與店長「我的單位」共用）；p＝名單一列，today＝'yyyy-MM-dd' */
+export function personFilter(f, p, today) {
+  switch (f) {
+    case 'left': return (p.status === 'disabled' || !!p.last_day) && (p.clock_total || 0) > (p.clock_stopped || 0);
+    case 'nohome': return p.status === 'active' && !p.clock_total && !p.clock_job;
+    case 'namediff': return p.name_diff === true;
+    case 'overdue': return !!p.last_day && p.last_day < today && p.status !== 'disabled';
+    case 'homestopped': return p.status === 'active' && !p.last_day && (p.clocks || []).some((c) => c.role === 'home' && c.roster_active === false);
+    default: return true;
+  }
+}
+
+/** 試跑模式（?dryrun=1）下寫入被攔、api 回 {ok:true, dryrun:true}：沒有 job_id，不可輪詢 */
+export function isDryRunResult(r) {
+  return !!(r && r.dryrun === true);
+}
+
+/** 後端回 no_perm 時的白話說明（總部單位的部門主管也有 platform.review，分頁看得到但後端只給門市店長） */
+export function storeLeadOnlyText(r) {
+  return r && r.code === 'no_perm' ? '這個分頁給門市店長用；總部同仁請到「同仁名單」處理。' : '';
 }

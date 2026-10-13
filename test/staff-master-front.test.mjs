@@ -126,16 +126,80 @@ ok(!L.personActions({ emp_no: 'DZY010', status: 'active', clock_total: 1, is_sel
 ok(L.personActions({ emp_no: 'DZY010', status: 'active', clock_total: 1, is_self: true, last_day: '2026-10-31', can_cancel_leave: true }, hq).cancelLeave, '總部對自己那列的撤銷不受店長限制（後端另擋）');
 {
   const { isReadAction } = await import('../platform/dryrun.js');
-  for (const a of ['staffUnitList', 'clockMapList', 'clockJobStatus', 'clockAlerts']) ok(isReadAction('platform', a, {}), `dryrun 放行讀取 ${a}`);
+  for (const a of ['staffUnitList', 'clockMapList', 'clockAlerts']) ok(isReadAction('platform', a, {}), `dryrun 放行讀取 ${a}`);
   ok(isReadAction('platform', 'staffReinstate', { emp_no: 'DZY001', preview: true }), 'dryrun 放行 staffReinstate preview:true');
   ok(!isReadAction('platform', 'staffReinstate', { emp_no: 'DZY001' }) && !isReadAction('platform', 'staffReinstate', { emp_no: 'DZY001', preview: false }), 'dryrun 擋真正的 staffReinstate');
-  for (const a of ['staffCreateByUnit', 'staffLeave', 'staffLeaveCancel', 'staffRename', 'clockLink', 'clockMapDecide', 'clockMapBuild', 'clockOutboxRetry', 'clockOutboxCancel', 'clockOldHomeDecide', 'clockCandidateCreate', 'clockCandidateDismiss']) ok(!isReadAction('platform', a, {}), `dryrun 擋寫入 ${a}`);
+  for (const a of ['staffCreateByUnit', 'staffLeave', 'staffLeaveCancel', 'staffRename', 'clockLink', 'clockJobStatus', 'clockMapDecide', 'clockMapBuild', 'clockOutboxRetry', 'clockOutboxCancel', 'clockOldHomeDecide', 'clockCandidateCreate', 'clockCandidateDismiss']) ok(!isReadAction('platform', a, {}), `dryrun 擋（非純讀取）${a}`);
 }
 {
   const ui = fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-ui.js'), 'utf8');
   ok(/clockOutboxCancel/.test(ui) && /data-act="job-cancel"/.test(ui) && /請填結案原因/.test(ui), '待辦單每筆有「結案」鈕，必填原因後送 clockOutboxCancel');
-  ok(/data\.confirmed/.test(ui) && /name_diff === true/.test(ui), '全部對照用後端 confirmed；打卡姓名不同用 name_diff 布林');
+  ok(/data\.confirmed/.test(ui) && /personFilter\('?\w*'?/.test(ui) && /name_diff === true/.test(fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-lib.js'), 'utf8')), '全部對照用後端 confirmed；打卡姓名不同用 name_diff 布林');
   ok(!/btn btn-primary" data-act="cm-yes"/.test(ui) && /data-act="cm-yes"/.test(ui), '「對」不是紅色主按鈕（改用 --ok 綠）');
+}
+
+// ---- 第 2 輪審查修正（issue #1）----
+// #15 後端 clockAlerts 的每個 key，前端都要有對應的一列（後端新增 key 沒接前端 → 這條紅）
+{
+  const gs = fs.readFileSync(path.join(ROOT, 'apps-script/platform/StaffClock.gs'), 'utf8');
+  const lit = /var empty = \{([\s\S]*?)\};\n/.exec(gs)[1];
+  const backendKeys = Array.from(lit.matchAll(/(\w+):/g)).map((m) => m[1]).filter((k, i, a) => a.indexOf(k) === i && k !== 'count' && k !== 'items'); // count／items 是 pending_confirm 的內層欄位
+  const NOT_ALERT = ['counts', 'last_sync', 'name_diff_items', 'no_home_map_items']; // 非「一類提醒」：統計、同步時間、逐人明細
+  // 後端 key → alertRows 的 key（count 類的欄位名不同）
+  const ROW_KEY = { needs_hq_count: 'needs_hq', candidates_count: 'candidates' };
+  const feed = (k) => (k === 'pending_confirm' ? { count: 1, items: [{}] } : (k === 'needs_hq_count' || k === 'candidates_count') ? 1 : [{ emp_no: 'DZY001', store_code: 'gf', emp_id: 'E1' }]);
+  ok(backendKeys.length >= 14, '#15 解析得到後端 clockAlerts 的 key：' + backendKeys.join());
+  for (const k of backendKeys.filter((x) => !NOT_ALERT.includes(x))) {
+    const rk = ROW_KEY[k] || k;
+    const hqRows = L.alertRows({ [k]: feed(k) }, hq);
+    ok(hqRows.length === 1 && hqRows[0].key === rk, `#15 總部：${k} 有對應的一列`, hqRows);
+    if (!['unmapped', 'payroll_diff', 'transfer_ask', 'needs_hq_count', 'candidates_count', 'transfer_failed'].includes(k)) {
+      ok(L.alertRows({ [k]: feed(k) }, lead).length === 1, `#15 店長：${k} 有對應的一列`);
+    }
+  }
+  const mkp = (o) => ({ emp_no: 'DZY050', status: 'active', clock_total: 1, clock_stopped: 0, last_day: '', clocks: [], ...o });
+  ok(L.personFilter('overdue', mkp({ last_day: '2026-10-01' }), '2026-10-13') && !L.personFilter('overdue', mkp({ last_day: '2026-10-01', status: 'disabled' }), '2026-10-13') && !L.personFilter('overdue', mkp({ last_day: '2026-10-20' }), '2026-10-13'), '#15 篩選 overdue：離職日已過且還沒停用');
+  ok(L.personFilter('homestopped', mkp({ clocks: [{ role: 'home', roster_active: false }] }), 'x') && !L.personFilter('homestopped', mkp({ clocks: [{ role: 'support', roster_active: false }] }), 'x') && !L.personFilter('homestopped', mkp({ last_day: '2026-10-31', clocks: [{ role: 'home', roster_active: false }] }), 'x'), '#15 篩選 homestopped：在職、沒登記離職、主店被停');
+  const lst = fs.readFileSync(path.join(ROOT, 'modules/staff/views/list.js'), 'utf8');
+  ok(/'overdue'/.test(lst) && /'homestopped'/.test(lst), '#15 同仁名單有這兩個篩選選項');
+}
+// #19 姓名上限 20
+ok(L.NAME_MAX === 20 && L.addFormErrors({ ...good, name: 'x'.repeat(20) }, '2026-10-13').length === 0 && L.addFormErrors({ ...good, name: 'x'.repeat(21) }, '2026-10-13').length === 1, '#19 姓名 20 字可、21 字擋下');
+{
+  const ui = fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-ui.js'), 'utf8');
+  ok(!/maxlength="30"/.test(ui) && (ui.match(/maxlength="20"/g) || []).length >= 2, '#19 姓名欄 maxlength 都是 20');
+}
+// #20 試跑：clockJobStatus 不是讀取；前端遇到 dryrun 結果不輪詢
+{
+  const { isReadAction, READ_ACTIONS } = await import('../platform/dryrun.js');
+  ok(!READ_ACTIONS.platform.includes('clockJobStatus') && !isReadAction('platform', 'clockJobStatus', { job_id: 'J1' }), '#20 clockJobStatus 不在試跑讀取白名單（取連結金鑰有副作用）');
+  ok(L.isDryRunResult({ ok: true, dryrun: true, data: { dryRun: true } }) && !L.isDryRunResult({ ok: true, data: { job_id: 'J1' } }), '#20 isDryRunResult 辨識試跑回應');
+  const ui = fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-ui.js'), 'utf8');
+  ok((ui.match(/isDryRunResult\(/g) || []).length >= 4, '#20 新增／取連結（兩處）／建立對照 遇到試跑結果都不輪詢');
+  // 行為：試跑回應 → 新增流程不呼叫 clockJobStatus
+  const { openAddFlow } = await import('../modules/staff-shared/clock-ui.js');
+  const calls = [];
+  const dlgQueue = [];
+  globalThis.document = { createElement: () => { const el = { _h: '', set innerHTML(v) { this._h = v; this.children = []; }, get innerHTML() { return this._h; }, querySelector: (sel) => (sel === '#ad-name' ? { value: '測試人' } : sel === '#ad-hire' ? { value: '2026-10-13' } : sel === '#ad-phone' ? { value: '0912000111' } : sel === '#ad-title' ? { value: 'pt' } : null) }; return el; } };
+  const toasts = [];
+  const ctxD = { ui: { dialog: async () => 'ok', toast: (m, t) => toasts.push(m), loading() {}, confirm: async () => true },
+    api: { call: async (m, a) => { calls.push(a); return a === 'staffCreateByUnit' ? { ok: true, dryrun: true, data: { dryRun: true } } : { ok: false }; } } };
+  const done = await openAddFlow({ ctx: ctxD, mod: 'me', viewer: lead, org: { titles: [] }, myUnitName: '光復', reload: async () => {} });
+  ok(done === false && !calls.includes('clockJobStatus') && toasts.some((t) => t.includes('試跑模式')), '#20 試跑新增：不輪詢 clockJobStatus、顯示試跑訊息', { calls, toasts });
+  delete globalThis.document;
+}
+// #22 總部單位部門主管開店長分頁 → 白話說明，不露 no_perm
+{
+  ok(L.storeLeadOnlyText({ ok: false, code: 'no_perm', error: '沒有權限' }).includes('門市店長') && L.storeLeadOnlyText({ ok: false, code: 'busy' }) === '', '#22 storeLeadOnlyText 只對 no_perm 出白話說明');
+  const { mountTeam, mountClockMap } = await import('../modules/staff-shared/clock-ui.js');
+  for (const [name, fn] of [['我的單位', mountTeam], ['打卡對照', mountClockMap]]) {
+    const el = { innerHTML: '', addEventListener() {}, removeEventListener() {} };
+    const ctx = { params: {}, api: { call: async () => ({ ok: false, code: 'no_perm', error: 'no_perm' }) }, ui: {} };
+    const stop = fn(el, { ctx, mod: 'me', viewer: { isHq: false, isLead: true } });
+    await new Promise((r) => setTimeout(r, 20));
+    ok(el.innerHTML.includes('這個分頁給門市店長用') && !el.innerHTML.includes('no_perm'), `#22 ${name}：收到 no_perm 顯示白話說明`, el.innerHTML);
+    if (typeof stop === 'function') stop();
+  }
 }
 
 // ---- 接線：manifest／檔案存在／分層 ----

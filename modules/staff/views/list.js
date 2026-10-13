@@ -8,6 +8,7 @@
 'use strict';
 
 import { orgFieldsHtml, bindOrgFields, readOrgFields } from '../../staff-shared/org-fields.js';
+import { personFilter, ymd } from '../../staff-shared/clock-lib.js';
 import { clockTagsHtml, clockButtonsHtml, isClockAct, handleClockAct, openAddFlow } from '../../staff-shared/clock-ui.js';
 
 const STATUS = {
@@ -20,7 +21,8 @@ const STATUS = {
 const FILTERS = [
   ['todo', '待處理'], ['all', '全部'], ['unclaimed', '未開通'], ['pending', '待確認'],
   ['rejected', '已退回'], ['active', '已開通'], ['disabled', '已停用'], ['locked', '忘記密碼鎖住'],
-  ['left', '已離職但打卡未停'], ['nohome', '沒有打卡編號']
+  ['left', '已離職但打卡未停'], ['nohome', '沒有打卡編號'],
+  ['overdue', '離職日已過未停用'], ['homestopped', '主店打卡被停']
 ];
 
 export function mountList(el, ctx) {
@@ -52,9 +54,7 @@ export function mountList(el, ctx) {
       case 'all': return true;
       case 'todo': return p.status === 'pending' || (p.status === 'active' && p.has_pending_change) || p.reset_locked;
       case 'locked': return p.reset_locked;
-      case 'left': return (p.status === 'disabled' || !!p.last_day) && (p.clock_total || 0) > (p.clock_stopped || 0);
-      case 'nohome': return p.status === 'active' && !p.clock_total && !p.clock_job;
-      case 'namediff': return p.name_diff === true; // 首頁「打卡姓名不同」：後端每人帶 name_diff 布林
+      case 'left': case 'nohome': case 'namediff': case 'overdue': case 'homestopped': return personFilter(state.f, p, ymd(new Date()));
       default: return p.status === state.f;
     }
   }

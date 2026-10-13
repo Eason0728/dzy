@@ -13,7 +13,7 @@ import { esc } from './esc.js';
 import { orgFieldsHtml, bindOrgFields, readOrgFields } from './org-fields.js';
 import {
   ymd, leaveMinDate, leaveDateError, leaveLabel, stoppedLabel, personActions, addFormErrors,
-  pollJob, linkOutcome, clockLinkUrl, jobKindText
+  pollJob, linkOutcome, clockLinkUrl, jobKindText, personFilter, isDryRunResult, storeLeadOnlyText
 } from './clock-lib.js';
 
 const domOf = (html) => { const d = document.createElement('div'); d.innerHTML = html; return d; };
@@ -115,6 +115,7 @@ async function openLink(env, p) {
   const storeCode = (env.storeCode) || (store && store.store_code) || undefined;
   const r = await callBusy(ctx, mod, 'clockLink', storeCode ? { emp_no: p.emp_no, store_code: storeCode } : { emp_no: p.emp_no });
   if (!r || !r.ok) { ctx.ui.toast((r && r.error) || '取不到打卡連結', 'danger'); return false; }
+  if (isDryRunResult(r)) { ctx.ui.toast('試跑模式，未寫入（不取打卡連結）', 'warn'); return false; }
   return showLinkDialog(ctx, mod, r.data.job_id, p, storeCode || (r.data.store_code || ''));
 }
 
@@ -158,7 +159,7 @@ export async function showLinkDialog(ctx, mod, jobId, p, storeCode) {
 
 async function openRename(env, p) {
   const { ctx, mod } = env;
-  const body = domOf(`<div class="field"><label class="field-label" for="rn2-name">新姓名</label><input class="input" id="rn2-name" value="${esc(p.name)}" maxlength="30"></div>
+  const body = domOf(`<div class="field"><label class="field-label" for="rn2-name">新姓名</label><input class="input" id="rn2-name" value="${esc(p.name)}" maxlength="20"></div>
     <p class="field-hint">改名後，打卡端姓名要另外請各店改成一致；改完前首頁會提醒「打卡姓名不同」。</p>`);
   const v = await ctx.ui.dialog({ title: `改名 ${p.emp_no}`, body, actions: [CANCEL, { label: '儲存', value: 'ok', variant: 'primary' }] });
   if (v !== 'ok') return false;
@@ -213,7 +214,7 @@ export async function openAddFlow(env) {
           <span class="text-muted">（固定，不能選）</span></div></div>
         <div class="field"><label class="field-label" for="ad-title">職稱</label><select class="input" id="ad-title">
           <option value="">請選擇</option>${(org.titles || []).filter((t) => t.parent === 'store').map((t) => `<option value="${esc(t.code)}"${t.code === val.title ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>`;
-    const body = domOf(`<div class="field"><label class="field-label" for="ad-name">姓名（全名）</label><input class="input" id="ad-name" maxlength="30" value="${esc(val.name)}"></div>
+    const body = domOf(`<div class="field"><label class="field-label" for="ad-name">姓名（全名）</label><input class="input" id="ad-name" maxlength="20" value="${esc(val.name)}"></div>
       ${unitPart}
       <div class="form-grid-2">
         <div class="field"><label class="field-label" for="ad-hire">到職日</label><input class="input" id="ad-hire" type="date" value="${esc(val.hire_date)}"></div>
@@ -241,6 +242,7 @@ export async function openAddFlow(env) {
     if (errs.length) { ctx.ui.toast(errs[0], 'warn'); continue; }
     const r = await callBusy(ctx, mod, 'staffCreateByUnit', payload);
     if (!r || !r.ok) { ctx.ui.toast((r && r.error) || '新增失敗，請稍後再試', 'danger'); continue; }
+    if (isDryRunResult(r)) { ctx.ui.toast('試跑模式，未寫入（不會建立同仁，也不會輪詢打卡）', 'warn'); return false; }
     await showAddResult(env, r.data, val.name);
     return true;
   }
@@ -278,6 +280,7 @@ async function showAddResult(env, data, name) {
     fresh.addEventListener('click', async () => {
       const lr = await callBusy(ctx, mod, 'clockLink', { emp_no: empNo, store_code: j.store_code || data.store_code });
       if (!lr || !lr.ok) { ctx.ui.toast((lr && lr.error) || '取不到打卡連結', 'danger'); return; }
+      if (isDryRunResult(lr)) { ctx.ui.toast('試跑模式，未寫入（不取打卡連結）', 'warn'); return; }
       showLinkDialog(ctx, mod, lr.data.job_id, { emp_no: empNo, name }, j.store_code || data.store_code);
     });
   } else if (res.status === 'timeout') {
@@ -325,7 +328,7 @@ export function mountClockMap(el, env) {
   async function load() {
     const [r, a] = await Promise.all([call(ctx, mod, 'clockMapList', {}), isHq ? call(ctx, mod, 'clockAlerts', {}) : Promise.resolve(null)]);
     if (!alive) return;
-    if (!r || !r.ok) { el.innerHTML = `<div class="card"><p>${esc((r && r.error) || '讀不到打卡對照')}</p></div>`; return; }
+    if (!r || !r.ok) { el.innerHTML = `<div class="card"><p data-role="store-lead-only">${esc(storeLeadOnlyText(r) || (r && r.error) || '讀不到打卡對照')}</p></div>`; return; }
     data = Object.assign(data, r.data);
     alerts = a && a.ok ? (a.data || {}) : {};
     draw();
@@ -475,6 +478,7 @@ export function mountClockMap(el, env) {
       if (!(await ctx.ui.confirm('要重新讀取六家店的打卡名冊、建立對照嗎？已確認的不會被動到。'))) return;
       const r = await callBusy(ctx, mod, 'clockMapBuild', {});
       if (!r || !r.ok) { ctx.ui.toast((r && r.error) || '前置檢查沒過，無法建立', 'danger'); return; }
+      if (isDryRunResult(r)) { ctx.ui.toast('試跑模式，未寫入（不會建立對照）', 'warn'); return; }
       ctx.ui.toast('已送出，正在建立對照…', 'ok');
       const res = await pollJob(() => call(ctx, mod, 'clockJobStatus', { job_id: r.data.job_id }), { shouldStop: () => !alive });
       if (!alive) return;
@@ -581,7 +585,7 @@ export function mountTeam(el, env) {
   async function load() {
     const [r, o, a] = await Promise.all([call(ctx, mod, 'staffUnitList', {}), call(ctx, mod, 'orgOptions', {}), call(ctx, mod, 'clockAlerts', {})]);
     if (!alive) return;
-    if (!r || !r.ok) { el.innerHTML = `<div class="card"><p>${esc((r && r.error) || '讀不到單位名單')}</p></div>`; return; }
+    if (!r || !r.ok) { el.innerHTML = `<div class="card"><p data-role="store-lead-only">${esc(storeLeadOnlyText(r) || (r && r.error) || '讀不到單位名單')}</p></div>`; return; }
     people = r.data.people || [];
     unit = r.data.unit || (people[0] && people[0].unit) || '';
     unitName = (people[0] && people[0].unit_name) || (org.units.find((u) => u.code === unit) || {}).name || '';
@@ -592,9 +596,7 @@ export function mountTeam(el, env) {
   }
 
   function visible() {
-    if (f === 'left') return people.filter((p) => (p.status === 'disabled' || p.last_day) && p.clock_total > p.clock_stopped);
-    if (f === 'namediff') return people.filter((p) => p.name_diff === true);
-    if (f === 'nohome') return people.filter((p) => p.status !== 'disabled' && !p.clock_total && !p.clock_job);
+    if (f) return people.filter((p) => personFilter(f, p, ymd(new Date())));
     return people;
   }
 
