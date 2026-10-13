@@ -354,6 +354,62 @@ function clkUnitConflict_() {
   return '';
 }
 
+// ---- 主店判斷（build、decide、每日同步、調店共用）----
+/**
+ * 這個人的主店。順序：
+ * 1) DZY 單位對得到打卡店 → 用它（by:'unit'；單位有值的人以單位為準，不被打卡資料覆蓋）
+ * 2) 單位空（第一期匯入、尚未認領）或對不到店 → 用打卡對照推斷（by:'infer'）：
+ *    只在一家名冊在職（roster_active≠FALSE、對照未被退回）＝那家；多家＝last_punch 較近者；
+ *    同日或都沒有 → 目前已是 home 的那家，再不然 store_code 字母序最前。
+ *    ※ 平台目前只存每個對照的 last_punch（最近一次打卡日），沒有近 60 天次數／名冊建立日，所以用最近打卡日。
+ * 回 {store, by}；推斷不出來 store＝''。
+ */
+function clkHomeStoreFor_(s, maps) {
+  var unit = clkStaffUnit_(s);
+  var us = unit ? clkStoreOfUnit_(unit) : null;
+  if (us) return { store: us.store_code, by: 'unit' };
+  var best = {};
+  maps.forEach(function (m) {
+    if (m.emp_no !== s.emp || m.state === 'rejected' || m.roster_active === 'FALSE') return;
+    var cur = best[m.store_code] || { last: '', home: false };
+    if ((m.last_punch || '') > cur.last) cur.last = m.last_punch || '';
+    if (m.role === 'home') cur.home = true;
+    best[m.store_code] = cur;
+  });
+  var keys = Object.keys(best);
+  if (!keys.length) return { store: '', by: '' };
+  keys.sort(function (x, y) {
+    if (best[x].last !== best[y].last) return best[x].last > best[y].last ? -1 : 1;
+    if (best[x].home !== best[y].home) return best[x].home ? -1 : 1;
+    return x < y ? -1 : (x > y ? 1 : 0);
+  });
+  return { store: keys[0], by: 'infer' };
+}
+
+/**
+ * 重算一個人各對照的 role（只改 role，不改 state、不發任何打卡單）。
+ * 單位對得到店、且已有 confirmed home 的人不動（以單位／既有為準）；單位空的人 suggested 與 confirmed 都可改。
+ * 回改了幾筆；有改寫 staff_log（role_recalc，只記店代碼與依據）。
+ */
+function clkRecomputeRoles_(empNo, d, why) {
+  var s = clkStaffByEmp_(empNo);
+  if (!s) return 0;
+  var maps = clkMaps_();
+  var mine = maps.filter(function (m) { return m.emp_no === s.emp && m.state !== 'rejected'; });
+  if (!mine.length) return 0;
+  var unitStore = clkStaffUnit_(s) ? clkStoreOfUnit_(clkStaffUnit_(s)) : null;
+  if (unitStore && mine.some(function (m) { return m.state === 'confirmed' && m.role === 'home'; })) return 0;
+  var h = clkHomeStoreFor_(s, maps);
+  if (!h.store || !mine.some(function (m) { return m.store_code === h.store; })) return 0;
+  var n = 0;
+  mine.forEach(function (m) {
+    var want = m.store_code === h.store ? 'home' : 'support';
+    if (m.role !== want) { m.role = want; clkMapSave_(m, d); n++; }
+  });
+  if (n) stfLog_(s.emp, 'role_recalc', 'sync', (why || '') + ' ' + h.store + ' ' + h.by);
+  return n;
+}
+
 // staff_clock
 function clkMaps_() {
   return clkRows_(CLK_SHEET_MAP, CLK_MAP_HEADERS).map(function (m) {
@@ -789,11 +845,12 @@ function handleClockMapList_(token) {
   if (!a.ok) return a;
   if (!clkSheetsReady_()) return { ok: true, data: { suggested: [], confirmed: [], needs_hq: [], candidates: [], confirmed_count: 0, built_at: '' } };
   var stores = clkStoreIndex_(), staff = clkStaffIndex_();
+  var myStoreL = a.scope ? clkStoreOfUnit_(a.scope.unit) : null;
   var maps = clkMaps_();
   var suggested = maps.filter(function (m) {
     if (m.state !== 'suggested' || !m.emp_no) return false;
-    var s = staff[m.emp_no];
-    return a.isHq || (s && clkStaffUnit_(s) === a.scope.unit);
+    // 店長：對照列的 store_code 屬於他單位對應的店就看得到（包含單位還是空的未認領者）
+    return a.isHq || (!!myStoreL && m.store_code === myStoreL.store_code);
   }).map(function (m) { return clkMapRowView_(m, staff[m.emp_no], a.org, stores); });
   var data = { suggested: suggested, confirmed: [], needs_hq: [], candidates: [], confirmed_count: maps.filter(function (m) { return m.state === 'confirmed'; }).length, built_at: '' };
   if (a.isHq) {
@@ -845,8 +902,9 @@ function handleClockMapDecide_(token, payload) {
   if (!a.isHq) {
     // 店長：必須是自己單位、suggested、而且不能改指給別人
     if (!row || row.state !== 'suggested') return clkErr_('dead_state', CLK_MSG.DEAD_STATE);
-    var own = clkStaffByEmp_(row.emp_no);
-    if (!own || clkStaffUnit_(own) !== a.scope.unit) return clkErr_('no_perm', CLK_MSG.NO_PERM);
+    // 店長只能決定「自己店」那家打卡帳號的對照（不看 DZY 單位：未認領的人單位是空的）
+    var myStore = clkStoreOfUnit_(a.scope.unit);
+    if (!myStore || row.store_code !== myStore.store_code) return clkErr_('no_perm', CLK_MSG.NO_PERM);
     if (payload.emp_no !== undefined && stfNormEmp_(payload.emp_no) !== row.emp_no) return clkErr_('no_perm', CLK_MSG.NO_PERM);
   } else if (payload.emp_no !== undefined && payload.emp_no !== '') {
     emp = stfNormEmp_(payload.emp_no);
@@ -879,7 +937,12 @@ function handleClockMapDecide_(token, payload) {
   if (row && row.state === 'confirmed' && row.emp_no !== emp && !a.isHq) return clkErr_('emp_id_taken', CLK_MSG.EMP_ID_TAKEN);
   var role = (a.isHq ? stfStr_(payload.role) : '') || (row && row.role) || '';
   if (['home', 'support'].indexOf(role) === -1 && role !== '') return clkErr_('bad_input', CLK_MSG.BAD_INPUT);
-  if (!role) { var hs = clkStoreOfUnit_(clkStaffUnit_(target)); role = (hs && hs.store_code === store) ? 'home' : 'support'; }
+  if (!role) {
+    var hs = clkHomeStoreFor_(target, maps);
+    role = (hs.store === store) ? 'home' : 'support';
+    // 預設推算的 home 不去搶已經生效的主店（只有總部明確指定 role 才會報 home_exists）
+    if (role === 'home' && maps.some(function (m) { return m.emp_no === emp && m.state === 'confirmed' && m.role === 'home' && m.store_code !== store; })) role = 'support';
+  }
   if (role === 'home' && maps.some(function (m) { return m.emp_no === emp && m.state === 'confirmed' && m.role === 'home' && m.store_code !== store; })) {
     return clkErr_('home_exists', CLK_MSG.HOME_EXISTS);
   }
@@ -1491,6 +1554,17 @@ function clockDailyApply_(today) {
       out.rejected_jobs.push(j.job_id);
     });
 
+    // 2c. 重算主店 role（單位空的人依打卡資料；只改 role，不改 state、不發單）
+    out.role_changes = [];
+    var seenEmp = {};
+    clkMaps_().forEach(function (m) {
+      if (!m.emp_no || seenEmp[m.emp_no] || m.state === 'rejected') return;
+      seenEmp[m.emp_no] = true;
+      var sx = staff[m.emp_no];
+      if (!sx || clkStaffStatus_(sx) === 'disabled') return;
+      if (clkRecomputeRoles_(m.emp_no, d, 'daily')) out.role_changes.push(m.emp_no);
+    });
+
     // 3. 異常：在職者沒有 home 對照、也沒有有效待辦
     out.no_home_map = clkNoHomeMap_(clkStaffAll_(), clkMaps_(), jobs, todayText).map(function (s) { return s.emp; });
     return { ok: true, data: out };
@@ -1554,7 +1628,7 @@ function clockMapBuildApply_(rostersByStore, now) {
     var groups = {};
     entries.forEach(function (e, i) { var r = find(i); (groups[r] = groups[r] || []).push(e); });
 
-    var res = { suggested: 0, kept: 0, candidates: 0, needs_hq: 0 };
+    var res = { suggested: 0, kept: 0, candidates: 0, needs_hq: 0, role_changes: 0 };
     var candidates = [], needs = [];
     // 保留總部尚未處理的「店長轉來」項目（只要那一列現在仍是 rejected 且沒別的生效對照）
     (ms.needs_hq || []).forEach(function (n) {
@@ -1572,7 +1646,6 @@ function clockMapBuildApply_(rostersByStore, now) {
       (dead ? deadByNorm : staffByNorm)[n] = (dead ? deadByNorm : staffByNorm)[n] || [];
       (dead ? deadByNorm : staffByNorm)[n].push(s);
     });
-    var homeStoreOf = function (s) { var st = clkStoreOfUnit_(clkStaffUnit_(s)); return st ? st.store_code : ''; };
     var stores = {};
     Object.keys(groups).forEach(function (g) {
       var grp = groups[g].sort(function (a, b) { return a.key < b.key ? -1 : (a.key > b.key ? 1 : 0); });
@@ -1611,12 +1684,13 @@ function clockMapBuildApply_(rostersByStore, now) {
           needs.push({ kind: 'conflict', name: name, entries: [{ store_code: e.store, emp_id: e.eid }], emp_nos: [s.emp] });
           return;
         }
-        var role = homeStoreOf(s) === e.store ? 'home' : 'support';
-        var row = clkNewMap_(s.emp, e.store, e.eid, role, 'suggested', 'name_match', true, '', d);
+        var row = clkNewMap_(s.emp, e.store, e.eid, 'support', 'suggested', 'name_match', true, '', d);
         row.last_punch = e.punch; clkSave_(CLK_SHEET_MAP, CLK_MAP_HEADERS, row);
         maps.push(row);
         res.suggested++;
       });
+      // 主店依 clkHomeStoreFor_（DZY 單位優先，單位空用打卡資料推斷）；已存在的列也一起更新 role（重跑 build 也會校正）
+      res.role_changes += clkRecomputeRoles_(s.emp, d, 'build');
     });
     res.candidates = candidates.length; res.needs_hq = needs.length;
     clkSetState_(CLK_PROP_MAP_STATE, { built_at: nowText, candidates: candidates, needs_hq: needs, excluded: ms.excluded || [] });
@@ -1734,11 +1808,26 @@ function clockAutoSupportRecord_(params, now) {
  */
 function clkAfterConfirm_(empNo, oldUnit, newUnit, byLabel) {
   try {
-    if (!oldUnit || !newUnit || oldUnit === newUnit || !clkSheetsReady_()) return null;
+    if (!newUnit || oldUnit === newUnit || !clkSheetsReady_()) return null;
     var store = clkStoreOfUnit_(newUnit);
     if (!store) return null;
     var emp = stfNormEmp_(empNo);
     var maps = clkMaps_();
+    if (!oldUnit) {
+      // 認領後單位從空變有值（不是調店，不發單）：新單位的店已有這個人的對照 → 那筆改 home、其他改 support；
+      // 沒有對照 → 不開 add 單，他會出現在 no_home_map 異常讓總部處理
+      var atStore = maps.filter(function (m) { return m.emp_no === emp && m.state !== 'rejected' && m.store_code === store.store_code; });
+      if (atStore.length) {
+        var dd = new Date(), flips = 0;
+        maps.forEach(function (m) {
+          if (m.emp_no !== emp || m.state === 'rejected') return;
+          var want = m.store_code === store.store_code ? 'home' : 'support';
+          if (m.role !== want) { m.role = want; clkMapSave_(m, dd); flips++; }
+        });
+        if (flips) stfLog_(emp, 'role_recalc', 'system', 'claim ' + store.store_code + ' unit');
+      }
+      return { mode: 'claim' };
+    }
     var mine = clkConfirmedOf_(maps, emp);
     if (!mine.length) return null;
     var d = new Date();
@@ -1862,13 +1951,18 @@ function handleStaffUnitList_(token, payload) {
   var maps = clkSheetsReady_() ? clkMaps_() : [], jobs = clkSheetsReady_() ? clkJobs_() : [], stores = clkSheetsReady_() ? clkStoreIndex_() : {};
   var today = clkTodayOf_(new Date());
   var nameDiff = clkSheetsReady_() ? clkNameDiffEmps_() : {};
-  var people = clkStaffAll_().filter(function (s) { return !unit || clkStaffUnit_(s) === unit; }).map(function (s) {
+  var myStoreU = (!a.isHq && a.scope) ? clkStoreOfUnit_(a.scope.unit) : null;
+  var people = clkStaffAll_().filter(function (s) {
+    if (!unit || clkStaffUnit_(s) === unit) return true;
+    // 店長：單位還是空的（未認領）、但在他那家店有對照的人也要看得到
+    return !a.isHq && clkStaffUnit_(s) === '' && !!myStoreU && maps.some(function (m) { return m.emp_no === s.emp && m.store_code === myStoreU.store_code && m.state !== 'rejected'; });
+  }).map(function (s) {
     var o = stfToObj_(s.values, a.org, false);
     var c = clkPersonClock_(s.emp, maps, jobs, stores);
     return { emp_no: s.emp, name: o.name, status: o.status, unit: o.unit, unit_name: o.unit_name, title: o.title, title_name: o.title_name,
       hire_date: s.hire, last_day: s.last, can_cancel_leave: !!s.last && s.last >= today && o.status !== 'disabled',
       clocks: c.clocks, clock_total: c.clock_total, clock_stopped: c.clock_stopped, clock_job: c.clock_job,
-      is_self: !!a.selfEmp && s.emp === a.selfEmp, name_diff: !!nameDiff[s.emp] };
+      is_self: !!a.selfEmp && s.emp === a.selfEmp, name_diff: !!nameDiff[s.emp], unit_empty: clkStaffUnit_(s) === '' };
   });
   return { ok: true, data: { people: people, unit: unit } };
 }
@@ -1900,7 +1994,8 @@ function handleClockAlerts_(token) {
     var s = staff[m.emp_no];
     return s && clkStaffStatus_(s) === 'disabled' && m.state === 'confirmed' && m.roster_active === 'TRUE' && mine(m.emp_no);
   }).map(function (m) { return { emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id }; });
-  var sug = maps.filter(function (m) { return m.state === 'suggested' && m.emp_no && mine(m.emp_no); });
+  var myStoreA = a.scope ? clkStoreOfUnit_(a.scope.unit) : null;
+  var sug = maps.filter(function (m) { return m.state === 'suggested' && m.emp_no && (a.isHq || (!!myStoreA && m.store_code === myStoreA.store_code)); });
   out.pending_confirm = { count: sug.length, items: sug.map(function (m) { return { emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id }; }) };
   var staffAll = clkStaffAll_();
   out.no_home_map = clkNoHomeMap_(staffAll, maps, jobs, today).filter(function (s) { return mine(s.emp); }).map(function (s) { return s.emp; });

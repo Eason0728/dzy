@@ -265,6 +265,16 @@ pending/running ──claim 時重驗不過──► cancelled（不送）
 - **G6 svcDirectory**：回**全部** staff（在職與停用都回，`active` 表狀態；沒有 confirmed 對照的人也在，`clocks` 只放 confirmed），回應多 `total`（筆數，＝`data.length`）與 `generated_at`（`yyyy-MM-dd HH:mm:ss`），佈告欄據此判斷名單完整。
 - `clockAlerts` 沒有新增頂層類別（前端不必新增列）：rejected 但打卡在職 → 併入 `unmapped`（多 `reason:'rejected'`、`emp_no`，總部才有）；離職者只有 suggested 對照 → 併入 `left_but_active`（多 `suggested:true`）；補償停用單（未完成）→ 併入 `outbox_failed`（多 `comp:true`、`reason`，總部才有，未完成就亮）。`counts` 另有 `rejected_active`、`left_suggested`、`compensations` 筆數。
 
+## 3.11 主店判斷與店長可見範圍（未認領者，2026-10-14）
+第一期匯入的同仁在認領前 `staff.unit` 是空的。主店判斷統一走 `clkHomeStoreFor_`（build、decide、每日同步、調店共用）：
+1. DZY 單位對得到打卡店 → 用它（單位有值的人以單位為準，不被打卡資料覆蓋）。
+2. 單位空（或對不到店）→ 用打卡對照推斷：只在一家名冊在職（`roster_active≠FALSE`、對照未被退回）＝那家；多家＝`last_punch` 較近者；同日／都沒有 → 目前已是 home 的那家，再不然 store_code 字母序最前。平台只存每個對照的最近打卡日（沒有近 60 天次數或名冊建立日），所以用最近打卡日。
+- **`clockMapBuildApply_`**：新建與**已存在**的列都重算 role（回傳 `role_changes` 筆數），不改 state。
+- **`clockDailyApply_`**：新增步驟「重算 role」（回傳 `role_changes:[emp_no]`）：單位空的人 suggested／confirmed 都可改 role；單位有值且已有 confirmed home 的人不動。**不改 state、不發任何打卡單**，寫 staff_log `role_recalc`。
+- **`clockMapDecide` 預設 role**：用同一函式；預設推算出 home 但此人已有生效主店時改 support（不報 `home_exists`；只有總部明確帶 `role:'home'` 才報）。
+- **認領確認後單位從空變有值**（`clkAfterConfirm_`，不算調店、不發單、無 transfer_ask）：新單位的店已有此人的對照 → 該店對照改 home、其他改 support；沒有對照 → 不開 add 單、不動既有對照，此人出現在 `no_home_map` 讓總部處理。
+- **店長可見／可決定**改以「對照列的店」為準：`clockMapList.suggested`、`clockAlerts.pending_confirm` 只含 `store_code` 等於店長單位對應的店的 suggested 列（單位空的未認領者也看得到）；`clockMapDecide` 店長只能決定自己店那家打卡帳號的對照（別店 `no_perm`）。`staffUnitList` 店長另外看得到「單位空、在本店有未退回對照」的人，每列多 `unit_empty:boolean`。單位為空的人店長仍不能對他登記離職／要連結（`no_perm`，單位不是店長的）。
+
 ## 4. Hook（Staff.gs 內的小改動，沒有 StaffClock.gs 時自動略過）
 - `setupStaff` 結尾呼叫 `clkSetup_`（建三分頁＋staff 右側欄）。
 - `handleStaffList_` 呼叫 `clkDecorateStaffList_`。
