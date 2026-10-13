@@ -233,5 +233,18 @@ ok(/clockmap: mountClockmap/.test(sidx) && /clockAlerts/.test(sidx), 'staff/inde
 // ---- 未認領者（單位空）卡片顯示 ----
 ok(/const unitOf = \(x\) => x\.unit_name \|\| x\.unit \|\| '單位未填（未認領）'/.test(fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-ui.js'), 'utf8')), '對照卡片：單位為空時顯示「單位未填（未認領）」而不是空白');
 
+// ---- 總部設為主店（clockSetHome）----
+{
+  const cx = (x, v) => L.homeAction(Object.assign({ state: 'confirmed', role: 'support' }, x), v);
+  ok(cx({}, hq) === 'btn', '「設為主店」：總部、已確認、不是主店 → 出現按鈕');
+  ok(cx({ role: 'home' }, hq) === 'mark', '已是主店 → 只顯示「主店」標記、不給按鈕');
+  ok(cx({ state: 'suggested' }, hq) === '' && cx({ state: 'rejected' }, hq) === '', '待確認／已退回的列不出現');
+  ok(cx({}, lead) === '' && cx({}, { isHq: false }) === '' && cx({}, null) === '', '店長與非總部看不到按鈕');
+  const ui = fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-ui.js'), 'utf8');
+  ok(/data-act="cm-home"/.test(ui) && /ctx\.ui\.confirm\(`要把 \$\{emp\} 的主店指定為/.test(ui) && /'clockSetHome'/.test(ui) && /homeAction\(x, \{ isHq \}\) === 'btn'/.test(ui), '按鈕接線：二次確認後呼叫 clockSetHome、成功後 act() 重新載入');
+  const { isReadAction } = await import('../platform/dryrun.js');
+  ok(!isReadAction('platform', 'clockSetHome', { emp_no: 'DZY001', store_code: 'hq' }), 'dryrun 不放行 clockSetHome（是寫入）');
+}
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

@@ -245,3 +245,13 @@ export function isDryRunResult(r) {
 export function storeLeadOnlyText(r) {
   return r && r.code === 'no_perm' ? '這個分頁給門市店長用；總部同仁請到「同仁名單」處理。' : '';
 }
+
+/**
+ * 打卡對照卡片的「主店」區塊（總部「全部對照」）：
+ * 已確認且不是主店 → 'btn'（給「設為主店」按鈕）；已確認且已是主店 → 'mark'（只顯示標記、不給按鈕）；
+ * 其他（待確認、已退回、店長檢視）→ ''。
+ */
+export function homeAction(x, viewer) {
+  if (!viewer || !viewer.isHq || !x || x.state !== 'confirmed') return '';
+  return x.role === 'home' ? 'mark' : 'btn';
+}
