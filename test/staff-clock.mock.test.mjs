@@ -1749,5 +1749,64 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'V2', decision: 'confirm' }, mgrJS.token).ok, 'VIS 金山店長可以確認自己店的');
 })();
 
+(() => {
+  // ── 總部指定主店（釘選）clockSetHome ──
+  const app = fresh();
+  const { sb, sheets, tok, props } = app;
+  const mgr = claimApprove(app, '釘店長', 'mgr-pin-pw-001', MZT_GF('sm'));
+  post(sb, 'staffImport', { names: ['釘人甲', '釘人乙', '釘單位人'] }, tok);
+  const E = (n) => sheets.staff._rows().find((r) => r[2] === n)[0];
+  const a = E('釘人甲'), b = E('釘人乙'), u = E('釘單位人');
+  giveMap(app, a, 'mztgf', 'P1', 'home', { last_punch: '2026-10-10' });
+  giveMap(app, a, 'hq', 'P2', 'support', { last_punch: '2026-09-01' });
+  giveMap(app, a, 'mztjs', 'P3', 'support', { last_punch: '2026-10-01' });
+  giveMap(app, a, 'cf', 'P4', 'support', { state: 'suggested', source: 'name_match' });
+  const roles = (emp) => mapOf(app, emp).map((m) => m.store_code + ':' + m.role + ':' + m.state).sort().join();
+  ok(post(sb, 'clockSetHome', { emp_no: a, store_code: 'hq' }, mgr.token).code === 'no_perm', 'PIN ★非總部（店長）被拒');
+  ok(post(sb, 'clockSetHome', { emp_no: a, store_code: 'cf' }, tok).code === 'bad_input', 'PIN ★該店只有 suggested、沒有 confirmed 對照 → bad_input');
+  ok(post(sb, 'clockSetHome', { emp_no: a, store_code: 'mztlzl' }, tok).code === 'bad_input' && post(sb, 'clockSetHome', { emp_no: a, store_code: 'nope' }, tok).code === 'bad_input', 'PIN 完全沒對照的店、不認得的店 → bad_input');
+  ok(post(sb, 'clockSetHome', { emp_no: 'DZY999', store_code: 'hq' }, tok).code === 'not_found', 'PIN 找不到同仁');
+  const jobsBefore = jobs(app).length;
+  const r = post(sb, 'clockSetHome', { emp_no: a, store_code: 'hq' }, tok);
+  ok(r.ok && r.data.pinned === true && JSON.parse(props.CLOCK_HOME_PIN)[a] === 'hq', 'PIN 釘選寫進 Script Property CLOCK_HOME_PIN', r);
+  ok(roles(a) === 'cf:support:suggested,hq:home:confirmed,mztgf:support:confirmed,mztjs:support:confirmed', 'PIN ★立刻對調：hq 對照 home、其他 confirmed 改 support，suggested 不動、state 不變', roles(a));
+  ok(jobs(app).length === jobsBefore, 'PIN ★不發任何打卡單');
+  ok(sheets.staff_log._rows().some((x) => x[1] === a && x[2] === 'home_pin' && x[4] === 'hq'), 'PIN 寫 staff_log（home_pin）');
+  // 每日重算不覆蓋（mztjs 打卡變成最近）
+  setMap(app, 'mztjs', 'P3', 'last_punch', '2026-10-13');
+  sb.clockDailyApply_(dayT(0));
+  ok(roles(a).indexOf('hq:home:confirmed') !== -1 && roles(a).indexOf('mztjs:support') !== -1, 'PIN ★每日重算不被較近的打卡資料覆蓋', roles(a));
+  // 對照：沒釘選的人會跟著打卡走
+  giveMap(app, b, 'mztgf', 'Q1', 'home', { last_punch: '2026-10-01' }); giveMap(app, b, 'mztjs', 'Q2', 'support', { last_punch: '2026-10-13' });
+  sb.clockDailyApply_(dayT(0));
+  ok(mapOf(app, b).find((m) => m.store_code === 'mztjs').role === 'home', 'PIN 對照組：沒釘選的人每日重算跟著最近打卡');
+  // clockMapList 帶 pinned
+  const lst = post(sb, 'clockMapList', {}, tok).data.confirmed;
+  ok(lst.find((x) => x.emp_id === 'P2').pinned === true && lst.find((x) => x.emp_id === 'P1').pinned === false, 'PIN ★clockMapList 每列帶 pinned 布林');
+  // 釘選的對照被停用 → 失效
+  setMap(app, 'hq', 'P2', 'roster_active', 'FALSE');
+  sb.clockDailyApply_(dayT(0));
+  ok(mapOf(app, a).find((m) => m.store_code === 'mztjs').role === 'home' && mapOf(app, a).find((m) => m.store_code === 'hq').role === 'support', 'PIN ★釘選的對照被停用 → 釘選失效，回到打卡推斷', roles(a));
+  setMap(app, 'hq', 'P2', 'roster_active', 'TRUE');
+  // 清除釘選
+  const c = post(sb, 'clockSetHome', { emp_no: a, store_code: 'hq' }, tok);
+  ok(c.ok && roles(a).indexOf('hq:home') !== -1, 'PIN （重新釘選）');
+  const clr = post(sb, 'clockSetHome', { emp_no: a, store_code: '' }, tok);
+  ok(clr.ok && clr.data.pinned === false && !('' + app.props.CLOCK_HOME_PIN).includes(a) && mapOf(app, a).find((m) => m.store_code === 'mztjs').role === 'home', 'PIN ★清除釘選後回到打卡推斷（mztjs 最近打卡）', roles(a));
+  ok(post(sb, 'clockSetHome', { emp_no: a, store_code: '' }, mgr.token).code === 'no_perm', 'PIN 清除也只限總部');
+  // DZY 單位有值時單位優先
+  post(sb, 'staffEdit', { emp_no: u, brand: 'mzt', unit: 'mzt-gf', dept: '', title: 'pt' }, tok);
+  giveMap(app, u, 'mztgf', 'U1', 'support', { state: 'suggested', source: 'name_match', last_punch: '2026-09-01' });
+  giveMap(app, u, 'hq', 'U2', 'support', { state: 'confirmed', last_punch: '2026-10-13' });
+  app.props.CLOCK_HOME_PIN = JSON.stringify(Object.assign(JSON.parse(app.props.CLOCK_HOME_PIN || '{}'), { [u]: 'hq' }));
+  const h = sb.clkHomeStoreFor_(sb.clkStaffByEmp_(u), sb.clkMaps_());
+  ok(h.store === 'mztgf' && h.by === 'unit', 'PIN ★DZY 單位有值 → 單位優先，釘選不生效', h);
+  const h2 = sb.clkHomeStoreFor_(sb.clkStaffByEmp_(a), sb.clkMaps_());
+  ok(h2.by === 'infer', 'PIN 優先順序：沒釘選也沒單位 → 推斷', h2);
+  // Code.gs：寫入類 action 上鎖
+  const mut = /MUTATING_ACTIONS = \{([\s\S]*?)\};/.exec(SRC.find(([f]) => f === 'Code.gs')[1])[1];
+  ok(mut.indexOf('clockSetHome: 1') !== -1, 'PIN clockSetHome 上全域寫入鎖');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

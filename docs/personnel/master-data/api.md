@@ -275,6 +275,12 @@ pending/running ──claim 時重驗不過──► cancelled（不送）
 - **認領確認後單位從空變有值**（`clkAfterConfirm_`，不算調店、不發單、無 transfer_ask）：新單位的店已有此人的對照 → 該店對照改 home、其他改 support；沒有對照 → 不開 add 單、不動既有對照，此人出現在 `no_home_map` 讓總部處理。
 - **店長可見／可決定**改以「對照列的店」為準：`clockMapList.suggested`、`clockAlerts.pending_confirm` 只含 `store_code` 等於店長單位對應的店的 suggested 列（單位空的未認領者也看得到）；`clockMapDecide` 店長只能決定自己店那家打卡帳號的對照（別店 `no_perm`）。`staffUnitList` 店長另外看得到「單位空、在本店有未退回對照」的人，每列多 `unit_empty:boolean`。單位為空的人店長仍不能對他登記離職／要連結（`no_perm`，單位不是店長的）。
 
+### 3.12 clockSetHome — 總部指定主店（釘選）
+- 權限：只有總部（`platform.staff`）。輸入 `{emp_no, store_code}`；`store_code:''` 清除釘選。
+- 該人在該店必須有 confirmed 對照，否則 `bad_input`（找不到同仁 `not_found`）。成功：釘選寫進 Script Property `CLOCK_HOME_PIN`（`{emp_no: store_code}`，不改 sheet）、那店 confirmed 對照設 `home`、其他 confirmed 設 `support`（suggested 不動）；**不改 state、不發任何打卡單**；staff_log `home_pin`（detail＝店代碼或 `clear`）。清除釘選後立即用打卡推斷重算 role。輸出 `{emp_no, store_code, pinned, role_changes}`。
+- `clkHomeStoreFor_` 優先順序：DZY 單位對得到打卡店 → 單位的店；否則釘選（且該店仍有未停用的 confirmed 對照）→ 釘選的店；否則打卡推斷。釘選指向的對照被停用或 rejected 時自動失效（表不刪，判斷時跳過）。每日重算、build、decide 預設 role 都走這個函式，所以尊重釘選。
+- `clockMapList` 的 `suggested`／`confirmed` 每列多 `pinned:boolean`（該人的釘選店＝此列的店）。寫入類 action（上全域寫入鎖）；前端 dryrun 不放行。
+
 ## 4. Hook（Staff.gs 內的小改動，沒有 StaffClock.gs 時自動略過）
 - `setupStaff` 結尾呼叫 `clkSetup_`（建三分頁＋staff 右側欄）。
 - `handleStaffList_` 呼叫 `clkDecorateStaffList_`。

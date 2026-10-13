@@ -13,7 +13,7 @@ import { esc } from './esc.js';
 import { orgFieldsHtml, bindOrgFields, readOrgFields } from './org-fields.js';
 import {
   ymd, leaveMinDate, leaveDateError, leaveLabel, stoppedLabel, personActions, addFormErrors,
-  pollJob, linkOutcome, clockLinkUrl, jobKindText, personFilter, isDryRunResult, storeLeadOnlyText
+  pollJob, linkOutcome, clockLinkUrl, jobKindText, personFilter, isDryRunResult, storeLeadOnlyText, homeAction
 } from './clock-lib.js';
 
 const domOf = (html) => { const d = document.createElement('div'); d.innerHTML = html; return d; };
@@ -347,6 +347,8 @@ export function mountClockMap(el, env) {
         <div class="card-row">
           ${confirmed ? '' : `<button type="button" class="btn" style="background:var(--ok);border-color:var(--ok);color:var(--ink-inverse)" data-act="cm-yes" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">對</button>
           <button type="button" class="btn btn-danger" data-act="cm-no" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">不對</button>`}
+          ${homeAction(x, { isHq }) === 'btn' ? `<button type="button" class="btn btn-secondary" data-act="cm-home" data-emp="${esc(x.emp_no)}" data-store="${esc(x.store_code)}">設為主店</button>` : ''}
+          ${homeAction(x, { isHq }) === 'mark' ? `<span class="tag tag-ok" data-role="home-mark">主店${x.pinned ? '（已指定）' : ''}</span>` : ''}
           ${isHq ? `<button type="button" class="btn btn-secondary" data-act="cm-assign" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">${confirmed ? '改指定…' : '指定給別人…'}</button>` : ''}
         </div>
       </div>`;
@@ -461,6 +463,16 @@ export function mountClockMap(el, env) {
     if (a === 'cm-no') {
       if (!(await ctx.ui.confirm('確定不是這位同仁？這筆會轉給總部處理。'))) return;
       return act(() => decide({ store_code: store, emp_id: eid, decision: 'reject' }, '已退回'));
+    }
+    if (a === 'cm-home') {
+      const emp = btn.getAttribute('data-emp');
+      if (!(await ctx.ui.confirm(`要把 ${emp} 的主店指定為 ${store} 嗎？（只改主店／支援店標記，不會動打卡系統）`))) return;
+      return act(async () => {
+        const r = await callBusy(ctx, mod, 'clockSetHome', { emp_no: emp, store_code: store });
+        if (!r || !r.ok) { ctx.ui.toast((r && r.error) || '指定失敗', 'danger'); return false; }
+        ctx.ui.toast('已指定主店', 'ok');
+        return true;
+      });
     }
     if (a === 'cm-assign') {
       const r = await assignDialog([{ store_code: store, emp_id: eid }], [], `指定 ${store}:${eid}`);
