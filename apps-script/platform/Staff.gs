@@ -928,7 +928,10 @@ function handleStaffSetActive_(token, payload) {
     t.v[STF_COL.status] = 'disabled';
     usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
     setTokenAfter_(userRow.row);
-    return stfSave_(t, 'disable', '');
+    var saved = stfSave_(t, 'disable', '');
+    // 員工名單統一：舊「停用」按鈕只停平台帳號——同時對他每個打卡對照發停用單（StaffClock.gs）
+    if (typeof clkAfterDisable_ === 'function') clkAfterDisable_(t.emp, t.auth.user.id);
+    return saved;
   }
   if (t.status !== 'disabled') return { ok: false, error: STF_MSG.BAD_STATE };
   var prev = stfStr_(t.v[STF_COL.prev_status]);
@@ -966,6 +969,7 @@ function handleStaffEdit_(token, payload) {
   payload = payload || {};
   var changed = [];
   var org = stfReadOrg_();
+  var oldUnitForClock = stfStr_(t.v[STF_COL.unit]);
 
   if (payload.name !== undefined) {
     var name = stfStr_(payload.name);
@@ -1007,7 +1011,12 @@ function handleStaffEdit_(token, payload) {
     var userRow = findUsrRowById_(stfStr_(t.v[STF_COL.user_id]));
     if (userRow) stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.name + 1).setValue(authSafeCell_(t.v[STF_COL.name]));
   }
-  return stfSave_(t, 'admin_edit', '改了：' + changed.join(','));
+  var savedEdit = stfSave_(t, 'admin_edit', '改了：' + changed.join(','));
+  // 有打卡對照的人改單位一律走調店流程（StaffClock.gs clkAfterConfirm_）：新單位有打卡就開 add 單、舊主店降支援
+  if (changed.indexOf('org') !== -1 && typeof clkAfterConfirm_ === 'function') {
+    clkAfterConfirm_(t.emp, oldUnitForClock, stfStr_(t.v[STF_COL.unit]), t.auth.user.id);
+  }
+  return savedEdit;
 }
 
 // ============================================================

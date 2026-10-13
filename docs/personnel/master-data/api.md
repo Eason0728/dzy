@@ -245,6 +245,22 @@ pending/running ──claim 時重驗不過──► cancelled（不送）
 ## 3.9 第一期 staffSetActive(true) 的限制
 有 `last_day` 的人（登記過離職）用舊「啟用」會被擋：`{ok:false, code:'use_reinstate', error:'…請用「復職」恢復…'}`，請走 `staffReinstate`（清 last_day＋恢復打卡）。沒有 last_day 的人（人資手動停用）舊啟用照常。
 
+## 3.10 上線前關修正（2026-10-13，Fable＋GPT 互盲；代號見 prelaunch-review.md）
+- **F2＝G14**：staffCreateByUnit、staffRename、clockCandidateCreate 姓名開頭是 `= + - @` → `bad_input`（試算表會當公式）。
+- **F4＝G11**：`clockRosterApply_` 對「有 src_* 的新列」改呼叫 `clockAutoSupportCheck_`（與 7A 同一套條件）；不過 → 該列進「打卡上有、沒對照」並**自動開補償停用單**（`summary.compensated`）。沒有 src_* 的新列只進異常（G4 查證：每日路徑完全不依姓名建對照，姓名比對只在手動的 clockMapBuildApply_，且只產生 suggested）。
+- **F1＝G3**：`add` 單 `tries>0`，或 `running` 過期重撿，**送前不取消**（打卡端可能已建；origin_op 冪等）；add 成功時若該人已停用／已過離職日，立刻補一張停用單。新增內部函式 **`clockCompensate_(store_code, emp_id, reason, emp_no?, now?)`**：7A 在店端建好人（svc_add 成功）卻記錄失敗時由同步員呼叫，開 `deactivate` 補償單（`expect.comp=true`，只在該編號已有 confirmed 對照時送前取消）；同編號已有未完成補償單則回既有（`existing:true`）；編號已有生效對照回 `conflict`。補償單進 `clockAlerts.compensations`（紅燈）。claim 回傳多一個 `comp:boolean`。
+- **G2**：該打卡編號有 `running`（送出中）的 add／deactivate／reactivate 單時，`clockMapDecide` 不能退回或改綁給別人（`job_open`）；`clockOutboxDone_` 回填 deactivate／reactivate 前比對對照仍是原人、原狀態，否則不改對照、記 staff_log `outbox_done_stale`（下次名冊同步校正）。pending 的單不擋（送前重驗會取消）。
+- **G5**：`clockMapBuildApply_` 名字比對只看在職者（排除 disabled、last_day 已過）；只對得到已離職者 → `needs_hq` `disabled_match`（不建 suggested、不當新人）。
+- **G6**：離職連動時平台帳號列遺失，staff 仍標停用、店端停用單照發；`disable_errors` 回 `user_missing`、staff_log `disable_failed`、`leave_overdue` 持續列出（停用後帳號沒停乾淨也算）。
+- **G7**：第一期 `staffEdit` 改單位後，同樣走調店流程（`clkAfterConfirm_`：已有 confirmed 對照才處理）。
+- **G8**：第一期 `staffSetActive(false)` 後立刻對每個 confirmed 對照（roster 未停用者）發 deactivate 單（`clkAfterDisable_`），不等隔日對帳。
+- **G12**：`clockDailyApply_` 新增：`source=auto_support` 的 rejected 對照、打卡帳號又在職、人也在職 → 發 deactivate 單（`expect.state=rejected, staff=active`；回傳 `rejected_jobs`）。rejected 但打卡在職、離職者只有 suggested 對照而打卡仍在職，兩種都進首頁異常（見下方 alerts 說明）。
+- **F3**：`clockAutoSupportCheck_` 新 reason `source_stopped`（來源對照 `roster_active=FALSE`）。
+- **F5**：`clockRosterApply_` 收到空 `rows` 而該店已有 confirmed 對照 → `{ok:false, code:'empty_roster'}`，不套用。
+- **F6**：`clockOutboxDone_` add 成功結果若帶 `active:false`，對照照實寫 `roster_active=FALSE`（進 `home_stopped`）。
+- **F10**：`clockLink` 支援店（role=support）的連結只給總部，店長 → `no_perm`。
+- `clockAlerts` 沒有新增頂層類別（前端不必新增列）：rejected 但打卡在職 → 併入 `unmapped`（多 `reason:'rejected'`、`emp_no`，總部才有）；離職者只有 suggested 對照 → 併入 `left_but_active`（多 `suggested:true`）；補償停用單（未完成）→ 併入 `outbox_failed`（多 `comp:true`、`reason`，總部才有，未完成就亮）。`counts` 另有 `rejected_active`、`left_suggested`、`compensations` 筆數。
+
 ## 4. Hook（Staff.gs 內的小改動，沒有 StaffClock.gs 時自動略過）
 - `setupStaff` 結尾呼叫 `clkSetup_`（建三分頁＋staff 右側欄）。
 - `handleStaffList_` 呼叫 `clkDecorateStaffList_`。

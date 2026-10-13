@@ -96,7 +96,11 @@ var CLK_MSG = {
   PRECHECK_NO_STORE: '沒有啟用的打卡店',
   NAME_SAME: '姓名沒有變',
   DEAD_STATE: '目前的狀態不能做這個動作',
-  UNAUTHORIZED: '服務金鑰錯誤'
+  UNAUTHORIZED: '服務金鑰錯誤',
+  NAME_START: '姓名開頭不能是 = + - @ 這四個符號（會被試算表當成公式），請改寫或加註在後面',
+  JOB_OPEN: '這個打卡編號還有送出中的待辦單，請等它完成再改',
+  EMPTY_ROSTER: '打卡端回了空名冊，但這家店已有生效對照——疑似打錯分頁或網址，不套用',
+  SUPPORT_LINK_HQ: '支援店的打卡連結只給總部'
 };
 
 // ============================================================
@@ -136,6 +140,8 @@ function clkValidYmd_(s) {
 /** 打卡編號以打卡名冊原字串為準（只去頭尾空白，不改大小寫；打卡端比對區分大小寫） */
 function clkEid_(v) { return stfStr_(v); }
 function clkCode_(v) { return stfStr_(v).toLowerCase(); }
+/** 開頭是 = + - @ 的姓名會在試算表變公式：新增／改名／候選建立一律擋 */
+function clkNameBadStart_(name) { return /^[=+\-@]/.test(String(name)); }
 function clkNormName_(v) { return String(v === undefined || v === null ? '' : v).replace(/[\s　]+/g, ''); }
 function clkTruthy_(v) { return v === true || String(v).trim().toUpperCase() === 'TRUE'; }
 function clkBoolText_(b) { return b ? 'TRUE' : 'FALSE'; }
@@ -437,16 +443,18 @@ function clkDisableStaff_(s, by, detail, d) {
   var v = s.values.slice(0, STF_COL_COUNT);
   var status = stfStr_(v[STF_COL.status]);
   if (status === 'disabled') return clkErr_('already_disabled', CLK_MSG.ALREADY_DISABLED);
+  // 平台帳號列遺失也要把 staff 標停用（店端停用單才驗得過、才發得出去）；回 warn 讓呼叫端記錄、進首頁異常
   var userRow = findUsrRowById_(stfStr_(v[STF_COL.user_id]));
-  if (!userRow) return clkErr_('not_found', CLK_MSG.NOT_FOUND);
   v[STF_COL.prev_status] = status;
   v[STF_COL.status] = 'disabled';
   v[STF_COL.updated_at] = clkNowText_(d);
-  stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
-  setTokenAfter_(userRow.row);
+  if (userRow) {
+    stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
+    setTokenAfter_(userRow.row);
+  }
   stfWriteRow_(STF_SHEET, s.row, v, STF_COL_COUNT);
   stfLog_(s.emp, 'disable', by, detail || '');
-  return { ok: true };
+  return userRow ? { ok: true } : { ok: true, warn: 'user_missing' };
 }
 function clkEnableStaff_(s, by, detail, d) {
   var v = s.values.slice(0, STF_COL_COUNT);
@@ -526,6 +534,7 @@ function handleStaffCreateByUnit_(token, payload) {
   var name = stfStr_(payload.name);
   if (!name) return clkErr_('bad_input', CLK_MSG.NAME_REQUIRED);
   if (name.length > CLK_NAME_MAX) return clkErr_('bad_input', CLK_MSG.NAME_TOO_LONG);
+  if (clkNameBadStart_(name)) return clkErr_('bad_input', CLK_MSG.NAME_START);
   var o = clkResolveOrg_(a, payload);
   if (!o.ok) return o;
   var phone = stfPhone_(payload.phone);
@@ -619,6 +628,7 @@ function handleStaffRename_(token, payload) {
   if (!s) return clkErr_('not_found', CLK_MSG.NOT_FOUND);
   var name = stfStr_(payload.name);
   if (!name) return clkErr_('bad_input', CLK_MSG.NAME_REQUIRED);
+  if (clkNameBadStart_(name)) return clkErr_('bad_input', CLK_MSG.NAME_START);
   if (name === clkStaffName_(s)) return clkErr_('no_change', CLK_MSG.NAME_SAME);
   var clash = clkNameClash_(name, clkStaffUnit_(s), s.emp);
   if (clash) return clash;
@@ -786,6 +796,12 @@ function handleClockMapDecide_(token, payload) {
   var by = clkActorLabel_(a);
   var emp = row ? row.emp_no : '';
 
+  // 這個打卡編號有送出中（running）的單時禁止改綁／退回：單送出的是舊對照，回填會蓋到新對照
+  var targetEmp = (a.isHq && payload.emp_no !== undefined && payload.emp_no !== '') ? stfNormEmp_(payload.emp_no) : emp;
+  if (row && (decision === 'reject' || row.emp_no !== targetEmp) &&
+      clkJobs_().some(function (j) { return j.state === 'running' && j.store_code === store && j.emp_id === eid && ['add', 'deactivate', 'reactivate'].indexOf(j.kind) !== -1; })) {
+    return clkErr_('job_open', CLK_MSG.JOB_OPEN);
+  }
   if (!a.isHq) {
     // 店長：必須是自己單位、suggested、而且不能改指給別人
     if (!row || row.state !== 'suggested') return clkErr_('dead_state', CLK_MSG.DEAD_STATE);
@@ -856,6 +872,7 @@ function handleClockCandidateCreate_(token, payload) {
   if (hire && !clkValidYmd_(hire)) return clkErr_('bad_input', CLK_MSG.HIRE_DATE);
   var name = stfStr_(cand.name);
   if (name.length > CLK_NAME_MAX) return clkErr_('bad_input', CLK_MSG.NAME_TOO_LONG);
+  if (clkNameBadStart_(name)) return clkErr_('bad_input', CLK_MSG.NAME_START);
   var clash = clkNameClash_(name, o.unit, '');
   if (clash) return clash;
   var n = stfMaxEmpNum_() + 1;
@@ -965,6 +982,7 @@ function handleClockLink_(token, payload) {
     if (want ? x.store_code === want : (x.role === 'home' && !m)) m = x;
   });
   if (!m) return clkErr_('no_map', CLK_MSG.NO_MAP);
+  if (m.role !== 'home' && !a.isHq) return clkErr_('no_perm', CLK_MSG.SUPPORT_LINK_HQ);   // 支援店連結只給總部
   var d = new Date();
   var jobs = clkJobs_();
   var j = clkEnqueue_({ kind: 'link', emp_no: s.emp, store_code: m.store_code, emp_id: m.emp_id,
@@ -1017,6 +1035,13 @@ function clkWithLock_(fn) {
 function clkJobInvalid_(j, maps, staffByEmp, d) {
   var ex = clkJson_(j.expect_json, {});
   if (j.kind === 'build') return null;
+  if (ex.comp) {   // 補償停用單：只在這個打卡編號已被人合法對照（confirmed）時取消
+    var cm = clkMapFind_(maps, j.store_code, j.emp_id);
+    return (cm && cm.state === 'confirmed') ? '這個打卡編號已經有生效對照' : null;
+  }
+  // 已經試著送過的 add 單（tries>0，或 running 過期＝可能已送達）不取消：打卡端已有（或可能有）這個人，
+  // 取消會留下平台沒對照、沒人會停的在職帳號。照送（svc_add 以 origin_op 冪等），之後由對帳／離職連動處理
+  if (j.kind === 'add' && (Number(j.tries) > 0 || j.state === 'running')) return null;
   var s = staffByEmp[j.emp_no];
   if (!s) return '同仁已不存在';
   var status = clkStaffStatus_(s);
@@ -1080,7 +1105,7 @@ function clockOutboxClaim_(now, limit, kinds) {
       clkJobSave_(j, d);
       var ex = clkJson_(j.expect_json, {});
       out.push({ job_id: j.job_id, kind: j.kind, emp_no: j.emp_no, store_code: j.store_code, emp_id: j.emp_id,
-        name: sendName, op_id: j.op_id, tries: j.tries, by: ex.by || '' });
+        name: sendName, op_id: j.op_id, tries: j.tries, by: ex.by || '', comp: !!ex.comp });
     }
     return { ok: true, data: { jobs: out, cancelled: cancelled } };
   });
@@ -1139,19 +1164,33 @@ function clockOutboxDone_(job_id, result, now) {
         var other = maps.filter(function (m) { return m.emp_no === j.emp_no && m.store_code === j.store_code && m.state === 'confirmed' && m.emp_id !== eid; });
         if (other.length) return clkFail_(j, 'conflict', CLK_MSG.DUP_CONFIRMED, false, d);
         if (existing) {
-          existing.role = 'home'; existing.state = 'confirmed'; existing.source = 'created'; existing.roster_active = 'TRUE';
+          existing.role = 'home'; existing.state = 'confirmed'; existing.source = 'created'; existing.roster_active = clkBoolText_(result.active !== false);
           existing.confirmed_by = ex.by || '管理系統'; existing.confirmed_at = nowText; clkMapSave_(existing, d);
         } else {
-          clkNewMap_(j.emp_no, j.store_code, eid, 'home', 'confirmed', 'created', true, ex.by || '管理系統', d);
+          // 打卡端冪等命中已停用的列時會帶 active:false：照實寫，不假裝在職（alerts.home_stopped 會列出）
+          clkNewMap_(j.emp_no, j.store_code, eid, 'home', 'confirmed', 'created', result.active !== false, ex.by || '管理系統', d);
         }
         j.emp_id = eid;
+        // 排隊期間這個人已被停用（add 單照送了）：打卡端現在有個在職帳號，立刻補一張停用單，不等隔日對帳
+        var gone = clkStaffByEmp_(j.emp_no);
+        if (gone && (clkStaffStatus_(gone) === 'disabled' || (gone.last && gone.last < clkTodayOf_(d)))) {
+          var allJobs = clkJobs_();
+          if (!clkOpenJob_(allJobs, 'deactivate', j.emp_no, j.store_code, eid)) {
+            clkEnqueue_({ kind: 'deactivate', emp_no: j.emp_no, store_code: j.store_code, emp_id: eid,
+              expect: { map: j.store_code + ':' + eid, emp_no: j.emp_no, state: 'confirmed', staff: 'disabled', by: 'add-done' } }, d, clkUsedIds_(allJobs));
+          }
+        }
         if (ex.demote_old) clkAddTransferAsk_(j.emp_no, clkPromoteHome_(clkMaps_(), j.emp_no, j.store_code, d));
       } else if (j.kind === 'deactivate' || j.kind === 'reactivate') {
         var m = clkMapFind_(maps, j.store_code, j.emp_id);
-        if (m) {
+        // 回填前比對 expect：送出期間這個打卡編號若被改綁給別人（或狀態變了），不拿舊單的結果去蓋新對照
+        var same = m && (ex.comp ? m.state !== 'confirmed' : (m.emp_no === j.emp_no && m.state === (ex.state || 'confirmed')));
+        if (same) {
           m.roster_active = j.kind === 'deactivate' ? 'FALSE' : 'TRUE';
           if (j.kind === 'deactivate' && ex.then === 'reject') { m.state = 'rejected'; }
           clkMapSave_(m, d);
+        } else if (m) {
+          stfLog_(j.emp_no, 'outbox_done_stale', 'sync', j.kind + ' ' + j.job_id);   // 下一次名冊同步會用真實狀態校正
         }
       } else if (j.kind === 'link') {
         var key = stfStr_(result.link_key);
@@ -1209,9 +1248,14 @@ function clockRosterApply_(store_code, rows, payrollNames, now) {
     if (!Array.isArray(rows)) return clkErr_('bad_input', CLK_MSG.BAD_INPUT);
     var d = clkDate_(now), nowText = clkNowText_(d);
     var maps = clkMaps_();
+    // 空名冊而這家店已有生效對照 → 視為抓取失敗（分頁改名、網址指錯），不套用，否則整店對照會被標成停用
+    if (rows.length === 0 && maps.some(function (x) { return x.store_code === store && x.state === 'confirmed'; })) {
+      return clkErr_('empty_roster', CLK_MSG.EMPTY_ROSTER);
+    }
+    var jobsCache = null, usedIds = null;
     var staff = clkStaffIndex_();
     var inRoster = {};
-    var summary = { updated: 0, created: 0, rejected: 0, unmapped: 0, name_diff: 0, payroll_diff: 0, conflicts: 0 };
+    var summary = { updated: 0, created: 0, rejected: 0, unmapped: 0, name_diff: 0, payroll_diff: 0, conflicts: 0, compensated: 0 };
     var unmapped = [], nameDiff = [], by = 'roster-sync';
     var jobs = null;
     rows.forEach(function (r) {
@@ -1242,8 +1286,15 @@ function clockRosterApply_(store_code, rows, payrollNames, now) {
       var srcStore = clkCode_(r.src_store), srcEid = clkEid_(r.src_emp_id);
       var src = (srcStore && srcEid) ? clkMapFind_(maps, srcStore, srcEid) : null;
       if (src && src.state === 'confirmed' && staff[src.emp_no]) {
-        var dupHere = maps.some(function (x) { return x.emp_no === src.emp_no && x.store_code === store && x.state === 'confirmed'; });
-        if (dupHere) { summary.conflicts++; unmapped.push({ emp_id: eid, name: stfStr_(r.name) }); return; }
+        // 與 7A 同一套把關（clockAutoSupportCheck_）：不過 → 列為異常，並發補償停用單（店端多出來的在職帳號沒人管）
+        var chk = clockAutoSupportCheck_({ store_code: store, src_store: srcStore, src_emp_id: srcEid });
+        if (!chk.data.allowed) {
+          summary.conflicts++;
+          unmapped.push({ emp_id: eid, name: stfStr_(r.name) });
+          if (!jobsCache) { jobsCache = clkJobs_(); usedIds = clkUsedIds_(jobsCache); }
+          if (clkCompensateCore_(store, eid, 'roster_' + chk.data.reason, src.emp_no, d, jobsCache, usedIds)) summary.compensated++;
+          return;
+        }
         var nm = clkNewMap_(src.emp_no, store, eid, 'support', 'confirmed', 'auto_support', true, by, d);
         nm.last_punch = punch; clkSave_(CLK_SHEET_MAP, CLK_MAP_HEADERS, nm);
         maps.push(nm);
@@ -1313,6 +1364,10 @@ function clockDailyApply_(today) {
         stfLog_(s.emp, 'disable_failed', 'daily', res.code || '');   // 首頁 alerts.leave_overdue 也會列出，直到處理好
         return;
       }
+      if (res.warn) {   // 平台帳號列遺失：staff 已標停用、店端停用單照發（不被本地失敗擋住），但留紀錄並進首頁異常
+        out.disable_errors.push({ emp_no: s.emp, code: res.warn });
+        stfLog_(s.emp, 'disable_failed', 'daily', res.warn);
+      }
       out.disabled.push(s.emp);
       needDeactivate(s.emp, out.jobs);
     });
@@ -1333,6 +1388,25 @@ function clockDailyApply_(today) {
         expect: { map: m.store_code + ':' + m.emp_id, emp_no: m.emp_no, state: 'confirmed', staff: 'disabled', by: 'daily' } }, d, used);
       jobs.push(j);
       out.reconcile_jobs.push(j.job_id);
+    });
+
+    // 2b. rejected 的首次支援對照（被店端移除過），打卡端帳號卻又變在職、人也還在職 → 發停用單（首頁另有 rejected_active 異常）
+    out.rejected_jobs = [];
+    maps = clkMaps_();
+    maps.forEach(function (m) {
+      var s = staff[m.emp_no];
+      if (!s || m.state !== 'rejected' || m.source !== 'auto_support' || m.roster_active !== 'TRUE') return;
+      if (clkStaffStatus_(s) === 'disabled' || (s.last && s.last < todayText)) return;
+      if (clkOpenJob_(jobs, 'deactivate', m.emp_no, m.store_code, m.emp_id)) return;
+      var doneToday = jobs.some(function (j) {
+        return j.kind === 'deactivate' && j.state === 'done' && j.emp_no === m.emp_no && j.store_code === m.store_code &&
+          j.emp_id === m.emp_id && stfStr_(j.done_at).slice(0, 10) === todayText;
+      });
+      if (doneToday) return;
+      var j = clkEnqueue_({ kind: 'deactivate', emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id,
+        expect: { map: m.store_code + ':' + m.emp_id, emp_no: m.emp_no, state: 'rejected', staff: 'active', by: 'daily' } }, d, used);
+      jobs.push(j);
+      out.rejected_jobs.push(j.job_id);
     });
 
     // 3. 異常：在職者沒有 home 對照、也沒有有效待辦
@@ -1407,8 +1481,15 @@ function clockMapBuildApply_(rostersByStore, now) {
       var m0 = e0 ? clkMapFind_(maps, e0.store_code, clkEid_(e0.emp_id)) : null;
       if (m0 && m0.state === 'rejected') needs.push(n);
     });
-    var staffByNorm = {};
-    staffAll.forEach(function (s) { var n = clkNormName_(clkStaffName_(s)); if (n) (staffByNorm[n] = staffByNorm[n] || []).push(s); });
+    var staffByNorm = {}, deadByNorm = {}, todayB = clkTodayOf_(d);
+    staffAll.forEach(function (s) {
+      var n = clkNormName_(clkStaffName_(s));
+      if (!n) return;
+      // 名字比對只看還在職的人：已停用、或離職日已過的人不當候選（否則在職的新人會被對到舊人）
+      var dead = clkStaffStatus_(s) === 'disabled' || (s.last && s.last < todayB);
+      (dead ? deadByNorm : staffByNorm)[n] = (dead ? deadByNorm : staffByNorm)[n] || [];
+      (dead ? deadByNorm : staffByNorm)[n].push(s);
+    });
     var homeStoreOf = function (s) { var st = clkStoreOfUnit_(clkStaffUnit_(s)); return st ? st.store_code : ''; };
     var stores = {};
     Object.keys(groups).forEach(function (g) {
@@ -1419,6 +1500,10 @@ function clockMapBuildApply_(rostersByStore, now) {
       grp.forEach(function (e) { if (perStore[e.store]) dupStore = true; perStore[e.store] = true; });
       if (dupStore) { needs.push({ kind: 'dup_in_store', name: name, entries: view, emp_nos: (staffByNorm[grp[0].norm] || []).map(function (s) { return s.emp; }) }); return; }
       var cands = staffByNorm[grp[0].norm] || [];
+      if (cands.length === 0 && (deadByNorm[grp[0].norm] || []).length) {   // 只對得到已離職的人：交總部，不當新人建、也不自動對照
+        needs.push({ kind: 'disabled_match', name: name, entries: view, emp_nos: deadByNorm[grp[0].norm].map(function (s) { return s.emp; }) });
+        return;
+      }
       if (cands.length === 0) {
         if (grp.every(function (e) { return !!clkMapFind_(maps, e.store, e.eid); })) return;
         candidates.push({ key: grp[0].key, name: name, entries: view });
@@ -1457,6 +1542,46 @@ function clockMapBuildApply_(rostersByStore, now) {
   });
 }
 
+// ---- 補償停用 ----
+
+/** 補償停用單（沒有生效對照的打卡帳號要被停掉）。回新單，或已有未完成的同一張，或 null（該編號已有生效對照＝合法，不補償） */
+function clkCompensateCore_(store, eid, reason, empNo, d, jobs, used) {
+  var cm = clkMapFind_(clkMaps_(), store, eid);
+  if (cm && cm.state === 'confirmed') return null;
+  for (var i = 0; i < jobs.length; i++) {
+    var o = jobs[i];
+    if (o.kind === 'deactivate' && o.store_code === store && o.emp_id === eid && CLK_OPEN_STATES.indexOf(o.state) !== -1 &&
+        clkJson_(o.expect_json, {}).comp) return null;
+  }
+  var why = String(reason || 'compensate').replace(/[^A-Za-z0-9_:.\-]/g, '').slice(0, 60);
+  var j = clkEnqueue_({ kind: 'deactivate', emp_no: empNo || '', store_code: store, emp_id: eid,
+    expect: { comp: true, map: store + ':' + eid, reason: why, by: 'comp' } }, d, used);
+  jobs.push(j);
+  stfLog_(empNo || '', 'compensate', 'sync', store + ' ' + why + ' ' + j.job_id);
+  return j;
+}
+
+/**
+ * 給同步員：7A 在店端建好人（svc_add 成功）卻寫不進對照 → 立刻開一張補償停用單並進首頁紅燈（alerts.compensations）。
+ * reason：短英數說明（如 record_failed）；emp_no 選填（知道是誰就帶）。
+ * 回 {ok:true, data:{job_id, existing:boolean}}；該打卡編號已有生效（confirmed）對照 → {ok:false, code:'conflict'}。
+ */
+function clockCompensate_(store_code, emp_id, reason, emp_no, now) {
+  return clkWithLock_(function () {
+    var store = clkCode_(store_code), eid = clkEid_(emp_id);
+    if (!clkStoreByCode_(store) || !/^[A-Za-z0-9_-]{1,32}$/.test(eid)) return clkErr_('bad_input', CLK_MSG.BAD_INPUT);
+    var d = clkDate_(now);
+    var jobs = clkJobs_();
+    var cm = clkMapFind_(clkMaps_(), store, eid);
+    if (cm && cm.state === 'confirmed') return clkErr_('conflict', '這個打卡編號已經有生效對照，不補償');
+    var before = jobs.length;
+    var j = clkCompensateCore_(store, eid, reason, stfNormEmp_(emp_no), d, jobs, clkUsedIds_(jobs));
+    if (j) return { ok: true, data: { job_id: j.job_id, existing: false } };
+    var open = jobs.filter(function (o) { return o.kind === 'deactivate' && o.store_code === store && o.emp_id === eid && CLK_OPEN_STATES.indexOf(o.state) !== -1 && clkJson_(o.expect_json, {}).comp; })[0];
+    return { ok: true, data: { job_id: open ? open.job_id : null, existing: true } };
+  });
+}
+
 // ---- 7A ----
 
 /**
@@ -1476,6 +1601,7 @@ function clockAutoSupportCheck_(params) {
   var maps = clkMaps_();
   var sm = clkMapFind_(maps, src, sid);
   if (!sm || sm.state !== 'confirmed') return no('source_not_confirmed');
+  if (sm.roster_active === 'FALSE') return no('source_stopped');   // 來源店名冊已停用：不能拿停用的帳號去別店建檔
   var s = clkStaffByEmp_(sm.emp_no);
   if (!s || clkStaffStatus_(s) === 'disabled') return no('staff_left');
   if (s.last) return no('leave_registered');
@@ -1708,6 +1834,35 @@ function handleClockAlerts_(token) {
     return s && m.state === 'confirmed' && m.role === 'home' && m.roster_active === 'FALSE' && clkStaffStatus_(s) !== 'disabled' && !s.last && mine(m.emp_no);
   }).map(function (m) { return { emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id }; });
   out.transfer_failed = [];
+  // 停用卻沒做乾淨（平台帳號列遺失、或帳號仍啟用）也算離職日已過未處理
+  staffAll.forEach(function (s) {
+    if (!s.last || s.last >= today || !mine(s.emp) || out.leave_overdue.indexOf(s.emp) !== -1) return;
+    var ur = findUsrRowById_(stfStr_(s.values[STF_COL.user_id]));
+    if (clkStaffStatus_(s) === 'disabled' && (!ur || String(ur.values[USR_COL.active]).toUpperCase() !== 'FALSE')) out.leave_overdue.push(s.emp);
+  });
+  // 對照被退回（rejected）、打卡端帳號卻是在職 → 併入 unmapped（reason:'rejected'）；
+  // 離職者只有待確認（suggested）對照、打卡端還在職 → 併入 left_but_active（suggested:true）；
+  // 補償停用單（沒有生效對照的打卡帳號要被停掉）→ 併入 outbox_failed（comp:true，未完成就先亮紅燈）。前端不必新增類別
+  var rejectedActive = maps.filter(function (m) {
+    return m.state === 'rejected' && m.roster_active === 'TRUE' && !!staff[m.emp_no] && clkStaffStatus_(staff[m.emp_no]) !== 'disabled' && mine(m.emp_no);
+  });
+  var leftSuggested = maps.filter(function (m) {
+    var s = staff[m.emp_no];
+    return s && m.state === 'suggested' && m.roster_active === 'TRUE' && (clkStaffStatus_(s) === 'disabled' || (s.last && s.last < today)) && mine(m.emp_no);
+  });
+  var compJobs = a.isHq ? jobs.filter(function (j) {
+    return clkJson_(j.expect_json, {}).comp && ['pending', 'running', 'failed'].indexOf(j.state) !== -1;
+  }) : [];
+  if (a.isHq) {
+    rejectedActive.forEach(function (m) { out.unmapped.push({ store_code: m.store_code, emp_id: m.emp_id, name: clkStaffName_(staff[m.emp_no]), reason: 'rejected', emp_no: m.emp_no }); });
+  }
+  leftSuggested.forEach(function (m) { out.left_but_active.push({ emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id, suggested: true }); });
+  compJobs.forEach(function (j) {
+    if (!out.outbox_failed.some(function (x) { return x.job_id === j.job_id; })) {
+      out.outbox_failed.push({ job_id: j.job_id, kind: j.kind, emp_no: j.emp_no, store_code: j.store_code, state: j.state, tries: j.tries,
+        last_error: stfStr_(j.last_error), comp: true, reason: clkJson_(j.expect_json, {}).reason || '' });
+    }
+  });
   stores.forEach(function (st) {
     var ss = clkSyncState_(st.store_code);
     if (ss.at) out.last_sync[st.store_code] = ss.at;
@@ -1737,7 +1892,8 @@ function handleClockAlerts_(token) {
   out.counts = {
     outbox_failed: out.outbox_failed.length, unmapped: out.unmapped.length, left_but_active: out.left_but_active.length,
     pending_confirm: out.pending_confirm.count, no_home_map: out.no_home_map.length, leave_overdue: out.leave_overdue.length,
-    home_stopped: out.home_stopped.length, transfer_failed: out.transfer_failed.length, name_diff: out.name_diff.length,
+    home_stopped: out.home_stopped.length, transfer_failed: out.transfer_failed.length,
+    rejected_active: rejectedActive.length, left_suggested: leftSuggested.length, compensations: compJobs.length, name_diff: out.name_diff.length,
     payroll_diff: out.payroll_diff.length, transfer_ask: out.transfer_ask.length, needs_hq: out.needs_hq_count, candidates: out.candidates_count
   };
   return { ok: true, data: out };
@@ -1780,4 +1936,24 @@ function clkLeaveBlocksEnable_(empNo) {
   var s = clkStaffByEmp_(empNo);
   if (s && s.last) return '這位同仁登記過離職日（' + s.last + '），請用「復職」恢復，才會一併清掉離職日並恢復打卡';
   return null;
+}
+
+/** Staff.gs staffSetActive(false) 的掛勾：舊的「停用」按鈕只停平台帳號，這裡同時對他每個生效對照發停用單（不必等隔日對帳） */
+function clkAfterDisable_(empNo, byLabel) {
+  try {
+    if (!clkSheetsReady_()) return null;
+    var emp = stfNormEmp_(empNo), d = new Date();
+    var jobs = clkJobs_(), used = clkUsedIds_(jobs), made = [];
+    clkConfirmedOf_(clkMaps_(), emp).forEach(function (m) {
+      if (m.roster_active === 'FALSE' || clkOpenJob_(jobs, 'deactivate', emp, m.store_code, m.emp_id)) return;
+      var j = clkEnqueue_({ kind: 'deactivate', emp_no: emp, store_code: m.store_code, emp_id: m.emp_id,
+        expect: { map: m.store_code + ':' + m.emp_id, emp_no: emp, state: 'confirmed', staff: 'disabled', by: String(byLabel || 'staffSetActive') } }, d, used);
+      jobs.push(j); made.push(j.job_id);
+    });
+    return made;
+  } catch (e) {
+    console.error('[clkAfterDisable_] ' + (e && e.message ? e.message : e));
+    try { stfLog_(stfNormEmp_(empNo), 'disable_jobs_failed', 'system', '停用單開單失敗'); } catch (e2) { /* 每日對帳會補 */ }
+    return null;
+  }
 }

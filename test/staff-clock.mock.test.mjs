@@ -582,7 +582,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
 
   // 套用：六店名冊
   const staffBefore = sheets.staff._rows().length;
-  setStaff(app, eX, 'name', '建同名'); setStaff(app, eX, 'status', 'disabled');   // 一位已停用的同名舊人：套用時全部 DZY（含停用）都要比，所以「建同名」變成同名多人
+  setStaff(app, eX, 'name', '建同名');   // 套用時兩位在職的同名 DZY → 「建同名」變成同名多人
   const rosters = {
     gf: [rosterRow('GF1', '跨店人'), rosterRow('GF9', '閒人甲'), rosterRow('GF8', '建丙')],
     mztjs: [rosterRow('JS1', '建乙'), rosterRow('JS2', '跨店 人'), rosterRow('JS3', '閒人甲'), rosterRow('JS4', '建同名'), rosterRow('JS5', '建丁'), rosterRow('JS6', '建丁')],
@@ -606,7 +606,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const need = ms.data.needs_hq;
   ok(need.some((n) => n.kind === 'dup_in_store' && n.name === '建丁'), 'B6 ★一人在同一家有兩個打卡編號 → 需總部處理', need);
   const amb = need.find((n) => n.kind === 'ambiguous' && n.name === '建同名');
-  ok(amb && amb.options.length === 2 && amb.entries[0].emp_id === 'JS4', 'B6 ★同名多人（含已停用的舊人）→ 需總部處理，列出候選的 DZY', need);
+  ok(amb && amb.options.length === 2 && amb.entries[0].emp_id === 'JS4', 'B6 ★同名多人（兩位在職）→ 需總部處理，列出候選的 DZY', need);
   ok(!maps(app).some((m) => m.emp_id === 'JS4' || m.emp_id === 'JS5' || m.emp_id === 'JS6'), 'B6 需總部處理的不建任何 suggested 列');
   ok(mine('建丙') === 'gf:GF8:support', 'B6 DZY 沒設單位的人 → 沒有 home，全部 support', mine('建丙'));
 
@@ -714,7 +714,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const mgr2 = claimApprove(app2, '帳店長', 'mgr-a-pw-01', MZT_GF('sm'));
   const w = claimApprove(app2, '帳同仁', 'crew-w-pw-01', MZT_GF('pt'));
   giveMap(app2, w.emp, 'mztgf', 'W1', 'home'); giveMap(app2, w.emp, 'mztjs', 'W2', 'support', { roster_active: 'FALSE' });
-  post(app2.sb, 'staffSetActive', { emp_no: w.emp, active: false }, app2.tok);      // 人資手動停用，沒走離職連動
+  setStaff(app2, w.emp, 'status', 'disabled');      // 模擬舊流程停用過、當時沒發單（G8 後按鈕會自己發單，這裡驗每日對帳的補單）
   const e1 = app2.sb.clockDailyApply_(today);
   const rj = jobs(app2).filter((j) => j.kind === 'deactivate');
   ok(e1.data.reconcile_jobs.length === 1 && rj.length === 1 && rj[0].store_code === 'mztgf', 'B7 ★DZY 已停用但對照店名冊仍在職 → 自動補 deactivate 單（名冊已停用的店不補）', e1);
@@ -866,7 +866,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const m2 = claimApprove(app2, '警店長', 'mgr-a-pw-01', MZT_GF('sm'));
   const p1 = claimApprove(app2, '警同仁一', 'crew-1-pw-01', MZT_GF('pt'));
   giveMap(app2, p1.emp, 'mztgf', 'AL1', 'home');
-  giveMap(app2, p1.emp, 'mztjs', 'AL2', 'support', { state: 'suggested', source: 'name_match' });
+  giveMap(app2, p1.emp, 'mztjs', 'AL2', 'support', { state: 'suggested', source: 'name_match', roster_active: '' });
   const cr = post(app2.sb, 'staffCreateByUnit', { name: '警新人', title: 'pt', hire_date: dayT(0), phone: '0966000111' }, m2.token);
   app2.sb.clockOutboxClaim_(nowT(1));
   app2.sb.clockOutboxDone_(cr.data.job_id, { ok: false, error: 'bad_input', message: 'x' }, nowT(2));    // failed → 打卡未建
@@ -1171,7 +1171,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   post(sb, 'staffLeave', { emp_no: w.emp, last_day: dayT(-1) }, tok);
   setStaff(app, w.emp, 'user_id', 'u9999');   // users 列遺失
   const d = sb.clockDailyApply_(dayT(0));
-  ok(d.data.disable_errors.length === 1 && staffOf(app, w.emp).status !== 'disabled', 'FIX5 （停用失敗，人仍在職）', d);
+  ok(d.data.disable_errors.length === 1 && d.data.disable_errors[0].code === 'user_missing', 'FIX5 （帳號列遺失：回報 disable_errors）', d);
   const al = post(sb, 'clockAlerts', {}, tok);
   ok(al.data.leave_overdue.join() === w.emp && al.data.counts.leave_overdue === 1, 'FIX5 ★停用失敗的人進 alerts.leave_overdue', al.data);
   ok(sheets_has(app, 'disable_failed'), 'FIX5 ★寫 staff_log（disable_failed）');
@@ -1246,63 +1246,266 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
 })();
 
 (() => {
-  // ── 14 送給打卡端的姓名不帶前導單引號 ──
+  // ── 14 送給打卡端的姓名不帶前導單引號（舊資料：姓名以符號開頭、待辦單格子有 authSafeCell_ 的單引號）──
   const app = fresh();
   const { sb } = app;
   const mgr = claimApprove(app, '修店長十四', 'mgr-fix14-pw-1', MZT_GF('sm'));
-  const c = post(sb, 'staffCreateByUnit', { name: '-B修加註', title: 'pt', hire_date: dayT(0), phone: '0911000228' }, mgr.token);
-  const cell = jobs(app).find((j) => j.job_id === c.data.job_id).name;
-  ok(cell === "'-B修加註", 'FIX14 （待辦單格子內為了防公式有前導單引號）', cell);
+  const c = post(sb, 'staffCreateByUnit', { name: '修加註', title: 'pt', hire_date: dayT(0), phone: '0911000228' }, mgr.token);
+  setStaff(app, c.data.emp_no, 'name', '-B修加註');                         // 舊資料（F2 之前建的）
+  const idx = app.sheets.clock_outbox._data.findIndex((r) => r[0] === c.data.job_id);
+  setCell(app, 'clock_outbox', idx, 'name', "'-B修加註");
   const cl = sb.clockOutboxClaim_(nowT(1));
   ok(cl.data.jobs[0].name === '-B修加註', 'FIX14 ★claim 給同步員的姓名是原字串，不帶單引號', cl.data.jobs[0]);
-  ok(staffOf(app, c.data.emp_no).name === '-B修加註', 'FIX14 staff 姓名本身是原字串');
+})();
+
+// ============================================================
+// 上線前關（Fable＋GPT 互盲）平台端修正：F2 F4 F1 G2 G4 G5 G6 G7 G8 G12 F3 F5 F6 F10
+// ============================================================
+(() => {
+  // ── F2＝G14 姓名開頭 = + - @ ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const mgr = claimApprove(app, '前店長二', 'mgr-pre2-pw-01', MZT_GF('sm'));
+  const body = (n) => ({ name: n, title: 'pt', hire_date: dayT(0), phone: '0911000300' });
+  ['=SUM(1)', '+886', '-B前加註', '@home'].forEach((n) => {
+    const r = post(sb, 'staffCreateByUnit', body(n), mgr.token);
+    ok(r.ok === false && r.code === 'bad_input' && r.error.indexOf('= + - @') !== -1, 'F2 ★新增姓名開頭「' + n[0] + '」被擋', r);
+  });
+  ok(post(sb, 'staffCreateByUnit', body('前加註-B'), mgr.token).ok, 'F2 符號放在後面可以');
+  const x = claimApprove(app, '前改名', 'pw-pre2-pw-02', MZT_GF('pt'));
+  ok(post(sb, 'staffRename', { emp_no: x.emp, name: '=改名' }, tok).code === 'bad_input', 'F2 ★改名開頭符號被擋');
+  app.props.CLOCK_MAP_STATE = JSON.stringify({ candidates: [{ key: 'gf:BAD1', name: '@候選', entries: [{ store_code: 'gf', emp_id: 'BAD1' }] }], needs_hq: [], excluded: [] });
+  ok(post(sb, 'clockCandidateCreate', { candidate_key: 'gf:BAD1', unit: 'mala-gf', title: 'pt' }, tok).code === 'bad_input', 'F2 ★候選新人姓名開頭符號被擋');
 })();
 
 (() => {
-  // ── 前端缺口補強（2026-10-13）：is_self、name_diff 逐人、全部對照、transfer_ask 帶姓名、no_home_map 逐人 ──
+  // ── F4＝G11 每日同步的 src 新列要過 7A 同一套把關，不過 → 異常＋補償停用單 ──
   const app = fresh();
   const { sb, tok } = app;
-  const mgr = claimApprove(app, '缺口店長', 'mgr-gap-pw-01', MZT_GF('sm'));
-  const x = claimApprove(app, '缺口同仁', 'crew-gap-pw-01', MZT_GF('pt'));
-  const y = claimApprove(app, '缺口無主店', 'crew-gap-pw-02', MZT_GF('pt'));
-  giveMap(app, x.emp, 'mztgf', 'GP1', 'home', { state: 'confirmed' });
-  giveMap(app, mgr.emp, 'mztgf', 'GP0', 'home', { state: 'confirmed' });
+  const mk = (n) => { const p = claimApprove(app, n, 'pw-' + n + '-0001', MZT_GF('pt')); giveMap(app, p.emp, 'mztgf', 'H' + n.length + p.emp, 'home'); return { emp: p.emp, src: 'H' + n.length + p.emp }; };
+  const ok1 = mk('前通過'), leave = mk('前離職日'), gone = mk('前已停用'), stopped = mk('前來源停'), removed = mk('前被移除過');
+  post(sb, 'staffLeave', { emp_no: leave.emp, last_day: dayT(5) }, tok);
+  setStaff(app, gone.emp, 'status', 'disabled');
+  setMap(app, 'mztgf', stopped.src, 'roster_active', 'FALSE');
+  giveMap(app, removed.emp, 'mztjs', 'OLDR', 'support', { state: 'rejected', source: 'auto_support' });
+  const row = (eid, who) => rosterRow(eid, '店端' + eid, { src_store: 'mztgf', src_emp_id: who.src });
+  const r = sb.clockRosterApply_('mztjs', [row('N1', ok1), row('N2', leave), row('N3', gone), row('N4', stopped), row('N5', removed)], undefined, nowT(0));
+  ok(r.ok && r.data.created === 1 && r.data.compensated === 4 && r.data.unmapped === 4, 'F4 ★1 條通過、4 條不過（離職日／已停用／來源停用／被移除過）', r);
+  ok(maps(app).filter((m) => m.store_code === 'mztjs' && m.state === 'confirmed' && m.source === 'auto_support').map((m) => m.emp_id).join() === 'N1', 'F4 只有通過把關的建 auto_support／confirmed');
+  const comp = jobs(app).filter((j) => JSON.parse(j.expect_json).comp);
+  ok(comp.length === 4 && comp.every((j) => j.kind === 'deactivate' && j.store_code === 'mztjs' && j.state === 'pending') && comp.map((j) => j.emp_id).sort().join() === 'N2,N3,N4,N5', 'F4 ★不過的 4 條各發一張補償停用單', comp);
+  ok(post(sb, 'clockAlerts', {}, tok).data.outbox_failed.filter((x) => x.comp).length === 4, 'F4 補償單進首頁紅燈（alerts.outbox_failed，comp:true）');
+  const again = sb.clockRosterApply_('mztjs', [row('N1', ok1), row('N2', leave), row('N3', gone), row('N4', stopped), row('N5', removed)], undefined, nowT(1));
+  ok(again.data.compensated === 0 && jobs(app).filter((j) => JSON.parse(j.expect_json).comp).length === 4, 'F4 跑兩次不重複發補償單');
+  const cl = sb.clockOutboxClaim_(nowT(2));
+  ok(cl.data.jobs.length === 4 && cl.data.jobs.every((j) => j.comp === true && j.kind === 'deactivate'), 'F4 補償單照送（不因同仁已離職／停用而被取消）', cl);
+  sb.clockOutboxDone_(comp[0].job_id, { ok: true }, nowT(3));
+  ok(post(sb, 'clockAlerts', {}, tok).data.outbox_failed.filter((x) => x.comp).length === 3, 'F4 做完後紅燈減一');
+  // 補償單送前：這個打卡編號被人合法對照 → 取消
+  const app2 = fresh();
+  const a2 = claimApprove(app2, '前補償甲', 'pw-comp-pw-0001', MZT_GF('pt'));
+  const cp = app2.sb.clockCompensate_('mztjs', 'Z9', 'record_failed', a2.emp, nowT(0));
+  ok(cp.ok && cp.data.job_id && cp.data.existing === false, 'F1 ★clockCompensate_ 開補償停用單', cp);
+  ok(app2.sb.clockCompensate_('mztjs', 'Z9', 'record_failed', a2.emp, nowT(0)).data.existing === true && jobs(app2).length === 1, 'F1 同一個編號不重複開單');
+  ok(post(app2.sb, 'clockAlerts', {}, app2.tok).data.outbox_failed.find((x) => x.comp).reason === 'record_failed', 'F1 ★補償單進紅燈（含原因）');
+  ok(app2.sb.clockCompensate_('nope', 'Z9', 'x').code === 'bad_input' && app2.sb.clockCompensate_('mztjs', '壞 編號', 'x').code === 'bad_input', 'F1 店代碼、編號格式不對被拒');
+  giveMap(app2, a2.emp, 'mztjs', 'Z9', 'support');
+  const cl2 = app2.sb.clockOutboxClaim_(nowT(1));
+  ok(cl2.data.cancelled.length === 1 && cl2.data.jobs.length === 0, 'F1 補償單送前該編號已有生效對照 → 取消（不誤停合法帳號）');
+  ok(app2.sb.clockCompensate_('mztjs', 'Z9', 'x').code === 'conflict', 'F1 該編號已有生效對照時不開補償單');
+})();
 
-  // is_self
-  const ul = post(sb, 'staffUnitList', {}, mgr.token);
-  ok(ul.data.people.filter((p) => p.is_self).map((p) => p.emp_no).join() === mgr.emp && ul.data.people.every((p) => typeof p.name_diff === 'boolean'), 'GAP is_self：staffUnitList 只有本人那列是 true、每列有 name_diff 布林', ul.data.people.map((p) => [p.emp_no, p.is_self]));
-  const sl = post(sb, 'staffList', {}, tok);
-  ok(sl.data.staff.every((p) => p.is_self === false) && sl.data.staff.every((p) => p.name_diff === false), 'GAP staffList 每列帶 is_self（admin 沒有同仁列＝全 false）與 name_diff');
-  ok(!JSON.stringify(ul).match(/phone|birthday|address/), 'GAP staffUnitList 仍不含手機生日地址');
+(() => {
+  // ── F1＝G3 已試著送過的 add 單不取消 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const mgr = claimApprove(app, '前店長一', 'mgr-pre1-pw-01', MZT_GF('sm'));
+  const c = post(sb, 'staffCreateByUnit', { name: '前送過', title: 'pt', hire_date: dayT(0), phone: '0911000301' }, mgr.token);
+  sb.clockOutboxClaim_(nowT(1));
+  sb.clockOutboxDone_(c.data.job_id, { ok: false, error: 'timeout' }, nowT(2));     // 送過一次（逾時：打卡端可能已建）
+  post(sb, 'staffSetActive', { emp_no: c.data.emp_no, active: false }, tok);          // 排隊期間被停用
+  const cl = sb.clockOutboxClaim_(nowT(10));
+  ok(cl.data.jobs.length === 1 && cl.data.jobs[0].job_id === c.data.job_id && cl.data.cancelled.length === 0, 'F1 ★tries>0 的 add 單不取消，照送（origin_op 冪等）', cl);
+  sb.clockOutboxDone_(c.data.job_id, { ok: true, emp_id: 'PS1' }, nowT(11));
+  ok(mapOf(app, c.data.emp_no)[0].emp_id === 'PS1', 'F1 送成功後照常寫對照（之後由停用單／對帳處理）');
+  ok(jobs(app).some((j) => j.kind === 'deactivate' && j.emp_no === c.data.emp_no), 'F1 且該人已停用 → 有對應的停用單（G8），不會留下沒人管的在職帳號');
+  // running 過期（可能已送達）也不取消
+  const c2 = post(sb, 'staffCreateByUnit', { name: '前掛住', title: 'pt', hire_date: dayT(0), phone: '0911000302' }, mgr.token);
+  sb.clockOutboxClaim_(nowT(20));
+  setStaff(app, c2.data.emp_no, 'status', 'disabled');
+  const cl2 = sb.clockOutboxClaim_(nowT(30));
+  ok(cl2.data.jobs.some((j) => j.job_id === c2.data.job_id) && !cl2.data.cancelled.includes(c2.data.job_id), 'F1 running 過期重撿的 add 單同樣不取消');
+})();
 
-  // name_diff 逐人
-  sb.clockRosterApply_('mztgf', [rosterRow('GP1', '打卡上別的名字'), rosterRow('GP0', '缺口店長')], undefined, nowT(1));
-  const al = post(sb, 'clockAlerts', {}, tok);
-  ok(al.data.name_diff_items.length === 1 && al.data.name_diff_items[0].emp_no === x.emp && al.data.name_diff_items[0].name === '缺口同仁' && al.data.name_diff_items[0].store_code === 'mztgf', 'GAP ★name_diff 逐人 {emp_no,name,store_code}', al.data.name_diff_items);
-  ok(al.data.name_diff[0].name === '缺口同仁', 'GAP name_diff 每列也帶姓名');
-  const ul2 = post(sb, 'staffUnitList', {}, mgr.token);
-  ok(ul2.data.people.find((p) => p.emp_no === x.emp).name_diff === true && ul2.data.people.find((p) => p.emp_no === mgr.emp).name_diff === false, 'GAP ★staffUnitList 每人 name_diff 布林');
-  ok(post(sb, 'staffList', {}, tok).data.staff.find((p) => p.emp_no === x.emp).name_diff === true, 'GAP staffList 也帶 name_diff');
-  const alM = post(sb, 'clockAlerts', {}, mgr.token);
-  ok(alM.data.name_diff_items.length === 1, 'GAP 店長看得到自己單位的 name_diff 逐人');
+(() => {
+  // ── G2 送出中改綁 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const a = claimApprove(app, '前綁甲', 'pw-g2-pw-0001', MZT_GF('pt'));
+  const b = claimApprove(app, '前綁乙', 'pw-g2-pw-0002', MZT_GF('pt'));
+  giveMap(app, a.emp, 'mztgf', 'G2A', 'home');
+  post(sb, 'staffLeave', { emp_no: a.emp, last_day: dayT(-1) }, tok);
+  sb.clockDailyApply_(dayT(0));
+  sb.clockOutboxClaim_(nowT(1));            // 停用單送出中（running）
+  const rb = post(sb, 'clockMapDecide', { store_code: 'mztgf', emp_id: 'G2A', decision: 'confirm', emp_no: b.emp }, tok);
+  ok(rb.ok === false && rb.code === 'job_open' && maps(app).find((m) => m.emp_id === 'G2A').emp_no === a.emp, 'G2 ★有送出中的單時禁止改綁給別人', rb);
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztgf', emp_id: 'G2A', decision: 'reject' }, tok).code === 'job_open', 'G2 送出中也不能退回');
+  // 回填時比對：對照已被改（直接改表模擬別條路徑）→ 不蓋新對照
+  setMap(app, 'mztgf', 'G2A', 'emp_no', b.emp);
+  const dj = jobs(app).find((j) => j.kind === 'deactivate' && j.emp_no === a.emp);
+  sb.clockOutboxDone_(dj.job_id, { ok: true }, nowT(2));
+  ok(maps(app).find((m) => m.emp_id === 'G2A').roster_active === 'TRUE' && app.sheets.staff_log._rows().some((r) => r[2] === 'outbox_done_stale'), 'G2 ★Done 前比對 expect：對照已改給別人 → 不標停用、記 outbox_done_stale', maps(app).find((m) => m.emp_id === 'G2A'));
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztgf', emp_id: 'G2A', decision: 'confirm', emp_no: a.emp }, tok).ok, 'G2 單結束後可以改綁');
+})();
 
-  // no_home_map 逐人
-  const nh = al.data.no_home_map_items.find((i) => i.emp_no === y.emp);
-  ok(nh && nh.name === '缺口無主店' && nh.store_code === 'mztgf' && al.data.no_home_map.indexOf(y.emp) !== -1, 'GAP ★no_home_map_items 逐人（舊 no_home_map 仍是 emp_no 陣列）', al.data.no_home_map_items);
+(() => {
+  // ── G4 查證：每日對帳／名冊同步不會依姓名自動 confirmed ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const a = claimApprove(app, '前同名人', 'pw-g4-pw-0001', MZT_GF('pt'));
+  giveMap(app, a.emp, 'mztgf', 'G4A', 'home');
+  sb.clockRosterApply_('mztjs', [rosterRow('G4B', '前同名人'), rosterRow('G4C', '前同名人', { src_store: '', src_emp_id: '' })], undefined, nowT(0));
+  sb.clockRosterApply_('gf', [rosterRow('G4D', '前同名人')], undefined, nowT(0));
+  sb.clockDailyApply_(dayT(0));
+  ok(maps(app).length === 1 && maps(app)[0].emp_id === 'G4A', 'G4 ★同名但沒有 src_* 的新列：每日同步與對帳都不建任何對照（只列「打卡上有、沒對照」）');
+  ok(post(sb, 'clockAlerts', {}, tok).data.unmapped.length === 3, 'G4 三筆同名新列都進異常清單');
+})();
 
-  // 全部對照
-  giveMap(app, y.emp, 'mztgf', 'GP2', 'support', { state: 'suggested' });
-  const ml = post(sb, 'clockMapList', {}, tok);
-  ok(ml.data.confirmed.length === ml.data.confirmed_count && ml.data.confirmed.every((m) => m.state === 'confirmed') && ml.data.confirmed.some((m) => m.emp_id === 'GP1' && m.name === '缺口同仁'), 'GAP ★clockMapList 總部多 confirmed：全部已生效對照', ml.data.confirmed);
-  ok(ml.data.suggested.some((m) => m.emp_id === 'GP2') && !ml.data.confirmed.some((m) => m.emp_id === 'GP2'), 'GAP confirmed 不含 suggested');
-  const mlM = post(sb, 'clockMapList', {}, mgr.token);
-  ok(Array.isArray(mlM.data.confirmed) && mlM.data.confirmed.length === 0, 'GAP 店長看到的 confirmed 是空陣列');
+(() => {
+  // ── G5 名字比對排除已停用／已過離職日 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const live = claimApprove(app, '前在職人', 'pw-g5-pw-0001', MZT_GF('pt'));
+  const old = claimApprove(app, '前在職人X', 'pw-g5-pw-0002', MZT_GF('pt'));
+  setStaff(app, old.emp, 'name', '前在職人'); setStaff(app, old.emp, 'status', 'disabled');
+  const solo = claimApprove(app, '前只剩舊人', 'pw-g5-pw-0003', MZT_GF('pt'));
+  setStaff(app, solo.emp, 'status', 'disabled');
+  const lastPast = claimApprove(app, '前過日人', 'pw-g5-pw-0004', MZT_GF('pt'));
+  post(sb, 'staffLeave', { emp_no: lastPast.emp, last_day: dayT(-2) }, tok);
+  const r = sb.clockMapBuildApply_({ mztgf: [rosterRow('B1', '前在職人'), rosterRow('B2', '前只剩舊人'), rosterRow('B3', '前過日人')] }, nowT(0));
+  ok(mapOf(app, live.emp).length === 1 && mapOf(app, old.emp).length === 0, 'G5 ★同名時只對到在職的那位，已停用的舊人不當候選', maps(app));
+  const st = JSON.parse(app.props.CLOCK_MAP_STATE);
+  ok(st.needs_hq.filter((n) => n.kind === 'disabled_match').map((n) => n.name).sort().join() === '前只剩舊人,前過日人' && st.candidates.length === 0 && maps(app).length === 1, 'G5 ★只對得到已離職的人 → 交總部（disabled_match），不建 suggested、也不當新人建 DZY', st);
+})();
 
-  // transfer_ask 帶姓名
-  sb.clkSetState_(sb.CLK_PROP_TRANSFER_ASK, { items: [{ emp_no: x.emp, store_code: 'mztgf' }] });
-  const ta = post(sb, 'clockAlerts', {}, tok).data.transfer_ask;
-  ok(ta.length === 1 && ta[0].name === '缺口同仁' && ta[0].emp_no === x.emp && ta[0].store_code === 'mztgf', 'GAP ★transfer_ask 帶姓名', ta);
-  ok(post(sb, 'clockOldHomeDecide', { emp_no: x.emp, store_code: 'mztgf', deactivate: false }, tok).ok, 'GAP 帶姓名後 clockOldHomeDecide 仍照 emp_no／store_code 運作');
+(() => {
+  // ── G6 帳號列遺失不擋店端停用單 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const w = claimApprove(app, '前帳遺失', 'pw-g6-pw-0001', MZT_GF('pt'));
+  giveMap(app, w.emp, 'mztgf', 'G6A', 'home'); giveMap(app, w.emp, 'mztjs', 'G6B', 'support');
+  post(sb, 'staffLeave', { emp_no: w.emp, last_day: dayT(-1) }, tok);
+  setStaff(app, w.emp, 'user_id', 'u9999');
+  const d = sb.clockDailyApply_(dayT(0));
+  ok(d.data.jobs.length === 2 && staffOf(app, w.emp).status === 'disabled', 'G6 ★帳號列遺失：staff 仍標停用、每個對照各一張店端停用單照發', d);
+  ok(sb.clockOutboxClaim_(nowT(1)).data.jobs.length === 2, 'G6 停用單通過送前重驗、可被撿走');
+  ok(post(sb, 'clockAlerts', {}, tok).data.leave_overdue.join() === w.emp, 'G6 同時進首頁異常（帳號沒停乾淨）');
+})();
+
+(() => {
+  // ── G7 舊 staffEdit 改單位 ／ G8 舊 staffSetActive(false) ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const a = claimApprove(app, '前改單位', 'pw-g7-pw-0001', MZT_GF('pt'));
+  giveMap(app, a.emp, 'mztgf', 'G7A', 'home');
+  const r = post(sb, 'staffEdit', { emp_no: a.emp, brand: 'mzt', unit: 'mzt-js', dept: '', title: 'pt' }, tok);
+  const aj = jobs(app).filter((j) => j.kind === 'add' && j.emp_no === a.emp);
+  ok(r.ok && aj.length === 1 && aj[0].store_code === 'mztjs' && JSON.parse(aj[0].expect_json).demote_old === true, 'G7 ★有對照的人用舊 staffEdit 改單位 → 同樣走調店流程（開新店 add 單、舊主店之後降支援）', aj);
+  const n = claimApprove(app, '前無對照', 'pw-g7-pw-0002', MZT_GF('pt'));
+  const before = jobs(app).length;
+  post(sb, 'staffEdit', { emp_no: n.emp, brand: 'mzt', unit: 'mzt-js', dept: '', title: 'pt' }, tok);
+  ok(jobs(app).length === before, 'G7 沒對照的人改單位不開單');
+  // G8
+  const b = claimApprove(app, '前舊停用', 'pw-g8-pw-0001', MZT_GF('pt'));
+  giveMap(app, b.emp, 'mztgf', 'G8A', 'home'); giveMap(app, b.emp, 'mztjs', 'G8B', 'support'); giveMap(app, b.emp, 'gf', 'G8C', 'support', { state: 'suggested' });
+  ok(post(sb, 'staffSetActive', { emp_no: b.emp, active: false }, tok).ok, 'G8 （舊停用按鈕）');
+  const dj = jobs(app).filter((j) => j.kind === 'deactivate' && j.emp_no === b.emp);
+  ok(dj.length === 2 && dj.map((j) => j.store_code).sort().join() === 'mztgf,mztjs', 'G8 ★同時對每個 confirmed 對照發停用單（suggested 不發），不必等隔日對帳', dj);
+  ok(sb.clockDailyApply_(dayT(0)).data.reconcile_jobs.length === 0 && jobs(app).filter((j) => j.emp_no === b.emp && j.kind === 'deactivate').length === 2, 'G8 隔日對帳不重複發單');
+  ok(sb.clockOutboxClaim_(nowT(1)).data.jobs.filter((j) => j.emp_no === b.emp).length === 2, 'G8 停用單通過送前重驗');
+})();
+
+(() => {
+  // ── G12 異常 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const a = claimApprove(app, '前被拒在職', 'pw-g12-pw-0001', MZT_GF('pt'));
+  const b = claimApprove(app, '前被拒手動', 'pw-g12-pw-0002', MZT_GF('pt'));
+  const c = claimApprove(app, '前離職只建議', 'pw-g12-pw-0003', MZT_GF('pt'));
+  giveMap(app, a.emp, 'mztjs', 'RA1', 'support', { state: 'rejected', source: 'auto_support', roster_active: 'TRUE' });
+  giveMap(app, b.emp, 'mztjs', 'RB1', 'support', { state: 'rejected', source: 'name_match', roster_active: 'TRUE' });
+  giveMap(app, c.emp, 'mztgf', 'RC1', 'home', { state: 'suggested', source: 'name_match', roster_active: 'TRUE' });
+  setStaff(app, c.emp, 'status', 'disabled');
+  const d = sb.clockDailyApply_(dayT(0));
+  const jj = jobs(app).filter((j) => j.kind === 'deactivate');
+  ok(d.data.rejected_jobs.length === 1 && jj.length === 1 && jj[0].emp_no === a.emp && jj[0].emp_id === 'RA1', 'G12 ★rejected 的首次支援對照、打卡帳號又在職、人也在職 → 發停用單（店長按「不對」轉總部的 rejected 不自動停）', jj);
+  const al = post(sb, 'clockAlerts', {}, tok).data;
+  ok(al.unmapped.filter((x) => x.reason === 'rejected').map((x) => x.emp_id).sort().join() === 'RA1,RB1' && al.counts.rejected_active === 2, 'G12 ★rejected 但打卡在職 → 進異常（併入 unmapped，reason=rejected）', al.unmapped);
+  ok(al.left_but_active.filter((x) => x.suggested).length === 1 && al.left_but_active[0].emp_id === 'RC1' && al.counts.left_suggested === 1, 'G12 ★離職者只有 suggested 對照、打卡仍在職 → 進異常（併入 left_but_active，suggested=true）', al.left_but_active);
+  ok(sb.clockDailyApply_(dayT(0)).data.rejected_jobs.length === 0, 'G12 跑兩次不重複發單');
+  const cl = sb.clockOutboxClaim_(nowT(1));
+  ok(cl.data.jobs.some((j) => j.emp_id === 'RA1') && cl.data.cancelled.length === 0, 'G12 停用單通過送前重驗（expect.state=rejected）');
+  sb.clockOutboxDone_(jj[0].job_id, { ok: true }, nowT(2));
+  ok(maps(app).find((m) => m.emp_id === 'RA1').roster_active === 'FALSE' && maps(app).find((m) => m.emp_id === 'RA1').state === 'rejected', 'G12 做完 roster_active FALSE、仍是 rejected');
+})();
+
+(() => {
+  // ── F3 來源店名冊已停用 ──
+  const app = fresh();
+  const { sb } = app;
+  const a = claimApprove(app, '前來源停', 'pw-f3-pw-0001', MZT_GF('pt'));
+  giveMap(app, a.emp, 'mztgf', 'F3A', 'home');
+  const chk = () => sb.clockAutoSupportCheck_({ store_code: 'mztjs', src_store: 'mztgf', src_emp_id: 'F3A' });
+  ok(chk().data.allowed === true, 'F3 對照組：來源在職可以');
+  setMap(app, 'mztgf', 'F3A', 'roster_active', 'FALSE');
+  const r = chk();
+  ok(r.data.allowed === false && r.data.reason === 'source_stopped', 'F3 ★來源店名冊已停用 → 拒（source_stopped）', r);
+})();
+
+(() => {
+  // ── F5 空名冊 ──
+  const app = fresh();
+  const { sb } = app;
+  const a = claimApprove(app, '前空名冊', 'pw-f5-pw-0001', MZT_GF('pt'));
+  giveMap(app, a.emp, 'mztgf', 'F5A', 'home');
+  const r = sb.clockRosterApply_('mztgf', [], undefined, nowT(0));
+  ok(r.ok === false && r.code === 'empty_roster' && maps(app)[0].roster_active === 'TRUE', 'F5 ★已有 confirmed 對照的店收到空名冊 → 失敗、不套用（對照不會被全標停用）', r);
+  ok(sb.clockRosterApply_('mztjs', [], undefined, nowT(0)).ok === true, 'F5 沒有對照的店空名冊照常');
+  ok(sb.clockRosterApply_('mztgf', [rosterRow('F5A', '前空名冊')], undefined, nowT(1)).ok, 'F5 有資料就正常套用');
+})();
+
+(() => {
+  // ── F6 svc_add 回 active:false ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const mgr = claimApprove(app, '前店長六', 'mgr-f6-pw-001', MZT_GF('sm'));
+  const c = post(sb, 'staffCreateByUnit', { name: '前冪等停用', title: 'pt', hire_date: dayT(0), phone: '0911000303' }, mgr.token);
+  sb.clockOutboxClaim_(nowT(1));
+  sb.clockOutboxDone_(c.data.job_id, { ok: true, emp_id: 'F6A', active: false }, nowT(2));
+  ok(mapOf(app, c.data.emp_no)[0].roster_active === 'FALSE', 'F6 ★回應帶 active:false → 照實寫 roster_active=FALSE');
+  ok(post(sb, 'clockAlerts', {}, tok).data.home_stopped.some((x) => x.emp_id === 'F6A'), 'F6 且進異常（在職者主店打卡已停）');
+  const c3 = post(sb, 'staffCreateByUnit', { name: '前既有列', title: 'pt', hire_date: dayT(0), phone: '0911000305' }, mgr.token);
+  giveMap(app, c3.data.emp_no, 'mztgf', 'F6C', 'home', { state: 'suggested', source: 'name_match' });
+  sb.clockOutboxClaim_(nowT(1));
+  sb.clockOutboxDone_(c3.data.job_id, { ok: true, emp_id: 'F6C', active: false }, nowT(2));
+  ok(mapOf(app, c3.data.emp_no).find((m) => m.emp_id === 'F6C').roster_active === 'FALSE', 'F6 同鍵已有 suggested 列時也照實寫');
+  const c2 = post(sb, 'staffCreateByUnit', { name: '前正常建', title: 'pt', hire_date: dayT(0), phone: '0911000304' }, mgr.token);
+  sb.clockOutboxClaim_(nowT(1));
+  sb.clockOutboxDone_(c2.data.job_id, { ok: true, emp_id: 'F6B' }, nowT(2));
+  ok(mapOf(app, c2.data.emp_no)[0].roster_active === 'TRUE', 'F6 沒帶 active 照舊 TRUE');
+})();
+
+(() => {
+  // ── F10 支援店連結只給總部 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const mgr = claimApprove(app, '前店長十', 'mgr-f10-pw-01', MZT_GF('sm'));
+  const x = claimApprove(app, '前支援人', 'pw-f10-pw-0001', MZT_GF('pt'));
+  giveMap(app, x.emp, 'mztgf', 'F10A', 'home'); giveMap(app, x.emp, 'mztjs', 'F10B', 'support');
+  const r = post(sb, 'clockLink', { emp_no: x.emp, store_code: 'mztjs' }, mgr.token);
+  ok(r.ok === false && r.code === 'no_perm', 'F10 ★店長不能取同仁「支援店」的連結', r);
+  ok(post(sb, 'clockLink', { emp_no: x.emp }, mgr.token).ok && post(sb, 'clockLink', { emp_no: x.emp, store_code: 'mztgf' }, mgr.token).ok, 'F10 主店連結店長照常');
+  ok(post(sb, 'clockLink', { emp_no: x.emp, store_code: 'mztjs' }, tok).ok, 'F10 總部可以取支援店連結');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);
