@@ -5,8 +5,10 @@
 
 import { mountList } from './views/list.js';
 import { mountImport } from './views/import.js';
+import { mountClockmap } from './views/clockmap.js';
+import { alertRows, staleSyncStores } from '../staff-shared/clock-lib.js';
 
-const VIEW_MOUNTERS = { list: mountList, import: mountImport };
+const VIEW_MOUNTERS = { list: mountList, import: mountImport, clockmap: mountClockmap };
 
 // 首頁 badge() 與 alerts() 同時跑，只共用「還在路上的那一次」staffList；回來就丟掉，
 // 不留時間快取——留 3 秒快取時，後台剛匯入／確認完回首頁會看到舊數字（e2e ⑧ 抓到）
@@ -52,7 +54,7 @@ export default {
 
 /** 首頁：待確認開通、資料變更待確認、忘記密碼被鎖住 */
 async function alertsOf(ctx) {
-  const res = await loadList(ctx);
+  const [res, ca] = await Promise.all([loadList(ctx), ctx.api.call('staff', 'clockAlerts', {}).catch(() => null)]);
   if (!res || !res.ok) return null;
   const s = res.data.staff || [];
   const pending = s.filter((x) => x.status === 'pending').length;
@@ -62,5 +64,11 @@ async function alertsOf(ctx) {
   if (pending) out.push({ level: 'warn', text: `${pending} 位同仁待確認開通`, view: 'list', params: { f: 'todo' }, count: pending });
   if (change) out.push({ level: 'warn', text: `${change} 位同仁有資料變更待確認`, view: 'list', params: { f: 'todo' }, count: change });
   if (locked) out.push({ level: 'error', text: `${locked} 位同仁忘記密碼被鎖住`, view: 'list', params: { f: 'locked' }, count: locked });
+  // 員工名單統一 D5：clockAlerts 每一類一列，點了到對應畫面（失敗待辦單的「重試」鈕在 打卡對照 → 待辦單）
+  if (ca && ca.ok && ca.data) {
+    alertRows(ca.data, { isHq: true, user: ctx.user }).forEach((r) => out.push({ level: r.level, text: r.text, view: r.view, params: r.params, count: r.count }));
+    const stale = staleSyncStores(ca.data.last_sync, new Date());
+    if (stale.length) out.push({ level: 'warn', text: `${stale.length} 家店的打卡名冊超過 26 小時沒同步（${stale.join('、')}）`, view: 'clockmap', params: { t: 'jobs' }, count: stale.length });
+  }
   return out;
 }

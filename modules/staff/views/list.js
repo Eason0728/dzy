@@ -8,6 +8,7 @@
 'use strict';
 
 import { orgFieldsHtml, bindOrgFields, readOrgFields } from '../../staff-shared/org-fields.js';
+import { clockTagsHtml, clockButtonsHtml, isClockAct, handleClockAct, openAddFlow } from '../../staff-shared/clock-ui.js';
 
 const STATUS = {
   unclaimed: ['tag', '未開通'],
@@ -18,7 +19,8 @@ const STATUS = {
 };
 const FILTERS = [
   ['todo', '待處理'], ['all', '全部'], ['unclaimed', '未開通'], ['pending', '待確認'],
-  ['rejected', '已退回'], ['active', '已開通'], ['disabled', '已停用'], ['locked', '忘記密碼鎖住']
+  ['rejected', '已退回'], ['active', '已開通'], ['disabled', '已停用'], ['locked', '忘記密碼鎖住'],
+  ['left', '已離職但打卡未停'], ['nohome', '沒有打卡編號']
 ];
 
 export function mountList(el, ctx) {
@@ -27,6 +29,7 @@ export function mountList(el, ctx) {
   let staff = [];
   let org = { brands: [], units: [], depts: [], titles: [] };
   let showPrivate = false;
+  const viewer = { isHq: true, isLead: false, user: ctx.user };
   const state = { f: (ctx.params && ctx.params.f) || 'all', q: '', brand: '' };
 
   el.innerHTML = '<div class="card"><p class="text-muted">讀取中…</p></div>';
@@ -49,6 +52,9 @@ export function mountList(el, ctx) {
       case 'all': return true;
       case 'todo': return p.status === 'pending' || (p.status === 'active' && p.has_pending_change) || p.reset_locked;
       case 'locked': return p.reset_locked;
+      case 'left': return (p.status === 'disabled' || !!p.last_day) && (p.clock_total || 0) > (p.clock_stopped || 0);
+      case 'nohome': return p.status === 'active' && !p.clock_total && !p.clock_job;
+      case 'namediff': return true; // 首頁「打卡姓名不同」：後端沒給逐人清單，先看全部
       default: return p.status === state.f;
     }
   }
@@ -62,7 +68,8 @@ export function mountList(el, ctx) {
     if (['pending', 'rejected', 'active'].indexOf(p.status) !== -1) a.push(b('unclaim', '撤回認領', 'btn-danger'));
     if (p.status === 'unclaimed') a.push(b('rename', '改姓名'));
     a.push(p.status === 'disabled' ? b('enable', '啟用') : b('disable', '停用', 'btn-danger'));
-    return a.join(' ');
+    const extra = clockButtonsHtml(p, viewer); // 員工名單統一：離職／撤銷離職／打卡連結／改名／復職
+    return a.join(' ') + (extra ? ' ' + extra : '');
   }
 
   function rowsHtml() {
@@ -79,7 +86,7 @@ export function mountList(el, ctx) {
         <td>${esc(p.emp_no)}</td>
         <td>${esc(p.name)}${priv}</td>
         <td>${esc(orgText(p, '') || '—')}${change}</td>
-        <td><span class="${cls}">${esc(txt)}</span>${p.reset_locked ? ' <span class="tag tag-danger">密碼鎖住</span>' : ''}${reason}</td>
+        <td><span class="${cls}">${esc(txt)}</span>${p.reset_locked ? ' <span class="tag tag-danger">密碼鎖住</span>' : ''} ${clockTagsHtml(p)}${reason}</td>
         <td>${esc(p.claimed_at || '')}</td>
         <td>${actionsHtml(p)}</td></tr>`;
     }).join('');
@@ -91,7 +98,8 @@ export function mountList(el, ctx) {
     el.innerHTML = `
       <div class="card stack">
         <div class="card-row"><div class="card-title">同仁名單（${staff.length} 位）</div>
-          <span class="text-muted">未開通 ${counts.unclaimed || 0}・待確認 ${counts.pending || 0}・已開通 ${counts.active || 0}・已停用 ${counts.disabled || 0}</span></div>
+          <button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></div>
+        <div class="card-row"><span class="text-muted">未開通 ${counts.unclaimed || 0}・待確認 ${counts.pending || 0}・已開通 ${counts.active || 0}・已停用 ${counts.disabled || 0}</span></div>
         <div class="form-grid-2">
           <div class="field"><label class="field-label" for="stf-q">搜尋姓名或編號</label><input class="input" id="stf-q" type="search" value="${esc(state.q)}"></div>
           <div class="field"><label class="field-label" for="stf-f">狀態</label><select class="input" id="stf-f">
@@ -112,7 +120,10 @@ export function mountList(el, ctx) {
     el.querySelector('#stf-brand').addEventListener('change', (e) => { state.brand = e.target.value; redraw(); });
     el.querySelector('#stf-priv').addEventListener('change', (e) => { showPrivate = e.target.checked; redraw(); });
     el.querySelector('[data-role="rows"]').addEventListener('click', onAction);
+    el.querySelector('[data-role="add-staff"]').addEventListener('click', () => openAddFlow(clockEnv()));
   }
+
+  const clockEnv = () => ({ ctx, mod: 'staff', viewer, org, reload: load });
 
   async function run(action, payload, okMsg) {
     ctx.ui.loading(true);
@@ -140,6 +151,7 @@ export function mountList(el, ctx) {
     if (!p) return;
     const act = btn.getAttribute('data-act');
     const who = `${p.emp_no} ${p.name}`;
+    if (isClockAct(act)) { handleClockAct(act, p, clockEnv()); return; }
 
     if (act === 'confirm') {
       const body = domOf(`<p><b>確認前請先打電話給本人核對</b>（手機 ${esc(p.phone)}），確定是他本人填的再按確認。</p>
