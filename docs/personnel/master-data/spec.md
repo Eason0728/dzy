@@ -83,7 +83,7 @@
 | svc_link | emp_id | 只回該人打卡連結金鑰 | `{ok, key}` |
 
 - 名冊右側補四欄 `src_store, src_emp_id, origin_op, last_op`（由 SvcStaff.gs 自己的 svcEnsureHeaders_ 補，不改 Code.gs 的 ROSTER_HEADERS；svc_add 冪等以 origin_op 為準、svc_set_active 以 last_op 為準，不另開 svc_ops 存結果；svc_link 不記任何結果）（ensureRosterHeaders 只補不改）：7A 建的人記他從哪家來，管理系統不必猜姓名就能對上。
-- 打卡連結金鑰**管理系統不存**：店長按「顯示打卡連結」→ 平台寫一張 kind=link 的待辦單 → 同步員打 svc_link → 金鑰放 CacheService 120 秒 → 前端 clockJobStatus 取到一次即刪。只給該單位店長與總部。（clock_outbox 的 kind 因此多一個 `link`，該列不寫金鑰。）
+- 打卡連結金鑰**管理系統不存**（mini 上的 CacheService 實際暫存於本機資料庫，檔案權限 600、不進雲端備份、取走即刪、最多 10 分鐘清除；上線前關 F8）：店長按「顯示打卡連結」→ 平台寫一張 kind=link 的待辦單 → 同步員打 svc_link → 金鑰放 CacheService 120 秒 → 前端 clockJobStatus 取到一次即刪。只給該單位店長與總部。（clock_outbox 的 kind 因此多一個 `link`，該列不寫金鑰。）
 - 掛法：Code.gs 分派表後面併入 `SVC_STAFF_HANDLERS`（照 LIFF／LINE_HUB 的三行寫法）。回退＝刪那三行＋檔案。
 
 ## 4. 七個流程
