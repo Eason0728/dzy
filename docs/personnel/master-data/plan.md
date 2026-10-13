@@ -22,7 +22,7 @@
 - **M4（階段 6–7）**：7A 與佈告欄切換上線。之後兩週觀察→階段 8 退場舊按鈕。
 
 ## 階段 0：準備（不寫功能）
-- 打卡：把六個部署副本中最新的 `程式碼.js` 與正本 `Code.gs` 對齊（以部署版為準，去掉試算表 ID／金鑰換回 `PASTE_` 佔位）。副本先複製到 repo 外暫存處理；commit 前對整份 staged diff 比對 deploy-local 所有金鑰值與六店試算表 ID，命中就停（mala-clock-in repo 是 public）。確認六店部署副本彼此相同（只差 CONFIG）。
+- ~~打卡：把六個部署副本中最新的 `程式碼.js` 與正本 `Code.gs` 對齊（以部署版為準，去掉試算表 ID／金鑰換回 `PASTE_` 佔位）。副本先複製到 repo 外暫存處理；commit 前對整份 staged diff 比對 deploy-local 所有金鑰值與六店試算表 ID，命中就停（mala-clock-in repo 是 public）。~~ 2026-10-13 查證不需要：origin/main 已含鎖，原判斷是比錯分支。打卡開發改從 origin/main 開 worktree 分支；部署一律用 tools/deploy-to-clasp.py（保留各店 CONFIG、檢查無佔位符）。確認六店部署副本彼此相同（只差 CONFIG）。
 - minikit：跟維護者確認 `app.json` 加選填 `jobs`；不同意→改走獨立 launchd 程式（同樣的 jobs.js，自己起 http 呼叫 127.0.0.1）。
 - 開 GitHub issue（dzy repo）當階段關審查紀錄；issue 內不貼網址、金鑰、真名。
 

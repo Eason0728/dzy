@@ -6,7 +6,7 @@
 ## 階段 0：準備
 | # | 任務 | 輸入 → 輸出 | 驗收 |
 |---|---|---|---|
-| Z1 | 打卡正本對齊部署版 | 六店 `~/mala-gas/*-clock-in/程式碼.js` → `~/mala-clock-in/apps-script/Code.gs` | 六店副本去掉 CONFIG 後彼此 diff 為空（或列出差異並說明）；正本 diff 部署版只剩佔位符差異；副本在 repo 外處理；`git diff --cached` 逐一比對 deploy-local 全部金鑰值＋六店試算表 ID＋部署 ID，零命中才 commit；repo 既有測試全綠 |
+| Z1 | ~~打卡正本對齊部署版~~（2026-10-13 查證：正本 origin/main 已含鎖，不需要；改為「從 origin/main 開 feature/svc-staff 分支、用 worktree，不動別的 session 的分支」）| 六店 `~/mala-gas/*-clock-in/程式碼.js` → `~/mala-clock-in/apps-script/Code.gs` | 六店副本去掉 CONFIG 後彼此 diff 為空（或列出差異並說明）；正本 diff 部署版只剩佔位符差異；副本在 repo 外處理；`git diff --cached` 逐一比對 deploy-local 全部金鑰值＋六店試算表 ID＋部署 ID，零命中才 commit；repo 既有測試全綠 |
 | Z2 | minikit jobs 掛勾確認 | 問維護者 | 得到「可」或改採 launchd 的結論，寫進 progress.md |
 | Z3 | 開審查 issue | — | dzy repo 有「員工名單統一｜階段關」issue，本文含範圍、驗收、規則，不含網址金鑰真名 |
 
@@ -17,6 +17,7 @@
 | A2 | svc_roster | — → 名冊陣列 | 只回 spec §3 欄位；不含 key／device_id／line_user_id；line_bound 為布林；last_punch 取 events 該 emp 最大日期；空名冊回 [] |
 | A3 | svc_add（冪等靠名冊 origin_op、ensureRosterHeaders 補三欄） | name, op_id, created_by, src_* → {emp_id} | 同 op_id 第二次回同一 emp_id 且名冊只多一列；寫名冊後、回應前丟例外，重送仍回同一 emp_id；回應與任何分頁都不含 key；在職同名回 duplicate_name；與 mgr_add_employee 同一把 ScriptLock；**依實際表頭定位寫入**（測試：表頭欄序打亂仍寫對欄）；name 去頭尾空白、≤20 字 |
 | A4 | svc_set_active＋svc_link | emp_id, active, op_id → 結果 | 不存在 not_found；停用寫 removed_at／removed_by；恢復時同名在職 duplicate_name；svc_link 只回該人 key；op_id 冪等 |
+| A6 | svc_payroll_names（只在光復有薪資主檔的那支生效） | — → [{store,emp_id,name}] | 只回三欄、無任何金額欄；沒有 payroll_master 分頁回 []；未設金鑰全拒 |
 | A5 | Code.gs 併入 SVC_STAFF_HANDLERS | — | 三行；舊 action 全數照舊（既有測試全綠）；刪掉三行＋檔案即回到原狀 |
 
 ## 階段 2：平台後端（~/dzy/apps-script/platform/StaffClock.gs）
@@ -31,6 +32,7 @@
 | B7 | clockDailyApply_ | today → 動作清單 | last_day<today 且在職→停用＋每個 confirmed 對照各一張 deactivate（同一支呼叫寫完）；**DZY 已停用但對照店名冊仍在職→自動補 deactivate 單**；打卡單位在職者無 home 對照且無有效待辦→異常；跑兩次不重複發單 |
 | B7b | 待辦單送前重驗（expect_json）＋cancelled | 對照被改正後，舊 deactivate 單送前被取消、不打打卡 |
 | B10 | 改名／調店／復職（spec §4.8） | 改名只有總部、產生「打卡姓名不同」異常；調店確認時開新店 add；復職列舊對照讓總部勾選後發 reactivate 單 |
+| B8b | 姓名一致檢查 | 每日同步時比 roster.name 與薪資主檔 name（同店同 emp_id），不同→alerts「請會計把薪資主檔姓名改成和打卡一樣」 |
 | B8 | clockLink（kind=link 單）＋svcDirectory＋clockAlerts | — | link 金鑰只在 CacheService、取一次即刪、不寫進任何分頁；svcDirectory 驗 BULLETIN_SVC_KEY、只回 confirmed、無手機生日地址；alerts 四類 |
 | B9 | Code.gs 分派＋MUTATING_ACTIONS；內部 `_` 函式不進分派表 | — | 新 action 可分派；打 /api 呼叫 clockOutboxClaim_ 等回 unknown_action；既有測試全綠 |
 
