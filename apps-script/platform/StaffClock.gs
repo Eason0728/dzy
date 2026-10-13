@@ -798,8 +798,8 @@ function handleClockMapDecide_(token, payload) {
 
   // 這個打卡編號有送出中（running）的單時禁止改綁／退回：單送出的是舊對照，回填會蓋到新對照
   var targetEmp = (a.isHq && payload.emp_no !== undefined && payload.emp_no !== '') ? stfNormEmp_(payload.emp_no) : emp;
-  if (row && (decision === 'reject' || row.emp_no !== targetEmp) &&
-      clkJobs_().some(function (j) { return j.state === 'running' && j.store_code === store && j.emp_id === eid && ['add', 'deactivate', 'reactivate'].indexOf(j.kind) !== -1; })) {
+  // 不以對照列存在為前提（補償單沒有對照列）；lease 過期的 running 視同 pending，不擋
+  if ((!row || decision === 'reject' || row.emp_no !== targetEmp) && clkInFlightFor_(store, eid, clkNowText_(d))) {
     return clkErr_('job_open', CLK_MSG.JOB_OPEN);
   }
   if (!a.isHq) {
@@ -875,6 +875,8 @@ function handleClockCandidateCreate_(token, payload) {
   if (clkNameBadStart_(name)) return clkErr_('bad_input', CLK_MSG.NAME_START);
   var clash = clkNameClash_(name, o.unit, '');
   if (clash) return clash;
+  var nowC = clkNowText_(new Date());
+  if (cand.entries.some(function (e) { return clkInFlightFor_(clkCode_(e.store_code), clkEid_(e.emp_id), nowC); })) return clkErr_('job_open', CLK_MSG.JOB_OPEN);
   var n = stfMaxEmpNum_() + 1;
   if (n > 999) return clkErr_('full', CLK_MSG.FULL);
   var empNo = stfEmpOf_(n);
@@ -924,7 +926,7 @@ function handleClockOutboxRetry_(token, payload) {
   var jobs = clkJobs_();
   var j = clkJobById_(jobs, stfStr_(payload && payload.job_id));
   if (!j) return clkErr_('no_job', CLK_MSG.NO_JOB);
-  var stuck = j.state === 'failed' || (CLK_OPEN_STATES.indexOf(j.state) !== -1 && j.tries >= CLK_ALERT_TRIES);
+  var stuck = clkJobStuck_(j, clkNowText_(new Date()));
   if (!stuck) return clkErr_('not_retryable', CLK_MSG.NOT_RETRYABLE);
   var d = new Date();
   j.state = 'pending'; j.tries = 0; j.next_at = clkNowText_(d); j.lease_until = ''; j.last_error = '';
@@ -945,7 +947,7 @@ function handleClockOutboxCancel_(token, payload) {
   payload = payload || {};
   var j = clkJobById_(clkJobs_(), stfStr_(payload.job_id));
   if (!j) return clkErr_('no_job', CLK_MSG.NO_JOB);
-  var stuck = j.state === 'failed' || (CLK_OPEN_STATES.indexOf(j.state) !== -1 && j.tries >= CLK_ALERT_TRIES);
+  var stuck = clkJobStuck_(j, clkNowText_(new Date()));
   if (!stuck) return clkErr_('not_retryable', CLK_MSG.NOT_RETRYABLE);
   var reason = stfStr_(payload.reason).slice(0, 100);
   var d = new Date();
@@ -1113,6 +1115,29 @@ function clockOutboxClaim_(now, limit, kinds) {
 
 /** 去掉 authSafeCell_ 為防公式加的前導單引號（只在後面接 = + - @ 時） */
 function clkUnquote_(v) { var t = String(v); return /^'[=+\-@]/.test(t) ? t.slice(1) : t; }
+
+/** 這個人的姓名會進打卡名冊（有未被退回的對照，或單位有對應打卡）→ true */
+function clkNameIntoClock_(empNo) {
+  if (!clkSheetsReady_()) return false;
+  var emp = stfNormEmp_(empNo);
+  var s = clkStaffByEmp_(emp);
+  if (s && clkStoreOfUnit_(clkStaffUnit_(s))) return true;
+  return clkMapsOf_(clkMaps_(), emp).some(function (m) { return m.state !== 'rejected'; });
+}
+
+/** 這張單「送出中」：running 且 lease 還沒過期（過期＝同步員可能當掉，視同 pending，交給送前重驗） */
+function clkJobInFlight_(j, nowText) { return j.state === 'running' && stfStr_(j.lease_until) >= nowText; }
+/** 卡住、可由總部重試或取消：failed、未完成且 tries≥3、或 running 但 lease 已過期 */
+function clkJobStuck_(j, nowText) {
+  return j.state === 'failed' || (CLK_OPEN_STATES.indexOf(j.state) !== -1 && j.tries >= CLK_ALERT_TRIES) ||
+    (j.state === 'running' && stfStr_(j.lease_until) < nowText);
+}
+/** 這個打卡編號有沒有送出中的 add／deactivate／reactivate 單（不看對照列存不存在） */
+function clkInFlightFor_(store, eid, nowText) {
+  return clkJobs_().some(function (j) {
+    return j.store_code === store && j.emp_id === eid && ['add', 'deactivate', 'reactivate'].indexOf(j.kind) !== -1 && clkJobInFlight_(j, nowText);
+  });
+}
 
 function clkRetryDelay_(tries) {
   return tries <= CLK_RETRY_MINUTES.length ? CLK_RETRY_MINUTES[tries - 1] : CLK_RETRY_LATER_MINUTES;

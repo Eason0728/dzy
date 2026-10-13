@@ -259,6 +259,7 @@ pending/running ──claim 時重驗不過──► cancelled（不送）
 - **F5**：`clockRosterApply_` 收到空 `rows` 而該店已有 confirmed 對照 → `{ok:false, code:'empty_roster'}`，不套用。
 - **F6**：`clockOutboxDone_` add 成功結果若帶 `active:false`，對照照實寫 `roster_active=FALSE`（進 `home_stopped`）。
 - **F10**：`clockLink` 支援店（role=support）的連結只給總部，店長 → `no_perm`。
+- **Fable 驗證補強**：(1) G2 的「送出中」只算 `running` 且 `lease_until` 未過期；lease 過期的 running 單視同 pending，不擋改綁／退回，且總部可重試或取消（`clockOutboxRetry`／`clockOutboxCancel` 的「卡住」條件含此情形）。(2) 送出中判斷不以對照列存在為前提：補償單 running 時，`clockMapDecide` confirm 與 `clockCandidateCreate` 都回 `job_open`。(3) 第一期 `staffImport`／`staffAdd`／`staffEdit` 改名同樣擋 `= + - @` 開頭（載入 StaffClock.gs 時）；`staffEdit` 改名對「單位有打卡或有未退回對照」的人上限 20（其餘維持 30，第一期匯入資料不受影響）。
 - `clockAlerts` 沒有新增頂層類別（前端不必新增列）：rejected 但打卡在職 → 併入 `unmapped`（多 `reason:'rejected'`、`emp_no`，總部才有）；離職者只有 suggested 對照 → 併入 `left_but_active`（多 `suggested:true`）；補償停用單（未完成）→ 併入 `outbox_failed`（多 `comp:true`、`reason`，總部才有，未完成就亮）。`counts` 另有 `rejected_active`、`left_suggested`、`compensations` 筆數。
 
 ## 4. Hook（Staff.gs 內的小改動，沒有 StaffClock.gs 時自動略過）

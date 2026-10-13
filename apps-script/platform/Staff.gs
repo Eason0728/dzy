@@ -76,6 +76,10 @@ var STF_MSG = {
   REASON_TOO_LONG: '退回原因最多 200 個字'
 };
 var STF_REASON_MAX = 200;
+// 姓名開頭 = + - @ 會在試算表／打卡名冊變成公式：匯入、新增、改名一律擋（員工名單統一，上線前關 F2）
+// （只在有 StaffClock.gs 的環境檢查：第一期單獨的測試仍驗證 users 姓名會加單引號防公式）
+function stfBadNameStart_(n) { return typeof clkNameBadStart_ === 'function' && clkNameBadStart_(n); }
+var STF_MSG_NAME_START = '姓名開頭不能是 = + - @ 這四個符號（會被試算表當成公式），請改寫或把符號放在後面';
 
 // ============================================================
 // 1. 共用小工具
@@ -811,6 +815,8 @@ function handleStaffImport_(token, payload) {
   if (!stfSheetsReady_()) setupStaff();
   var names = Array.isArray(payload && payload.names) ? payload.names.map(stfStr_).filter(function (n) { return n; }) : [];
   if (!names.length) return { ok: false, error: STF_MSG.NAMES_REQUIRED };
+  var badStart = names.filter(function (n) { return stfBadNameStart_(n); });
+  if (badStart.length) return { ok: false, error: STF_MSG_NAME_START };
   var tooLong = names.filter(function (n) { return n.length > STF_MAX.name; });
   if (tooLong.length) return { ok: false, error: STF_MSG.NAME_TOO_LONG + '：' + tooLong.map(function (n) { return n.slice(0, 10) + '…'; }).join('、') };
 
@@ -975,6 +981,11 @@ function handleStaffEdit_(token, payload) {
     var name = stfStr_(payload.name);
     if (!name) return { ok: false, error: '姓名不得為空' };
     if (name.length > STF_MAX.name) return { ok: false, error: STF_MSG.NAME_TOO_LONG };
+    if (stfBadNameStart_(name)) return { ok: false, error: STF_MSG_NAME_START };
+    // 這個人會進（或已在）打卡名冊時，姓名上限 20（打卡端 svc_add 的限制），否則之後的 add 單會被永久拒絕
+    if (name.length > 20 && typeof clkNameIntoClock_ === 'function' && clkNameIntoClock_(t.emp)) {
+      return { ok: false, error: '姓名最多 20 個字（這位同仁在打卡系統有對照或單位有打卡）' };
+    }
     var clash = stfUnclaimedByName_(name).filter(function (r) { return r.row !== t.hit.row; });
     if (clash.length) return { ok: false, error: '名單上已有同名、還沒認領的人' };
     if (name !== stfStr_(t.v[STF_COL.name])) { t.v[STF_COL.name] = name; changed.push('name'); }

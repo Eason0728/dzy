@@ -1508,5 +1508,44 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(post(sb, 'clockLink', { emp_no: x.emp, store_code: 'mztjs' }, tok).ok, 'F10 總部可以取支援店連結');
 })();
 
+(() => {
+  // ── Fable 驗證補強：lease 過期不擋、補償單（無對照列）也擋、staffImport／staffEdit 姓名 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const a = claimApprove(app, '驗綁甲', 'pw-v1-pw-0001', MZT_GF('pt'));
+  const b = claimApprove(app, '驗綁乙', 'pw-v1-pw-0002', MZT_GF('pt'));
+  giveMap(app, a.emp, 'mztgf', 'V1A', 'home');
+  post(sb, 'staffLeave', { emp_no: a.emp, last_day: dayT(-1) }, tok);
+  sb.clockDailyApply_(dayT(0));
+  const dj0 = jobs(app).findIndex((j) => j.kind === 'deactivate' && j.emp_no === a.emp);
+  setCell(app, 'clock_outbox', dj0 + 1, 'state', 'running'); setCell(app, 'clock_outbox', dj0 + 1, 'lease_until', nowT(-15));   // 同步員撿走後當掉：lease 早就過期，單永遠停在 running
+  const dj = jobs(app).find((j) => j.kind === 'deactivate' && j.emp_no === a.emp);
+  ok(dj.state === 'running', 'V1 （單卡在 running，lease 已過期）');
+  const rb = post(sb, 'clockMapDecide', { store_code: 'mztgf', emp_id: 'V1A', decision: 'confirm', emp_no: b.emp }, tok);
+  ok(rb.ok === true, 'V1 ★lease 過期的 running 單不擋改綁（視同 pending，送前重驗會處理）', rb);
+  const dj2 = jobs(app).find((j) => j.job_id === dj.job_id);
+  ok(post(sb, 'clockOutboxCancel', { job_id: dj.job_id }, tok).ok && jobs(app).find((j) => j.job_id === dj.job_id).state === 'cancelled', 'V1 ★lease 過期的 running 單總部可以取消', dj2);
+  // 補償單（沒有對照列）running 中：confirm／建立候選都擋
+  sb.clockCompensate_('mztjs', 'V4Z', 'record_failed', '', nowT(0));
+  sb.clockOutboxClaim_(nowT(1));
+  const c1 = post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'V4Z', decision: 'confirm', emp_no: b.emp }, tok);
+  ok(c1.ok === false && c1.code === 'job_open' && !maps(app).some((m) => m.emp_id === 'V4Z'), 'V4 ★沒有對照列、有送出中的補償單：總部 confirm 被擋', c1);
+  app.props.CLOCK_MAP_STATE = JSON.stringify({ candidates: [{ key: 'mztjs:V4Z', name: '驗候選', entries: [{ store_code: 'mztjs', emp_id: 'V4Z' }] }], needs_hq: [], excluded: [] });
+  ok(post(sb, 'clockCandidateCreate', { candidate_key: 'mztjs:V4Z', unit: 'mzt-js', title: 'pt' }, tok).code === 'job_open', 'V4 ★補償單送出中，建立候選新人（新建 confirmed）被擋');
+  // 姓名（第一期入口）
+  ['=cmd', '+1', '-B', '@x'].forEach((n) => {
+    ok(post(sb, 'staffImport', { names: [n] }, tok).ok === false, 'V5 ★staffImport 擋開頭「' + n[0] + '」');
+  });
+  ok(post(sb, 'staffAdd', { name: '-加註' }, tok).ok === false, 'V5 ★staffAdd 擋開頭符號');
+  ok(post(sb, 'staffImport', { names: ['驗加註-B', '長'.repeat(25)] }, tok).ok, 'V5 符號放後面、21～30 字的第一期匯入照舊可以');
+  ok(post(sb, 'staffEdit', { emp_no: b.emp, name: '@改' }, tok).ok === false, 'V5 ★staffEdit 改名擋開頭符號');
+  const long = '改'.repeat(21);
+  const e1 = post(sb, 'staffEdit', { emp_no: b.emp, name: long }, tok);
+  ok(e1.ok === false && e1.error.indexOf('20') !== -1, 'V5 ★會進打卡（單位有打卡／有對照）的人 staffEdit 改名限 20 字', e1);
+  const imp = sheetsNameEmp(app, '長'.repeat(25));
+  ok(post(sb, 'staffEdit', { emp_no: imp, name: long }, tok).ok, 'V5 沒單位、沒對照的人（第一期匯入）改名仍可到 30 字');
+  function sheetsNameEmp(ap, n) { return ap.sheets.staff._rows().find((r) => r[2] === n)[0]; }
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
