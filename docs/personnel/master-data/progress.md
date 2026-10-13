@@ -3,7 +3,7 @@
 - 分級：完整
 - 分級依據：排程=是 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
 - 現在在：⑤
-- 等 Eason：總部按「同仁名單 → 打卡對照 → 建立打卡對照」，各店店長 3 天內確認
+- 等 Eason：無（2026-10-14 總部已建立並全部確認打卡對照，「需總部處理」「候選新人」皆空；店長不必確認）
 
 ## ① 查（2026-10-13）
 - 規劃稿 ~/dzy/docs/personnel/master-data-plan.md（v1，方向與六題已定）；記憶 staff-master-direction.md 已記方向
@@ -63,7 +63,7 @@
 
 ### 第 4 段（開放寫入）——建議新對話，口令「員工名單統一第 4 段」，先讀本檔與 spec §4、prelaunch-review.md
 前置（缺一不開，plan 5d）：
-1. 打卡對照全部確認：44 位在職打卡同仁 confirmed 或明確排除；候選新人總部處理完（總部單位要指定 dzy-hq／mzt-hq／mala-hq）。
+1. ✅ 打卡對照全部確認（2026-10-14 總部完成，需總部處理與候選新人皆空）。⚠ 未認領者的 home／support 標籤要等「無單位推主店」修正上線後每日重算才正確——開寫入前確認已上線並跑過一次 00:10。
 2. mini「登入後自動啟動」（Eason 2026-10-14 同意）：minikit DEPLOY.md 規則 9 寫「不裝開機自動啟動」，要改規則＋做 LaunchAgent（FileVault 開著，停電仍需到場解鎖）。
 3. 雲端排程守門（~/mala-fortune/tools/gas-watchdog/Code.js → ~/mala-gas/schedule-watchdog）加監看 dzy-platform /platform/health 的 reasons `clock_sync_stale`、`clock_daily_apply_failed`。
 4. 確認 mini `.env` 已刪 `GAS_PROP_LEGACY_SECRETS`（第一期過渡旗標，dzy-admin skill 部署第 5 步）。
