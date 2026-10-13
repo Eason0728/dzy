@@ -3,7 +3,7 @@
 - 分級：完整
 - 分級依據：排程=是 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
 - 現在在：③-需求
-- 等 Eason：需求 6 題（網頁 https://claude.ai/artifact/RcyZFKRnvD4uWpGH7Efxyd）＋准不准唯讀抓六店打卡名冊試配對
+- 等 Eason：需求第 7 題（第一次跨店：LINE 打卡自動建一筆／總部按一下）
 
 ## ① 查（2026-10-13）
 - 規劃稿 ~/dzy/docs/personnel/master-data-plan.md（v1，方向與六題已定）；記憶 staff-master-direction.md 已記方向
@@ -13,7 +13,8 @@
 - 結論：不存在，屬既有 dzy 上的新一期；口令「建立新系統」→ 走五站，docs 放本目錄
 
 ## ② 探（2026-10-13）
-- 結果寫在 requirements.md 第 7 節；真實名冊唯讀抓取被自動權限擋下＝未確認
+- 結果寫在 requirements.md 第 7 節；Eason 准後唯讀抓六店名冊：在職 44 人、13 人跨店、六張犁空；樣本在 spike/sample（gitignore）
+- 2026-10-13 Eason：六題照推薦，第 4 題改依實際打卡
 - 發現：打卡 repo 正本 Code.gs 缺新增同仁的鎖（六個部署副本都有）＝正本落後部署
 
 ## 關卡紀錄
