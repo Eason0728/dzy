@@ -1258,5 +1258,52 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(staffOf(app, c.data.emp_no).name === '-B修加註', 'FIX14 staff 姓名本身是原字串');
 })();
 
+(() => {
+  // ── 前端缺口補強（2026-10-13）：is_self、name_diff 逐人、全部對照、transfer_ask 帶姓名、no_home_map 逐人 ──
+  const app = fresh();
+  const { sb, tok } = app;
+  const mgr = claimApprove(app, '缺口店長', 'mgr-gap-pw-01', MZT_GF('sm'));
+  const x = claimApprove(app, '缺口同仁', 'crew-gap-pw-01', MZT_GF('pt'));
+  const y = claimApprove(app, '缺口無主店', 'crew-gap-pw-02', MZT_GF('pt'));
+  giveMap(app, x.emp, 'mztgf', 'GP1', 'home', { state: 'confirmed' });
+  giveMap(app, mgr.emp, 'mztgf', 'GP0', 'home', { state: 'confirmed' });
+
+  // is_self
+  const ul = post(sb, 'staffUnitList', {}, mgr.token);
+  ok(ul.data.people.filter((p) => p.is_self).map((p) => p.emp_no).join() === mgr.emp && ul.data.people.every((p) => typeof p.name_diff === 'boolean'), 'GAP is_self：staffUnitList 只有本人那列是 true、每列有 name_diff 布林', ul.data.people.map((p) => [p.emp_no, p.is_self]));
+  const sl = post(sb, 'staffList', {}, tok);
+  ok(sl.data.staff.every((p) => p.is_self === false) && sl.data.staff.every((p) => p.name_diff === false), 'GAP staffList 每列帶 is_self（admin 沒有同仁列＝全 false）與 name_diff');
+  ok(!JSON.stringify(ul).match(/phone|birthday|address/), 'GAP staffUnitList 仍不含手機生日地址');
+
+  // name_diff 逐人
+  sb.clockRosterApply_('mztgf', [rosterRow('GP1', '打卡上別的名字'), rosterRow('GP0', '缺口店長')], undefined, nowT(1));
+  const al = post(sb, 'clockAlerts', {}, tok);
+  ok(al.data.name_diff_items.length === 1 && al.data.name_diff_items[0].emp_no === x.emp && al.data.name_diff_items[0].name === '缺口同仁' && al.data.name_diff_items[0].store_code === 'mztgf', 'GAP ★name_diff 逐人 {emp_no,name,store_code}', al.data.name_diff_items);
+  ok(al.data.name_diff[0].name === '缺口同仁', 'GAP name_diff 每列也帶姓名');
+  const ul2 = post(sb, 'staffUnitList', {}, mgr.token);
+  ok(ul2.data.people.find((p) => p.emp_no === x.emp).name_diff === true && ul2.data.people.find((p) => p.emp_no === mgr.emp).name_diff === false, 'GAP ★staffUnitList 每人 name_diff 布林');
+  ok(post(sb, 'staffList', {}, tok).data.staff.find((p) => p.emp_no === x.emp).name_diff === true, 'GAP staffList 也帶 name_diff');
+  const alM = post(sb, 'clockAlerts', {}, mgr.token);
+  ok(alM.data.name_diff_items.length === 1, 'GAP 店長看得到自己單位的 name_diff 逐人');
+
+  // no_home_map 逐人
+  const nh = al.data.no_home_map_items.find((i) => i.emp_no === y.emp);
+  ok(nh && nh.name === '缺口無主店' && nh.store_code === 'mztgf' && al.data.no_home_map.indexOf(y.emp) !== -1, 'GAP ★no_home_map_items 逐人（舊 no_home_map 仍是 emp_no 陣列）', al.data.no_home_map_items);
+
+  // 全部對照
+  giveMap(app, y.emp, 'mztgf', 'GP2', 'support', { state: 'suggested' });
+  const ml = post(sb, 'clockMapList', {}, tok);
+  ok(ml.data.confirmed.length === ml.data.confirmed_count && ml.data.confirmed.every((m) => m.state === 'confirmed') && ml.data.confirmed.some((m) => m.emp_id === 'GP1' && m.name === '缺口同仁'), 'GAP ★clockMapList 總部多 confirmed：全部已生效對照', ml.data.confirmed);
+  ok(ml.data.suggested.some((m) => m.emp_id === 'GP2') && !ml.data.confirmed.some((m) => m.emp_id === 'GP2'), 'GAP confirmed 不含 suggested');
+  const mlM = post(sb, 'clockMapList', {}, mgr.token);
+  ok(Array.isArray(mlM.data.confirmed) && mlM.data.confirmed.length === 0, 'GAP 店長看到的 confirmed 是空陣列');
+
+  // transfer_ask 帶姓名
+  sb.clkSetState_(sb.CLK_PROP_TRANSFER_ASK, { items: [{ emp_no: x.emp, store_code: 'mztgf' }] });
+  const ta = post(sb, 'clockAlerts', {}, tok).data.transfer_ask;
+  ok(ta.length === 1 && ta[0].name === '缺口同仁' && ta[0].emp_no === x.emp && ta[0].store_code === 'mztgf', 'GAP ★transfer_ask 帶姓名', ta);
+  ok(post(sb, 'clockOldHomeDecide', { emp_no: x.emp, store_code: 'mztgf', deactivate: false }, tok).ok, 'GAP 帶姓名後 clockOldHomeDecide 仍照 emp_no／store_code 運作');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

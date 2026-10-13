@@ -315,7 +315,7 @@ export function mountClockMap(el, env) {
   const { ctx, mod, viewer } = env;
   const isHq = viewer.isHq;
   let alive = true;
-  let data = { suggested: [], needs_hq: [], candidates: [], confirmed_count: 0, built_at: '' };
+  let data = { suggested: [], confirmed: [], needs_hq: [], candidates: [], confirmed_count: 0, built_at: '' };
   let alerts = {};
   let tab = (ctx.params && ctx.params.t) || (isHq ? 'all' : 'suggested');
   if (tab === 'suggested') tab = 'all';
@@ -333,21 +333,27 @@ export function mountClockMap(el, env) {
 
   const unitOf = (x) => x.unit_name || x.unit || '';
 
-  function suggestedHtml() {
-    const rows = data.suggested || [];
-    if (!rows.length) return `<div class="card" data-role="cm-empty"><p class="text-muted">${isHq ? '目前沒有待確認或未生效的對照' : '目前沒有要你確認的打卡對照'}</p></div>`;
-    return rows.map((x) => `
-      <div class="card stack" data-role="cm-row" data-store="${esc(x.store_code)}" data-emp-id="${esc(x.emp_id)}">
+  function mapCard(x) {
+    const confirmed = x.state === 'confirmed';
+    return `
+      <div class="card stack" data-role="cm-row" data-state="${esc(x.state)}" data-store="${esc(x.store_code)}" data-emp-id="${esc(x.emp_id)}">
         <div class="card-row"><div class="card-title">${esc(x.name)}　${esc(x.emp_no)}</div>
-          <span class="tag ${x.state === 'confirmed' ? 'tag-ok' : x.state === 'rejected' ? 'tag-danger' : 'tag-warn'}">${x.state === 'confirmed' ? '已確認' : x.state === 'rejected' ? '已退回' : '等確認'}</span></div>
+          <span class="tag ${confirmed ? 'tag-ok' : x.state === 'rejected' ? 'tag-danger' : 'tag-warn'}">${confirmed ? '已確認' : x.state === 'rejected' ? '已退回' : '等確認'}</span></div>
         <div class="text-muted">${esc(unitOf(x))}｜打卡：${esc(x.store_name || x.store_code)} 編號 ${esc(x.emp_id)}（${esc(ROLE_TEXT[x.role] || x.role)}）${x.last_punch ? `｜最近打卡 ${esc(x.last_punch)}` : ''}</div>
-        <p class="field-hint">這個人在打卡系統的 ${esc(x.emp_id)}，就是 ${esc(x.name)} 本人嗎？</p>
+        ${confirmed ? '' : `<p class="field-hint">這個人在打卡系統的 ${esc(x.emp_id)}，就是 ${esc(x.name)} 本人嗎？</p>`}
         <div class="card-row">
-          <button type="button" class="btn btn-primary" data-act="cm-yes" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">對</button>
-          <button type="button" class="btn btn-danger" data-act="cm-no" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">不對</button>
-          ${isHq ? `<button type="button" class="btn btn-secondary" data-act="cm-assign" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">指定給別人…</button>` : ''}
+          ${confirmed ? '' : `<button type="button" class="btn" style="background:var(--ok);border-color:var(--ok);color:var(--ink-inverse)" data-act="cm-yes" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">對</button>
+          <button type="button" class="btn btn-danger" data-act="cm-no" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">不對</button>`}
+          ${isHq ? `<button type="button" class="btn btn-secondary" data-act="cm-assign" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">${confirmed ? '改指定…' : '指定給別人…'}</button>` : ''}
         </div>
-      </div>`).join('');
+      </div>`;
+  }
+
+  function suggestedHtml() {
+    // 總部「全部對照」＝待確認＋已生效；店長只有待確認
+    const rows = (data.suggested || []).concat(isHq ? (data.confirmed || []) : []);
+    if (!rows.length) return `<div class="card" data-role="cm-empty"><p class="text-muted">${isHq ? '目前沒有任何對照' : '目前沒有要你確認的打卡對照'}</p></div>`;
+    return rows.map(mapCard).join('');
   }
 
   function needsHtml() {
@@ -379,7 +385,7 @@ export function mountClockMap(el, env) {
     if (!rows.length) return '<div class="card" data-role="cm-empty"><p class="text-muted">沒有待決定的舊主店</p></div>';
     return `<div class="card"><p class="text-muted">這些同仁調店後，舊主店變成「支援」。要不要把舊店的打卡停掉？</p></div>` + rows.map((x, i) => `
       <div class="card stack" data-role="oldhome-row">
-        <div class="card-row"><div class="card-title">${esc(x.emp_no)}</div><span class="text-muted">舊主店 ${esc(x.store_code)}</span></div>
+        <div class="card-row"><div class="card-title">${esc(x.name || '')}　${esc(x.emp_no)}</div><span class="text-muted">舊主店 ${esc(x.store_code)}</span></div>
         <div class="card-row"><button type="button" class="btn btn-danger" data-act="old-stop" data-i="${i}">停用舊店打卡</button>
           <button type="button" class="btn btn-secondary" data-act="old-keep" data-i="${i}">保留（當支援）</button></div>
       </div>`).join('');
@@ -392,12 +398,13 @@ export function mountClockMap(el, env) {
       <div class="card stack" data-role="job-row" data-job="${esc(x.job_id)}">
         <div class="card-row"><div class="card-title">${esc(x.emp_no || '')} ${esc(jobKindText(x.kind))}</div><span class="tag tag-danger">失敗（試了 ${esc(x.tries)} 次）</span></div>
         <div class="text-muted">${esc(x.store_code || '')}｜${esc(x.last_error || '')}</div>
-        <div class="card-row"><button type="button" class="btn btn-primary" data-act="job-retry" data-i="${i}">重試</button></div>
+        <div class="card-row"><button type="button" class="btn btn-primary" data-act="job-retry" data-i="${i}">重試</button>
+          <button type="button" class="btn btn-secondary" data-act="job-cancel" data-i="${i}">結案</button></div>
       </div>`).join('');
   }
 
   function draw() {
-    const counts = { all: (data.suggested || []).length, needs: (data.needs_hq || []).length, cand: (data.candidates || []).length, oldhome: (alerts.transfer_ask || []).length, jobs: (alerts.outbox_failed || []).length };
+    const counts = { all: (data.suggested || []).length + (data.confirmed || []).length, needs: (data.needs_hq || []).length, cand: (data.candidates || []).length, oldhome: (alerts.transfer_ask || []).length, jobs: (alerts.outbox_failed || []).length };
     const head = isHq
       ? `<div class="card stack" data-role="cm-head">
           <div class="card-row"><div class="card-title">打卡對照</div><span class="text-muted">已生效 ${esc(data.confirmed_count)} 筆${data.built_at ? `｜上次建立 ${esc(data.built_at)}` : ''}</span></div>
@@ -512,6 +519,22 @@ export function mountClockMap(el, env) {
         return true;
       });
     }
+    if (a === 'job-cancel') {
+      const x = (alerts.outbox_failed || [])[i];
+      if (!x) return;
+      const body = domOf(`<p>確定這筆「${esc(jobKindText(x.kind))}」不用做了？結案後就不再重試，首頁紅燈會消失。</p>
+        <div class="field"><label class="field-label" for="jc-reason">結案原因（必填）</label><input class="input" id="jc-reason" maxlength="100"></div>`);
+      const v = await ctx.ui.dialog({ title: `結案 ${x.emp_no || ''}`, body, actions: [CANCEL, { label: '結案', value: 'ok', variant: 'danger' }] });
+      if (v !== 'ok') return;
+      const reason = body.querySelector('#jc-reason').value.trim();
+      if (!reason) { ctx.ui.toast('請填結案原因', 'warn'); return; }
+      return act(async () => {
+        const r = await callBusy(ctx, mod, 'clockOutboxCancel', { job_id: x.job_id, reason });
+        if (!r || !r.ok) { ctx.ui.toast((r && r.error) || '結案失敗', 'danger'); return false; }
+        ctx.ui.toast('已結案', 'ok');
+        return true;
+      });
+    }
     return undefined;
   }
 
@@ -570,6 +593,7 @@ export function mountTeam(el, env) {
 
   function visible() {
     if (f === 'left') return people.filter((p) => (p.status === 'disabled' || p.last_day) && p.clock_total > p.clock_stopped);
+    if (f === 'namediff') return people.filter((p) => p.name_diff === true);
     if (f === 'nohome') return people.filter((p) => p.status !== 'disabled' && !p.clock_total && !p.clock_job);
     return people;
   }

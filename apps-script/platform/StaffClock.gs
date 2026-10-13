@@ -737,7 +737,7 @@ function clkStaffIndex_() { var o = {}; clkStaffAll_().forEach(function (s) { o[
 function handleClockMapList_(token) {
   var a = clkNeedActor_(token);
   if (!a.ok) return a;
-  if (!clkSheetsReady_()) return { ok: true, data: { suggested: [], needs_hq: [], candidates: [], confirmed_count: 0, built_at: '' } };
+  if (!clkSheetsReady_()) return { ok: true, data: { suggested: [], confirmed: [], needs_hq: [], candidates: [], confirmed_count: 0, built_at: '' } };
   var stores = clkStoreIndex_(), staff = clkStaffIndex_();
   var maps = clkMaps_();
   var suggested = maps.filter(function (m) {
@@ -745,8 +745,11 @@ function handleClockMapList_(token) {
     var s = staff[m.emp_no];
     return a.isHq || (s && clkStaffUnit_(s) === a.scope.unit);
   }).map(function (m) { return clkMapRowView_(m, staff[m.emp_no], a.org, stores); });
-  var data = { suggested: suggested, needs_hq: [], candidates: [], confirmed_count: maps.filter(function (m) { return m.state === 'confirmed'; }).length, built_at: '' };
+  var data = { suggested: suggested, confirmed: [], needs_hq: [], candidates: [], confirmed_count: maps.filter(function (m) { return m.state === 'confirmed'; }).length, built_at: '' };
   if (a.isHq) {
+    // 全部已生效對照（總部才有；店長看到空陣列）
+    data.confirmed = maps.filter(function (m) { return m.state === 'confirmed' && m.emp_no; })
+      .map(function (m) { return clkMapRowView_(m, staff[m.emp_no], a.org, stores); });
     var st = clkGetState_(CLK_PROP_MAP_STATE, { built_at: '', candidates: [], needs_hq: [], excluded: [] });
     data.built_at = st.built_at || '';
     data.candidates = st.candidates || [];
@@ -1610,9 +1613,22 @@ function clkPersonClock_(empNo, maps, jobs, stores) {
   };
 }
 
+/** 打卡名冊姓名≠管理系統姓名的同仁（各店同步狀態 name_diff 合併）：{emp_no:true} */
+function clkNameDiffEmps_() {
+  var o = {};
+  if (!clkSheetsReady_()) return o;
+  clkStores_().forEach(function (st) {
+    clkSyncState_(st.store_code).name_diff.forEach(function (n) { if (n.emp_no) o[n.emp_no] = true; });
+  });
+  return o;
+}
+
 /** handleStaffList_ 的掛勾：每位同仁多 hire_date、last_day、clocks… */
-function clkDecorateStaffList_(list) {
+function clkDecorateStaffList_(list, token) {
   if (!clkSheetsReady_()) return list;
+  var selfEmp = '';
+  if (token) { var act = clkActor_(token); if (act.ok) selfEmp = act.selfEmp; }
+  var nameDiff = clkNameDiffEmps_();
   var maps = clkMaps_(), jobs = clkJobs_(), stores = clkStoreIndex_(), extra = {};
   clkStaffAll_().forEach(function (s) { extra[s.emp] = s; });
   return list.map(function (p) {
@@ -1620,13 +1636,15 @@ function clkDecorateStaffList_(list) {
     var c = clkPersonClock_(p.emp_no, maps, jobs, stores);
     p.hire_date = s ? s.hire : ''; p.last_day = s ? s.last : '';
     p.clocks = c.clocks; p.clock_total = c.clock_total; p.clock_stopped = c.clock_stopped; p.clock_job = c.clock_job;
+    p.is_self = !!selfEmp && p.emp_no === selfEmp;
+    p.name_diff = !!nameDiff[p.emp_no];
     return p;
   });
 }
 
 /**
  * 單位同仁名單（店長看自己單位；總部可帶 unit，不帶＝全部）。唯讀，不含手機／生日／地址。
- * 輸出每人：emp_no,name,status,unit,unit_name,title,title_name,hire_date,last_day,can_cancel_leave,clocks[],clock_total,clock_stopped,clock_job
+ * 輸出每人：emp_no,name,status,unit,unit_name,title,title_name,hire_date,last_day,can_cancel_leave,clocks[],clock_total,clock_stopped,clock_job,is_self,name_diff
  */
 function handleStaffUnitList_(token, payload) {
   var a = clkNeedActor_(token);
@@ -1635,12 +1653,14 @@ function handleStaffUnitList_(token, payload) {
   var unit = a.isHq ? stfStr_(payload && payload.unit) : a.scope.unit;
   var maps = clkSheetsReady_() ? clkMaps_() : [], jobs = clkSheetsReady_() ? clkJobs_() : [], stores = clkSheetsReady_() ? clkStoreIndex_() : {};
   var today = clkTodayOf_(new Date());
+  var nameDiff = clkSheetsReady_() ? clkNameDiffEmps_() : {};
   var people = clkStaffAll_().filter(function (s) { return !unit || clkStaffUnit_(s) === unit; }).map(function (s) {
     var o = stfToObj_(s.values, a.org, false);
     var c = clkPersonClock_(s.emp, maps, jobs, stores);
     return { emp_no: s.emp, name: o.name, status: o.status, unit: o.unit, unit_name: o.unit_name, title: o.title, title_name: o.title_name,
       hire_date: s.hire, last_day: s.last, can_cancel_leave: !!s.last && s.last >= today && o.status !== 'disabled',
-      clocks: c.clocks, clock_total: c.clock_total, clock_stopped: c.clock_stopped, clock_job: c.clock_job };
+      clocks: c.clocks, clock_total: c.clock_total, clock_stopped: c.clock_stopped, clock_job: c.clock_job,
+      is_self: !!a.selfEmp && s.emp === a.selfEmp, name_diff: !!nameDiff[s.emp] };
   });
   return { ok: true, data: { people: people, unit: unit } };
 }
@@ -1654,7 +1674,7 @@ function handleClockAlerts_(token) {
   var a = clkNeedActor_(token);
   if (!a.ok) return a;
   var empty = { counts: {}, outbox_failed: [], unmapped: [], left_but_active: [], pending_confirm: { count: 0, items: [] }, no_home_map: [],
-    name_diff: [], payroll_diff: [], leave_overdue: [], home_stopped: [], transfer_failed: [], transfer_ask: [], needs_hq_count: 0, candidates_count: 0, last_sync: {} };
+    name_diff: [], name_diff_items: [], no_home_map_items: [], payroll_diff: [], leave_overdue: [], home_stopped: [], transfer_failed: [], transfer_ask: [], needs_hq_count: 0, candidates_count: 0, last_sync: {} };
   if (!clkSheetsReady_()) return { ok: true, data: empty };
   var staff = clkStaffIndex_(), maps = clkMaps_(), jobs = clkJobs_(), stores = clkStores_();
   var today = clkTodayOf_(new Date());
@@ -1676,6 +1696,10 @@ function handleClockAlerts_(token) {
   out.pending_confirm = { count: sug.length, items: sug.map(function (m) { return { emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id }; }) };
   var staffAll = clkStaffAll_();
   out.no_home_map = clkNoHomeMap_(staffAll, maps, jobs, today).filter(function (s) { return mine(s.emp); }).map(function (s) { return s.emp; });
+  out.no_home_map_items = out.no_home_map.map(function (e) {
+    var sp = staff[e], stc = sp ? clkStoreOfUnit_(clkStaffUnit_(sp)) : null;
+    return { emp_no: e, name: sp ? clkStaffName_(sp) : '', store_code: stc ? stc.store_code : '' };
+  });
   // 離職日已過、卻還沒停用（連動停用失敗，例如帳號列遺失）
   out.leave_overdue = staffAll.filter(function (s) { return s.last && s.last < today && clkStaffStatus_(s) !== 'disabled' && mine(s.emp); }).map(function (s) { return s.emp; });
   // DZY 在職、沒登記離職，但主店打卡被停（例如店長在打卡端用舊按鈕停用）
@@ -1691,10 +1715,18 @@ function handleClockAlerts_(token) {
       ss.unmapped.forEach(function (u) { out.unmapped.push({ store_code: st.store_code, emp_id: u.emp_id, name: u.name }); });
       ss.payroll_diff.forEach(function (p) { out.payroll_diff.push({ store_code: st.store_code, emp_id: p.emp_id, roster_name: p.roster_name, payroll_name: p.payroll_name }); });
     }
-    ss.name_diff.forEach(function (n) { if (mine(n.emp_no)) out.name_diff.push({ emp_no: n.emp_no, store_code: st.store_code, emp_id: n.emp_id }); });
+    ss.name_diff.forEach(function (n) {
+      if (!mine(n.emp_no)) return;
+      var sp = staff[n.emp_no], nm = sp ? clkStaffName_(sp) : '';
+      out.name_diff.push({ emp_no: n.emp_no, name: nm, store_code: st.store_code, emp_id: n.emp_id });
+      out.name_diff_items.push({ emp_no: n.emp_no, name: nm, store_code: st.store_code });
+    });
   });
   if (a.isHq) {
-    out.transfer_ask = clkGetState_(CLK_PROP_TRANSFER_ASK, { items: [] }).items;
+    out.transfer_ask = clkGetState_(CLK_PROP_TRANSFER_ASK, { items: [] }).items.map(function (x) {
+      var sp = staff[x.emp_no];
+      return { emp_no: x.emp_no, name: sp ? clkStaffName_(sp) : '', store_code: x.store_code };
+    });
     var noHome = {};
     out.no_home_map.forEach(function (e) { noHome[e] = true; });
     out.transfer_failed = (clkGetState_(CLK_PROP_TRANSFER_FAIL, { items: [] }).items || []).filter(function (e) { return noHome[e]; });

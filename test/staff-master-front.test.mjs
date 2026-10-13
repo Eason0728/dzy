@@ -119,6 +119,25 @@ ok(rowsLead.find((r) => r.key === 'pending_confirm').view === 'clock' && rowsLea
 ok(L.alertRows({}, hq).length === 0 && L.alertRows(null, hq).length === 0, '全零異常 → 沒有任何提醒列');
 ok(L.staleSyncStores({ gf: '2026-10-13 00:10:00', cf: '2026-10-11 00:10:00' }, Date.parse('2026-10-13T12:00:00+08:00')).join() === 'cf', '超過 26 小時沒同步的店會被點名');
 
+
+// ---- 缺口補強（2026-10-13）：is_self、dryrun 白名單、結案 ----
+ok(L.isSelf({ emp_no: 'DZY010', is_self: true }, {}) === true && L.isSelf({ emp_no: 'DZY010', is_self: false }, { username: 'DZY010' }) === false, 'isSelf：後端給的 is_self 優先');
+ok(!L.personActions({ emp_no: 'DZY010', status: 'active', clock_total: 1, is_self: true }, lead).leave, '店長不能對 is_self 那列登記離職（按鈕不出現）');
+ok(L.personActions({ emp_no: 'DZY010', status: 'active', clock_total: 1, is_self: true, last_day: '2026-10-31', can_cancel_leave: true }, hq).cancelLeave, '總部對自己那列的撤銷不受店長限制（後端另擋）');
+{
+  const { isReadAction } = await import('../platform/dryrun.js');
+  for (const a of ['staffUnitList', 'clockMapList', 'clockJobStatus', 'clockAlerts']) ok(isReadAction('platform', a, {}), `dryrun 放行讀取 ${a}`);
+  ok(isReadAction('platform', 'staffReinstate', { emp_no: 'DZY001', preview: true }), 'dryrun 放行 staffReinstate preview:true');
+  ok(!isReadAction('platform', 'staffReinstate', { emp_no: 'DZY001' }) && !isReadAction('platform', 'staffReinstate', { emp_no: 'DZY001', preview: false }), 'dryrun 擋真正的 staffReinstate');
+  for (const a of ['staffCreateByUnit', 'staffLeave', 'staffLeaveCancel', 'staffRename', 'clockLink', 'clockMapDecide', 'clockMapBuild', 'clockOutboxRetry', 'clockOutboxCancel', 'clockOldHomeDecide', 'clockCandidateCreate', 'clockCandidateDismiss']) ok(!isReadAction('platform', a, {}), `dryrun 擋寫入 ${a}`);
+}
+{
+  const ui = fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-ui.js'), 'utf8');
+  ok(/clockOutboxCancel/.test(ui) && /data-act="job-cancel"/.test(ui) && /請填結案原因/.test(ui), '待辦單每筆有「結案」鈕，必填原因後送 clockOutboxCancel');
+  ok(/data\.confirmed/.test(ui) && /name_diff === true/.test(ui), '全部對照用後端 confirmed；打卡姓名不同用 name_diff 布林');
+  ok(!/btn btn-primary" data-act="cm-yes"/.test(ui) && /data-act="cm-yes"/.test(ui), '「對」不是紅色主按鈕（改用 --ok 綠）');
+}
+
 // ---- 接線：manifest／檔案存在／分層 ----
 for (const id of ['me', 'staff']) {
   const m = (await import(`../modules/${id}/manifest.js`)).default;

@@ -54,7 +54,7 @@ export function mountList(el, ctx) {
       case 'locked': return p.reset_locked;
       case 'left': return (p.status === 'disabled' || !!p.last_day) && (p.clock_total || 0) > (p.clock_stopped || 0);
       case 'nohome': return p.status === 'active' && !p.clock_total && !p.clock_job;
-      case 'namediff': return true; // 首頁「打卡姓名不同」：後端沒給逐人清單，先看全部
+      case 'namediff': return p.name_diff === true; // 首頁「打卡姓名不同」：後端每人帶 name_diff 布林
       default: return p.status === state.f;
     }
   }

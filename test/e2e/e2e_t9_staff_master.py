@@ -182,6 +182,12 @@ class Mock9(MockBackend):
         r['last_day'] = ''
         return {'ok': True, 'data': {'emp_no': r['emp_no']}}
 
+    def _row_view(self, m):
+        r = self.row(m['emp_no'])
+        return {'emp_no': r['emp_no'], 'name': r['name'], 'unit': r['unit'], 'unit_name': self._org_name('unit', r['unit']), 'store_code': m['store_code'],
+                'store_name': UNIT_STORE[r['unit']][1], 'emp_id': m['emp_id'], 'role': m['role'], 'state': m['state'], 'source': 'name_match',
+                'roster_active': True, 'last_punch': m['last_punch']}
+
     def _suggested_rows(self, me, lead):
         out = []
         for m in self.maps:
@@ -195,7 +201,8 @@ class Mock9(MockBackend):
 
     def a_clockMapList(self, p, hq, me, lead):
         needs = [] if lead else list(self.escalated)
-        return {'ok': True, 'data': {'suggested': self._suggested_rows(me, lead), 'needs_hq': needs, 'candidates': [], 'confirmed_count': len([m for m in self.maps if m['state'] == 'confirmed']), 'built_at': ''}}
+        confirmed = [] if lead else [self._row_view(m) for m in self.maps if m['state'] == 'confirmed']
+        return {'ok': True, 'data': {'suggested': self._suggested_rows(me, lead), 'confirmed': confirmed, 'needs_hq': needs, 'candidates': [], 'confirmed_count': len([m for m in self.maps if m['state'] == 'confirmed']), 'built_at': ''}}
 
     def a_clockMapDecide(self, p, hq, me, lead):
         m = next((m for m in self.maps if m['store_code'] == p['store_code'] and m['emp_id'] == p['emp_id']), None)
@@ -221,6 +228,16 @@ class Mock9(MockBackend):
         j.update(state='pending', polls=0, tries=0, will_fail=False, last_error='')
         self.retried = getattr(self, 'retried', []) + [j['job_id']]
         return {'ok': True, 'data': {'job_id': j['job_id'], 'state': 'pending'}}
+
+    def a_clockOutboxCancel(self, p, hq, me, lead):
+        j = self.jobs.get(p.get('job_id'))
+        if not hq:
+            return self.err('no_perm', '只有總部可以結案')
+        if not j or j['state'] != 'failed':
+            return self.err('not_retryable', '這張單不能結案')
+        j['state'] = 'cancelled'
+        self.cancelled = getattr(self, 'cancelled', []) + [(j['job_id'], p.get('reason'))]
+        return {'ok': True, 'data': {'job_id': j['job_id'], 'state': 'cancelled'}}
 
     def a_clockAlerts(self, p, hq, me, lead):
         failed = [j for j in self.jobs.values() if j['state'] == 'failed' and (hq or j.get('unit') == me['unit'])]
@@ -399,21 +416,36 @@ def main():
             admin.wait_for_selector('[data-role="add-failed"]')
             check('首頁' in admin.inner_text('[data-role="add-failed"]') and admin.locator('[data-role="add-retry"]').count() == 1, '★失敗畫面：說明會在首頁待辦出現、總部有重試鈕')
             admin.click('.dialog .btn:has-text("關閉")')
+            # 再放一張失敗單，等一下測「結案」
+            mock.jobs['JX1'] = {'job_id': 'JX1', 'kind': 'add', 'emp_no': 'DZY030', 'store_code': 'hq', 'state': 'failed', 'polls': 0, 'tries': 3,
+                                'will_fail': True, 'last_error': 'bad_input', 'unit': 'dzy-hq'}
             # 首頁提醒
             admin.click('[data-role="nav-desktop"] [data-nav="__home__"]')
             admin.wait_for_selector('[data-role="alert-row"]:has-text("打卡待辦單失敗")')
             home = admin.inner_text('[data-role="view-content"]')
-            check('1 筆打卡待辦單失敗' in home and '1 筆打卡對照需要總部處理' in home and '2 筆打卡對照等你確認' in home, '★總部首頁每一類一列：待辦單失敗／需總部處理／等確認')
+            check('2 筆打卡待辦單失敗' in home and '1 筆打卡對照需要總部處理' in home and '2 筆打卡對照等你確認' in home, '★總部首頁每一類一列：待辦單失敗／需總部處理／等確認')
             admin.click('[data-role="alert-row"]:has-text("打卡待辦單失敗")')
             admin.wait_for_selector('[data-role="job-row"]')
             check('timeout' in admin.inner_text('[data-role="job-row"]'), '點提醒 → 打卡對照的「待辦單」分頁，列出失敗原因')
-            admin.click('[data-act="job-retry"]')
+            check(admin.locator('[data-act="job-cancel"]').count() == 2, '每筆失敗單都有「結案」鈕')
+            admin.click('[data-role="job-row"]:has-text("timeout") [data-act="job-retry"]')
+            admin.wait_for_function("() => document.querySelectorAll('[data-role=\"job-row\"]').length === 1")
+            check(getattr(mock, 'retried', []) != [] and not any(j['state'] == 'failed' and j['job_id'] != 'JX1' for j in mock.jobs.values()), '★按「重試」→ 後端單回到 pending')
+            admin.click('[data-act="job-cancel"]')
+            admin.click('.dialog .btn-danger:has-text("結案")')
+            admin.wait_for_selector('.toast-warn:has-text("結案原因")')
+            admin.click('[data-act="job-cancel"]')
+            admin.fill('#jc-reason', '打卡端已有這個人')
+            admin.click('.dialog .btn-danger:has-text("結案")')
             admin.wait_for_selector('[data-role="cm-empty"]')
-            check(getattr(mock, 'retried', []) != [] and all(j['state'] != 'failed' for j in mock.jobs.values()), '★按「重試」→ 後端單回到 pending')
+            check(mock.cancelled == [('JX1', '打卡端已有這個人')] and mock.jobs['JX1']['state'] == 'cancelled', '★「結案」要填原因，送 clockOutboxCancel')
             admin.click('[data-role="cm-tab"][data-t="needs"]')
             admin.wait_for_selector('[data-role="needs-row"]')
             check('店長說不對' in admin.inner_text('[data-role="needs-row"]') and '測試乙' in admin.inner_text('[data-role="needs-row"]'), '「需總部處理」看到店長按「不對」轉來的那筆')
             admin.screenshot(path=os.path.join(SHOTS, 'master-hq-needs-1280.png'))
+            admin.click('[data-role="cm-tab"][data-t="all"]')
+            admin.wait_for_selector('[data-role="cm-row"][data-state="confirmed"]')
+            check(admin.locator('[data-role="cm-row"][data-state="confirmed"]').count() >= 2 and admin.locator('[data-role="cm-row"][data-state="confirmed"] [data-act="cm-yes"]').count() == 0, '★「全部對照」顯示已生效的對照（沒有對／不對鈕，可改指定）')
 
             browser.close()
         check(mock.leaked == [], '真實網路零流出：%s' % mock.leaked)

@@ -90,9 +90,10 @@
 
 ### 2.6 staffUnitList — 單位同仁名單（唯讀）
 - 權限：店長（固定自己單位）、總部（可帶 `unit` 篩選，不帶＝全部）。
-- 輸出：`{people:[{emp_no, name, status, unit, unit_name, title, title_name, hire_date, last_day, can_cancel_leave, clocks:[{store_code, store_name, emp_id, role, roster_active(true|false|null)}], clock_total, clock_stopped, clock_job:{job_id,state,tries}|null}], unit}`。**不含手機、生日、地址。**
+- 輸出：`{people:[{emp_no, name, status, unit, unit_name, title, title_name, hire_date, last_day, can_cancel_leave, is_self, name_diff, clocks:[{store_code, store_name, emp_id, role, roster_active(true|false|null)}], clock_total, clock_stopped, clock_job:{job_id,state,tries}|null}], unit}`。**不含手機、生日、地址。**
 - `clock_total`＝confirmed 對照數；`clock_stopped`＝其中 `roster_active=FALSE` 的數量（畫面「打卡已停 n/m」）；`clock_job`＝尚未結束的 add 單（畫面「打卡建檔中…」）。
-- 另外 `staffList`（總部既有 action）每位同仁多帶 `hire_date, last_day, clocks, clock_total, clock_stopped, clock_job`（欄位同上）。
+- `is_self`＝這一列是不是呼叫者本人（前端據此不顯示對自己的離職鈕）；`name_diff`＝打卡名冊姓名≠管理系統姓名（任一店）。
+- 另外 `staffList`（總部既有 action）每位同仁多帶 `hire_date, last_day, clocks, clock_total, clock_stopped, clock_job, is_self, name_diff`（欄位同上）。
 
 ### 2.7 clockMapBuild — 總部按「建立打卡對照」
 - 權限：總部。輸入：無。
@@ -102,7 +103,8 @@
 
 ### 2.8 clockMapList — 打卡對照清單
 - 權限：店長、總部。
-- 輸出：`{suggested:[{emp_no, name, unit, unit_name, store_code, store_name, emp_id, role, state, source, roster_active, last_punch}], needs_hq:[…], candidates:[…], confirmed_count, built_at}`。
+- 輸出：`{suggested:[{emp_no, name, unit, unit_name, store_code, store_name, emp_id, role, state, source, roster_active, last_punch}], confirmed:[同形狀], needs_hq:[…], candidates:[…], confirmed_count, built_at}`。
+  - `confirmed`＝全部已生效對照（**只有總部有值**，店長是空陣列）；前端「全部對照」＝suggested＋confirmed。
   - `suggested`：店長只有「對照的 DZY 在自己單位」的 suggested 列；總部全部。
   - `needs_hq`、`candidates`、`built_at` **只有總部有值**（店長看到空陣列）。
   - `needs_hq[i]`：`{kind:'ambiguous'(同名多人)|'dup_in_store'(一人同店兩個編號)|'conflict'(同人同店已有生效編號)|'rejected'(對照被退回,需重指定)|'escalated'(店長按「不對」轉來), name, entries:[{store_code, emp_id}], options:[{emp_no, name, unit}]}`。
@@ -158,7 +160,7 @@
   - `transfer_failed:[emp_no]`：調店確認時開 add 單失敗（總部才有；他有主店或進行中的 add 單後消失；同時寫 staff_log `transfer_add_failed`）。
   - `name_diff:[{emp_no,store_code,emp_id}]`：打卡名冊姓名≠管理系統姓名（改名後）。
   - `payroll_diff:[{store_code,emp_id,roster_name,payroll_name}]`：薪資主檔姓名≠打卡名冊姓名，請會計改成一致（總部才有）。
-  - `transfer_ask:[{emp_no,store_code}]`、`needs_hq_count`、`candidates_count`（總部才有）。
+  - `transfer_ask:[{emp_no,name,store_code}]`、`needs_hq_count`、`candidates_count`（總部才有）。
   - `last_sync:{store_code:'yyyy-MM-dd HH:mm:ss'}`：每店最後一次名冊同步時間（health 用）。
   - `counts`：以上各類的筆數物件。
 

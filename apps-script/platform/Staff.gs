@@ -799,7 +799,7 @@ function handleStaffList_(token) {
   var org = stfReadOrg_();
   var list = stfAllRows_().map(function (r) { return stfToObj_(r.values, org, true); });
   // 員工名單統一（StaffClock.gs）：多帶 hire_date／last_day／打卡對照摘要；沒有那支檔案時照舊
-  if (typeof clkDecorateStaffList_ === 'function') list = clkDecorateStaffList_(list);
+  if (typeof clkDecorateStaffList_ === 'function') list = clkDecorateStaffList_(list, token);
   return { ok: true, data: { staff: list } };
 }
 

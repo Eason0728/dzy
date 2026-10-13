@@ -80,8 +80,9 @@ export function allStopped(p) {
   return total > 0 && (Number(p.clock_stopped) || 0) >= total;
 }
 
-/** 是不是本人（後端也會擋；這裡只是不顯示按鈕）。user 可能沒有編號欄位，這時回 false 交給後端 */
+/** 是不是本人（後端也會擋；這裡只是不顯示按鈕）。優先用後端給的 is_self；沒有才退回比對 user 的編號欄位 */
 export function isSelf(p, user) {
+  if (p && typeof p.is_self === 'boolean') return p.is_self; // 後端算好的（staffUnitList／staffList 每列帶 is_self）
   const me = user && (user.username || user.emp_no || '');
   return !!me && String(me).toUpperCase() === String(p && p.emp_no).toUpperCase();
 }
