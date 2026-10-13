@@ -1179,6 +1179,17 @@ function clockOutboxDone_(job_id, result, now) {
     result = (result && typeof result === 'object') ? result : {};
     var ex = clkJson_(j.expect_json, {});
 
+    // G9：同步員回報店端實際狀態（actual_active）與目標不同＝這張單沒達成（店端另有人改過）——
+    // 對照的 roster_active 照實寫，單轉 failed（conflict）進紅燈，不當成功
+    if ((j.kind === 'deactivate' || j.kind === 'reactivate') && typeof result.actual_active === 'boolean') {
+      var target = j.kind === 'reactivate';
+      if (result.ok === true && result.actual_active === target) { /* 達成，走下面一般成功流程 */ }
+      else if (result.actual_active !== target) {
+        var cm = clkMapFind_(clkMaps_(), j.store_code, j.emp_id);
+        if (cm && !ex.comp && cm.emp_no === j.emp_no) { cm.roster_active = clkBoolText_(result.actual_active); clkMapSave_(cm, d); }
+        return clkFail_(j, 'conflict', '店端實際狀態與目標不同（actual_active=' + result.actual_active + '）', false, d);
+      }
+    }
     if (result.ok === true) {
       var maps = clkMaps_();
       if (j.kind === 'add') {
@@ -1932,7 +1943,7 @@ function handleSvcDirectory_(payload) {
   var want = PropertiesService.getScriptProperties().getProperty(CLK_PROP_SVC_KEY);
   var got = payload && typeof payload.svc_key === 'string' ? payload.svc_key : '';
   if (!want || !got || !authSafeEqual_(got, want)) return clkErr_('unauthorized', CLK_MSG.UNAUTHORIZED);
-  if (!stfSheetsReady_()) return { ok: true, data: [] };
+  if (!stfSheetsReady_()) return { ok: true, data: [], total: 0, generated_at: clkNowText_(new Date()) };
   var org = stfReadOrg_();
   var maps = clkSheetsReady_() ? clkMaps_().filter(function (m) { return m.state === 'confirmed'; }) : [];
   var data = clkStaffAll_().map(function (s) {
@@ -1943,7 +1954,7 @@ function handleSvcDirectory_(payload) {
       clocks: maps.filter(function (m) { return m.emp_no === s.emp; }).map(function (m) { return { store_code: m.store_code, emp_id: m.emp_id, role: m.role }; })
     };
   });
-  return { ok: true, data: data };
+  return { ok: true, data: data, total: data.length, generated_at: clkNowText_(new Date()) };
 }
 
 /** Staff.gs stfClearClaim_ 的掛勾：有到職日（店長新增才會有）或已有 confirmed 打卡對照 → 退回認領時保留品牌、單位、部門、職稱 */

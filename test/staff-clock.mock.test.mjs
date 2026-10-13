@@ -1547,5 +1547,43 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   function sheetsNameEmp(ap, n) { return ap.sheets.staff._rows().find((r) => r[2] === n)[0]; }
 })();
 
+(() => {
+  // ── G9 actual_active ／ G6 svcDirectory 完整性 ──
+  const app = fresh();
+  const { sb, tok, props } = app;
+  const a = claimApprove(app, '二關甲', 'pw-r2-pw-0001', MZT_GF('pt'));
+  const b = claimApprove(app, '二關乙', 'pw-r2-pw-0002', MZT_GF('pt'));
+  giveMap(app, a.emp, 'mztgf', 'R2A', 'home');
+  setStaff(app, a.emp, 'status', 'disabled');
+  sb.clockDailyApply_(dayT(0));
+  sb.clockOutboxClaim_(nowT(1));
+  const j = jobs(app).find((x) => x.kind === 'deactivate' && x.emp_no === a.emp);
+  const r = sb.clockOutboxDone_(j.job_id, { ok: true, actual_active: true }, nowT(2));
+  const jj = jobs(app).find((x) => x.job_id === j.job_id);
+  ok(r.data.state === 'failed' && jj.state === 'failed' && jj.last_error.indexOf('conflict') === 0, 'G9 ★停用單回報店端實際仍在職（actual_active:true）→ failed（conflict），不算成功', jj);
+  ok(maps(app).find((m) => m.emp_id === 'R2A').roster_active === 'TRUE', 'G9 對照 roster_active 照實寫（TRUE），沒被標成已停用');
+  ok(post(sb, 'clockAlerts', {}, tok).data.outbox_failed.some((x) => x.job_id === j.job_id && x.state === 'failed'), 'G9 進 alerts');
+  // 一致的 actual_active 照常成功；reactivate 反向同理
+  ok(post(sb, 'clockOutboxRetry', { job_id: j.job_id }, tok).ok, 'G9 （重試）');
+  sb.clockOutboxClaim_(nowT(1));
+  const okR = sb.clockOutboxDone_(j.job_id, { ok: true, actual_active: false }, nowT(2));
+  ok(okR.data.state === 'done' && maps(app).find((m) => m.emp_id === 'R2A').roster_active === 'FALSE', 'G9 actual_active 與目標一致 → 成功');
+  giveMap(app, b.emp, 'mztgf', 'R2B', 'home', { roster_active: 'FALSE' });
+  post(sb, 'staffLeave', { emp_no: b.emp, last_day: dayT(-1) }, tok); sb.clockDailyApply_(dayT(0)); post(sb, 'staffReinstate', { emp_no: b.emp, stores: ['mztgf'] }, tok);
+  sb.clockOutboxClaim_(nowT(1));
+  const rj = jobs(app).find((x) => x.kind === 'reactivate' && x.emp_no === b.emp);
+  sb.clockOutboxDone_(rj.job_id, { ok: false, error: 'conflict', actual_active: false }, nowT(2));
+  ok(jobs(app).find((x) => x.job_id === rj.job_id).state === 'failed' && maps(app).find((m) => m.emp_id === 'R2B').roster_active === 'FALSE', 'G9 reactivate 回 error=conflict＋actual_active:false → failed、照實寫');
+  // G6 svcDirectory
+  props.BULLETIN_SVC_KEY = 'fake-bulletin-key-0002';
+  const dir = post(sb, 'svcDirectory', { svc_key: 'fake-bulletin-key-0002' });
+  const n = app.sheets.staff._rows().length - 1;
+  ok(dir.ok && dir.total === n && dir.data.length === n && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dir.generated_at), 'G6 ★svcDirectory 帶 total（＝全部 staff 筆數）與 generated_at', [dir.total, n]);
+  ok(dir.data.some((p) => p.emp_no === a.emp && p.active === false) && dir.data.find((p) => p.emp_no === b.emp).clocks.length >= 0 && dir.data.every((p) => Array.isArray(p.clocks)), 'G6 ★停用者、沒有 confirmed 對照的人也都回（帶 active）；clocks 只放 confirmed');
+  const c = claimApprove(app, '二關丙', 'pw-r2-pw-0003', MZT_GF('pt'));
+  const dir2 = post(sb, 'svcDirectory', { svc_key: 'fake-bulletin-key-0002' });
+  ok(dir2.total === n + 1 && dir2.data.find((p) => p.emp_no === c.emp).clocks.length === 0, 'G6 無對照的新人也在名單內、total 隨之增加');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
