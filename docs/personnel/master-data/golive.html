@@ -1,0 +1,165 @@
+<title>員工名單統一上線</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* 版型：單欄文件，左側深色編號條呼應管理系統側邊欄；黃色＝要你決定的地方 */
+:root{
+  --bg:#faf8f6; --card:#ffffff; --ink:#231815; --soft:#5d554f; --muted:#8a817a; --line:#e6e0da;
+  --side:#1b1917; --side-ink:#f3eee8; --gold:#FABE00; --gold-soft:#fff6d6; --red:#c8402c; --red-soft:#fbe9e6; --ok:#2f6b3a; --ok-soft:#e8f2ea;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#161413; --card:#1f1c1a; --ink:#f1ebe5; --soft:#c9c0b8; --muted:#958b82; --line:#34302c;
+  --side:#0e0d0c; --side-ink:#f3eee8; --gold:#f5c22b; --gold-soft:#3a2f0e; --red:#ef7a64; --red-soft:#3a1f1a; --ok:#8fc19c; --ok-soft:#1d2a20; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161413; --card:#1f1c1a; --ink:#f1ebe5; --soft:#c9c0b8; --muted:#958b82; --line:#34302c;
+  --side:#0e0d0c; --side-ink:#f3eee8; --gold:#f5c22b; --gold-soft:#3a2f0e; --red:#ef7a64; --red-soft:#3a1f1a; --ok:#8fc19c; --ok-soft:#1d2a20; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.75;margin:0}
+.wrap{max-width:46rem;margin:0 auto;padding-inline:16px;padding-block:2.2rem 4rem}
+header{background:var(--side);color:var(--side-ink);border-radius:14px;padding:1.4rem 1.4rem 1.3rem}
+.eyebrow{font-size:.78rem;letter-spacing:.14em;color:var(--gold);font-weight:700}
+h1{font-size:clamp(1.6rem,5vw,2.1rem);font-weight:900;margin:.3rem 0 .5rem;line-height:1.25;text-wrap:balance}
+header p{margin:0;color:#cfc6bd}
+.id{font-family:var(--mono);font-weight:700;background:var(--gold);color:#231815;border-radius:6px;padding:0 .4em;white-space:nowrap}
+section{margin-top:2.4rem}
+h2{font-size:1.25rem;font-weight:900;margin:0 0 .8rem;text-wrap:balance}
+h2 small{font-size:.8rem;font-weight:500;color:var(--muted);margin-left:.4rem}
+p{margin:0 0 .8rem}
+.phases{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ph{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.8rem .9rem;min-width:0}
+.ph.now{border:2px solid var(--gold)}
+.ph b{display:block;font-size:.85rem;color:var(--muted)}
+.ph.now b{color:var(--ink)}
+.ph span{font-weight:700;font-size:.95rem}
+ol.flow{list-style:none;margin:0;padding:0;display:grid;gap:8px;counter-reset:s}
+ol.flow li{counter-increment:s;display:grid;grid-template-columns:2rem 1fr;gap:.6rem;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;align-items:start}
+ol.flow li::before{content:counter(s);width:1.7rem;height:1.7rem;border-radius:50%;background:var(--side);color:var(--side-ink);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;margin-top:.15rem}
+ol.flow li div{min-width:0}
+.note{font-size:.9rem;color:var(--soft)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55rem .75rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:700;color:var(--soft);background:color-mix(in srgb,var(--line) 35%,var(--card));white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.y{color:var(--ok);font-weight:700}.n{color:var(--muted)}
+.ladder{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:.3rem 0 .9rem}
+.ladder span{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:.15rem .7rem;font-size:.9rem;font-weight:500}
+.ladder i{color:var(--muted);font-style:normal}
+ul.plain{margin:0;padding-left:1.2rem}ul.plain li{margin:.25rem 0}
+.dec{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--ok);border-radius:10px;padding:.8rem 1rem}
+.dec ul{margin:0;padding-left:1.1rem}.dec li{margin:.35rem 0}
+.q{background:var(--gold-soft);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:10px;padding:.85rem 1rem;margin-top:10px}
+.q h3{margin:0 0 .3rem;font-size:1rem;font-weight:900}
+.q .rec{margin:.35rem 0 0;font-size:.93rem}
+.q .rec b{color:var(--ink)}
+.risk{background:var(--red-soft);border-radius:10px;padding:.75rem 1rem;font-size:.92rem;margin-top:.8rem}
+.reply{margin-top:2.4rem;background:var(--side);color:var(--side-ink);border-radius:14px;padding:1.1rem 1.3rem}
+.reply p{margin:.2rem 0}
+footer{margin-top:2rem;font-size:.8rem;color:var(--muted)}
+@media (max-width:560px){.phases{grid-template-columns:1fr}}
+.opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:.45rem}
+.opt{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:.2rem .6rem;font-size:.9rem}
+.opt.pick{border:2px solid var(--gold);font-weight:700}
+.opt.pick::before{content:"推薦　";color:var(--soft);font-weight:500;font-size:.8rem}
+.why{font-size:.88rem;color:var(--soft);margin:.4rem 0 0}
+.who{display:inline-block;font-size:.78rem;font-weight:700;border-radius:999px;padding:.05rem .55rem;margin-left:.4rem;vertical-align:middle}
+.who.me{background:var(--ok-soft);color:var(--ok)}
+.who.you{background:var(--gold-soft);color:var(--ink);border:1px solid var(--gold)}
+.who.mini{background:var(--red-soft);color:var(--red)}
+.step{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem;margin-top:12px}
+.step h3{margin:0 0 .4rem;font-size:1.05rem;font-weight:900}
+.step ol{margin:.3rem 0 0;padding-left:1.2rem}.step li{margin:.3rem 0}
+.feel{font-size:.88rem;color:var(--ok);margin-top:.5rem}
+code{font-family:var(--mono);font-size:.85em;background:color-mix(in srgb,var(--line) 45%,var(--card));padding:.05em .35em;border-radius:5px;word-break:break-all}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">鼎兆元管理系統・員工名單統一・上線</div>
+  <h1>程式全部寫完、審過了，分 6 段上線</h1>
+  <p>四個系統（管理系統、六家打卡、Mac mini 同步程式、佈告欄）在本機用假資料整條跑通。Fable 審了 6 輪、GPT 與 Fable 上線前互盲審 2 場，挑出的問題全部修完。先回答 3 題，我就從第 1 段開始。</p>
+</header>
+
+<section>
+  <h2>先回答 3 題</h2>
+  <div class="q"><h3>1. 什麼時候開始第 1 段（打卡裝新入口）？</h3>
+    <div class="opts"><span class="opt pick">今晚打烊後（22:30 以後）</span><span class="opt">明天下午</span></div>
+    <p class="why">第 1 段要重新部署六家店的打卡程式。雖然員工感受不到任何變化，部署那幾秒正在打卡的人可能要重按一次，所以挑沒人上班的時間。</p></div>
+  <div class="q"><h3>2. 同意在 Mac mini 的共用外殼加一個「定時做事」功能嗎？</h3>
+    <div class="opts"><span class="opt pick">同意</span><span class="opt">不同意，改成另開一支獨立程式</span></div>
+    <p class="why">同步程式要每分鐘撿待辦單、每天 00:10 對帳，原本的外殼沒有定時功能。這個改動只對有設定的系統生效，現金帳、調撥、耗損這些系統行為完全不變（已測過）。不同意也做得到，只是 Mac mini 上會多一支要顧的程式。</p></div>
+  <div class="q"><h3>3. Mac mini 開機自動啟動要怎麼做？</h3>
+    <div class="opts"><span class="opt pick">登入後自動啟動，停電仍要人到場解鎖，靠雲端守門通知</span><span class="opt">先不做，停機時靠守門通知人手動開</span></div>
+    <p class="why">之前你選了「另案讓 Mac mini 開機自己啟動」。查到兩件事：Mac mini 的部署規則目前寫「不裝開機自動啟動」；它開了磁碟加密，停電重開後一定要有人到場輸入密碼。所以最多做到「有人解鎖登入後，系統自己跑起來」。這一段要做完，才開放店長新增人（第 4 段）。</p></div>
+</section>
+
+<section>
+  <h2>6 段上線</h2>
+
+  <div class="step"><h3>第 1 段　打卡裝新入口<span class="who me">我做</span></h3>
+    <ol>
+      <li>另一個對話今天幫光復打卡上了「訂貨小幫手讀班表」，還沒併進主線。我先把它併進來，免得部署時把它洗掉。</li>
+      <li>六家店打卡部署新版：多一個給管理系統用的入口、值班核定頁的新按鈕與標記。</li>
+      <li>確認六家店打卡、LINE 打卡、值班核定都照常。</li>
+    </ol>
+    <p class="feel">員工感受：無。鑰匙沒設之前，新入口一律拒絕；值班核定頁的新東西都是關著的。</p></div>
+
+  <div class="step"><h3>第 2 段　設鑰匙<span class="who you">你做，約 15 分鐘</span></h3>
+    <ol>
+      <li>在 Mac mini 終端機貼我給的一行指令，它會產生六把鑰匙、寫進 Mac mini 的設定檔，並在畫面上印一次。</li>
+      <li>打開六家店打卡程式的編輯器（我會給六個連結），左邊齒輪「專案設定」→ 最下面「指令碼屬性」→ 新增 <code>STAFF_SVC_KEY</code>，貼上對應那家的鑰匙 → 儲存。</li>
+      <li>完成後跟我說，我從外面確認六家都接得上。</li>
+    </ol>
+    <p class="feel">鑰匙只在 Mac mini 和各店的程式設定裡，不經過對話、不進任何程式庫。</p></div>
+
+  <div class="step"><h3>第 3 段　Mac mini 更新、建立對照<span class="who mini">Mac mini 的 Claude 做＋總部、店長確認</span></h3>
+    <ol>
+      <li>你在 Mac mini 打開 Claude，貼我給的一段交代：更新管理系統後端和同步程式、重啟、照清單驗證。這時是「只讀」模式，不會寫進打卡。</li>
+      <li>管理系統新畫面上線。這時只有總部用「打卡對照」，先不要通知店長新增人。</li>
+      <li>總部按「建立打卡對照」。系統用姓名配好 44 位打卡在職同仁，各店店長在「我的資料 → 打卡對照」按對或不對（建議給 3 天），總部處理剩下的。</li>
+    </ol>
+    <p class="feel">員工感受：無。店長只多一件事，就是確認自己店的對照。</p></div>
+
+  <div class="step"><h3>第 4 段　開放新增、離職、LINE 自動加新店<span class="who you">前置你做</span><span class="who me">開關我做</span></h3>
+    <ol>
+      <li>前置條件（缺一不開）：
+        <ul class="plain">
+          <li>Mac mini 開機自動啟動做好（第 3 題）。</li>
+          <li>雲端守門開始監看 Mac mini。</li>
+          <li>會計補五家店的薪資店代碼：光復已確認是 SSLGF，其他五家我會給你填的位置。</li>
+          <li>第一期留下的舊相容開關已經關掉。</li>
+          <li>44 人的對照全部確認完。</li>
+        </ul></li>
+      <li>打開寫入；六家店值班核定的「新增同仁」改成說明，請大家到管理系統新增。</li>
+      <li>光復打卡設定 Mac mini 的網址和一把「首次支援」鑰匙，LINE 自動加新店開始運作。</li>
+      <li>通知店長：新人到管理系統「我的資料 → 我的單位 → 新增同仁」建檔，當天就能打卡。</li>
+    </ol>
+    <p class="feel">店長感受：新人改到管理系統建，一次就好。員工感受：第一次去別店支援，用 LINE 打卡就會自動加入。</p></div>
+
+  <div class="step"><h3>第 5 段　佈告欄改讀管理系統<span class="who mini">Mac mini 的 Claude 做</span></h3>
+    <ol>
+      <li>佈告欄更新後先「搬家檢查」：在職的人要全部對上才准進下一步。本機演練 44 人對上 43，剩 1 位是手動加的同仁，要你指定一次。</li>
+      <li>新舊兩套名單並行 7 天，每天自動比對，連續 7 天完全一樣才切換。</li>
+      <li>切換後拿掉「打卡同步」按鈕。萬一有問題，一個指令回到舊做法。</li>
+    </ol>
+    <p class="feel">員工感受：無，LINE 自動登入照舊。</p></div>
+
+  <div class="step"><h3>第 6 段　兩週後拿掉舊新增<span class="who me">我做</span></h3>
+    <ol>
+      <li>第 4 段開放後兩週內，「打卡上有、管理系統對不到」的異常是零，就把值班核定舊的新增功能關掉。</li>
+    </ol></div>
+</section>
+
+<section>
+  <h2>還沒做、但不擋上線的</h2>
+  <ul class="plain">
+    <li>薪資系統用編號對人（這期只做「姓名不一致」提醒），放進薪資搬家那一案。</li>
+    <li>管理系統裡一支舊的稽核抽查測試，大約每 40 次會失敗一次，跟這一期無關，已另外開成一件事。</li>
+  </ul>
+</section>
+
+<div class="reply"><p><b>回 3 題（「照推薦」也行）</b>，我就照時間開始第 1 段。</p></div>
+<footer>正本：~/dzy/docs/personnel/master-data/progress.md、prelaunch-review.md・審查紀錄 GitHub Eason0728/dzy issue #1・2026-10-13</footer>
+</div>
