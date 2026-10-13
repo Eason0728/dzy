@@ -78,6 +78,7 @@
 落地清單 1–8 在第 4 段結束時逐項完成（skill：dzy-admin 加一節＋mala-clock-in 加一節、dispatch-resources 登錄版號與 .env 變數名、守門、累犯摘要來源、記憶更新）。
 
 ### 第 5 段（佈告欄）——可另開一個對話並行，口令「員工名單統一第 5 段」
+**2026-10-14 進度**：附錄 D 第 1 步（管理系統 svcDirectory）早已在 dzy main；第 2 步完成——佈告欄 PR #38 合併（main b25e42d，前端 v0.7.5 上線）、GAS clasp deploy @34 回 v0.7.5（build 全綠、judge 44/44、run.py 三輪全過）。下一步：Mac mini 設鑰匙＋附錄 B 更新＋`migrate` 報告（只報告不寫）→ 拿回報告判斷 `--map`／`--allow-name-diff` → `migrate --apply` → 雙跑 7 天（最早 2026-10-21 可切）。
 照 ~/dzy-bulletin-wt-staffmaster/server/DEPLOY.md 附錄 D：mini 平台 `.env` 加 `GAS_PROP_BULLETIN_SVC_KEY`、佈告欄 server `.env` 加 `DZY_PLATFORM_URL`（127.0.0.1:8799）與 `BULLETIN_SVC_KEY`（同值）→ 合併分支、GAS v0.7.5 clasp 部署 → mini 佈告欄更新 → `migrate` 檢查（本機演練：S-045 手動新增者需 `--map` 人工指定）→ `migrate --apply` → 雙跑 7 天 → `dual-status` 可拆舊才切 `STAFF_SOURCE=dzy`。
 ⚠ 與第 4 段都會重啟 mini 平台，兩個對話不要同時動 mini。
 
