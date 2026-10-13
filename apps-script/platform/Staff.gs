@@ -76,6 +76,10 @@ var STF_MSG = {
   REASON_TOO_LONG: '退回原因最多 200 個字'
 };
 var STF_REASON_MAX = 200;
+// 姓名開頭 = + - @ 會在試算表／打卡名冊變成公式：匯入、新增、改名一律擋（員工名單統一，上線前關 F2）
+// （只在有 StaffClock.gs 的環境檢查：第一期單獨的測試仍驗證 users 姓名會加單引號防公式）
+function stfBadNameStart_(n) { return typeof clkNameBadStart_ === 'function' && clkNameBadStart_(n); }
+var STF_MSG_NAME_START = '姓名開頭不能是 = + - @ 這四個符號（會被試算表當成公式），請改寫或把符號放在後面';
 
 // ============================================================
 // 1. 共用小工具
@@ -698,11 +702,14 @@ function stfReviewTarget_(token, payload) {
 function handleUnitApprove_(token, payload) {
   var t = stfReviewTarget_(token, payload);
   if (!t.ok) return t;
+  var oldUnit = stfStr_(t.v[STF_COL.unit]);
   var err = stfApplyConfirm_(t.v, t.rv.org);
   if (err) return { ok: false, error: err };
   t.v[STF_COL.updated_at] = stfNowText_();
   stfWriteRow_(STF_SHEET, t.hit.row, t.v, STF_COL_COUNT);
   stfLog_(t.emp, 'confirm', t.rv.user.id, 'unit_review');
+  // 調店：確認後單位換了 → 新單位有打卡就開 add 單（StaffClock.gs；沒有那支檔案時略過）
+  if (typeof clkAfterConfirm_ === 'function') clkAfterConfirm_(t.emp, oldUnit, stfStr_(t.v[STF_COL.unit]), t.rv.user.id);
   return { ok: true, data: { emp_no: t.emp } };
 }
 
@@ -751,7 +758,10 @@ function stfRejectClaim_(v, reason) {
 
 /** 認領資料全部清掉、回 unclaimed（staffUnclaim 與退回認領共用） */
 function stfClearClaim_(v) {
-  ['brand', 'unit', 'dept', 'title', 'p_brand', 'p_unit', 'p_dept', 'p_title', 'birthday', 'phone', 'address',
+  // 員工名單統一：店長新增的人（有到職日或已有生效的打卡對照）單位是店長建的，退回認領時保留組織四欄（StaffClock.gs）
+  var keepOrg = typeof clkKeepOrgOnClear_ === 'function' && clkKeepOrgOnClear_(v);
+  (keepOrg ? [] : ['brand', 'unit', 'dept', 'title']).forEach(function (f) { v[STF_COL[f]] = ''; });
+  ['p_brand', 'p_unit', 'p_dept', 'p_title', 'birthday', 'phone', 'address',
     'reject_reason', 'claimed_at', 'confirmed_at', 'reset_locked', 'reset_lock_until', 'prev_status'].forEach(function (f) {
     v[STF_COL[f]] = '';
   });
@@ -791,7 +801,10 @@ function handleStaffList_(token) {
     try { setupStaff(); } finally { lock.releaseLock(); }
   }
   var org = stfReadOrg_();
-  return { ok: true, data: { staff: stfAllRows_().map(function (r) { return stfToObj_(r.values, org, true); }) } };
+  var list = stfAllRows_().map(function (r) { return stfToObj_(r.values, org, true); });
+  // 員工名單統一（StaffClock.gs）：多帶 hire_date／last_day／打卡對照摘要；沒有那支檔案時照舊
+  if (typeof clkDecorateStaffList_ === 'function') list = clkDecorateStaffList_(list, token);
+  return { ok: true, data: { staff: list } };
 }
 
 function handleStaffImport_(token, payload) {
@@ -802,6 +815,8 @@ function handleStaffImport_(token, payload) {
   if (!stfSheetsReady_()) setupStaff();
   var names = Array.isArray(payload && payload.names) ? payload.names.map(stfStr_).filter(function (n) { return n; }) : [];
   if (!names.length) return { ok: false, error: STF_MSG.NAMES_REQUIRED };
+  var badStart = names.filter(function (n) { return stfBadNameStart_(n); });
+  if (badStart.length) return { ok: false, error: STF_MSG_NAME_START };
   var tooLong = names.filter(function (n) { return n.length > STF_MAX.name; });
   if (tooLong.length) return { ok: false, error: STF_MSG.NAME_TOO_LONG + '：' + tooLong.map(function (n) { return n.slice(0, 10) + '…'; }).join('、') };
 
@@ -871,9 +886,12 @@ function handleStaffConfirm_(token, payload) {
   if (!t.ok) return t;
   var hasP = STF_ORG_FIELDS.some(function (f) { return stfStr_(t.v[STF_COL['p_' + f]]) !== ''; });
   if (!(t.status === 'pending' || (t.status === 'active' && hasP))) return { ok: false, error: STF_MSG.NO_PENDING };
+  var oldUnit = stfStr_(t.v[STF_COL.unit]);
   var err = stfApplyConfirm_(t.v, stfReadOrg_());
   if (err) return { ok: false, error: err };
-  return stfSave_(t, 'confirm', '');
+  var saved = stfSave_(t, 'confirm', '');
+  if (typeof clkAfterConfirm_ === 'function') clkAfterConfirm_(t.emp, oldUnit, stfStr_(t.v[STF_COL.unit]), t.auth.user.id);
+  return saved;
 }
 
 function handleStaffReject_(token, payload) {
@@ -905,13 +923,21 @@ function handleStaffSetActive_(token, payload) {
   var userRow = findUsrRowById_(stfStr_(t.v[STF_COL.user_id]));
   if (!userRow) return { ok: false, error: STF_MSG.NOT_FOUND };
   var usersSheet = stfSheet_(USR_SHEET_USERS);
+  // 員工名單統一：登記過離職日的人用舊「啟用」會被隔天 00:10 又停用——擋下，請走復職（staffReinstate，會清離職日並恢復打卡）
+  if (payload.active === true && typeof clkLeaveBlocksEnable_ === 'function') {
+    var blocked = clkLeaveBlocksEnable_(t.emp);
+    if (blocked) return { ok: false, error: blocked, code: 'use_reinstate' };
+  }
   if (payload.active === false) {
     if (t.status === 'disabled') return { ok: false, error: STF_MSG.BAD_STATE };
     t.v[STF_COL.prev_status] = t.status;
     t.v[STF_COL.status] = 'disabled';
     usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
     setTokenAfter_(userRow.row);
-    return stfSave_(t, 'disable', '');
+    var saved = stfSave_(t, 'disable', '');
+    // 員工名單統一：舊「停用」按鈕只停平台帳號——同時對他每個打卡對照發停用單（StaffClock.gs）
+    if (typeof clkAfterDisable_ === 'function') clkAfterDisable_(t.emp, t.auth.user.id);
+    return saved;
   }
   if (t.status !== 'disabled') return { ok: false, error: STF_MSG.BAD_STATE };
   var prev = stfStr_(t.v[STF_COL.prev_status]);
@@ -949,11 +975,17 @@ function handleStaffEdit_(token, payload) {
   payload = payload || {};
   var changed = [];
   var org = stfReadOrg_();
+  var oldUnitForClock = stfStr_(t.v[STF_COL.unit]);
 
   if (payload.name !== undefined) {
     var name = stfStr_(payload.name);
     if (!name) return { ok: false, error: '姓名不得為空' };
     if (name.length > STF_MAX.name) return { ok: false, error: STF_MSG.NAME_TOO_LONG };
+    if (stfBadNameStart_(name)) return { ok: false, error: STF_MSG_NAME_START };
+    // 這個人會進（或已在）打卡名冊時，姓名上限 20（打卡端 svc_add 的限制），否則之後的 add 單會被永久拒絕
+    if (name.length > 20 && typeof clkNameIntoClock_ === 'function' && clkNameIntoClock_(t.emp)) {
+      return { ok: false, error: '姓名最多 20 個字（這位同仁在打卡系統有對照或單位有打卡）' };
+    }
     var clash = stfUnclaimedByName_(name).filter(function (r) { return r.row !== t.hit.row; });
     if (clash.length) return { ok: false, error: '名單上已有同名、還沒認領的人' };
     if (name !== stfStr_(t.v[STF_COL.name])) { t.v[STF_COL.name] = name; changed.push('name'); }
@@ -990,7 +1022,12 @@ function handleStaffEdit_(token, payload) {
     var userRow = findUsrRowById_(stfStr_(t.v[STF_COL.user_id]));
     if (userRow) stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.name + 1).setValue(authSafeCell_(t.v[STF_COL.name]));
   }
-  return stfSave_(t, 'admin_edit', '改了：' + changed.join(','));
+  var savedEdit = stfSave_(t, 'admin_edit', '改了：' + changed.join(','));
+  // 有打卡對照的人改單位一律走調店流程（StaffClock.gs clkAfterConfirm_）：新單位有打卡就開 add 單、舊主店降支援
+  if (changed.indexOf('org') !== -1 && typeof clkAfterConfirm_ === 'function') {
+    clkAfterConfirm_(t.emp, oldUnitForClock, stfStr_(t.v[STF_COL.unit]), t.auth.user.id);
+  }
+  return savedEdit;
 }
 
 // ============================================================
@@ -1080,5 +1117,7 @@ function setupStaff() {
 
   var users = ss.getSheetByName(USR_SHEET_USERS);
   users.getRange(1, AUTH_USERS_COL.token_after + 1).setValue('token_after');
+  // 員工名單統一（StaffClock.gs）：clock_stores／staff_clock／clock_outbox 三分頁＋staff 右側 hire_date、last_day（只補不覆蓋）
+  if (typeof clkSetup_ === 'function') clkSetup_(ss);
   return { ok: true };
 }
