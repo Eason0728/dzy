@@ -3,7 +3,7 @@
 - 分級：完整
 - 分級依據：排程=是 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
 - 現在在：⑤
-- 等 Eason：第 2 段在 mini 終端機設鑰匙＋六店貼 STAFF_SVC_KEY
+- 等 Eason：總部按「同仁名單 → 打卡對照 → 建立打卡對照」，各店店長 3 天內確認
 
 ## ① 查（2026-10-13）
 - 規劃稿 ~/dzy/docs/personnel/master-data-plan.md（v1，方向與六題已定）；記憶 staff-master-direction.md 已記方向
@@ -35,6 +35,7 @@
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
 |---|---|---|---|---|---|
+| 2026-10-14 | ⑤ 上線第 2、3 段 | 六店 STAFF_SVC_KEY＋mini 只讀上線＋管理系統新畫面 | mini 回報 health green、六店每日同步 ok（六張犁名冊空屬正常）、jobs 啟動、log 無網址金鑰；外網探針新 action 回「登入已失效」（已認得）；前端 5adc6ee 上線（node 0 fail、e2e 九支通過、正式登入頁無錯誤） | 1 | mini 回報（minikit d11b9f3）、dzy 5adc6ee |
 | 2026-10-14 | ⑤ 上線第 1 段 | 六店打卡 SvcStaff＋光復 LineHub 7A（開關關閉） | 三方比對一致→補丁式部署（只套本案修改）→拉回逐檔比對一致；探針 svc_roster 錯金鑰全回 unauthorized、whoami／mgr_day 照常；光復 @155、金山 @22、墨竹亭光復 @16、六張犁 @11、總部 @36、央廚 @34；值班核定頁新版上線（開關未開，行為不變） | 1 | mala-gas 168ab59、mala-clock-in 1fa6c73 |
 | 2026-10-13 | ④ 階段關 第 5 輪＋上線前關第 2 場＋結關 | 7A 打卡端＋佈告欄＋全部跨 repo 契約 | Fable 8 條＋GPT 12 條（G4 可接受）全修、四組跨 repo 契約逐欄一致；**M4 階段關通過** | 5 | dzy issue #1、prelaunch-review.md |
 | 2026-10-13 | ④ 上線前關 | 寫外部系統／金鑰／7A | Fable 11（無高）＋GPT 15（高 13）互盲；兩邊同挑 3 條必修、單邊 14 條判斷後修、6 條判定可接受並記理由；三邊修正中 | 1 | prelaunch-review.md |
@@ -53,3 +54,26 @@
 - [ ] 6 寫一則記憶：
 - [ ] 7 進版控：
 - [ ] 8 回報未完成與等待事項：
+
+## 接手說明（下一個對話從這裡開始；2026-10-14 02:00 寫）
+**現況**：第 1–3 段完成。六店打卡有服務端點且鑰匙已設；mini 以只讀模式（CLOCK_WRITE=0）每天 00:10 同步六店名冊；管理系統新畫面已上線（打卡對照、我的單位、首頁提醒）。寫入（新增／離職連動）、LINE 自動加新店、值班核定改說明都還**關著**。
+**開發位置**：程式都已併進各 repo main（dzy 5adc6ee、mala-clock-in 1fa6c73、minikit d11b9f3）；佈告欄仍在 ~/dzy-bulletin-wt-staffmaster（feature/staff-master，未上線）。可清掉的 worktree：~/dzy-wt-staffmaster、~/mala-clock-in-svcstaff、~/dzy-minikit-wt-jobs（佈告欄那個留到第 5 段）。
+**交辦檔小誤差**：mini-handoff-segment3.md 第 6 步「POST {} 期望 unauthorized」已過時，實際回 bad_input（上線前關 F7 改成先驗格式）；格式正確無金鑰才回 unauthorized。
+
+### 第 4 段（開放寫入）——建議新對話，口令「員工名單統一第 4 段」，先讀本檔與 spec §4、prelaunch-review.md
+前置（缺一不開，plan 5d）：
+1. 打卡對照全部確認：44 位在職打卡同仁 confirmed 或明確排除；候選新人總部處理完（總部單位要指定 dzy-hq／mzt-hq／mala-hq）。
+2. mini「登入後自動啟動」（Eason 2026-10-14 同意）：minikit DEPLOY.md 規則 9 寫「不裝開機自動啟動」，要改規則＋做 LaunchAgent（FileVault 開著，停電仍需到場解鎖）。
+3. 雲端排程守門（~/mala-fortune/tools/gas-watchdog/Code.js → ~/mala-gas/schedule-watchdog）加監看 dzy-platform /platform/health 的 reasons `clock_sync_stale`、`clock_daily_apply_failed`。
+4. 確認 mini `.env` 已刪 `GAS_PROP_LEGACY_SECRETS`（第一期過渡旗標，dzy-admin skill 部署第 5 步）。
+5. 墨竹亭光復 MZTGF 薪資門市表未建 → 該店不做姓名一致檢查（已知，可接受）。
+開關步驟：mini `.env` 改 `CLOCK_WRITE=1`、加 `HUB_SVC_KEY`（16 字以上）→ 重啟；光復打卡指令碼屬性 `STAFF_HUB_URL`（mini Funnel 的 /platform/svc/auto-support 完整網址）＋`STAFF_HUB_KEY`（同 HUB_SVC_KEY）；六店指令碼屬性 `STAFF_MASTER_ADD_REDIRECT=1`。
+驗收（task E4）：用測試名字在一家店走「店長新增→打卡名冊出現→登記離職→隔天 00:10 停用」，測完把測試列停用；7A 用一位已綁 LINE 的同仁實測一次（先問 Eason）。
+通知店長的 LINE 文字要先給 Eason 看（發訊息到群組＝要先問）。
+落地清單 1–8 在第 4 段結束時逐項完成（skill：dzy-admin 加一節＋mala-clock-in 加一節、dispatch-resources 登錄版號與 .env 變數名、守門、累犯摘要來源、記憶更新）。
+
+### 第 5 段（佈告欄）——可另開一個對話並行，口令「員工名單統一第 5 段」
+照 ~/dzy-bulletin-wt-staffmaster/server/DEPLOY.md 附錄 D：mini 平台 `.env` 加 `GAS_PROP_BULLETIN_SVC_KEY`、佈告欄 server `.env` 加 `DZY_PLATFORM_URL`（127.0.0.1:8799）與 `BULLETIN_SVC_KEY`（同值）→ 合併分支、GAS v0.7.5 clasp 部署 → mini 佈告欄更新 → `migrate` 檢查（本機演練：S-045 手動新增者需 `--map` 人工指定）→ `migrate --apply` → 雙跑 7 天 → `dual-status` 可拆舊才切 `STAFF_SOURCE=dzy`。
+⚠ 與第 4 段都會重啟 mini 平台，兩個對話不要同時動 mini。
+
+### 第 6 段：第 4 段開放後兩週，若「打卡上有、沒對照」異常為零 → 六店 mgr_add_employee 回 disabled（task H1）。
