@@ -17,6 +17,12 @@
 - 2026-10-13 Eason：六題照推薦，第 4 題改依實際打卡
 - 發現：打卡 repo 正本 Code.gs 缺新增同仁的鎖（六個部署副本都有）＝正本落後部署
 
+## ④ 開發位置
+- 打卡端：worktree ~/mala-clock-in-svcstaff（分支 feature/svc-staff，從 origin/main）
+- 平台後端與前端：worktree ~/dzy-wt-staffmaster（分支 feature/staff-master）
+- 同步員：~/dzy-minikit（尚未開分支）
+- 階段關審查紀錄：dzy repo issue #1（https://github.com/Eason0728/dzy/issues/1）
+
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
 |---|---|---|---|---|---|
