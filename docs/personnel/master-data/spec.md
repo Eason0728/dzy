@@ -1,6 +1,6 @@
 # 規格：員工名單統一（人員資料當正本）
 
-版本：v1 定案 / 2026-10-13（Eason「規格 OK」，§10 兩題照推薦）
+版本：v2 / 2026-10-13（v1 Eason「規格 OK」；v2 依 GPT 設計審 21 條修正，**§11 列出全部修正，與前文衝突時以 §11 為準**）
 上游：requirements.md v3（七題定案）
 ⚠ 本 repo 是 public：本檔不寫任何網址、金鑰、試算表 ID、真名。
 
@@ -66,20 +66,23 @@
 - 每次改動寫 staff_log（誰、何時、哪列、前後值；不寫個資）。
 
 ### 2.4 新分頁 clock_outbox（待辦單）
-`job_id, kind(add|deactivate|reactivate), emp_no, store_code, emp_id, name, op_id, state(pending|running|done|failed), tries, last_error, created_at, done_at`
+`job_id, kind(add|deactivate|reactivate|link), emp_no, store_code, emp_id, name, op_id, expect_json, state(pending|running|done|failed|cancelled), tries, next_at, lease_until, last_error, created_at, updated_at, done_at`
 - op_id 一張單一個，打卡端用它做冪等（同一張單重送不會建兩個人）。
-- 失敗重試：1、5、30 分鐘、之後每 6 小時；第 3 次失敗起首頁顯示紅色待辦，可按「重試」。
+- expect_json：開單當下的對照快照（例：`{"map":"mztjs:MZTJS12","emp_no":"DZY014","state":"confirmed"}`）。送出前重新比對，對照已改或已取消 → 該單 cancelled，不送。
+- 撿單：state=pending 且 next_at≤現在，或 running 且 lease_until<現在；撿到即設 running、lease_until=現在+5 分鐘。mini 上 .gs 呼叫是一支一支依序跑（kit 請求佇列），撿單本身不會被兩個同步員同時拿到；仍寫成鎖內讀改寫，日後搬回 Apps Script 也成立。
+- 失敗重試：next_at 依 1、5、30 分鐘、之後每 6 小時；第 3 次失敗起首頁顯示紅色待辦，可按「重試」。
+- kind=link 的單不寫金鑰；金鑰只進 CacheService。
 
 ## 3. 打卡端新增（每店同一份 SvcStaff.gs）
 全部要 `svc_key`＝指令碼屬性 `STAFF_SVC_KEY`（未設＝全拒），固定時間比對；`v:1`。
 | action | 輸入 | 做什麼 | 回傳 |
 |---|---|---|---|
 | svc_roster | — | 唯讀名冊＋每人最近打卡日 | `[{emp_id,name,active,created_at,removed_at,line_bound(布林),last_punch,src_store,src_emp_id}]`（不回 key、裝置、LINE id） |
-| svc_add | name, op_id, created_by, src_store?, src_emp_id? | 在**本店鎖內**：op_id 已做過→回上次結果；同名在職→duplicate_name；取號（沿用 nextEmpId）；**依表頭定位**寫入（修掉舊 appendRow 位置寫入的風險）；記 src_* | `{ok, emp_id, key}` |
+| svc_add | name, op_id, created_by, src_store?, src_emp_id? | 在**本店鎖內**：名冊已有 origin_op=op_id 的列→回那列（崩潰後重送也找得回）；同名在職→duplicate_name；取號（沿用 nextEmpId）；**依表頭定位**寫入；記 src_*、origin_op | `{ok, emp_id}`（**不回 key**） |
 | svc_set_active | emp_id, active, op_id, by | 同 mgr_set_active 的寫法（active、removed_at、removed_by） | `{ok, emp_id, active}` |
 | svc_link | emp_id | 只回該人打卡連結金鑰 | `{ok, key}` |
 
-- 名冊右側補兩欄 `src_store, src_emp_id`（ensureRosterHeaders 只補不改）：7A 建的人記他從哪家來，管理系統不必猜姓名就能對上。
+- 名冊右側補三欄 `src_store, src_emp_id, origin_op`（冪等以名冊上的 origin_op 為準，不另開 svc_ops 存結果；svc_link 不記任何結果）（ensureRosterHeaders 只補不改）：7A 建的人記他從哪家來，管理系統不必猜姓名就能對上。
 - 打卡連結金鑰**管理系統不存**：店長按「顯示打卡連結」→ 平台寫一張 kind=link 的待辦單 → 同步員打 svc_link → 金鑰放 CacheService 120 秒 → 前端 clockJobStatus 取到一次即刪。只給該單位店長與總部。（clock_outbox 的 kind 因此多一個 `link`，該列不寫金鑰。）
 - 掛法：Code.gs 分派表後面併入 `SVC_STAFF_HANDLERS`（照 LIFF／LINE_HUB 的三行寫法）。回退＝刪那三行＋檔案。
 
@@ -98,25 +101,25 @@
 4. 打卡全部停掉後，該人狀態顯示「已離職（打卡已停 3/3）」。
 
 ### 4.3 第一次建對照（F1、第 5、6 題）
+0. 前置檢查（不過就拒絕）：staff 已有 DZY001～DZY113 且無重複姓名組未處理；clock_outbox 沒有未完成單。
 1. 總部按「建立打卡對照」→ 同步員拉六店 svc_roster。
-2. 配對（只在 clock_stores 對應的單位裡比，去空白）：
-   - 名冊在職者與 DZY 同名且唯一 → suggested
-   - 同名多人、或一人對到兩個打卡編號在同一家 → 標「需總部處理」
-   - 名冊在職者 DZY 找不到 → 第 6 題：建 DZY（unclaimed），對照標 suggested、source=name_match
-   - 同一人出現在多家名冊 → 主店＝DZY 的單位那家，其他家 support
+2. 先把六店在職名冊**跨店聚成「人」**（同名去空白＋已綁 LINE 的同一人＋src_*），再拿每個人去比**全部** DZY（不限單位）：
+   - 唯一同名 → suggested；home＝DZY 單位對應那家，其他家 support
+   - 同名多人、或一人在同一家有兩個打卡編號 → 「需總部處理」
+   - DZY 找不到 → 只進「候選新人」清單，**不建 staff**；總部確認是真人（排除 TEST、錯字）後按「建立」才補 DZY（第 6 題）
 3. 店長在「我的資料 → 待審核」多一個分頁「打卡對照」，看自己單位的 suggested 一列列按「對」「不對」。按「不對」→ 轉總部。
 4. 總部在「同仁名單 → 打卡對照」看全部、處理轉來的、可直接指定。
-5. confirmed 才生效。
+5. confirmed 才生效；同一個 DZY 在同一家只能有一個 confirmed 打卡編號（確認時檢查）。
 
-### 4.4 第一次跨店（7A，改光復 LineHub）
-現況 not_bound 分支之前加一段，**全部條件成立才自動建**，否則走原本流程：
-- 定位唯一命中 B 店；
-- 這個 LINE 在 B 店沒綁、B 店名冊沒有同名在職者（有同名→原本「帶出名字請本人確認」流程不變）；
-- 這個 LINE 在別家**恰好一家以上綁定且在職，且都是同一個姓名**；
-- B 店名冊沒有 src 指向他的停用列（有→不自動恢復，回「請主管協助」，避免離職又被自動加回）。
-動作：呼叫 B 店 svc_add（created_by=`LINE 自動（首次支援）`、src_store/src_emp_id＝他已綁那家）→ 綁 LINE → 照常打這張卡 → 回覆「已幫你加入 B 店名冊，第一次支援請跟 B 店值班主管說一聲」。
-B 店值班核定頁：created_by 是「LINE 自動」的人，名字旁標「首次支援」到他第一張卡被核定為止。
-管理系統：每日拉名冊看到 src_* 有值的新列→直接寫 support／auto_support／confirmed（不靠姓名）。
+### 4.4 第一次跨店（7A，改光復 LineHub；v2 改由 mini 把關）
+光復 LineHub 在 not_bound 分支之前加一段：條件一（定位唯一命中 B 店、這個 LINE 在 B 店沒綁、B 店沒有同名在職者、這個 LINE 在別家已綁且在職、姓名唯一）成立 → 呼叫 mini 的 `/platform/svc/auto-support`（帶 `HUB_SVC_KEY`、B 店代碼、他已綁那家的店代碼＋emp_id、op_id）。**LineHub 不持有任何店的 STAFF_SVC_KEY。**
+mini（jobs 模組提供的 Node 路由）同步把關，全部成立才建：
+- 他已綁那家的打卡編號在 staff_clock 是 confirmed，且對到的 DZY **在職、沒有登記離職**；
+- B 店沒有指向他的停用或 rejected 對照（被移除過→不自動加回，回「請主管協助」）；
+- 通過 → mini 用 B 店金鑰呼叫 B 店 svc_add（created_by=`LINE 自動（首次支援）`、src_*）→ 寫 staff_clock support／auto_support／confirmed → 回 ok。
+LineHub 收到 ok → 走原本「輸入全名綁定」那條（line_bind_name，這時 B 店名冊只有他一個未綁同名者）→ 照常打卡 → 回覆「已幫你加入 B 店名冊，第一次支援請跟 B 店值班主管說一聲」。
+mini 不通、或任一條件不成立 → 回原本「名冊上沒有你，請主管把你加進去」。
+B 店值班核定頁：created_by 是「LINE 自動」的人，名字旁標「首次支援」，並多一顆「不是本店支援，移除」（就是既有的設離職）。移除後每日同步把對照標 rejected，之後不會再自動加。
 專屬打卡連結（?k=）不受影響、做不到 7A。
 
 ### 4.5 每日同步（00:10，F7＋支援店重算）
@@ -176,3 +179,36 @@ B 店值班核定頁：created_by 是「LINE 自動」的人，名字旁標「�
 ## 10. Eason 確認的兩題（2026-10-13 照推薦）
 1. 離職日最多往回補幾天：7 天（推薦，§4.2）／不限。
 2. 7A 遇到「在那家離職過」的人：不自動加回，請主管處理（推薦，§4.4）／自動恢復。
+
+## 11. 設計審修正（v2，2026-10-13；GPT 21 條，結果檔不進 repo）
+| GPT# | 問題 | 修正 |
+|---|---|---|
+| 1 | 113 人匯入未確認就建對照會重複建 DZY | Eason 2026-10-13 確認 113 人已建檔；§4.3 加前置檢查 |
+| 2 | 只在單位內比對，跨店的人會被重建 | §4.3 改跨店聚人＋比全部 DZY |
+| 3 | 對不上就建 staff，TEST 列會變正本 | §4.3 改候選清單，總部確認才建 |
+| 4 | DZY 取號併發 | mini 依序執行＋鎖內取號；加 emp_no 唯一檢查與併發測試（task B2） |
+| 5 | staff 與待辦單非原子 | 同一支 .gs 呼叫內寫完；每日檢查加「打卡單位在職者沒有 home 對照、也沒有有效待辦」 |
+| 6 | 同人同店可對兩個編號 | §4.3 第 5 點唯一檢查 |
+| 7 | 舊待辦單在對照改正後仍會送 | §2.4 expect_json＋送前重驗＋cancelled |
+| 8 | 打卡寫入與冪等紀錄分兩次寫 | §3 冪等改以名冊 origin_op 為準 |
+| 9 | 離職連動中途崩潰會漏停 | 停用與全部 deactivate 單同一支呼叫寫完；**每日對帳：DZY 已停用但對照店仍在職 → 自動補 deactivate 單**（不只警告） |
+| 10 | 7A 後立刻離職會漏停 | 7A 由 mini 先寫對照（§4.4）＋第 9 條每日對帳 |
+| 11 | 7A 沒檢查 DZY 在職 | §4.4 mini 把關 |
+| 12 | 7A 被定位造假後主管退回卡，名冊仍在 | §4.4「不是本店支援，移除」→ rejected，不再自動加 |
+| 13 | 薪資用姓名對人，加註 -B 可能對不到 | Fable 複核＝**部分成立**：工時與當月請假扣薪用打卡名冊的姓名→編號，不會錯；但特休已用、年度假別額度、補休已用、核定頁額度四處拿**薪資主檔的姓名**直接比請假紀錄的姓名，薪資主檔沒加註就漏算，或算到同店以前同名的人。這是薪資既有缺陷，任何姓名不一致都會中。處理方式待 Eason（設計審網頁第 1 題） |
+| 14 | 沒有改名、調店、復職 | 新增 §4.8 |
+| 15 | svc_ops 會存到打卡金鑰 | §3 svc_add 不回 key、不存結果；svc_link 不記錄；測試全表找不到金鑰 |
+| 16 | 7A 要把六店金鑰放進光復 | §4.4 改經 mini；光復只持 HUB_SVC_KEY |
+| 17 | 正本對齊時可能把金鑰推上 public repo | task Z1 改：副本先放 repo 外、對整份 staged diff 比對 deploy-local 所有金鑰與試算表 ID，命中就停 |
+| 18 | mini 停跑時首頁假裝零異常 | /platform/health 加「每店最後成功同步時間」，超過 26 小時＝warn，由雲端排程守門外部監看；開放寫入（5d）前 mini 開機自啟必須完成；「兩週零異常」需六店連續 14 天每日同步成功 |
+| 19 | 佈告欄有人沒對上就拆舊路 | §4.6 改：在職 S-xxx 必須全部唯一對上，新舊雙跑 7 天比對，留快照與回退開關 |
+| 20 | 待辦單欄位不夠 | §2.4 補 next_at、lease_until、updated_at、cancelled、link |
+| 21 | 用 platform.review（職級衍生）權限太寬 | §5 改：店長＝門市單位、職級為店長以上、且同單位；總部單位不走店長路徑；不能對自己登記離職 |
+
+### 4.8 改名、調店、復職（v2 新增）
+- 改名：已有對照的人只有總部能改姓名；改完首頁出現「打卡名冊姓名不同（N 家）」直到總部在打卡端改成一致（本期不做打卡改名端點）。佈告欄顯示管理系統的姓名。
+- 調店：第一期「改單位 → 待確認」確認時，新單位有打卡 → 開新店 add（home）、舊 home 改 support 並問總部要不要停用舊店。
+- 復職：總部把停用的人恢復 → 列出他過去的對照讓總部勾要恢復哪幾家 → 發 reactivate 單。
+
+### 11.1 順帶發現（Fable 複核，不在本期修）
+- 薪資 master.emp_id＝emp_prefix＋roster.emp_id，但 payCollect 以 roster.emp_id 為鍵；任何店設了 emp_prefix，工時會整個接不到。目前各店 prefix 皆空，未觸發。列入薪資搬家案。

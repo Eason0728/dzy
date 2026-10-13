@@ -1,6 +1,6 @@
 # 技術方案：員工名單統一
 
-依據：`spec.md` v1 定案。四個里程碑、八個階段；每階段結束有可驗收的東西。
+依據：`spec.md` v2（v1 定案＋GPT 設計審 21 條修正）。四個里程碑、八個階段；每階段結束有可驗收的東西。
 ⚠ dzy repo 是 public：不寫網址、金鑰、試算表 ID、真名。
 
 ## 共用契約（兩個以上任務都會產生的值，逐字元定義）
@@ -22,12 +22,12 @@
 - **M4（階段 6–7）**：7A 與佈告欄切換上線。之後兩週觀察→階段 8 退場舊按鈕。
 
 ## 階段 0：準備（不寫功能）
-- 打卡：把六個部署副本中最新的 `程式碼.js` 與正本 `Code.gs` 對齊（以部署版為準，去掉試算表 ID／金鑰換回 `PASTE_` 佔位），commit。確認六店部署副本彼此相同（只差 CONFIG）。
+- 打卡：把六個部署副本中最新的 `程式碼.js` 與正本 `Code.gs` 對齊（以部署版為準，去掉試算表 ID／金鑰換回 `PASTE_` 佔位）。副本先複製到 repo 外暫存處理；commit 前對整份 staged diff 比對 deploy-local 所有金鑰值與六店試算表 ID，命中就停（mala-clock-in repo 是 public）。確認六店部署副本彼此相同（只差 CONFIG）。
 - minikit：跟維護者確認 `app.json` 加選填 `jobs`；不同意→改走獨立 launchd 程式（同樣的 jobs.js，自己起 http 呼叫 127.0.0.1）。
 - 開 GitHub issue（dzy repo）當階段關審查紀錄；issue 內不貼網址、金鑰、真名。
 
 ## 階段 1：打卡端 SvcStaff.gs（mala-clock-in repo）
-- 新檔 `apps-script/SvcStaff.gs`：svc_roster／svc_add／svc_set_active／svc_link；金鑰比對、冪等（op 紀錄存新分頁 `svc_ops`：op_id, action, result_json, at）、鎖、依表頭寫入。
+- 新檔 `apps-script/SvcStaff.gs`：svc_roster／svc_add／svc_set_active／svc_link；金鑰比對、冪等（以名冊新欄 origin_op 為準，不另存結果；svc_link 不留紀錄）、鎖、依表頭寫入。
 - `ensureRosterHeaders` 補 `src_store, src_emp_id`。
 - Code.gs 分派表併入 `SVC_STAFF_HANDLERS`（三行）。
 - node mock 測試（沿用 repo 既有 mock 方式）。
@@ -41,7 +41,8 @@
 - 測試：沿用 `test/staff.mock.test.mjs` 沙盒，新寫 `test/staff-clock.mock.test.mjs`。
 
 ## 階段 3：同步員（~/dzy-minikit）
-- kit：`app.json` 選填 `jobs`；啟動時 require，給 `{runGas, env, log, now}`；jobs 例外不影響主服務。
+- kit：`app.json` 選填 `jobs`；啟動時 require，給 `{runGas, env, log, now}`；jobs 例外不影響主服務。jobs 模組可另外宣告本機路由（`routes`），kit 掛在 `<path>/svc/*`，給 7A 用（`/platform/svc/auto-support`，驗 HUB_SVC_KEY）。
+- /platform/health 帶上「每店最後成功同步時間」，超過 26 小時 level=warn；雲端排程守門把它納入外部監看。
 - `apps/dzy-platform/jobs.js`：每 60 秒撿單→打打卡→回填；每天 00:10 每日同步；開機補跑；`clockLink` 也走待辦單（kind=link，見 spec 補充）：jobs.js 撿到後打 svc_link，把金鑰暫存 CacheService 120 秒，前端用 clockJobStatus 取一次即清除。
 - 測試：本機假打卡後端（node http）＋假 runGas。
 
@@ -55,7 +56,7 @@
 - 5a：mini 同步新後端（sync-gas.sh）＋jobs＋.env 六店網址金鑰；`CLOCK_WRITE=0`（同步員只做 svc_roster，不送 add／deactivate）。
 - 5b：總部按「建立打卡對照」；店長確認；總部處理剩下的。驗收：44 位在職打卡同仁全部 confirmed 或明確排除。
 - 5c：前端上線（先 mini 後前端，照 dzy-admin 規矩）。
-- 5d：`CLOCK_WRITE=1`，開放新增與離職。值班核定的新增按鈕改說明（打卡前端小改）。
+- 5d：前置——mini 開機自動啟動（另案）完成、守門已監看 health；然後 `CLOCK_WRITE=1`，開放新增與離職。值班核定的新增按鈕改說明（打卡前端小改）。
 - 上線前關（5a 之前）：Fable＋GPT 互盲，審 SvcStaff、jobs.js、StaffClock.gs 的寫入路徑。
 
 ## 階段 6：7A（光復 LineHub）
@@ -67,7 +68,7 @@
 ## 階段 7：佈告欄切換（~/dzy-bulletin）
 - server 端同步改讀 `svcDirectory`（127.0.0.1）；staff 加 `dzy` 欄；一次性搬家腳本用既有 src 經對照填 dzy。
 - 拿掉打卡同步按鈕、CLOCK_PRIMARY_。
-- 演練：spike/sample 真實名冊在本機跑搬家，零錯配才上。
+- 演練：spike/sample 真實名冊在本機跑搬家；**在職 S-xxx 必須全部唯一對上**才切；新舊雙跑 7 天每日比對、留快照與回退開關，比對全同才拿掉舊同步。
 
 ## 階段 8：舊新增退場（M4 後兩週）
 - 條件：兩週內「打卡上有、沒對照」異常為零。
@@ -83,4 +84,5 @@
 | 打卡端正本落後 | 階段 0 先對齊；之後每次部署前 diff 部署副本與正本產物 |
 | 真名進 public repo | 測試一律假名；spike/ gitignore；commit 前 grep 名冊真名（spike/sample 抽出名單比對整個 repo） |
 | svc_key 外流 | 只在 mini .env 與各店指令碼屬性；可單店換 |
-| 7A 被濫用（定位造假） | 只限已在別家綁 LINE 且在職者；B 店主管核定時看得到「首次支援」可退回；每人每店只會建一次（op_id 含日期＋停用列不自動恢復） |
+| 7A 被濫用（定位造假） | mini 把關（來源對照 confirmed、DZY 在職）；光復不持店金鑰；B 店主管「不是本店支援，移除」→ rejected 不再自動加 |
+| mini 停跑沒人知道 | health 帶每店最後成功同步時間，雲端守門外部監看；寫入上線前完成開機自啟 |

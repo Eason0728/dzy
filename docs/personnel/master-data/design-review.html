@@ -1,0 +1,114 @@
+<title>員工名單統一設計審</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* 版型：單欄文件，左側深色編號條呼應管理系統側邊欄；黃色＝要你決定的地方 */
+:root{
+  --bg:#faf8f6; --card:#ffffff; --ink:#231815; --soft:#5d554f; --muted:#8a817a; --line:#e6e0da;
+  --side:#1b1917; --side-ink:#f3eee8; --gold:#FABE00; --gold-soft:#fff6d6; --red:#c8402c; --red-soft:#fbe9e6; --ok:#2f6b3a; --ok-soft:#e8f2ea;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#161413; --card:#1f1c1a; --ink:#f1ebe5; --soft:#c9c0b8; --muted:#958b82; --line:#34302c;
+  --side:#0e0d0c; --side-ink:#f3eee8; --gold:#f5c22b; --gold-soft:#3a2f0e; --red:#ef7a64; --red-soft:#3a1f1a; --ok:#8fc19c; --ok-soft:#1d2a20; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161413; --card:#1f1c1a; --ink:#f1ebe5; --soft:#c9c0b8; --muted:#958b82; --line:#34302c;
+  --side:#0e0d0c; --side-ink:#f3eee8; --gold:#f5c22b; --gold-soft:#3a2f0e; --red:#ef7a64; --red-soft:#3a1f1a; --ok:#8fc19c; --ok-soft:#1d2a20; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.75;margin:0}
+.wrap{max-width:46rem;margin:0 auto;padding-inline:16px;padding-block:2.2rem 4rem}
+header{background:var(--side);color:var(--side-ink);border-radius:14px;padding:1.4rem 1.4rem 1.3rem}
+.eyebrow{font-size:.78rem;letter-spacing:.14em;color:var(--gold);font-weight:700}
+h1{font-size:clamp(1.6rem,5vw,2.1rem);font-weight:900;margin:.3rem 0 .5rem;line-height:1.25;text-wrap:balance}
+header p{margin:0;color:#cfc6bd}
+.id{font-family:var(--mono);font-weight:700;background:var(--gold);color:#231815;border-radius:6px;padding:0 .4em;white-space:nowrap}
+section{margin-top:2.4rem}
+h2{font-size:1.25rem;font-weight:900;margin:0 0 .8rem;text-wrap:balance}
+h2 small{font-size:.8rem;font-weight:500;color:var(--muted);margin-left:.4rem}
+p{margin:0 0 .8rem}
+.phases{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ph{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.8rem .9rem;min-width:0}
+.ph.now{border:2px solid var(--gold)}
+.ph b{display:block;font-size:.85rem;color:var(--muted)}
+.ph.now b{color:var(--ink)}
+.ph span{font-weight:700;font-size:.95rem}
+ol.flow{list-style:none;margin:0;padding:0;display:grid;gap:8px;counter-reset:s}
+ol.flow li{counter-increment:s;display:grid;grid-template-columns:2rem 1fr;gap:.6rem;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;align-items:start}
+ol.flow li::before{content:counter(s);width:1.7rem;height:1.7rem;border-radius:50%;background:var(--side);color:var(--side-ink);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;margin-top:.15rem}
+ol.flow li div{min-width:0}
+.note{font-size:.9rem;color:var(--soft)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55rem .75rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:700;color:var(--soft);background:color-mix(in srgb,var(--line) 35%,var(--card));white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.y{color:var(--ok);font-weight:700}.n{color:var(--muted)}
+.ladder{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:.3rem 0 .9rem}
+.ladder span{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:.15rem .7rem;font-size:.9rem;font-weight:500}
+.ladder i{color:var(--muted);font-style:normal}
+ul.plain{margin:0;padding-left:1.2rem}ul.plain li{margin:.25rem 0}
+.dec{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--ok);border-radius:10px;padding:.8rem 1rem}
+.dec ul{margin:0;padding-left:1.1rem}.dec li{margin:.35rem 0}
+.q{background:var(--gold-soft);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:10px;padding:.85rem 1rem;margin-top:10px}
+.q h3{margin:0 0 .3rem;font-size:1rem;font-weight:900}
+.q .rec{margin:.35rem 0 0;font-size:.93rem}
+.q .rec b{color:var(--ink)}
+.risk{background:var(--red-soft);border-radius:10px;padding:.75rem 1rem;font-size:.92rem;margin-top:.8rem}
+.reply{margin-top:2.4rem;background:var(--side);color:var(--side-ink);border-radius:14px;padding:1.1rem 1.3rem}
+.reply p{margin:.2rem 0}
+footer{margin-top:2rem;font-size:.8rem;color:var(--muted)}
+@media (max-width:560px){.phases{grid-template-columns:1fr}}
+.opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:.45rem}
+.opt{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:.2rem .6rem;font-size:.9rem}
+.opt.pick{border:2px solid var(--gold);font-weight:700}
+.opt.pick::before{content:"推薦　";color:var(--soft);font-weight:500;font-size:.8rem}
+.why{font-size:.88rem;color:var(--soft);margin:.4rem 0 0}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">鼎兆元管理系統・員工名單統一・開工前設計審</div>
+  <h1>GPT 挑了 21 個洞，20 個已補，1 個要你決定</h1>
+  <p>開工前請 GPT 專門找「會出事」的設計缺陷。下面是白話版：它說會怎麼壞、我改成怎樣。你只需要回答最上面那一題。</p>
+</header>
+
+<section>
+  <h2>要你決定的 1 題</h2>
+  <div class="q"><h3>薪資系統有 4 個地方用「薪資主檔上的姓名」去對請假紀錄，姓名不一致就會算錯假。這一期要不要順手修？</h3>
+    <div class="opts"><span class="opt pick">這期只加警示，薪資搬家那案再修</span><span class="opt">這期就改薪資那 4 處</span></div>
+    <p class="why"><b>怎麼會出事</b>：同一家店已經有在職的「王小明」，新來的王小明在打卡名冊上要寫成「王小明-B」。但如果會計在薪資主檔寫的是「王小明」，他的<b>特休已用、年度假別額度、補休已用</b>就對不到，餘額會虛高、申請也擋不住；更糟的是，如果店裡以前有離職的「王小明」，會把那個人的假算到他頭上。工時和當月請假扣薪不受影響（那兩條是用打卡編號對的）。</p>
+    <p class="why"><b>這不是新系統造成的</b>：今天只要打卡名冊和薪資主檔的姓名有一字不同，就會中。</p>
+    <p class="why"><b>推薦做法</b>：這期每天檢查一次「同一個人，打卡名冊姓名和薪資主檔姓名不一樣」，有就放首頁待辦，請會計改成一字不差；程式上的根治（改成用編號對）放進薪資搬家那一案。這樣不用動到算錢的程式。選第二個的話，要多一輪上線前審查，也打破「薪資一行不改」。</p></div>
+</section>
+
+<section>
+  <h2>已經補好的（挑重點）</h2>
+  <div class="tbl"><table>
+    <tr><th>GPT 說會怎麼壞</th><th>改成</th></tr>
+    <tr><td>跨店的人在第一次對編號時，會被當成新人再建一個 DZY</td><td>先把六家打卡名冊裡的同一個人合起來，再去比全部 DZY，不限單位</td></tr>
+    <tr><td>打卡名冊上的測試帳號（真的有一筆叫 TEST）會被自動建成正式員工</td><td>對不上的人只進「候選新人」清單，總部確認是真人才建</td></tr>
+    <tr><td>離職連動做到一半當機，剩下的店永遠沒停</td><td>每天對帳：管理系統已離職、某家打卡還在職 → 自動再停一次，不只是警示</td></tr>
+    <tr><td>LINE 自動加新店時，沒確認這個人是不是已經離職</td><td>改成光復的 LINE 打卡先問 Mac mini，Mac mini 確認他在職、沒登記離職才建</td></tr>
+    <tr><td>為了 LINE 自動加新店，六家店的鑰匙要全部放進光復的程式，一外洩全部遭殃</td><td>鑰匙只放 Mac mini，光復只拿一把「只能請 Mac mini 幫忙」的鑰匙</td></tr>
+    <tr><td>有人定位造假跑去別家打卡，主管退回那張卡，但他還留在那家名冊</td><td>那家值班核定頁多一顆「不是本店支援，移除」，移除後永遠不會再自動加</td></tr>
+    <tr><td>對錯編號改正後，舊的「停用」待辦單還是會把別人停掉</td><td>每張待辦單記下開單時的對照，送出前再比一次，不一樣就作廢</td></tr>
+    <tr><td>打卡連結的鑰匙會被存進紀錄表</td><td>建人時不回傳鑰匙、任何表都不存，要看連結時才即時拿</td></tr>
+    <tr><td>把線上版打卡程式存回公開程式庫時，可能把鑰匙一起推上去</td><td>先在程式庫外處理，送出前逐一比對所有已知鑰匙和表格代號，命中就停</td></tr>
+    <tr><td>Mac mini 停擺兩週，首頁還是顯示「零異常」，大家以為一切正常</td><td>Mac mini 健康檢查帶上「每家店最後一次同步成功的時間」，超過 26 小時由雲端的排程守門抓到；開放寫入打卡之前，Mac mini 開機自動啟動要先做好</td></tr>
+    <tr><td>佈告欄有人沒對上就把舊同步拆掉，那人從此登不進去</td><td>在職的人必須全部對上才切換，新舊一起跑 7 天比對完全一樣才拆</td></tr>
+    <tr><td>沒想到改名、調店、復職</td><td>補上：改名只有總部能改並提醒同步打卡；調店確認時自動在新店建檔；復職由總部勾要恢復哪幾家</td></tr>
+  </table></div>
+  <p class="note">另外 9 條是比較細的（編號不重複、權限只給門市店長不給總部的部門主管、待辦單欄位補齊等），都已寫進規格第 11 節。</p>
+</section>
+
+<section>
+  <h2>順便發現的一個舊問題</h2>
+  <div class="risk">薪資系統裡有個設定叫「編號前綴」，如果哪家店設了值，那家的工時會整個對不到人。目前每家都沒設，所以沒出事。這跟這一期無關，我記在規格裡，薪資搬家時一起處理。</div>
+</section>
+
+<div class="reply">
+  <p><b>回這一題（「照推薦」也行），我就開工</b>：先把打卡程式的存檔和線上版對齊，再做打卡那邊的新入口。</p>
+</div>
+<footer>正本：~/dzy/docs/personnel/master-data/spec.md 第 11 節・2026-10-13</footer>
+</div>
