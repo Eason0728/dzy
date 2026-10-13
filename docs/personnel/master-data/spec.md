@@ -82,7 +82,7 @@
 | svc_set_active | emp_id, active, op_id, by | 同 mgr_set_active 的寫法（active、removed_at、removed_by） | `{ok, emp_id, active}` |
 | svc_link | emp_id | 只回該人打卡連結金鑰 | `{ok, key}` |
 
-- 名冊右側補三欄 `src_store, src_emp_id, origin_op`（冪等以名冊上的 origin_op 為準，不另開 svc_ops 存結果；svc_link 不記任何結果）（ensureRosterHeaders 只補不改）：7A 建的人記他從哪家來，管理系統不必猜姓名就能對上。
+- 名冊右側補四欄 `src_store, src_emp_id, origin_op, last_op`（由 SvcStaff.gs 自己的 svcEnsureHeaders_ 補，不改 Code.gs 的 ROSTER_HEADERS；svc_add 冪等以 origin_op 為準、svc_set_active 以 last_op 為準，不另開 svc_ops 存結果；svc_link 不記任何結果）（ensureRosterHeaders 只補不改）：7A 建的人記他從哪家來，管理系統不必猜姓名就能對上。
 - 打卡連結金鑰**管理系統不存**：店長按「顯示打卡連結」→ 平台寫一張 kind=link 的待辦單 → 同步員打 svc_link → 金鑰放 CacheService 120 秒 → 前端 clockJobStatus 取到一次即刪。只給該單位店長與總部。（clock_outbox 的 kind 因此多一個 `link`，該列不寫金鑰。）
 - 掛法：Code.gs 分派表後面併入 `SVC_STAFF_HANDLERS`（照 LIFF／LINE_HUB 的三行寫法）。回退＝刪那三行＋檔案。
 
@@ -159,7 +159,7 @@ B 店值班核定頁：created_by 是「LINE 自動」的人，名字旁標「�
 - mini 停機：新增按不了（第 3 題接受）；停機前已寫的待辦單開機後自動接著做；00:10 沒跑到→開機後第一次撿單時補跑當天的每日同步。
 
 ## 7. 不改的東西（逐條在驗收時確認）
-- 打卡：打卡、裝置、核定、薪資、出勤班表的程式一行不改；改動只有：新增 SvcStaff.gs、分派表三行、ensureRosterHeaders 多兩欄、LineHub not_bound 前一段（4.4）、值班核定頁的新增按鈕與「首次支援」標記。
+- 打卡：打卡、裝置、核定、薪資、出勤班表的程式一行不改；改動只有：新增 SvcStaff.gs、分派表三行、SvcStaff.gs 自己補四欄（不改 ROSTER_HEADERS）、LineHub not_bound 前一段（4.4）、值班核定頁的新增按鈕與「首次支援」標記。
 - 薪資：不動。跨店時數照舊會計手填。
 - 第一期：認領、登入、忘記密碼、審核流程不動。
 

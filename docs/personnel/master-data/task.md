@@ -15,7 +15,7 @@
 |---|---|---|---|
 | A1 | SvcStaff.gs 骨架＋驗證 | `{action,v,svc_key}` → 通過或錯誤 | 未設 STAFF_SVC_KEY 全回 unauthorized；錯金鑰 unauthorized；v≠1 bad_version；比對為固定時間（逐字元 XOR 累加） |
 | A2 | svc_roster | — → 名冊陣列 | 只回 spec §3 欄位；不含 key／device_id／line_user_id；line_bound 為布林；last_punch 取 events 該 emp 最大日期；空名冊回 [] |
-| A3 | svc_add（冪等靠名冊 origin_op、ensureRosterHeaders 補三欄） | name, op_id, created_by, src_* → {emp_id} | 同 op_id 第二次回同一 emp_id 且名冊只多一列；寫名冊後、回應前丟例外，重送仍回同一 emp_id；回應與任何分頁都不含 key；在職同名回 duplicate_name；與 mgr_add_employee 同一把 ScriptLock；**依實際表頭定位寫入**（測試：表頭欄序打亂仍寫對欄）；name 去頭尾空白、≤20 字 |
+| A3 | svc_add（冪等靠名冊 origin_op；SvcStaff.gs 的 svcEnsureHeaders_ 補 src_store／src_emp_id／origin_op／last_op 四欄，不改 ROSTER_HEADERS） | name, op_id, created_by, src_* → {emp_id} | 同 op_id 第二次回同一 emp_id 且名冊只多一列；寫名冊後、回應前丟例外，重送仍回同一 emp_id；回應與任何分頁都不含 key；在職同名回 duplicate_name；與 mgr_add_employee 同一把 ScriptLock；**依實際表頭定位寫入**（測試：表頭欄序打亂仍寫對欄）；name 去頭尾空白、≤20 字 |
 | A4 | svc_set_active＋svc_link | emp_id, active, op_id → 結果 | 不存在 not_found；停用寫 removed_at／removed_by；恢復時同名在職 duplicate_name；svc_link 只回該人 key；op_id 冪等 |
 | A6 | svc_payroll_names（只在光復有薪資主檔的那支生效） | — → [{store,emp_id,name}] | 只回三欄、無任何金額欄；沒有 payroll_master 分頁回 []；未設金鑰全拒 |
 | A5 | Code.gs 併入 SVC_STAFF_HANDLERS | — | 三行；舊 action 全數照舊（既有測試全綠）；刪掉三行＋檔案即回到原狀 |
