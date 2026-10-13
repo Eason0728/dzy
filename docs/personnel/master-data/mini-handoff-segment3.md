@@ -18,7 +18,7 @@
    `cd ~/dzy-minikit/apps/dzy-platform && for v in GF MZTJS MZTGF MZTLZL HQ CF; do printf "$v url=%s key=%s\n" $(grep -c "^CLOCK_URL_$v=https" .env) $(grep -c "^CLOCK_KEY_$v=." .env); done; grep -c '^CLOCK_WRITE=0$' .env; ls -l .env | awk '{print $1}'`
    期望：六行都是 `url=1 key=1`、`CLOCK_WRITE` 那行印 1、權限 `-rw-------`。
 
-2. **更新 minikit。** `cd ~/dzy-minikit && git pull --ff-only && git log --oneline -3`。期望：fast-forward 成功，看得到「員工名單統一」相關提交。`grep -c StaffClock apps/dzy-platform/app.json` 期望 2 以上、`ls apps/dzy-platform/gas/StaffClock.gs` 存在。
+2. **更新 minikit。** `cd ~/dzy-minikit && git pull --ff-only && git log --oneline -3`。期望：fast-forward 成功，看得到「員工名單統一」相關提交。`grep -o StaffClock apps/dzy-platform/app.json | wc -l` 期望 2、`ls apps/dzy-platform/gas/StaffClock.gs` 存在。
 
 3. **重啟平台後端。**
    `export PATH="$HOME/.local/node/bin:$PATH"; cd "$HOME/dzy-minikit" && bash kit/bin/stop.sh apps/dzy-platform && bash kit/bin/start.sh apps/dzy-platform && sleep 3 && bash kit/bin/status.sh apps/dzy-platform`
