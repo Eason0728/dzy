@@ -754,7 +754,10 @@ function stfRejectClaim_(v, reason) {
 
 /** 認領資料全部清掉、回 unclaimed（staffUnclaim 與退回認領共用） */
 function stfClearClaim_(v) {
-  ['brand', 'unit', 'dept', 'title', 'p_brand', 'p_unit', 'p_dept', 'p_title', 'birthday', 'phone', 'address',
+  // 員工名單統一：店長新增的人（有到職日或已有生效的打卡對照）單位是店長建的，退回認領時保留組織四欄（StaffClock.gs）
+  var keepOrg = typeof clkKeepOrgOnClear_ === 'function' && clkKeepOrgOnClear_(v);
+  (keepOrg ? [] : ['brand', 'unit', 'dept', 'title']).forEach(function (f) { v[STF_COL[f]] = ''; });
+  ['p_brand', 'p_unit', 'p_dept', 'p_title', 'birthday', 'phone', 'address',
     'reject_reason', 'claimed_at', 'confirmed_at', 'reset_locked', 'reset_lock_until', 'prev_status'].forEach(function (f) {
     v[STF_COL[f]] = '';
   });

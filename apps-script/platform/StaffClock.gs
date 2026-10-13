@@ -1648,3 +1648,12 @@ function handleSvcDirectory_(payload) {
   });
   return { ok: true, data: data };
 }
+
+/** Staff.gs stfClearClaim_ 的掛勾：有到職日（店長新增才會有）或已有 confirmed 打卡對照 → 退回認領時保留品牌、單位、部門、職稱 */
+function clkKeepOrgOnClear_(v) {
+  if (!clkSheetsReady_()) return false;
+  var empNo = stfNormEmp_(v[STF_COL.emp_no]);
+  var s = clkStaffByEmp_(empNo);
+  if (s && s.hire) return true;
+  return clkMapsOf_(clkMaps_(), empNo).some(function (m) { return m.state === 'confirmed'; });
+}

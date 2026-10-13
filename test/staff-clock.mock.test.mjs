@@ -1067,5 +1067,28 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(ulHq.ok && ulHq.data.people.length === 1 && ulHq.data.people[0].emp_no === q.emp, 'B9 總部可帶 unit 篩選');
 })();
 
+// ============================================================
+// 退回認領保留組織四欄（clkKeepOrgOnClear_）
+// ============================================================
+(() => {
+  const app = fresh();
+  const { sb, sheets, tok } = app;
+  const mgr = claimApprove(app, '退店長', 'mgr-a-pw-01', MZT_GF('sm'));
+  const c = post(sb, 'staffCreateByUnit', { name: '退新人', title: 'ft', hire_date: dayT(0), phone: '0922000111' }, mgr.token);
+  const lkNew = post(sb, 'claimLookup', { name: '退新人' });
+  const sub = post(sb, 'claimSubmit', Object.assign({ name: '退新人', emp_no: c.data.emp_no, password: 'new-pw-0001' }, PROF({ title: 'pt' })));
+  ok(lkNew.ok && lkNew.data.emp_no === c.data.emp_no && sub.ok, 'KEEP (a) 店長新增的新人走第一期認領送出');
+  const rj = post(sb, 'unitReject', { emp_no: c.data.emp_no, reason: '資料不對' }, mgr.token);
+  const s = staffOf(app, c.data.emp_no);
+  ok(rj.ok && s.status === 'unclaimed' && s.unit === 'mzt-gf' && s.brand === 'mzt' && s.title === 'ft' && s.p_unit === '' && s.p_title === '' && s.phone === '', 'KEEP (a) 店長新增者被退回：unit/brand/title 保留、status unclaimed、p_* 與個資已清', s);
+  // (b) 一般同仁（無到職日、無對照）
+  post(sb, 'staffImport', { names: ['退一般'] }, tok);
+  const emp = post(sb, 'claimLookup', { name: '退一般' }).data.emp_no;
+  post(sb, 'claimSubmit', Object.assign({ name: '退一般', emp_no: emp, password: 'new-pw-0002' }, PROF()));
+  const rj2 = post(sb, 'unitReject', { emp_no: emp, reason: '資料不對' }, mgr.token);
+  const g = staffOf(app, emp);
+  ok(rj2.ok && g.status === 'unclaimed' && g.unit === '' && g.brand === '' && g.title === '' && g.dept === '', 'KEEP (b) 一般同仁（無到職日、無對照）被退回：組織四欄照舊清空（第一期行為不變）', g);
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

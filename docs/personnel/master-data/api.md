@@ -237,7 +237,7 @@ pending/running ──claim 時重驗不過──► cancelled（不送）
 - `staffConfirm`／`unitApprove` 確認組織變更後呼叫 `clkAfterConfirm_(emp_no, 舊單位, 新單位, 操作者)`：舊單位非空、他已有 confirmed 對照、新單位有打卡才處理——新單位已有他的 confirmed 對照＝直接升主店（舊主店降 support、進 `transfer_ask`）；沒有＝開一張 `add` 單（`demote_old`）。第一次認領把單位從空填成某單位**不算調店**。
 
 ## 5. 已知限制與取捨（給前端／同步員知道）
-- 第一期 `staffReject`／`unitReject` 退回認領會清掉 staff 的組織四欄（`stfClearClaim_`），店長新增、尚未認領就被退回的人會失去單位；本期不改第一期流程。
+- 第一期退回認領／撤回認領（`stfClearClaim_`）原本會清掉組織四欄；已處理：有到職日（店長新增）或已有 confirmed 打卡對照的人，退回時保留 brand／unit／dept／title（`clkKeepOrgOnClear_`），p_* 與個資照清；一般同仁（113 人匯入）行為不變。
 - `staffEdit`（第一期總部直接改姓名）不會產生「打卡姓名不同」提醒；改名請走 `staffRename`。
 - 「已綁 LINE 的同一人」無法在建對照時用來聚人（`svc_roster` 只回 `line_bound` 布林，沒有 LINE 身分）；目前只用「同名去空白＋src_*」。
 - 名冊姓名、候選新人姓名存在 Script Properties（`CLOCK_MAP_STATE`／`CLOCK_SYNC_*`），僅正式環境內部；量級約 50 人，遠小於單值上限。
