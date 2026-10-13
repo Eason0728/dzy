@@ -112,12 +112,12 @@
 5. confirmed 才生效；同一個 DZY 在同一家只能有一個 confirmed 打卡編號（確認時檢查）。
 
 ### 4.4 第一次跨店（7A，改光復 LineHub；v2 改由 mini 把關）
-光復 LineHub 在 not_bound 分支之前加一段：條件一（定位唯一命中 B 店、這個 LINE 在 B 店沒綁、B 店沒有同名在職者、這個 LINE 在別家已綁且在職、姓名唯一）成立 → 呼叫 mini 的 `/platform/svc/auto-support`（帶 `HUB_SVC_KEY`、B 店代碼、他已綁那家的店代碼＋emp_id、op_id）。**LineHub 不持有任何店的 STAFF_SVC_KEY。**
+光復 LineHub 在 not_bound 分支之前加一段：條件一（定位唯一命中 B 店、這個 LINE 在 B 店沒綁、B 店沒有同名在職者、這個 LINE 在別家**恰好一家**已綁且在職（上線前關 #29：已在兩家以上的人到第三家仍請主管加）、即時重讀來源列確認仍在職且仍綁同一 LINE（G10）、B 店名冊任何列（含離職）都沒綁這個 LINE（#27））成立 → 呼叫 mini 的 `/platform/svc/auto-support`（帶 `HUB_SVC_KEY`、B 店代碼、他已綁那家的店代碼＋emp_id、op_id）。**LineHub 不持有任何店的 STAFF_SVC_KEY。**
 mini（jobs 模組提供的 Node 路由）同步把關，全部成立才建：
 - 他已綁那家的打卡編號在 staff_clock 是 confirmed，且對到的 DZY **在職、沒有登記離職**；
 - B 店沒有指向他的停用或 rejected 對照（被移除過→不自動加回，回「請主管協助」）；
 - 通過 → mini 用 B 店金鑰呼叫 B 店 svc_add（created_by=`LINE 自動（首次支援）`、src_*）→ 寫 staff_clock support／auto_support／confirmed → 回 ok。
-LineHub 收到 ok → 走原本「輸入全名綁定」那條（line_bind_name，這時 B 店名冊只有他一個未綁同名者）→ 照常打卡 → 回覆「已幫你加入 B 店名冊，第一次支援請跟 B 店值班主管說一聲」。
+LineHub 收到 ok（帶 B 店新列的 emp_id）→ 以該 emp_id 找到 B 店那一列、用它的 key 直接綁定（不靠姓名，上線前關 #26）→ 照常打卡 → 回覆「已幫你加入 B 店名冊，第一次支援請跟 B 店值班主管說一聲」。
 mini 不通、或任一條件不成立 → 回原本「名冊上沒有你，請主管把你加進去」。
 B 店值班核定頁：created_by 是「LINE 自動」的人，名字旁標「首次支援」，並多一顆「不是本店支援，移除」（就是既有的設離職）。移除後每日同步把對照標 rejected，之後不會再自動加。
 專屬打卡連結（?k=）不受影響、做不到 7A。
