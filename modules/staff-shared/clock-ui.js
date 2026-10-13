@@ -334,7 +334,7 @@ export function mountClockMap(el, env) {
     draw();
   }
 
-  const unitOf = (x) => x.unit_name || x.unit || '';
+  const unitOf = (x) => x.unit_name || x.unit || '單位未填（未認領）';
 
   function mapCard(x) {
     const confirmed = x.state === 'confirmed';

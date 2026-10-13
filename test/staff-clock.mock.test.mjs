@@ -608,7 +608,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const amb = need.find((n) => n.kind === 'ambiguous' && n.name === '建同名');
   ok(amb && amb.options.length === 2 && amb.entries[0].emp_id === 'JS4', 'B6 ★同名多人（兩位在職）→ 需總部處理，列出候選的 DZY', need);
   ok(!maps(app).some((m) => m.emp_id === 'JS4' || m.emp_id === 'JS5' || m.emp_id === 'JS6'), 'B6 需總部處理的不建任何 suggested 列');
-  ok(mine('建丙') === 'gf:GF8:support', 'B6 DZY 沒設單位的人 → 沒有 home，全部 support', mine('建丙'));
+  ok(mine('建丙') === 'gf:GF8:home', 'B6 DZY 沒設單位的人、只在一家名冊在職 → 用打卡資料推斷主店（那一家）', mine('建丙'));
 
   // 重跑冪等：不重複列、不重設已決定的
   const nBefore = maps(app).length;
@@ -630,7 +630,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const sug = (emp, store, eid, role) => giveMap(app, emp, store, eid, role, { state: 'suggested', source: 'name_match', roster_active: 'TRUE' });
   sug(x.emp, 'mztgf', 'GA1', 'home'); sug(x.emp, 'mztjs', 'JA1', 'support'); sug(y.emp, 'mztjs', 'JB1', 'home'); sug(z.emp, 'mztgf', 'GC1', 'home'); sug(z.emp, 'mztgf', 'GC2', 'support');
   const lA = post(sb, 'clockMapList', {}, mgrGF.token);
-  ok(lA.ok && lA.data.suggested.map((m) => m.emp_id).sort().join() === 'GA1,GC1,GC2,JA1', 'B6 ★店長只看到自己單位的人的 suggested（含他支援別店的那列）', lA.data.suggested.map((m) => m.emp_id));
+  ok(lA.ok && lA.data.suggested.map((m) => m.emp_id).sort().join() === 'GA1,GC1,GC2', 'B6 ★店長只看到「自己店那家打卡帳號」的 suggested（別店的 JA1 不在）', lA.data.suggested.map((m) => m.emp_id));
   ok(lA.data.needs_hq.length === 0 && lA.data.candidates.length === 0, 'B6 店長看不到總部專屬清單');
   ok(post(sb, 'clockMapList', {}, tok).data.suggested.length === 5, 'B6 總部看全部');
   ok(post(sb, 'clockMapList', {}, x.token).code === 'no_perm', 'B6 一般同仁不能看對照');
@@ -657,7 +657,8 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   // 同一個人只有一個主店
   const homeTwo = post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'JA1', decision: 'confirm', role: 'home' }, tok);
   ok(homeTwo.code === 'home_exists', 'B6 一個人只能有一個主店', homeTwo);
-  ok(post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'JA1', decision: 'confirm' }, mgrGF.token).ok, 'B6 他支援的別店編號：他的主店店長可以確認');
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'JA1', decision: 'confirm' }, mgrGF.token).code === 'no_perm', 'B6 ★別店那家打卡帳號的對照，光復店長不能決定');
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'JA1', decision: 'confirm' }, mgrJS.token).ok, 'B6 金山店長可以確認自己店那家的對照');
   // staff_log
   const lg = sheets.staff_log._rows().filter((r) => r[2].indexOf('map_') === 0).map((r) => r.join('|')).join('\n');
   ok(lg.indexOf('map_confirm') !== -1 && lg.indexOf('map_reject') !== -1, 'B6 決定寫 staff_log（誰、何時、哪列）');
@@ -1635,6 +1636,117 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(rr.ok === false && rr.code === 'setup_failed' && rr.error.indexOf('mala-hq') !== -1, 'HQ 衝突時 action 也回 setup_failed、不寫資料', rr);
   // 單位→店只比對「包含」，不是前綴
   ok(sb.clkStoreOfUnit_('dzy-hq').store_code === 'hq' && sb.clkStoreOfUnit_('hq') === null && sb.clkStoreOfUnit_('mala') === null, 'HQ 單位→店用完整單位代碼比對');
+})();
+
+(() => {
+  // ── 主店判斷：未認領者（單位空）依打卡資料推斷；DZY 單位優先 ──
+  const app = fresh();
+  const { sb, sheets, tok } = app;
+  post(sb, 'staffImport', { names: ['主單店', '主多店', '主同分', '主單位優先', '主不動甲'] }, tok);
+  const E = (n) => sheets.staff._rows().find((r) => r[2] === n)[0];
+  post(sb, 'staffEdit', { emp_no: E('主單位優先'), brand: 'mzt', unit: 'mzt-gf', dept: '', title: 'pt' }, tok);
+  const R = (eid, n, punch) => rosterRow(eid, n, { last_punch: punch });
+  sb.clockMapBuildApply_({
+    mztgf: [R('A1', '主單店', '2026-10-01'), R('A2', '主多店', '2026-10-01'), R('A3', '主同分', '2026-10-05'), R('A4', '主單位優先', '2026-09-01')],
+    mztjs: [R('B2', '主多店', '2026-10-10'), R('B3', '主同分', '2026-10-05'), R('B4', '主單位優先', '2026-10-12')]
+  }, nowT(0));
+  const roleOf = (n) => mapOf(app, E(n)).map((m) => m.store_code + ':' + m.role).sort().join();
+  ok(roleOf('主單店') === 'mztgf:home', 'ROLE ★未認領、只在一家名冊在職 → 主店＝那家', roleOf('主單店'));
+  ok(roleOf('主多店') === 'mztgf:support,mztjs:home', 'ROLE ★未認領、多家 → 最近打卡者為主店（金山 10/10 比光復 10/01 近）', roleOf('主多店'));
+  ok(roleOf('主同分') === 'mztgf:home,mztjs:support', 'ROLE 同日打卡 → store_code 字母序最前（mztgf）', roleOf('主同分'));
+  ok(roleOf('主單位優先') === 'mztgf:home,mztjs:support', 'ROLE ★DZY 單位有值 → 以單位為準，不被較近的打卡資料覆蓋', roleOf('主單位優先'));
+  ok(mapOf(app, E('主多店')).every((m) => m.state === 'suggested'), 'ROLE 推斷只動 role，state 仍是 suggested');
+
+  // 每日重算：打卡資料變了 → 單位空的人 role 跟著變（suggested／confirmed 都可），不改 state、不發單
+  setMap(app, 'mztgf', 'A2', 'state', 'confirmed');
+  sb.clockRosterApply_('mztgf', [R('A1', '主單店', '2026-10-01'), R('A2', '主多店', '2026-10-14'), R('A3', '主同分', '2026-10-05'), R('A4', '主單位優先', '2026-09-01')], undefined, nowT(0));
+  const jobsBefore = jobs(app).length;
+  const stateBefore = maps(app).map((m) => m.state).join();
+  const dd = sb.clockDailyApply_(dayT(0));
+  ok(roleOf('主多店') === 'mztgf:home,mztjs:support' && dd.data.role_changes.indexOf(E('主多店')) !== -1, 'ROLE ★每日同步重算：光復打卡變最近 → home 換到光復（confirmed 那筆也可改 role）', roleOf('主多店'));
+  ok(maps(app).map((m) => m.state).join() === stateBefore && jobs(app).length === jobsBefore, 'ROLE ★每日重算不改任何 state、不發任何打卡單');
+  ok(app.sheets.staff_log._rows().some((r) => r[1] === E('主多店') && r[2] === 'role_recalc'), 'ROLE 重算寫 staff_log（role_recalc）');
+  // DZY 單位有值且已有 confirmed home：不被打卡資料覆蓋
+  setMap(app, 'mztgf', 'A4', 'state', 'confirmed');
+  sb.clockRosterApply_('mztjs', [R('B2', '主多店', '2026-10-10'), R('B3', '主同分', '2026-10-05'), R('B4', '主單位優先', '2026-10-20')], undefined, nowT(0));
+  sb.clockDailyApply_(dayT(0));
+  ok(roleOf('主單位優先') === 'mztgf:home,mztjs:support', 'ROLE ★單位有值的人每日重算也不動（home 以單位為準）');
+  // 重跑 build 對既有列也更新 role
+  setMap(app, 'mztjs', 'B3', 'role', 'home'); setMap(app, 'mztgf', 'A3', 'role', 'support'); setMap(app, 'mztgf', 'A3', 'last_punch', '2026-10-08');
+  const rb = sb.clockMapBuildApply_({ mztgf: [R('A3', '主同分', '2026-10-05')], mztjs: [R('B3', '主同分', '2026-10-05')] }, nowT(1));
+  ok(roleOf('主同分') === 'mztgf:home,mztjs:support' && rb.data.role_changes >= 1, 'ROLE ★重跑「建立打卡對照」：已存在的列也用新規則更新 role', roleOf('主同分'));
+
+  // 單位有值、已有 confirmed home（例如總部手動指定在別家）：每日重算不覆蓋
+  const app4 = fresh();
+  const p4 = claimApprove(app4, '主手動指定', 'pw-role-pw-0001', MZT_GF('pt'));
+  giveMap(app4, p4.emp, 'mztjs', 'M1', 'home'); giveMap(app4, p4.emp, 'mztgf', 'M2', 'support');
+  app4.sb.clockDailyApply_(dayT(0));
+  ok(mapOf(app4, p4.emp).map((m) => m.store_code + ':' + m.role).sort().join() === 'mztgf:support,mztjs:home', 'ROLE ★單位有值且已有 confirmed home：每日重算不覆蓋既有主店');
+  // decide 預設 role：未認領者用推斷
+  const app2 = fresh();
+  post(app2.sb, 'staffImport', { names: ['決定未認領'] }, app2.tok);
+  const e2 = app2.sheets.staff._rows().find((r) => r[2] === '決定未認領')[0];
+  giveMap(app2, e2, 'mztgf', 'D1', 'support', { state: 'suggested', source: 'name_match', last_punch: '2026-10-01' });
+  giveMap(app2, e2, 'mztjs', 'D2', 'support', { state: 'suggested', source: 'name_match', last_punch: '2026-10-09' });
+  setMap(app2, 'mztgf', 'D1', 'role', ''); 
+  post(app2.sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'D2', decision: 'confirm' }, app2.tok);
+  const d1 = post(app2.sb, 'clockMapDecide', { store_code: 'mztgf', emp_id: 'D1', decision: 'confirm' }, app2.tok);
+  ok(d1.ok && d1.data.role === 'support', 'ROLE decide 預設 role：已有生效主店時不搶（support），不報 home_exists', d1);
+  // 單位空的人沒有任何 confirmed home 時：預設推斷
+  const app3 = fresh();
+  post(app3.sb, 'staffImport', { names: ['決定單家'] }, app3.tok);
+  const e3 = app3.sheets.staff._rows().find((r) => r[2] === '決定單家')[0];
+  giveMap(app3, e3, 'mztjs', 'S1', 'support', { state: 'suggested', source: 'name_match' });
+  setMap(app3, 'mztjs', 'S1', 'role', '');
+  ok(post(app3.sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'S1', decision: 'confirm' }, app3.tok).data.role === 'home', 'ROLE decide 預設 role：未認領、只在一家 → home');
+})();
+
+(() => {
+  // ── 認領後單位從空變有值 ──
+  const app = fresh();
+  const { sb, sheets, tok } = app;
+  post(sb, 'staffImport', { names: ['認領換主甲', '認領無對照乙'] }, tok);
+  const E = (n) => sheets.staff._rows().find((r) => r[2] === n)[0];
+  const a = E('認領換主甲'), b = E('認領無對照乙');
+  giveMap(app, a, 'mztgf', 'C1', 'home'); giveMap(app, a, 'mztjs', 'C2', 'support');
+  giveMap(app, b, 'mztgf', 'C3', 'home');
+  const head = sheets.staff._data[0];
+  const setP = (emp, unit) => { const i = sheets.staff._data.findIndex((r) => r[0] === emp); [['p_brand', 'mzt'], ['p_unit', unit], ['p_title', 'pt']].forEach(([h, v]) => { sheets.staff._data[i][head.indexOf(h)] = v; }); sheets.staff._data[i][head.indexOf('status')] = 'pending'; };
+  const jobsBefore = jobs(app).length;
+  setP(a, 'mzt-js');
+  ok(post(sb, 'staffConfirm', { emp_no: a }, tok).ok, 'CLAIM （認領確認，單位空→金山）');
+  ok(mapOf(app, a).map((m) => m.store_code + ':' + m.role).sort().join() === 'mztgf:support,mztjs:home', 'CLAIM ★新單位的店已有對照 → 那筆改 home、原 home 改 support', mapOf(app, a));
+  ok(jobs(app).length === jobsBefore && mapOf(app, a).every((m) => m.state === 'confirmed') && post(sb, 'clockAlerts', {}, tok).data.transfer_ask.length === 0, 'CLAIM ★不發單、不改 state、不算調店（沒有 transfer_ask）');
+  setP(b, 'mzt-js');
+  post(sb, 'staffConfirm', { emp_no: b }, tok);
+  ok(jobs(app).length === jobsBefore && mapOf(app, b)[0].role === 'home', 'CLAIM 新單位的店沒有對照 → 不開 add 單、不動既有對照');
+  ok(post(sb, 'clockAlerts', {}, tok).data.no_home_map.indexOf(b) !== -1, 'CLAIM 沒對照的人列入 no_home_map 讓總部處理');
+})();
+
+(() => {
+  // ── 店長可見範圍：看「對照列的店」，單位空的未認領者也看得到 ──
+  const app = fresh();
+  const { sb, sheets, tok } = app;
+  const mgrGF = claimApprove(app, '見店長光', 'mgr-vis-pw-001', MZT_GF('sm'));
+  const mgrJS = claimApprove(app, '見店長金', 'mgr-vis-pw-002', MZT_JS('sm'));
+  post(sb, 'staffImport', { names: ['見未認領'] }, tok);
+  const u = sheets.staff._rows().find((r) => r[2] === '見未認領')[0];
+  giveMap(app, u, 'mztgf', 'V1', 'home', { state: 'suggested', source: 'name_match' });
+  giveMap(app, u, 'mztjs', 'V2', 'support', { state: 'suggested', source: 'name_match' });
+  const ids = (t) => post(sb, 'clockMapList', {}, t).data.suggested.map((m) => m.emp_id).sort().join();
+  ok(ids(mgrGF.token) === 'V1' && ids(mgrJS.token) === 'V2', 'VIS ★單位空的未認領者：各店店長只看到自己店那家的對照', [ids(mgrGF.token), ids(mgrJS.token)]);
+  ok(post(sb, 'clockMapList', {}, mgrGF.token).data.suggested[0].unit === '', 'VIS 單位欄位為空（前端顯示未認領）');
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'V2', decision: 'confirm' }, mgrGF.token).code === 'no_perm', 'VIS ★別店店長不能決定這家的對照');
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'V2', decision: 'reject' }, mgrGF.token).code === 'no_perm', 'VIS 別店店長也不能退回');
+  ok(post(sb, 'clockAlerts', {}, mgrGF.token).data.pending_confirm.count === 1 && post(sb, 'clockAlerts', {}, mgrJS.token).data.pending_confirm.items[0].emp_id === 'V2', 'VIS 待確認數 alerts 同樣以店為準');
+  const ul = post(sb, 'staffUnitList', {}, mgrJS.token).data.people;
+  const row = ul.find((p) => p.emp_no === u);
+  ok(row && row.unit_empty === true && row.unit === '', 'VIS ★staffUnitList：單位空、在本店有對照的未認領者看得到（unit_empty）');
+  const ulGF = post(sb, 'staffUnitList', {}, mgrGF.token).data.people;
+  ok(ulGF.some((p) => p.emp_no === u), 'VIS 光復店長也看得到（他在光復也有對照）');
+  const other = claimApprove(app, '見他店店長', 'mgr-vis-pw-003', { brand: 'mzt', unit: 'mzt-lzl', title: 'sm' });
+  ok(!post(sb, 'staffUnitList', {}, other.token).data.people.some((p) => p.emp_no === u) && ids(other.token) === '', 'VIS ★第三家店的店長看不到');
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'V2', decision: 'confirm' }, mgrJS.token).ok, 'VIS 金山店長可以確認自己店的');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

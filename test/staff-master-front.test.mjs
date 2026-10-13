@@ -230,5 +230,8 @@ ok(/team: mountTeamView/.test(idx) && /clock: mountClockView/.test(idx), 'me/ind
 const sidx = fs.readFileSync(path.join(ROOT, 'modules/staff/index.js'), 'utf8');
 ok(/clockmap: mountClockmap/.test(sidx) && /clockAlerts/.test(sidx), 'staff/index.js 有接線打卡對照與 clockAlerts');
 
+// ---- 未認領者（單位空）卡片顯示 ----
+ok(/const unitOf = \(x\) => x\.unit_name \|\| x\.unit \|\| '單位未填（未認領）'/.test(fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-ui.js'), 'utf8')), '對照卡片：單位為空時顯示「單位未填（未認領）」而不是空白');
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
