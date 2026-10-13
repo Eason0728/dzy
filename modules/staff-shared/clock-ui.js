@@ -52,10 +52,11 @@ export function clockButtonsHtml(p, viewer) {
   if (a.link) out.push(b('link', '顯示打卡連結'));
   if (a.rename) out.push(b('rename-clock', '改名'));
   if (a.reinstate) out.push(b('reinstate', '復職'));
+  if (a.addHome) out.push(b('add-home', '在主店建打卡帳號', 'btn-primary'));
   return out.join(' ');
 }
 
-const CLOCK_ACTS = ['leave', 'leave-cancel', 'link', 'rename-clock', 'reinstate'];
+const CLOCK_ACTS = ['leave', 'leave-cancel', 'link', 'rename-clock', 'reinstate', 'add-home'];
 export function isClockAct(act) { return CLOCK_ACTS.indexOf(act) !== -1; }
 
 /** 點擊分派。env = { ctx, mod, viewer, reload } */
@@ -65,7 +66,27 @@ export async function handleClockAct(act, p, env) {
   if (act === 'link') return openLink(env, p);
   if (act === 'rename-clock') return openRename(env, p);
   if (act === 'reinstate') return openReinstate(env, p);
+  if (act === 'add-home') return openAddHome(env, p);
   return undefined;
+}
+
+// ============================================================
+// 在主店建打卡帳號（總部，no_home_map 異常列；後端 clockAddHome）
+// ============================================================
+
+async function openAddHome(env, p) {
+  const { ctx, mod } = env;
+  const unit = p.unit_name || p.unit || '';
+  const body = domOf(`<p>要在 <b>${esc(p.emp_no)} ${esc(p.name)}</b> 的主店${unit ? `（單位：${esc(unit)}）` : ''}建一個打卡帳號嗎？</p>
+    <p class="field-hint">送出後會開一張打卡建檔單，由同步程式到打卡系統建立；建好前名單上會顯示「打卡建檔中…」。他在別家店原本的打卡帳號不會自動停用；原本是主店的話，建好後首頁會問你要不要停用。</p>`);
+  const v = await ctx.ui.dialog({ title: `在主店建打卡帳號 ${p.emp_no}`, body, actions: [CANCEL, { label: '建立', value: 'ok', variant: 'primary' }] });
+  if (v !== 'ok') return false;
+  const r = await callBusy(ctx, mod, 'clockAddHome', { emp_no: p.emp_no });
+  if (!r || !r.ok) { ctx.ui.toast((r && r.error) || '建立失敗，請稍後再試', 'danger'); return false; }
+  if (isDryRunResult(r)) { ctx.ui.toast('試跑模式，未寫入', 'warn'); return false; }
+  ctx.ui.toast('已送出，打卡建檔中…', 'ok');
+  await env.reload();
+  return true;
 }
 
 // ============================================================
