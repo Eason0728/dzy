@@ -11,7 +11,7 @@
 | op_id | `dzy:` + job_id（管理系統發的）；7A 由 LineHub 發：`hub:` + store_code + `:` + LINE userId 的 SHA-256 前 12 碼 + `:` + 台北日期 `yyyyMMdd` | `dzy:J20261014093015-a3f0`、`hub:mztjs:1a2b3c4d5e6f:20261014` |
 | emp_no | `DZY` + 三位數字，大寫 | `DZY128` |
 | 打卡 svc 請求 | POST JSON `{action, v:1, svc_key, ...}`，Content-Type `text/plain` | `{"action":"svc_add","v":1,"svc_key":"…","name":"…","op_id":"dzy:J…","created_by":"管理系統:DZY014"}` |
-| 打卡 svc 回應 | 成功 `{ok:true, ...}`；失敗 `{ok:false, error:<代碼>, message:<中文>}`；代碼只用 `unauthorized` `bad_version` `bad_input` `busy` `duplicate_name` `not_found` `disabled`；doPost 層另可能回暫時性的 `unknown_action` `bad_json` `server_error`（同步員一律當失敗重試） | `{"ok":false,"error":"duplicate_name","message":"本店已有在職同仁同名"}` |
+| 打卡 svc 回應 | 成功 `{ok:true, ...}`；失敗 `{ok:false, error:<代碼>, message:<中文>}`；代碼只用 `unauthorized` `bad_version` `bad_input` `busy` `duplicate_name` `not_found` `disabled` `conflict`（svc_set_active 同 op 重送但名冊現況與目標不同，回應帶 active）；doPost 層另可能回暫時性的 `unknown_action` `bad_json` `server_error`（同步員一律當失敗重試） | `{"ok":false,"error":"duplicate_name","message":"本店已有在職同仁同名"}` |
 | created_by（打卡名冊） | 管理系統建：`管理系統:` + 操作者 emp_no 或帳號；7A：`LINE 自動（首次支援）` | |
 | 日期 | 一律台北時區字串 `yyyy-MM-dd`；時間 `yyyy-MM-dd HH:mm:ss` | |
 

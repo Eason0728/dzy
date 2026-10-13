@@ -6,7 +6,7 @@
 
 ## 0. 一句話架構
 管理系統（Mac mini）記「誰是誰」與「他在哪幾家打卡」；要動打卡名冊時，先寫一張**待辦單**，
-由 Mac mini 上的一支小程式（同步員）每分鐘撿單、呼叫各店打卡後端的新服務端點去做，做完回填結果。
+由 Mac mini 上的一支小程式（同步員）在按下當下立即撿單（失敗的每 15 分鐘補撿；Eason 2026-10-14）、呼叫各店打卡後端的新服務端點去做，做完回填結果。
 打卡那邊只新增一支 `SvcStaff.gs`（服務端點）＋LINE 打卡「名冊上沒有你」那一段改成可自動建檔（7A）。
 佈告欄改向管理系統要名單。
 
@@ -83,7 +83,7 @@
 | svc_link | emp_id | 只回該人打卡連結金鑰 | `{ok, key}` |
 
 - 名冊右側補四欄 `src_store, src_emp_id, origin_op, last_op`（由 SvcStaff.gs 自己的 svcEnsureHeaders_ 補，不改 Code.gs 的 ROSTER_HEADERS；svc_add 冪等以 origin_op 為準、svc_set_active 以 last_op 為準，不另開 svc_ops 存結果；svc_link 不記任何結果）（ensureRosterHeaders 只補不改）：7A 建的人記他從哪家來，管理系統不必猜姓名就能對上。
-- 打卡連結金鑰**管理系統不存**：店長按「顯示打卡連結」→ 平台寫一張 kind=link 的待辦單 → 同步員打 svc_link → 金鑰放 CacheService 120 秒 → 前端 clockJobStatus 取到一次即刪。只給該單位店長與總部。（clock_outbox 的 kind 因此多一個 `link`，該列不寫金鑰。）
+- 打卡連結金鑰**管理系統不存**（mini 上的 CacheService 實際暫存於本機資料庫，檔案權限 600、不進雲端備份、取走即刪、最多 10 分鐘清除；上線前關 F8）：店長按「顯示打卡連結」→ 平台寫一張 kind=link 的待辦單 → 同步員打 svc_link → 金鑰放 CacheService 120 秒 → 前端 clockJobStatus 取到一次即刪。只給該單位店長與總部。（clock_outbox 的 kind 因此多一個 `link`，該列不寫金鑰。）
 - 掛法：Code.gs 分派表後面併入 `SVC_STAFF_HANDLERS`（照 LIFF／LINE_HUB 的三行寫法）。回退＝刪那三行＋檔案。
 
 ## 4. 七個流程
@@ -112,12 +112,12 @@
 5. confirmed 才生效；同一個 DZY 在同一家只能有一個 confirmed 打卡編號（確認時檢查）。
 
 ### 4.4 第一次跨店（7A，改光復 LineHub；v2 改由 mini 把關）
-光復 LineHub 在 not_bound 分支之前加一段：條件一（定位唯一命中 B 店、這個 LINE 在 B 店沒綁、B 店沒有同名在職者、這個 LINE 在別家已綁且在職、姓名唯一）成立 → 呼叫 mini 的 `/platform/svc/auto-support`（帶 `HUB_SVC_KEY`、B 店代碼、他已綁那家的店代碼＋emp_id、op_id）。**LineHub 不持有任何店的 STAFF_SVC_KEY。**
+光復 LineHub 在 not_bound 分支之前加一段：條件一（定位唯一命中 B 店、這個 LINE 在 B 店沒綁、B 店沒有同名在職者、這個 LINE 在別家**恰好一家**已綁且在職（上線前關 #29：已在兩家以上的人到第三家仍請主管加）、即時重讀來源列確認仍在職且仍綁同一 LINE（G10）、B 店名冊任何列（含離職）都沒綁這個 LINE（#27））成立 → 呼叫 mini 的 `/platform/svc/auto-support`（帶 `HUB_SVC_KEY`、B 店代碼、他已綁那家的店代碼＋emp_id、op_id）。**LineHub 不持有任何店的 STAFF_SVC_KEY。**
 mini（jobs 模組提供的 Node 路由）同步把關，全部成立才建：
 - 他已綁那家的打卡編號在 staff_clock 是 confirmed，且對到的 DZY **在職、沒有登記離職**；
 - B 店沒有指向他的停用或 rejected 對照（被移除過→不自動加回，回「請主管協助」）；
 - 通過 → mini 用 B 店金鑰呼叫 B 店 svc_add（created_by=`LINE 自動（首次支援）`、src_*）→ 寫 staff_clock support／auto_support／confirmed → 回 ok。
-LineHub 收到 ok → 走原本「輸入全名綁定」那條（line_bind_name，這時 B 店名冊只有他一個未綁同名者）→ 照常打卡 → 回覆「已幫你加入 B 店名冊，第一次支援請跟 B 店值班主管說一聲」。
+LineHub 收到 ok（帶 B 店新列的 emp_id）→ 以該 emp_id 找到 B 店那一列、用它的 key 直接綁定（不靠姓名，上線前關 #26）→ 照常打卡 → 回覆「已幫你加入 B 店名冊，第一次支援請跟 B 店值班主管說一聲」。
 mini 不通、或任一條件不成立 → 回原本「名冊上沒有你，請主管把你加進去」。
 B 店值班核定頁：created_by 是「LINE 自動」的人，名字旁標「首次支援」，並多一顆「不是本店支援，移除」（就是既有的設離職）。移除後每日同步把對照標 rejected，之後不會再自動加。
 專屬打卡連結（?k=）不受影響、做不到 7A。
