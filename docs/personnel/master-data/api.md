@@ -44,6 +44,7 @@
 | mztlzl | 墨竹亭 台北六張犁 | mzt-lzl |
 | hq | 鼎兆元 總部 | dzy-hq |
 | cf | 中央廚房 | ck |
+  **`unit_code` 可放多個單位（逗號分隔）**：總部三單位（dzy-hq、mzt-hq、mala-hq）共用同一套總部打卡，hq 列預設 `dzy-hq,mzt-hq,mala-hq`（Eason 2026-10-14）。規則：單位→店＝完整單位代碼出現在該店 unit_code 清單裡；店→單位＝只對一個單位才可自動帶入，對到多個單位（如 hq）時不猜——`clockCandidateCreate` 必須帶 `unit`（缺就 `bad_input`「請指定單位」）。同一個單位不得出現在兩家店的 unit_code（含停用的店）：setupStaff 丟錯停下，action 回 `setup_failed`。**升級**：setupStaff 偵測既有 hq 列的 unit_code 恰好等於舊預設 `dzy-hq` 時補成三個；其他值（含總部自訂、清空）一律不動，可重跑。
   `unit_code` 空白＝這家店不綁單位（新增不會自動開打卡單）。一個單位只取第一個啟用的店。
 - `staff_clock`：`emp_no, store_code, emp_id, role(home|support), state(suggested|confirmed|rejected), source(name_match|created|auto_support|roster_seen), roster_active(TRUE|FALSE|空), last_punch, confirmed_by, confirmed_at, updated_at`。唯一鍵 `store_code+emp_id`（store_code 小寫；emp_id **以打卡名冊的原字串為準，只 trim、不轉大小寫**，打卡端區分大小寫）。
 - `clock_outbox`：`job_id, kind, emp_no, store_code, emp_id, name, op_id, expect_json, state(pending|running|done|failed|cancelled), tries, next_at, lease_until, last_error, created_at, updated_at, done_at`。

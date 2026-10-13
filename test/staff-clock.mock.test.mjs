@@ -211,7 +211,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(sheets.clock_outbox._rows()[0].join() === 'job_id,kind,emp_no,store_code,emp_id,name,op_id,expect_json,state,tries,next_at,lease_until,last_error,created_at,updated_at,done_at', 'B1 clock_outbox 表頭逐字（spec §2.4 v2）');
   const stores = sheets.clock_stores._rows().slice(1);
   ok(stores.length === 6 && stores.map((r) => r[0]).join() === 'gf,mztjs,mztgf,mztlzl,hq,cf', 'B1 預設六列、store_code 照契約', stores);
-  ok(stores.map((r) => r[2]).join() === 'mala-gf,mzt-js,mzt-gf,mzt-lzl,dzy-hq,ck', 'B1 unit_code 依 org 預設單位對上（六個都查得到）', stores.map((r) => r[2]));
+  ok(stores.map((r) => r[2]).join('|') === 'mala-gf|mzt-js|mzt-gf|mzt-lzl|dzy-hq,mzt-hq,mala-hq|ck', 'B1 unit_code 依 org 預設單位對上（hq 一列放三個總部單位）', stores.map((r) => r[2]));
   ok(stores.every((r) => String(r[3]) === 'TRUE'), 'B1 預設全部啟用');
   const head = sheets.staff._rows()[0];
   ok(head.length === 26 && head[24] === 'hire_date' && head[25] === 'last_day', 'B1 staff 右側補 hire_date、last_day');
@@ -1584,6 +1584,57 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const c = claimApprove(app, '二關丙', 'pw-r2-pw-0003', MZT_GF('pt'));
   const dir2 = post(sb, 'svcDirectory', { svc_key: 'fake-bulletin-key-0002' });
   ok(dir2.total === n + 1 && dir2.data.find((p) => p.emp_no === c.emp).clocks.length === 0, 'G6 無對照的新人也在名單內、total 隨之增加');
+})();
+
+(() => {
+  // ── 總部三單位共用 hq 打卡（Eason 2026-10-14）──
+  const app = fresh();
+  const { sb, sheets, tok } = app;
+  const body = (o) => Object.assign({ title: 'hs', hire_date: dayT(0), phone: '0911000400' }, o);
+  const r1 = post(sb, 'staffCreateByUnit', body({ name: '總部墨', unit: 'mzt-hq', title: 'hs' }), tok);
+  const r2 = post(sb, 'staffCreateByUnit', body({ name: '總部辛', unit: 'mala-hq', title: 'hs', phone: '0911000401' }), tok);
+  ok(r1.ok && r1.data.store_code === 'hq' && r1.data.job_id && r2.ok && r2.data.store_code === 'hq' && r2.data.job_id, 'HQ ★墨竹亭總部、小辛辣總部的新人都會開 hq 的 add 單', [r1, r2]);
+  ok(jobs(app).filter((j) => j.store_code === 'hq' && j.kind === 'add').length === 2, 'HQ add 單的店都是 hq');
+  const r3 = post(sb, 'staffCreateByUnit', body({ name: '總部鼎', unit: 'dzy-hq', dept: 'it', phone: '0911000402' }), tok);
+  ok(r3.ok && r3.data.store_code === 'hq', 'HQ 鼎兆元總部照舊');
+  // 建對照：三單位的人主店＝hq
+  const e1 = r1.data.emp_no, e2 = r2.data.emp_no;
+  const b = sb.clockMapBuildApply_({ hq: [rosterRow('H1', '總部墨'), rosterRow('H2', '總部辛')] }, nowT(0));
+  ok(maps(app).find((m) => m.emp_no === e1).role === 'home' && maps(app).find((m) => m.emp_no === e2).role === 'home' && b.ok, 'HQ ★建對照：mzt-hq、mala-hq 的人主店＝hq', maps(app));
+  // 候選新人：hq 對到多個單位 → 沒指定單位被擋
+  app.props.CLOCK_MAP_STATE = JSON.stringify({ candidates: [{ key: 'hq:H9', name: '總部候選', entries: [{ store_code: 'hq', emp_id: 'H9' }] }, { key: 'mztjs:J9', name: '金山候選', entries: [{ store_code: 'mztjs', emp_id: 'J9' }] }], needs_hq: [], excluded: [] });
+  const noUnit = post(sb, 'clockCandidateCreate', { candidate_key: 'hq:H9', title: 'hs' }, tok);
+  ok(noUnit.ok === false && noUnit.code === 'bad_input' && noUnit.error.indexOf('指定單位') !== -1, 'HQ ★hq 候選新人沒指定單位被擋', noUnit);
+  const withUnit = post(sb, 'clockCandidateCreate', { candidate_key: 'hq:H9', unit: 'mzt-hq', title: 'hs' }, tok);
+  ok(withUnit.ok && staffOf(app, withUnit.data.emp_no).unit === 'mzt-hq' && mapOf(app, withUnit.data.emp_no)[0].role === 'home', 'HQ 指定單位後可建立，主店＝hq', withUnit);
+  const js = post(sb, 'clockCandidateCreate', { candidate_key: 'mztjs:J9', title: 'pt' }, tok);
+  ok(js.ok && staffOf(app, js.data.emp_no).unit === 'mzt-js', 'HQ 只對一個單位的店仍自動帶單位');
+  // 舊分頁升級：hq 列只有 dzy-hq → 補三個；自訂值不動
+  const old = fresh();
+  old.sheets.clock_stores._data.find((r) => r[0] === 'hq')[2] = 'dzy-hq';
+  old.sb.setupStaff();
+  ok(old.sheets.clock_stores._rows().find((r) => r[0] === 'hq')[2] === 'dzy-hq,mzt-hq,mala-hq', 'HQ ★舊分頁 hq 列等於舊預設 dzy-hq → 升級成三個單位');
+  old.sb.setupStaff();
+  ok(old.sheets.clock_stores._rows().find((r) => r[0] === 'hq')[2] === 'dzy-hq,mzt-hq,mala-hq', 'HQ 升級可重跑');
+  const custom = fresh();
+  custom.sheets.clock_stores._data.find((r) => r[0] === 'hq')[2] = 'dzy-hq,mzt-hq';
+  custom.sb.setupStaff();
+  ok(custom.sheets.clock_stores._rows().find((r) => r[0] === 'hq')[2] === 'dzy-hq,mzt-hq', 'HQ 總部自訂過的值不動');
+  const blank = fresh();
+  blank.sheets.clock_stores._data.find((r) => r[0] === 'hq')[2] = '';
+  blank.sb.setupStaff();
+  ok(blank.sheets.clock_stores._rows().find((r) => r[0] === 'hq')[2] === '', 'HQ 清空的值不動');
+  // 同一單位不得在兩家店
+  const dup = fresh();
+  dup.sheets.clock_stores._data.find((r) => r[0] === 'cf')[2] = 'ck,mala-hq';
+  let msg = '';
+  try { dup.sb.setupStaff(); } catch (e) { msg = e.message; }
+  ok(msg.indexOf('mala-hq') !== -1 && msg.indexOf('hq') !== -1 && msg.indexOf('cf') !== -1, 'HQ ★同一單位出現在兩家店 → setup 報錯', msg);
+  const mgr = claimApprove(dup, '衝突店長', 'mgr-dup-pw-001', MZT_GF('sm'));
+  const rr = post(dup.sb, 'staffCreateByUnit', { name: '衝突新人', title: 'pt', hire_date: dayT(0), phone: '0911000403' }, mgr.token);
+  ok(rr.ok === false && rr.code === 'setup_failed' && rr.error.indexOf('mala-hq') !== -1, 'HQ 衝突時 action 也回 setup_failed、不寫資料', rr);
+  // 單位→店只比對「包含」，不是前綴
+  ok(sb.clkStoreOfUnit_('dzy-hq').store_code === 'hq' && sb.clkStoreOfUnit_('hq') === null && sb.clkStoreOfUnit_('mala') === null, 'HQ 單位→店用完整單位代碼比對');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);
