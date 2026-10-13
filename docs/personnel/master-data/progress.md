@@ -20,12 +20,13 @@
 ## ④ 開發位置
 - 打卡端：worktree ~/mala-clock-in-svcstaff（分支 feature/svc-staff，從 origin/main）
 - 平台後端與前端：worktree ~/dzy-wt-staffmaster（分支 feature/staff-master）
-- 同步員：~/dzy-minikit（尚未開分支）
+- 同步員：worktree ~/dzy-minikit-wt-jobs（分支 feature/staff-master-jobs）
 - 階段關審查紀錄：dzy repo issue #1（https://github.com/Eason0728/dzy/issues/1）
 
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
 |---|---|---|---|---|---|
+| 2026-10-13 | ④ 階段關 第 1 輪 | 打卡 SvcStaff＋平台 StaffClock | Fable 14 條（高 2、中 5、低 7），測試全綠、6 個變異全被抓到；分派修正中 | 1 | dzy issue #1 |
 | 2026-10-13 | ③→④ 設計審 | requirements＋spec v1＋plan＋task | GPT 21 條（高 19、中 2）：20 條直接改進 spec v2／plan／task（spec §11 對照表）；第 13 條（薪資姓名對人）Fable 複核＝部分成立（特休／年度額度／補休／核定頁額度四處用薪資主檔姓名比請假姓名），處理方式待 Eason | 1 | spec.md §11；GPT 原文存 scratchpad，不進 repo |
 
 ## 落地清單
