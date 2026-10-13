@@ -17,7 +17,10 @@ export default {
     { id: 'unit', name: '單位通訊錄', requires: ['platform.self'] },
     // 2026-10-12：認領後主管審核。platform.review 是後端依職級自動加的衍生權限（單位主管才有），
     // platform.staff（人資）也能審；兩者都沒有的人看不到這個分頁
-    { id: 'review', name: '待審核', requires: ['platform.review', 'platform.staff'] }
+    { id: 'review', name: '待審核', requires: ['platform.review', 'platform.staff'] },
+    // 2026-10-13 員工名單統一：店長的「我的單位」（新增／離職／打卡連結）與「打卡對照」（對／不對）
+    { id: 'team', name: '我的單位', requires: ['platform.review'] },
+    { id: 'clock', name: '打卡對照', requires: ['platform.review'] }
   ],
   entry: () => import('./index.js')
 };

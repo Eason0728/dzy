@@ -15,6 +15,9 @@
 export const READ_ACTIONS = {
   platform: ['login', 'me', 'listUsers', 'listRoles', 'orgOptions', 'claimLookup',
     'myProfile', 'myUnit', 'staffList', 'unitPending',
+    // 員工名單統一（2026-10-13）：單位名單、打卡對照清單、首頁提醒是純讀取
+    // clockJobStatus 刻意不列：查 link 單會從快取取走並刪掉一次性金鑰（有副作用）；試跑時新增／取連結本來就被攔，前端不輪詢
+    'staffUnitList', 'clockMapList', 'clockAlerts',
     // logout 不是資料寫入（只讓自己的登入失效），試跑模式也要真的登出（2026-10-12）
     'logout'],
   audit: ['getAll'],
@@ -39,12 +42,15 @@ export function isDryRun() {
 
 /**
  * 這次呼叫是不是「讀取」。拿不準一律 false（當寫入擋）。
- * staffImport 帶 preview:true 只回預覽、後端在寫入前就 return，視為讀取。
+ * staffImport／staffReinstate 帶 preview:true 只回預覽、後端在寫入前就 return，視為讀取。
  */
 export function isReadAction(backendId, action, payload) {
   const list = READ_ACTIONS[backendId];
   if (Array.isArray(list) && list.includes(action)) return true;
   if (backendId === 'platform' && action === 'staffImport'
+    && payload && payload.preview === true) return true;
+  // 復職先 preview（只回舊對照清單、後端在寫入前就 return）視為讀取
+  if (backendId === 'platform' && action === 'staffReinstate'
     && payload && payload.preview === true) return true;
   return false;
 }
