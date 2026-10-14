@@ -738,5 +738,20 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(up.ok && app.sheets.staff.getMaxColumns() >= 27 && app.sheets.staff._data[0][26] === 'extra_depts', 'R1 #1 升級照常補欄', up);
 })();
 
+(() => {
+  // #2／G3：重跑升級不得更新 org_hash／快照基準
+  const app = legacyApp();
+  const { sb, tok } = app;
+  post(sb, 'orgUpgrade2026', {}, tok);
+  const h0 = JSON.parse(app.props.ORG_UPGRADE_STATE).org_hash;
+  app.sheets.org._data.push(['unit', 'extra-x', '外加', 'mala', 'store', '', 9, 'TRUE']);
+  app.sheets.org._data.find((r) => r[1] === 'mala-hq' && r[0] === 'unit')[2] = '壞掉';
+  const r2 = post(sb, 'orgUpgrade2026', {}, tok);
+  ok(r2.ok && r2.data.org.length >= 1, 'R1 #2 重跑升級把改壞的名稱修回', r2);
+  ok(JSON.parse(app.props.ORG_UPGRADE_STATE).org_hash === h0, 'R1 #2 重跑後 org_hash 不變（基準只在首次成功建立）');
+  const rb = post(sb, 'orgRollback2026', {}, tok);
+  ok(rb.ok === false && rb.data && rb.data.diff.some((d) => d.code === 'extra-x'), 'R1 #2 之後回退仍被拒並列出 extra-x', rb);
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

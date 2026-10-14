@@ -1636,8 +1636,8 @@ function handleOrgUpgrade_(token, payload) {
   if (after.cells.length || after.addRows.length || after.clock.status === 'updated' || after.titles.length) {
     return { ok: false, error: '升級後驗證失敗（資料與目標不一致），請檢查後重跑；原始資料可用 orgRollback2026 還原' };
   }
-  // ⑦ 有改過 org 才更新「升級後」雜湊與快照（重跑沒有變更時不蓋掉別人之後的修改）
-  if (plan.cells.length || plan.addRows.length || !state.org_hash) {
+  // ⑦ 「升級後」雜湊與快照只在首次成功時建立；已有基準就不更新（重跑不得把切換後別人的修改洗進基準）
+  if (!state.org_hash) {
     state.org_hash = stfOrgHash_();
     var snapSheet = stfSheet_(state.org_snap) || SpreadsheetApp.getActive().insertSheet(state.org_snap);
     stfPutBlock_(snapSheet, [STF_ORG_HEADERS].concat(stfOrgSnapshot_()), STF_ORG_HEADERS.length);
