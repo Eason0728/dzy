@@ -646,7 +646,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(staffOf(app, P.offHm.emp).title === 'odir' && rb.data.titles_skipped.indexOf(P.offHm.emp) !== -1 && rb.data.titles_restored === 1, 'T4 回退：升級後又被改過的職稱不蓋回、列入 titles_skipped', rb.data);
   ok(rb.data.orphans.some((o) => o.emp_no === P.hqIt.emp && o.unit === 'yiwu-hq') && rb.data.orphans.some((o) => o.emp_no === P.offHm.emp && o.title === 'odir'), 'T4 回退報告：列出回退後單位／職稱找不到的孤兒', rb.data.orphans);
   ok(!rb.data.orphans.some((o) => o.emp_no === P.normal.emp || o.emp_no === P.offHs.emp), 'T4 孤兒不含正常的人');
-  ok(rbk(app).ok === false && rbk(app).error === '找不到備份 org_bak_20261014', 'T4 沒有升級紀錄時回退 → 找不到備份 org_bak_20261014');
+  ok(rbk(app).ok === false && rbk(app).error === '找不到升級紀錄，沒有可退回的備份', 'T4 沒有升級紀錄時回退 → 找不到升級紀錄');
 
   // ── 回退保護：切換後 org 被改過 → 拒絕整表覆蓋並列差異 ──
   post(sb, 'staffEdit', { emp_no: P.hqIt.emp, brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' }, tok);
@@ -865,6 +865,58 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const rb2 = post(sb, 'orgRollback2026', {}, tok);
   ok(rb2.ok === true && rb2.data.clock_restored === true && app.sheets.clock_stores._rows().map((r) => r.join('|')).join() === app.legacyClock.map((r) => r.join('|')).join() && !app.props.ORG_UPGRADE_STATE, 'R1 G2 重跑成功：續跑 clock、state 清除', rb2);
   ok(orgSnap(app).join() === app.legacySnap.join() && staffOf(app, app.P.offHs.emp).title === 'hs', 'R1 G2 org 與職稱仍是還原後的樣子');
+})();
+
+(() => {
+  // N1：state 在、備份分頁被刪 → 升級（含 dryrun）拒絕、零寫入
+  ['org_bak', 'stf_bak', 'clk_bak'].forEach((k) => {
+    const app = legacyApp();
+    const { sb, tok } = app;
+    post(sb, 'orgUpgrade2026', {}, tok);
+    const st = JSON.parse(app.props.ORG_UPGRADE_STATE);
+    delete app.sheets[st[k]];
+    const names0 = Object.keys(app.sheets).sort().join();
+    const org0 = app.sheets.org._rows().map((r) => r.join('|')).join();
+    const u1 = post(sb, 'orgUpgrade2026', {}, tok);
+    const u2 = post(sb, 'orgUpgrade2026', { dryrun: true }, tok);
+    ok(u1.ok === false && u2.ok === false && u1.error.indexOf(st[k]) !== -1 && Object.keys(app.sheets).sort().join() === names0 && app.sheets.org._rows().map((r) => r.join('|')).join() === org0 && app.props.ORG_UPGRADE_STATE === JSON.stringify(st), 'R2 N1 缺 ' + k + ' → 升級／預覽拒絕、說明缺哪份、零寫入', [u1, u2]);
+  });
+  // N2：快照被刪不要把現況全列 added
+  const app = legacyApp();
+  const { sb, tok } = app;
+  post(sb, 'orgUpgrade2026', {}, tok);
+  const st = JSON.parse(app.props.ORG_UPGRADE_STATE);
+  app.sheets.org._data.push(['unit', 'extra-x', 'x', 'mala', 'store', '', 9, 'TRUE']);
+  delete app.sheets[st.org_snap];
+  const rb = post(sb, 'orgRollback2026', {}, tok);
+  ok(rb.ok === false && rb.error === '找不到切換後快照，無法比對差異；請先確認組織表沒被改過' && !rb.data && app.props.ORG_UPGRADE_STATE === JSON.stringify(st), 'R2 N2 org_snap 被刪 → 明確訊息、不列 diff、零寫入', rb);
+  const app2 = legacyApp();
+  post(app2.sb, 'orgUpgrade2026', {}, app2.tok);
+  const st2 = JSON.parse(app2.props.ORG_UPGRADE_STATE);
+  app2.sheets.clock_stores._data.push(['zz', 'q', 'q', 'q', 'q']);
+  delete app2.sheets[st2.clk_snap];
+  const rb2 = post(app2.sb, 'orgRollback2026', {}, app2.tok);
+  ok(rb2.ok === false && /找不到切換後快照/.test(rb2.error), 'R2 N2 clk_snap 被刪 → 同樣明確訊息', rb2);
+})();
+
+(() => {
+  // 兼任停用代碼：原有的原樣放行，新加入的仍須啟用
+  const app = legacyApp();
+  const { sb, tok } = app;
+  const org = sb.stfReadOrg_();
+  const f = (list, ex) => sb.stfCleanExtraDepts_(org, list, 'dzy-hq', 'it', ex);
+  const r = f(['training', 'old', 'ops'], ['training', 'old']);
+  ok(!r.error && r.codes.sort().join() === 'old,ops,training', 'R2 兼任：原有 [training,old] 送 [training,old,ops] → 通過（old 原樣保留）', r);
+  ok(!!f(['new-inactive'], []).error && !!f(['training', 'old'], ['training']).error, 'R2 兼任：新加入的不存在代碼 → 擋');
+  app.sheets.org._data.find((x) => x[0] === 'dept' && x[1] === 'ops')[7] = 'FALSE';
+  const f2 = (list, ex) => sb.stfCleanExtraDepts_(sb.stfReadOrg_(), list, 'dzy-hq', 'it', ex);
+  ok(!f2(['ops'], ['ops']).error && !!f2(['ops'], []).error, 'R2 兼任：停用的 ops 原有就放行、新加就擋');
+  // 端到端
+  const crew = mk(app, '兼任甲', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
+  app.sheets.staff._data[0][26] = 'extra_depts';
+  app.sheets.staff._data.find((x) => x[0] === crew.emp)[26] = 'training,old';
+  const e = post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['training', 'old', 'it'] }, tok);
+  ok(e.ok && app.sheets.staff._data.find((x) => x[0] === crew.emp)[26] === 'it,training,old', 'R2 兼任：staffEdit 帶入原有停用代碼可存', e);
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

@@ -356,7 +356,8 @@ function stfDecorate_(o, extraMap, org, withFlags) {
  * 驗證兼任部門陣列。回 {error} 或 {codes: 排序後的代碼陣列}。
  * 規則：陣列；每個是 dzy-hq 底下 active 的部門（或特別代碼 ck）；不得等於主要部門（主要單位是 ck 也不能再兼任 ck）；不得重複。
  */
-function stfCleanExtraDepts_(org, list, mainUnit, mainDept) {
+function stfCleanExtraDepts_(org, list, mainUnit, mainDept, existing) {
+  existing = existing || [];   // 這個人目前就有的兼任代碼：停用或已不存在也原樣放行；新加入的才要求啟用中
   if (!Array.isArray(list)) return { error: '兼任部門格式錯誤' };
   var seen = {};
   var codes = [];
@@ -370,12 +371,12 @@ function stfCleanExtraDepts_(org, list, mainUnit, mainDept) {
       if (mainUnit === STF_EXTRA_CK) return { error: '主要單位已經是中央工廠，不用再兼任' };
     } else {
       var d = org.dept[c];
-      if (!d || !d.active || d.parent !== 'dzy-hq') return { error: '兼任部門只能選鼎兆元總部底下啟用中的部門' };
+      if ((!d || !d.active || d.parent !== 'dzy-hq') && existing.indexOf(c) === -1) return { error: '兼任部門只能選鼎兆元總部底下啟用中的部門' };
       if (c === mainDept) return { error: '兼任部門不能和主要部門相同' };
     }
     codes.push(c);
   }
-  var orderOf = function (c) { return c === STF_EXTRA_CK ? 1e9 : org.dept[c].order; };
+  var orderOf = function (c) { return c === STF_EXTRA_CK ? 1e9 : (org.dept[c] ? org.dept[c].order : 5e8); };
   codes.sort(function (a, b) { return orderOf(a) - orderOf(b) || (a < b ? -1 : 1); });
   return { codes: codes };
 }
@@ -1270,7 +1271,7 @@ function handleStaffEdit_(token, payload) {
   }
   var extraNew = null;
   if (payload.extra_depts !== undefined) {
-    var ex = stfCleanExtraDepts_(org, payload.extra_depts, stfStr_(t.v[STF_COL.unit]), stfStr_(t.v[STF_COL.dept]));
+    var ex = stfCleanExtraDepts_(org, payload.extra_depts, stfStr_(t.v[STF_COL.unit]), stfStr_(t.v[STF_COL.dept]), stfSplitCodes_(stfReadExtraMap_()[t.emp]));
     if (ex.error) return { ok: false, error: ex.error };
     // 清單已用（可能剛改過的）新主要部門驗過；和現值不同才寫
     if (ex.codes.join(',') !== stfStr_(stfReadExtraMap_()[t.emp])) {
@@ -1640,6 +1641,11 @@ function handleOrgUpgrade_(token, payload) {
   var problem = stfOrgSheetProblem_();
   if (problem) return { ok: false, error: problem };
   var dry = !!(payload && payload.dryrun === true);
+  var st0 = stfGetUpgradeState_();
+  if (st0) {
+    var lost = [st0.org_bak, st0.stf_bak, st0.clk_bak].filter(function (n) { return n && !stfSheet_(n); });
+    if (lost.length) return { ok: false, error: '已有升級紀錄，但備份分頁不見了：' + lost.join('、') + '。為避免之後回退沒有東西可還原，停止升級，請先處理（找回備份分頁，或確認要放棄回退能力）' };
+  }
   var colState = stfExtraColState_();
   if (colState === 'mismatch') return { ok: false, error: '分頁「staff」第 ' + STF_EXTRA_DEPTS_COL_NO + ' 欄的表頭不是 extra_depts，停止升級以免資料錯位' };
   var plan = stfUpgradePlan_();
@@ -1759,7 +1765,7 @@ function handleOrgRollback_(token) {
   var auth = stfRequireAdmin_(token);
   if (!auth.ok) return auth;
   var state = stfGetUpgradeState_();
-  if (!state) return { ok: false, error: '找不到備份 org_bak_20261014' };
+  if (!state) return { ok: false, error: '找不到升級紀錄，沒有可退回的備份' };
   var bak = stfSheet_(state.org_bak);
   if (!bak) return { ok: false, error: '找不到備份 ' + state.org_bak };
   var osh = stfSheet_(STF_SHEET_ORG);
@@ -1779,6 +1785,9 @@ function handleOrgRollback_(token) {
   var clockBad = hasClock && !clockDone && !!state.clk_hash && stfClockHash_() !== state.clk_hash;
   if (orgBad || clockBad) {
     var out = {};
+    if ((orgBad && !stfSheet_(state.org_snap)) || (clockBad && !(state.clk_snap && stfSheet_(state.clk_snap)))) {
+      return { ok: false, error: '找不到切換後快照，無法比對差異；請先確認組織表沒被改過' };
+    }
     if (orgBad) {
       var diff = [];
       var snap = stfSheet_(state.org_snap);
