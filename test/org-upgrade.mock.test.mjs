@@ -488,5 +488,214 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   ok(sb.stfScopeMeets_(m(['dept'], 2, 'hq'), nd('dept', 1, 'hq')) === true && sb.stfScopeMeets_(m(['dept'], 1, 'hq'), nd('dept', 2, 'hq')) === false, 'T3 部門階梯：高審低可、低審高擋');
 })();
 
+// ============================================================
+// T4 升級／回退（orgUpgrade2026／orgRollback2026，只有 role admin）
+// ============================================================
+// 升級前（2026-10-14 之前）正式表的 org 預設值
+const LEGACY_ORG = [
+  ['brand', 'mzt', '墨竹亭', '', '', '', 1, 'TRUE'],
+  ['brand', 'mala', '麻的小辛辣', '', '', '', 2, 'TRUE'],
+  ['brand', 'yiwu', '一悟燒肉', '', '', '', 3, 'TRUE'],
+  ['brand', 'ck', '央廚', '', '', '', 4, 'TRUE'],
+  ['brand', 'dzy', '鼎兆元總部', '', '', '', 5, 'TRUE'],
+  ['unit', 'mzt-js', '新竹金山', 'mzt', 'store', '', 1, 'TRUE'],
+  ['unit', 'mzt-gf', '新竹光復', 'mzt', 'store', '', 2, 'TRUE'],
+  ['unit', 'mzt-lzl', '台北六張犁', 'mzt', 'store', '', 3, 'TRUE'],
+  ['unit', 'mzt-wx', '台中文心', 'mzt', 'store', '', 4, 'TRUE'],
+  ['unit', 'mzt-rg', '內湖瑞光', 'mzt', 'store', '', 5, 'TRUE'],
+  ['unit', 'mzt-mc', '台中美村', 'mzt', 'store', '', 6, 'TRUE'],
+  ['unit', 'mzt-hq', '墨竹亭總部', 'mzt', 'hq', '', 7, 'TRUE'],
+  ['unit', 'mala-gf', '新竹光復', 'mala', 'store', '', 1, 'TRUE'],
+  ['unit', 'mala-hq', '小辛辣總部', 'mala', 'hq', '', 2, 'TRUE'],
+  ['unit', 'yiwu-js', '新竹金山', 'yiwu', 'store', '', 1, 'TRUE'],
+  ['unit', 'yiwu-wx', '竹北文興', 'yiwu', 'store', '', 2, 'TRUE'],
+  ['unit', 'ck', '央廚', 'ck', 'store', '', 1, 'TRUE'],
+  ['unit', 'dzy-hq', '鼎兆元總部', 'dzy', 'hq', '', 1, 'TRUE'],
+  ['title', 'pt', '計時同仁', 'store', '', 1, 1, 'TRUE'],
+  ['title', 'ft', '正職同仁', 'store', '', 2, 2, 'TRUE'],
+  ['title', 'sm', '店長', 'store', '', 3, 3, 'TRUE'],
+  ['title', 'am', '區經理', 'store', '', 4, 4, 'TRUE'],
+  ['title', 'sv', '督導', 'store', '', 5, 5, 'TRUE'],
+  ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'TRUE'],
+  ['title', 'hs', '部門同仁', 'hq', '', 1, 1, 'TRUE'],
+  ['title', 'hm', '部門主管', 'hq', '', 2, 2, 'TRUE'],
+  ['title', 'ceo', '執行長', 'hq', '', 3, 3, 'TRUE'],
+  ['title', 'gm', '總經理', 'hq', '', 4, 4, 'TRUE'],
+  ['title', 'chair', '董事長', 'hq', '', 5, 5, 'TRUE'],
+  // 部門只掛在鼎兆元總部（Eason 2026-10-11）；墨竹亭總部、小辛辣總部沒有部門，同仁不必選
+  ['dept', 'fin', '財務部', 'dzy-hq', '', '', 1, 'TRUE'],
+  ['dept', 'hr', '人資部', 'dzy-hq', '', '', 2, 'TRUE'],
+  ['dept', 'it', '資訊部', 'dzy-hq', '', '', 3, 'TRUE'],
+  ['dept', 'eng', '工程部', 'dzy-hq', '', '', 4, 'TRUE'],
+  ['dept', 'franchise', '加盟招商部', 'dzy-hq', '', '', 5, 'TRUE'],
+  ['dept', 'purchase', '採購部', 'dzy-hq', '', '', 6, 'TRUE'],
+  ['dept', 'ops', '營運部', 'dzy-hq', '', '', 7, 'TRUE'],
+  ['dept', 'training', '訓練部', 'dzy-hq', '', '', 8, 'TRUE'],
+  ['dept', 'marketing', '行銷部', 'dzy-hq', '', '', 9, 'TRUE']
+];
+
+(() => {
+  const nonBlank = (rows) => rows.filter((r) => r.some((c) => String(c).trim() !== '')).map((r) => r.slice(0, 8).map((c) => String(c).trim().toUpperCase() === 'TRUE' || String(c).trim().toUpperCase() === 'FALSE' ? String(c).trim().toUpperCase() : String(c).trim()));
+  const orgSnap = (app) => nonBlank(app.sheets.org._rows().slice(1));
+  const clkHq = (app) => app.sheets.clock_stores._data.find((r) => String(r[0]).toLowerCase() === 'hq');
+
+  /** 還原成升級前的樣子：舊 org、舊 clock hq 列、staff 尾端只有 hire_date／last_day，再建一批同仁 */
+  function legacyApp(clockValue) {
+    const app = fresh();
+    const od = app.sheets.org._data;
+    od.length = 1;
+    LEGACY_ORG.forEach((r) => od.push(r.slice()));
+    clkHq(app)[2] = clockValue === undefined ? 'dzy-hq,mzt-hq,mala-hq' : clockValue;
+    app.sheets.staff._data[0][26] = '';
+    const P = {};
+    P.offHs = mk(app, '升甲', { brand: 'mzt', unit: 'mzt-hq', title: 'hs' });
+    P.offHm = mk(app, '升乙', { brand: 'mala', unit: 'mala-hq', title: 'hm' });
+    P.offCeo = mk(app, '升丙', { brand: 'mala', unit: 'mala-hq', title: 'ceo' });
+    P.storeAm = mk(app, '升丁', { brand: 'mala', unit: 'mala-gf', title: 'am' });
+    P.storeSv = mk(app, '升戊', { brand: 'mzt', unit: 'mzt-js', title: 'sv' });
+    P.storeBd = mk(app, '升己', { brand: 'mzt', unit: 'mzt-gf', title: 'bd' });
+    P.stopped = mk(app, '升庚', { brand: 'mzt', unit: 'mzt-mc', title: 'pt' });
+    P.normal = mk(app, '升辛', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+    P.ckPt = mk(app, '升壬', { brand: 'ck', unit: 'ck', title: 'pt' });
+    P.hqIt = mk(app, '升癸', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
+    app.P = P;
+    app.legacySnap = orgSnap(app);
+    app.legacyClock = app.sheets.clock_stores._rows().map((r) => r.slice());
+    return app;
+  }
+  const upg = (app, payload, t) => post(app.sb, 'orgUpgrade2026', payload || {}, t === undefined ? app.tok : t);
+  const rbk = (app, t) => post(app.sb, 'orgRollback2026', {}, t === undefined ? app.tok : t);
+  const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_bak|stf_bak|org_upg)_/.test(k)).sort();
+
+  const app = legacyApp();
+  const { sb, tok, hrTok, P } = app;
+  const sheetCount0 = Object.keys(app.sheets).length;
+  ok(app.legacySnap.length === LEGACY_ORG.length && app.sheets.staff._data[0][26] === '', 'T4 （前置）舊 org、舊 staff 欄位');
+
+  // ── 權限：只有 role admin ──
+  ok(upg(app, { dryrun: true }, hrTok).ok === false && upg(app, { dryrun: true }, hrTok).error === '沒有權限', 'T4 反：人資（platform.staff）呼叫 orgUpgrade2026 被擋（含預覽）');
+  ok(upg(app, {}, P.normal.token).ok === false && upg(app, {}, '').ok === false, 'T4 反：店長／沒登入被擋');
+  ok(rbk(app, hrTok).ok === false && rbk(app, hrTok).error === '沒有權限' && rbk(app, P.normal.token).ok === false, 'T4 反：人資呼叫 orgRollback2026 被擋');
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/CODE_ALLOWED_ACTIONS = \[[\s\S]*?'orgUpgrade2026'[\s\S]*?'orgRollback2026'[\s\S]*?\];/.test(src) && /orgUpgrade2026: 1/.test(src) && /orgRollback2026: 1/.test(src), 'T4 兩個 action 在白名單、且上寫入鎖');
+  ok(post(sb, 'orgUpgrade2026', {}, '').error !== '不支援的操作', 'T4 action 可分派（沒登入不是 unknown action）');
+  ok(sb.stfOrgSnapshot_ && orgSnap(app).join() === app.legacySnap.join(), 'T4 被擋的都沒動到 org');
+
+  // ── 預覽（dryrun）──
+  const dr = upg(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true, 'T4 預覽成功', dr);
+  const orgHas = (r, code, field, from, to) => r.data.org.some((x) => x.code === code && x.field === field && x.from === from && x.to === to);
+  ok(orgHas(dr, 'mzt-hq', 'ladder', 'hq', 'office') && orgHas(dr, 'mala-hq', 'ladder', 'hq', 'office') && orgHas(dr, 'mzt-hq', 'name', '墨竹亭總部', '墨竹亭品牌辦公室') && orgHas(dr, 'ck', 'name', '央廚', '中央工廠（央廚）'), 'T4 預覽：改名與 ladder 變更逐格列出（code,kind,field,from,to）', dr.data.org);
+  ok(['mzt-wx', 'mzt-rg', 'mzt-mc'].every((c) => orgHas(dr, c, 'active', 'TRUE', 'FALSE')) && ['am', 'sv', 'bd'].every((c) => orgHas(dr, c, 'active', 'TRUE', 'FALSE')), 'T4 預覽：三店與 am／sv／bd 停用');
+  ok(['yiwu-hq', 'ofs', 'oam', 'osv', 'odir'].every((c) => dr.data.org.some((x) => x.code === c && x.field === 'row' && x.to === 'added')), 'T4 預覽：新增 yiwu-hq 與四個辦公室職稱');
+  ok(dr.data.backup === 'created' && dr.data.clock === 'updated' && dr.data.staffColumn === 'added', 'T4 預覽：backup／clock／staffColumn 狀態', [dr.data.backup, dr.data.clock, dr.data.staffColumn]);
+  ok(dr.data.titles.length === 2 && dr.data.titles.some((t) => t.emp_no === P.offHs.emp && t.from === 'hs' && t.to === 'ofs' && t.name === '升甲') && dr.data.titles.some((t) => t.emp_no === P.offHm.emp && t.from === 'hm' && t.to === 'osv'), 'T4 預覽：品牌辦公室 hs→ofs、hm→osv 逐人列出（emp_no,name,from,to）', dr.data.titles);
+  const todoOf = (r, emp) => r.data.todo.filter((x) => x.emp_no === emp).map((x) => x.flag).join();
+  ok(todoOf(dr, P.offCeo.emp) === 'title_ladder' && todoOf(dr, P.storeAm.emp) === 'title_ladder' && todoOf(dr, P.storeSv.emp) === 'title_ladder' && todoOf(dr, P.storeBd.emp) === 'title_ladder' && todoOf(dr, P.stopped.emp) === 'unit_inactive', 'T4 todo：ceo／am／sv／bd＝title_ladder、停用門市同仁＝unit_inactive');
+  ok(todoOf(dr, P.normal.emp) === '' && todoOf(dr, P.ckPt.emp) === '' && todoOf(dr, P.hqIt.emp) === '' && todoOf(dr, P.offHs.emp) === '' && todoOf(dr, P.offHm.emp) === '', 'T4 todo：正常的人、會被自動對應的人不列');
+  ok(dr.data.todo.every((x) => ['unit_inactive', 'title_ladder'].indexOf(x.flag) !== -1 && x.name && x.unit_name !== undefined), 'T4 todo 只有 unit_inactive／title_ladder 兩種 flag，帶 name／unit_name');
+  ok(orgSnap(app).join() === app.legacySnap.join() && Object.keys(app.sheets).length === sheetCount0 && app.sheets.staff._data[0][26] === '' && clkHq(app)[2] === 'dzy-hq,mzt-hq,mala-hq' && staffOf(app, P.offHs.emp).title === 'hs' && !app.props.ORG_UPGRADE_STATE, 'T4 預覽不寫任何東西（org／分頁／欄位／clock／職稱／狀態都沒動）');
+
+  // ── 正式升級 ──
+  const r1 = upg(app, { dryrun: false });
+  ok(r1.ok && r1.data.backup === 'created' && r1.data.clock === 'updated' && r1.data.staffColumn === 'added' && r1.data.org.length === dr.data.org.length, '正式升級成功、報告與預覽一致'.replace(/^/, 'T4 '), r1);
+  const names = bakNames(app);
+  ok(names.length === 4 && /^clk_bak_\d{12}$/.test(names[0]) && /^org_bak_\d{12}$/.test(names[1]) && /^org_upg_\d{12}$/.test(names[2]) && /^stf_bak_\d{12}$/.test(names[3]), 'T4 備份分頁名帶時間（org_bak_／clk_bak_／stf_bak_ YYYYMMDDHHmm）', names);
+  const st = JSON.parse(app.props.ORG_UPGRADE_STATE);
+  ok(st.org_bak === names[1] && st.clk_bak === names[0] && /^[0-9a-f]{64}$/.test(st.org_hash), 'T4 Script Properties ORG_UPGRADE_STATE＝{備份名、升級後 org 雜湊}');
+  ok(nonBlank(app.sheets[st.org_bak]._rows().slice(1)).join() === app.legacySnap.join(), 'T4 org 備份＝升級前整份');
+  ok(app.sheets[st.clk_bak]._rows().map((r) => r.join('|')).join() === app.legacyClock.map((r) => r.join('|')).join(), 'T4 clock_stores 備份＝升級前整份');
+  const org = sb.stfReadOrg_();
+  ok(org.unit['mzt-hq'].ladder === 'office' && org.unit['mala-hq'].name === '小辛辣品牌辦公室' && org.unit['yiwu-hq'].ladder === 'office' && org.unit['yiwu-hq'].parent === 'yiwu' && org.brand.ck.name === '中央工廠' && org.unit.ck.name === '中央工廠（央廚）', 'T4 org 已是新樣子');
+  ok(['mzt-wx', 'mzt-rg', 'mzt-mc'].every((c) => !org.unit[c].active) && ['am', 'sv', 'bd'].every((c) => !org.title[c].active) && ['pt', 'ft', 'sm'].every((c) => org.title[c].active), 'T4 三店與 am／sv／bd 停用、pt／ft／sm 啟用');
+  ok(['ofs', 'oam', 'osv', 'odir'].every((c, k) => org.title[c].parent === 'office' && org.title[c].rank === k + 1 && org.title[c].order === k + 1 && org.title[c].active) && org.dept.training, 'T4 辦公室四級職稱完整八欄、訓練部保留');
+  ok(clkHq(app)[2] === 'dzy-hq,mzt-hq,mala-hq,yiwu-hq', 'T4 clock hq 列補上 yiwu-hq');
+  ok(app.sheets.staff._data[0].slice(24, 27).join() === 'hire_date,last_day,extra_depts', 'T4 staff 補 extra_depts 欄');
+  ok(staffOf(app, P.offHs.emp).title === 'ofs' && staffOf(app, P.offHm.emp).title === 'osv' && staffOf(app, P.offCeo.emp).title === 'ceo' && staffOf(app, P.storeAm.emp).title === 'am', 'T4 辦公室 hs→ofs、hm→osv；ceo 與門市 am 不動');
+  const stfBakRows = app.sheets[st.stf_bak]._rows().slice(1);
+  ok(stfBakRows.length === 2 && stfBakRows.some((r) => r[0] === P.offHs.emp && r[1] === 'hs' && r[2] === 'ofs'), 'T4 受影響同仁的原職稱已備份（emp_no,title）');
+  ok(post(sb, 'orgOptions', {}).data.titles.filter((t) => t.parent === 'store').map((t) => t.code).join() === 'pt,ft,sm', 'T4 orgOptions 門市職稱只剩三級');
+  // 升級後同仁名單 flags 與預覽 todo 一致
+  const lst = post(sb, 'staffList', {}, tok).data.staff;
+  const fl = (emp) => lst.find((x) => x.emp_no === emp).flags.join();
+  ok(fl(P.offCeo.emp) === 'title_ladder' && fl(P.storeAm.emp) === 'title_ladder' && fl(P.stopped.emp) === 'unit_inactive' && fl(P.normal.emp) === '' && fl(P.offHs.emp) === '', 'T4 升級後 staffList flags 與預覽 todo 一致');
+
+  // ── 重跑：第二次無變更 ──
+  const before = orgSnap(app).join();
+  const beforeSheets = Object.keys(app.sheets).sort().join();
+  const stateBefore = app.props.ORG_UPGRADE_STATE;
+  const r2 = upg(app, {});
+  ok(r2.ok && r2.data.org.length === 0 && r2.data.backup === 'exists' && r2.data.clock === 'skipped' && r2.data.staffColumn === 'exists' && r2.data.titles.length === 0, 'T4 跑兩次：第二次 org 無變更、備份 exists、clock skipped、欄位 exists、無職稱變更', r2);
+  ok(orgSnap(app).join() === before && Object.keys(app.sheets).sort().join() === beforeSheets && app.props.ORG_UPGRADE_STATE === stateBefore && bakNames(app).length === 4, 'T4 第二次沒有任何寫入（org 逐格相同、沒多分頁、狀態不變、備份沒被覆蓋）');
+  ok(JSON.stringify(upg(app, { dryrun: true }).data.org) === '[]', 'T4 升級後預覽＝空');
+
+  // ── 回退 ──
+  // 切換後有人調到新單位／改過職稱
+  ok(post(sb, 'staffEdit', { emp_no: P.hqIt.emp, brand: 'yiwu', unit: 'yiwu-hq', dept: '', title: 'oam' }, tok).ok, 'T4 （前置）切換後把一位同仁調到 yiwu-hq 區經理');
+  ok(post(sb, 'staffEdit', { emp_no: P.offHm.emp, title: 'odir' }, tok).ok, 'T4 （前置）切換後又把升級對應過的人改成總監');
+  const rb = rbk(app);
+  ok(rb.ok && rb.data.restored === LEGACY_ORG.length, 'T4 回退成功，restored＝備份列數', rb);
+  ok(orgSnap(app).join() === app.legacySnap.join(), 'T4 回退後 org 與升級前逐格相同');
+  ok(app.sheets.clock_stores._rows().map((r) => r.join('|')).join() === app.legacyClock.map((r) => r.join('|')).join(), 'T4 回退後 clock_stores 與升級前逐格相同');
+  ok(staffOf(app, P.offHs.emp).title === 'hs', 'T4 回退：升級對應過、之後沒動的人職稱還原（ofs→hs）');
+  ok(staffOf(app, P.offHm.emp).title === 'odir' && rb.data.titles_skipped.indexOf(P.offHm.emp) !== -1 && rb.data.titles_restored === 1, 'T4 回退：升級後又被改過的職稱不蓋回、列入 titles_skipped', rb.data);
+  ok(rb.data.orphans.some((o) => o.emp_no === P.hqIt.emp && o.unit === 'yiwu-hq') && rb.data.orphans.some((o) => o.emp_no === P.offHm.emp && o.title === 'odir'), 'T4 回退報告：列出回退後單位／職稱找不到的孤兒', rb.data.orphans);
+  ok(!rb.data.orphans.some((o) => o.emp_no === P.normal.emp || o.emp_no === P.offHs.emp), 'T4 孤兒不含正常的人');
+  ok(rbk(app).ok === false && rbk(app).error === '找不到備份 org_bak_20261014', 'T4 沒有升級紀錄時回退 → 找不到備份 org_bak_20261014');
+
+  // ── 回退保護：切換後 org 被改過 → 拒絕整表覆蓋並列差異 ──
+  post(sb, 'staffEdit', { emp_no: P.hqIt.emp, brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' }, tok);
+  post(sb, 'staffEdit', { emp_no: P.offHm.emp, title: 'hm' }, tok);
+  ok(upg(app, {}).ok && upg(app, {}).data.backup === 'exists', 'T4 回退後可再次升級（重新備份）');
+  const odata = app.sheets.org._data;
+  odata.find((r) => r[1] === 'mala-gf')[2] = '光復店（改名）';
+  const snapAfter = orgSnap(app).join();
+  const rb2 = rbk(app);
+  ok(rb2.ok === false && rb2.data && rb2.data.diff.some((d) => d.code === 'mala-gf' && d.field === 'name' && d.expected === '新竹光復' && d.actual === '光復店（改名）'), 'T4 回退保護：切換後 org 被改過 → 拒絕並列出差異', rb2);
+  ok(orgSnap(app).join() === snapAfter, 'T4 被拒絕時 org 原封不動');
+  odata.find((r) => r[1] === 'mala-gf')[2] = '新竹光復';
+  odata.push(['unit', 'extra-x', '別人加的', 'mala', 'store', '', 9, 'TRUE']);
+  const rb3 = rbk(app);
+  ok(rb3.ok === false && rb3.data.diff.some((d) => d.code === 'extra-x' && d.field === 'row' && d.actual === 'added'), 'T4 回退保護：別人新增了列也列出來', rb3.data && rb3.data.diff);
+  odata.pop();
+  ok(rbk(app).ok && orgSnap(app).join() === app.legacySnap.join(), 'T4 差異處理掉後可回退，回退後與備份逐格相同');
+})();
+
+// 自訂過的 clock hq 列
+(() => {
+  const mkApp = (v) => {
+    const app = fresh();
+    const od = app.sheets.org._data; od.length = 1; LEGACY_ORG.forEach((r) => od.push(r.slice()));
+    app.sheets.clock_stores._data.find((r) => r[0] === 'hq')[2] = v;
+    return app;
+  };
+  const up = (a) => post(a.sb, 'orgUpgrade2026', {}, a.tok);
+  const hq = (a) => a.sheets.clock_stores._data.find((r) => r[0] === 'hq')[2];
+  const a1 = mkApp('mala-hq,dzy-hq');
+  const r1 = up(a1);
+  ok(r1.ok && r1.data.clock === 'updated' && hq(a1) === 'mala-hq,dzy-hq,yiwu-hq', 'T4 clock hq 自訂值：保留自訂值與順序，只在後面補 yiwu-hq');
+  const a2 = mkApp('dzy-hq,yiwu-hq,mzt-hq');
+  const r2 = up(a2);
+  ok(r2.ok && r2.data.clock === 'skipped' && hq(a2) === 'dzy-hq,yiwu-hq,mzt-hq', 'T4 clock hq 自訂值已含 yiwu-hq → skipped、原樣不動');
+  const a3 = mkApp('');
+  const r3 = up(a3);
+  ok(r3.ok && r3.data.clock === 'custom' && hq(a3) === '', 'T4 clock hq 被刻意清空 → custom、不動');
+  const a4 = mkApp('dzy-hq');
+  a4.sheets.clock_stores._data.find((r) => r[0] === 'cf')[2] = '自訂-cf';
+  up(a4);
+  ok(a4.sheets.clock_stores._data.find((r) => r[0] === 'cf')[2] === '自訂-cf' && a4.sheets.clock_stores._data.find((r) => r[0] === 'gf')[2] === 'mala-gf', 'T4 clock 其他列完全不動');
+  // 沒有 clock_stores 分頁
+  const a5 = mkApp('dzy-hq');
+  delete a5.sheets.clock_stores;
+  const r5 = up(a5);
+  ok(r5.ok && r5.data.clock === 'custom' && !a5.props.ORG_UPGRADE_STATE === false && JSON.parse(a5.props.ORG_UPGRADE_STATE).clk_bak === '', 'T4 沒有 clock_stores 分頁 → clock＝custom、升級照跑、不建 clk 備份', r5);
+  // staff 欄表頭被改過 → 停
+  const a6 = mkApp('dzy-hq');
+  a6.sheets.staff._data[0][26] = 'zzz';
+  const before6 = a6.sheets.org._rows().map((r) => r.join('|')).join();
+  const r6 = up(a6);
+  ok(r6.ok === false && a6.sheets.org._rows().map((r) => r.join('|')).join() === before6 && !a6.props.ORG_UPGRADE_STATE, 'T4 staff 第 27 欄表頭不符 → 停下，什麼都不寫（含備份）', r6);
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
