@@ -134,7 +134,14 @@ function stfReadRows_(name, colCount) {
   if (!sh) return [];
   var last = sh.getLastRow();
   if (last < 2) return [];
-  return sh.getRange(2, 1, last - 1, colCount).getValues();
+  // 依實際欄數讀（舊分頁可能比 colCount 少，例如只有 26 欄；越界在真 Apps Script 會丟 range invalid），缺的欄補空字串
+  var have = typeof sh.getMaxColumns === 'function' ? Math.min(colCount, sh.getMaxColumns()) : colCount;
+  if (have < 1) have = 1;
+  var vals = sh.getRange(2, 1, last - 1, have).getValues();
+  if (have < colCount) {
+    vals = vals.map(function (r) { var o = r.slice(); while (o.length < colCount) o.push(''); return o; });
+  }
+  return vals;
 }
 
 /** 寫一整列前先把該列設成純文字，再 setValues（不用 appendRow，新列不一定繼承欄格式） */
@@ -300,19 +307,40 @@ function stfExtraDeptName_(org, code) {
 }
 
 /**
- * 名單旗標（契約 plan.md，規格第 13 節）：'unit_inactive'＝單位已停用（或單位代碼已不存在）、
- * 'title_ladder'＝職稱停用、不存在或不屬於該單位的職稱階梯。沒有單位（未認領）或已停用帳號 → 空陣列。
+ * 名單旗標明細（契約 plan.md，規格第 13 節）：回 [{flag, submitted}]。
+ * 'unit_inactive'＝單位已停用（或單位代碼已不存在）、'title_ladder'＝職稱停用、不存在或不屬於該單位的職稱階梯、
+ * 'dept_inactive'＝部門代碼不存在或已停用（主要部門與送出的部門都檢查）。
+ * submitted＝true 表示問題出在「送出待審的資料」（p_unit／p_title）而不是目前身分。
+ * 目前身分沒有單位（未認領）時只檢查送出資料；已停用帳號 → 空陣列。
  */
-function stfFlags_(o, org) {
-  var flags = [];
-  if (!o.unit || o.status === 'disabled') return flags;
-  var u = org.unit[o.unit];
-  if (!u || !u.active) flags.push('unit_inactive');
-  if (o.title && u) {
-    var t = org.title[o.title];
-    if (!t || !t.active || t.parent !== (u.ladder || 'store')) flags.push('title_ladder');
+function stfFlagDetails_(o, org) {
+  var out = [];
+  if (o.status === 'disabled') return out;
+  var seen = {};
+  var add = function (flag, submitted) { var k = flag + '|' + (submitted ? 1 : 0); if (!seen[k]) { seen[k] = true; out.push({ flag: flag, submitted: submitted }); } };
+  var check = function (unit, title, dept, submitted) {
+    var u = org.unit[unit];
+    if (!u || !u.active) add('unit_inactive', submitted);
+    if (dept) { var d = org.dept[dept]; if (!d || !d.active) add('dept_inactive', submitted); }
+    if (title && u) {
+      var t = org.title[title];
+      if (!t || !t.active || t.parent !== (u.ladder || 'store')) add('title_ladder', submitted);
+    }
+  };
+  if (o.unit) check(o.unit, o.title, o.dept || '', false);
+  var pu = o.p_unit || '';
+  var pt = o.p_title || '';
+  var pd = o.p_dept || '';
+  if (pu || pt || pd) {
+    var eu = pu || o.unit;
+    if (eu) check(eu, pt, pd, true);
   }
-  return flags;
+  return out;
+}
+
+function stfFlags_(o, org) {
+  var seen = {};
+  return stfFlagDetails_(o, org).map(function (x) { return x.flag; }).filter(function (f) { if (seen[f]) return false; seen[f] = true; return true; });
 }
 
 /** 把 extra_depts／extra_dept_names（及可選的 flags）補進 stfToObj_ 的結果 */
@@ -1384,7 +1412,20 @@ var STF_UPGRADE_SET = [
   ['unit', 'mzt-wx', 'active', 'FALSE'], ['unit', 'mzt-rg', 'active', 'FALSE'], ['unit', 'mzt-mc', 'active', 'FALSE'],
   ['title', 'am', 'active', 'FALSE'], ['title', 'sv', 'active', 'FALSE'], ['title', 'bd', 'active', 'FALSE']
 ];
-// (kind, code) upsert 的新列（完整八欄）；已存在就只對齊 name／parent／ladder／rank／active
+// STF_UPGRADE_SET 的目標列若整列缺失，就以這裡的完整八欄補上（舊值取自升級前預設 org；已存在的列只依 STF_UPGRADE_SET 改指定欄位，不動其他欄）
+var STF_UPGRADE_REQUIRED = [
+  ['brand', 'ck', '中央工廠', '', '', '', 4, 'TRUE'],
+  ['unit', 'ck', '中央工廠（央廚）', 'ck', 'store', '', 1, 'TRUE'],
+  ['unit', 'mzt-hq', '墨竹亭品牌辦公室', 'mzt', 'office', '', 7, 'TRUE'],
+  ['unit', 'mala-hq', '小辛辣品牌辦公室', 'mala', 'office', '', 2, 'TRUE'],
+  ['unit', 'mzt-wx', '台中文心', 'mzt', 'store', '', 4, 'FALSE'],
+  ['unit', 'mzt-rg', '內湖瑞光', 'mzt', 'store', '', 5, 'FALSE'],
+  ['unit', 'mzt-mc', '台中美村', 'mzt', 'store', '', 6, 'FALSE'],
+  ['title', 'am', '區經理', 'store', '', 4, 4, 'FALSE'],
+  ['title', 'sv', '督導', 'store', '', 5, 5, 'FALSE'],
+  ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'FALSE']
+];
+// (kind, code) upsert 的新列（完整八欄）；已存在就對齊 name／parent／ladder／rank／order／active
 var STF_UPGRADE_ADD = [
   ['unit', 'yiwu-hq', '一悟燒肉品牌辦公室', 'yiwu', 'office', '', 3, 'TRUE'],
   ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
@@ -1392,7 +1433,7 @@ var STF_UPGRADE_ADD = [
   ['title', 'osv', '區督導', 'office', '', 3, 3, 'TRUE'],
   ['title', 'odir', '總監', 'office', '', 4, 4, 'TRUE']
 ];
-var STF_UPGRADE_ADD_FIELDS = ['name', 'parent', 'ladder', 'rank', 'active'];
+var STF_UPGRADE_ADD_FIELDS = ['name', 'parent', 'ladder', 'rank', 'order', 'active'];
 
 function stfNormCell_(v, idx) {
   var t = (v === undefined || v === null) ? '' : String(v).trim();
@@ -1413,6 +1454,28 @@ function stfHashText_(text) {
   return hex;
 }
 function stfOrgHash_() { return stfHashText_(JSON.stringify(stfOrgSnapshot_())); }
+
+/** 備份分頁（含表頭列）的值 → 與 stfOrgSnapshot_ 同樣正規化後的列（用來判斷「org 已經等於備份」） */
+function stfNormOrgRows_(vals) {
+  return vals.slice(1).map(function (r) {
+    return r.slice(0, STF_ORG_HEADERS.length).map(function (v, i) { return stfNormCell_(v, i); });
+  }).filter(function (r) { return r[0] !== '' || r[1] !== ''; });
+}
+
+/** clock_stores 的值（含表頭列）→ 去頭尾空白、去掉列尾空格、略過空列 */
+function stfNormClockRows_(vals) {
+  return vals.map(function (r) {
+    var o = r.map(function (v) { return (v === undefined || v === null) ? '' : String(v).trim(); });
+    while (o.length && o[o.length - 1] === '') o.pop();
+    return o;
+  }).filter(function (r) { return r.length > 0; });
+}
+function stfClockSnapshot_() {
+  var sh = stfSheet_('clock_stores');
+  return sh ? stfNormClockRows_(stfSheetValues_(sh, 5)) : [];
+}
+function stfClockHash_() { return stfHashText_(JSON.stringify(stfClockSnapshot_())); }
+function stfSameRows_(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
 function stfGetUpgradeState_() {
   var raw = PropertiesService.getScriptProperties().getProperty(STF_PROP_ORG_UPGRADE);
@@ -1456,6 +1519,18 @@ function stfCopyToNewSheet_(src, name, minWidth) {
 
 function stfStamp_() { return stfNowText_().replace(/\D/g, '').slice(0, 12); }
 
+/** 一次決定備份／快照分頁名：同一個時間戳＋共用序號（撞名就 _2、_3…），建立任何備份前先呼叫；真 Apps Script 的 insertSheet 遇同名會丟錯 */
+function stfPickBackupNames_(withClock) {
+  var base = stfStamp_();
+  for (var n = 1; n < 1000; n++) {
+    var suf = n === 1 ? base : base + '_' + n;
+    var names = { org_bak: 'org_bak_' + suf, clk_bak: withClock ? 'clk_bak_' + suf : '', clk_snap: withClock ? 'clk_upg_' + suf : '', stf_bak: 'stf_bak_' + suf, org_snap: 'org_upg_' + suf };
+    var clash = Object.keys(names).some(function (k) { return names[k] && stfSheet_(names[k]); });
+    if (!clash) return names;
+  }
+  throw new Error('備份分頁名稱無法決定');
+}
+
 /** 升級計畫（唯讀）：org 要改的格、新增的列、記憶體裡改完的 org 列、clock 狀態、職稱對應、todo */
 function stfUpgradePlan_() {
   var rowsRaw = stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length);
@@ -1477,6 +1552,14 @@ function stfUpgradePlan_() {
     work[i][idx] = to;
     cells.push({ row: i + 2, col: idx + 1, value: to });
   };
+  // 必要列缺失 → 先整列補上（完整八欄）；之後 SET 對補上的列沒有差異
+  STF_UPGRADE_REQUIRED.forEach(function (row) {
+    if (find(row[0], row[1]) === -1) {
+      work.push(row.slice());
+      addRows.push(row.slice());
+      report.push({ code: row[1], kind: row[0], field: 'row', from: '', to: 'added' });
+    }
+  });
   STF_UPGRADE_SET.forEach(function (x) {
     var i = find(x[0], x[1]);
     if (i !== -1) setCell(i, x[2], x[3]);
@@ -1519,16 +1602,17 @@ function stfUpgradePlan_() {
     var unit = stfStr_(r.values[STF_COL.unit]);
     var title = stfStr_(r.values[STF_COL.title]);
     var status = stfStr_(r.values[STF_COL.status]);
-    if (!unit) return;
     var effTitle = title;
-    if (STF_BRAND_OFFICES.indexOf(unit) !== -1 && STF_OFFICE_TITLE_MAP[title]) {
+    if (unit && STF_BRAND_OFFICES.indexOf(unit) !== -1 && STF_OFFICE_TITLE_MAP[title]) {
       effTitle = STF_OFFICE_TITLE_MAP[title];
       titles.push({ emp_no: emp, name: name, from: title, to: effTitle,
         from_name: newOrg.title[title] ? newOrg.title[title].name : title, to_name: newOrg.title[effTitle] ? newOrg.title[effTitle].name : effTitle, row: r.row });
     }
-    var flags = stfFlags_({ unit: unit, title: effTitle, status: status }, newOrg);
-    flags.forEach(function (f) {
-      todo.push({ emp_no: emp, name: name, unit_name: newOrg.unit[unit] ? newOrg.unit[unit].name : unit, flag: f });
+    var details = stfFlagDetails_({ unit: unit, title: effTitle, dept: stfStr_(r.values[STF_COL.dept]), status: status,
+      p_unit: stfStr_(r.values[STF_COL.p_unit]), p_title: stfStr_(r.values[STF_COL.p_title]), p_dept: stfStr_(r.values[STF_COL.p_dept]) }, newOrg);
+    details.forEach(function (f) {
+      var uc = f.submitted && stfStr_(r.values[STF_COL.p_unit]) ? stfStr_(r.values[STF_COL.p_unit]) : unit;
+      todo.push({ emp_no: emp, name: name, unit_name: newOrg.unit[uc] ? newOrg.unit[uc].name : uc, flag: f.flag, submitted: f.submitted });
     });
   });
   return { report: report, cells: cells, addRows: addRows, newOrg: newOrg, clock: clock, titles: titles, todo: todo };
@@ -1573,14 +1657,11 @@ function handleOrgUpgrade_(token, payload) {
   if (dry) return { ok: true, data: data };
 
   // ① 備份（已有備份不覆蓋）：org 整份、clock_stores 整份、受影響同仁的職稱
-  var stamp = stfStamp_();
   if (!backupExists) {
-    state = { at: stfNowText_(), by: String(auth.user.id), org_bak: 'org_bak_' + stamp, clk_bak: '', stf_bak: 'stf_bak_' + stamp, org_snap: 'org_upg_' + stamp, org_hash: '' };
+    var nm = stfPickBackupNames_(!!stfSheet_('clock_stores'));
+    state = { at: stfNowText_(), by: String(auth.user.id), org_bak: nm.org_bak, clk_bak: nm.clk_bak, stf_bak: nm.stf_bak, org_snap: nm.org_snap, clk_snap: nm.clk_snap, org_hash: '', clk_hash: '' };
     stfCopyToNewSheet_(stfSheet_(STF_SHEET_ORG), state.org_bak, STF_ORG_HEADERS.length);
-    if (stfSheet_('clock_stores')) {
-      state.clk_bak = 'clk_bak_' + stamp;
-      stfCopyToNewSheet_(stfSheet_('clock_stores'), state.clk_bak, 5);
-    }
+    if (state.clk_bak) stfCopyToNewSheet_(stfSheet_('clock_stores'), state.clk_bak, 5);
     var sb = SpreadsheetApp.getActive().insertSheet(state.stf_bak);
     stfPutBlock_(sb, [['emp_no', 'title', 'to_title']], 3);
     stfSetUpgradeState_(state);
@@ -1620,18 +1701,60 @@ function handleOrgUpgrade_(token, payload) {
   if (after.cells.length || after.addRows.length || after.clock.status === 'updated' || after.titles.length) {
     return { ok: false, error: '升級後驗證失敗（資料與目標不一致），請檢查後重跑；原始資料可用 orgRollback2026 還原' };
   }
-  // ⑦ 有改過 org 才更新「升級後」雜湊與快照（重跑沒有變更時不蓋掉別人之後的修改）
-  if (plan.cells.length || plan.addRows.length || !state.org_hash) {
+  // ⑥b 新增的整列要和目標逐欄（完整八欄）一致
+  var nowOrg = stfOrgSnapshot_();
+  var rowsOk = plan.addRows.every(function (ar) {
+    var want = ar.map(function (v, i) { return stfNormCell_(v, i); });
+    return nowOrg.some(function (cr) { return cr.join('|') === want.join('|'); });
+  });
+  if (!rowsOk) return { ok: false, error: '升級後驗證失敗（新增列與目標不一致），請檢查後重跑；原始資料可用 orgRollback2026 還原' };
+  // ⑦ 「升級後」雜湊與快照只在首次成功時建立；已有基準就不更新（重跑不得把切換後別人的修改洗進基準）
+  if (!state.org_hash) {
     state.org_hash = stfOrgHash_();
     var snapSheet = stfSheet_(state.org_snap) || SpreadsheetApp.getActive().insertSheet(state.org_snap);
     stfPutBlock_(snapSheet, [STF_ORG_HEADERS].concat(stfOrgSnapshot_()), STF_ORG_HEADERS.length);
+    // clock_stores 同一套：升級後雜湊＋快照（沒有 clock_stores 或沒備份就不管）
+    if (state.clk_bak && state.clk_snap && stfSheet_('clock_stores')) {
+      state.clk_hash = stfClockHash_();
+      var csnap = stfSheet_(state.clk_snap) || SpreadsheetApp.getActive().insertSheet(state.clk_snap);
+      var cvals = stfClockSnapshot_();
+      var cw = cvals.reduce(function (m, r) { return Math.max(m, r.length); }, 5);
+      stfPutBlock_(csnap, cvals, cw);
+    }
     state.upgraded_at = stfNowText_();
     stfSetUpgradeState_(state);
   }
   return { ok: true, data: data };
 }
 
-/** 回退：org（和 clock_stores）整份蓋回備份；切換後 org 被改過就拒絕並列出差異 */
+/** 兩份「列」的差異：以第 0 欄為 key；欄位名由 heads 取（沒有就 colN） */
+function stfDiffClockRows_(expectRows, curRows) {
+  var diff = [];
+  var index = function (rows) {
+    var m = {}, seen = {};
+    rows.forEach(function (r, i) { var k = r[0] || ('#' + i); seen[k] = (seen[k] || 0) + 1; m[seen[k] > 1 ? k + '~' + seen[k] : k] = r; });
+    return m;
+  };
+  var em = index(expectRows), cm = index(curRows);
+  var head = expectRows[0] || [];
+  Object.keys(em).forEach(function (k) {
+    var e = em[k], c = cm[k];
+    if (!c) { diff.push({ key: k, field: 'row', expected: 'exists', actual: 'removed' }); return; }
+    var n = Math.max(e.length, c.length);
+    for (var i = 0; i < n; i++) {
+      var ev = e[i] === undefined ? '' : e[i], cv = c[i] === undefined ? '' : c[i];
+      if (ev !== cv) diff.push({ key: k, field: head[i] || ('col' + (i + 1)), expected: ev, actual: cv });
+    }
+  });
+  Object.keys(cm).forEach(function (k) { if (!em[k]) diff.push({ key: k, field: 'row', expected: 'absent', actual: 'added' }); });
+  return diff;
+}
+
+/**
+ * 回退：org（和 clock_stores）整份蓋回備份。
+ * - 寫入前先檢查 state 指向的備份分頁與正式分頁都在，缺一零寫入失敗、保留 state。
+ * - 某一份「已等於備份」視為該步已完成（回退中斷後可重跑）；否則切換後被改過（與升級後雜湊不符）就拒絕並列出差異。
+ */
 function handleOrgRollback_(token) {
   var auth = stfRequireAdmin_(token);
   if (!auth.ok) return auth;
@@ -1641,29 +1764,48 @@ function handleOrgRollback_(token) {
   if (!bak) return { ok: false, error: '找不到備份 ' + state.org_bak };
   var osh = stfSheet_(STF_SHEET_ORG);
   if (!osh) return { ok: false, error: '找不到 org 分頁' };
+  if (state.stf_bak && !stfSheet_(state.stf_bak)) return { ok: false, error: '找不到備份 ' + state.stf_bak + '（同仁職稱備份），為避免半套回退，什麼都沒有改' };
+  var hasClock = !!state.clk_bak;
+  if (hasClock && !stfSheet_(state.clk_bak)) return { ok: false, error: '找不到備份 ' + state.clk_bak + '（clock_stores 備份），為避免半套回退，什麼都沒有改' };
+  if (hasClock && !stfSheet_('clock_stores')) return { ok: false, error: '找不到分頁 clock_stores，為避免半套回退，什麼都沒有改' };
+  if (!stfSheet_(STF_SHEET)) return { ok: false, error: '找不到分頁 ' + STF_SHEET };
 
-  // ① 雜湊比對：切換後有人改過 org → 拒絕整表覆蓋
-  if (state.org_hash && stfOrgHash_() !== state.org_hash) {
-    var diff = [];
-    var snap = stfSheet_(state.org_snap);
-    var expectRows = snap ? stfSheetValues_(snap, STF_ORG_HEADERS.length).slice(1).map(function (r) { return r.slice(0, 8).map(function (v, i) { return stfNormCell_(v, i); }); }) : [];
-    var key = function (r) { return r[0] + '|' + r[1]; };
-    var curRows = stfOrgSnapshot_();
-    var expMap = {}, curMap = {};
-    expectRows.forEach(function (r) { expMap[key(r)] = r; });
-    curRows.forEach(function (r) { curMap[key(r)] = r; });
-    Object.keys(expMap).forEach(function (k) {
-      var e = expMap[k], c = curMap[k];
-      if (!c) { diff.push({ kind: e[0], code: e[1], field: 'row', expected: 'exists', actual: 'removed' }); return; }
-      STF_ORG_HEADERS.forEach(function (f, i) { if (e[i] !== c[i]) diff.push({ kind: e[0], code: e[1], field: f, expected: e[i], actual: c[i] }); });
-    });
-    Object.keys(curMap).forEach(function (k) {
-      if (!expMap[k]) diff.push({ kind: curMap[k][0], code: curMap[k][1], field: 'row', expected: 'absent', actual: 'added' });
-    });
-    return { ok: false, error: '切換後組織資料又被改過，為避免蓋掉新的修改，拒絕整表覆蓋；差異已列出', data: { diff: diff } };
+  // ① 判斷各步狀態：已等於備份＝已完成；否則雜湊不符＝切換後被改過 → 拒絕
+  var bakOrgRows = stfNormOrgRows_(stfSheetValues_(bak, STF_ORG_HEADERS.length));
+  var orgDone = stfSameRows_(stfOrgSnapshot_(), bakOrgRows);
+  var clockDone = false;
+  if (hasClock) clockDone = stfSameRows_(stfClockSnapshot_(), stfNormClockRows_(stfSheetValues_(stfSheet_(state.clk_bak), 5)));
+  var orgBad = !orgDone && !!state.org_hash && stfOrgHash_() !== state.org_hash;
+  var clockBad = hasClock && !clockDone && !!state.clk_hash && stfClockHash_() !== state.clk_hash;
+  if (orgBad || clockBad) {
+    var out = {};
+    if (orgBad) {
+      var diff = [];
+      var snap = stfSheet_(state.org_snap);
+      var expectRows = snap ? stfSheetValues_(snap, STF_ORG_HEADERS.length).slice(1).map(function (r) { return r.slice(0, 8).map(function (v, i) { return stfNormCell_(v, i); }); }) : [];
+      var key = function (r) { return r[0] + '|' + r[1]; };
+      var curRows = stfOrgSnapshot_();
+      var expMap = {}, curMap = {};
+      expectRows.forEach(function (r) { expMap[key(r)] = r; });
+      curRows.forEach(function (r) { curMap[key(r)] = r; });
+      Object.keys(expMap).forEach(function (k) {
+        var e = expMap[k], c = curMap[k];
+        if (!c) { diff.push({ kind: e[0], code: e[1], field: 'row', expected: 'exists', actual: 'removed' }); return; }
+        STF_ORG_HEADERS.forEach(function (f, i) { if (e[i] !== c[i]) diff.push({ kind: e[0], code: e[1], field: f, expected: e[i], actual: c[i] }); });
+      });
+      Object.keys(curMap).forEach(function (k) {
+        if (!expMap[k]) diff.push({ kind: curMap[k][0], code: curMap[k][1], field: 'row', expected: 'absent', actual: 'added' });
+      });
+      out.diff = diff;
+    }
+    if (clockBad) {
+      var csnap = state.clk_snap ? stfSheet_(state.clk_snap) : null;
+      out.clock_diff = stfDiffClockRows_(csnap ? stfNormClockRows_(stfSheetValues_(csnap, 5)) : [], stfClockSnapshot_());
+    }
+    return { ok: false, error: '切換後' + (orgBad ? '組織資料' : '') + (orgBad && clockBad ? '和' : '') + (clockBad ? '打卡店別對照（clock_stores）' : '') + '又被改過，為避免蓋掉新的修改，拒絕整表覆蓋；差異已列出', data: out };
   }
 
-  // ② 先還原同仁職稱（只還原「目前仍是升級後職稱」的人；之後被改過的不動）
+  // ② 先還原同仁職稱（只還原「目前仍是升級後職稱」的人；之後被改過的不動；重跑時已還原的不受影響）
   var titlesRestored = 0, titlesSkipped = [];
   var stfBak = stfSheet_(state.stf_bak);
   if (stfBak) {
@@ -1682,14 +1824,16 @@ function handleOrgRollback_(token) {
       }
     });
   }
-  // ③ org 整份蓋回
+  // ③ org 整份蓋回（已等於備份就略過）
   var bakVals = stfSheetValues_(bak, STF_ORG_HEADERS.length);
-  var restored = stfPutBlock_(osh, bakVals, STF_ORG_HEADERS.length) - 1;
-  // ④ clock_stores 整份蓋回
+  var restored = orgDone ? bakVals.length - 1 : stfPutBlock_(osh, bakVals, STF_ORG_HEADERS.length) - 1;
+  // ④ clock_stores 整份蓋回（已等於備份就略過）
   var clockRestored = false;
-  if (state.clk_bak && stfSheet_(state.clk_bak) && stfSheet_('clock_stores')) {
-    var cv = stfSheetValues_(stfSheet_(state.clk_bak), 5);
-    stfPutBlock_(stfSheet_('clock_stores'), cv, cv.length ? cv[0].length : 5);
+  if (hasClock) {
+    if (!clockDone) {
+      var cv = stfSheetValues_(stfSheet_(state.clk_bak), 5);
+      stfPutBlock_(stfSheet_('clock_stores'), cv, cv.length ? cv[0].length : 5);
+    }
     clockRestored = true;
   }
   // ⑤ 孤兒：回退後單位／職稱在 org 裡找不到（或已停用）的同仁，只列不改
@@ -1698,10 +1842,12 @@ function handleOrgRollback_(token) {
   stfAllRows_().forEach(function (r) {
     var unit = stfStr_(r.values[STF_COL.unit]);
     var title = stfStr_(r.values[STF_COL.title]);
-    if (!unit) return;
+    var dept = stfStr_(r.values[STF_COL.dept]);
+    var pdept = stfStr_(r.values[STF_COL.p_dept]);
     if (stfStr_(r.values[STF_COL.status]) === 'disabled') return;
-    if (!org.unit[unit] || (title && !org.title[title])) {
-      orphans.push({ emp_no: stfStr_(r.values[STF_COL.emp_no]), name: stfStr_(r.values[STF_COL.name]), unit: unit, title: title });
+    if (!unit && !(pdept && !org.dept[pdept])) return;
+    if ((unit && !org.unit[unit]) || (title && !org.title[title]) || (dept && !org.dept[dept]) || (pdept && !org.dept[pdept])) {
+      orphans.push({ emp_no: stfStr_(r.values[STF_COL.emp_no]), name: stfStr_(r.values[STF_COL.name]), unit: unit, title: title, dept: dept });
     }
   });
   stfSetUpgradeState_(null);   // 備份分頁保留；下次升級重新備份
