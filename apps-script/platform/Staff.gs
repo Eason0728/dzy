@@ -308,7 +308,8 @@ function stfExtraDeptName_(org, code) {
 
 /**
  * 名單旗標明細（契約 plan.md，規格第 13 節）：回 [{flag, submitted}]。
- * 'unit_inactive'＝單位已停用（或單位代碼已不存在）、'title_ladder'＝職稱停用、不存在或不屬於該單位的職稱階梯。
+ * 'unit_inactive'＝單位已停用（或單位代碼已不存在）、'title_ladder'＝職稱停用、不存在或不屬於該單位的職稱階梯、
+ * 'dept_inactive'＝部門代碼不存在或已停用（主要部門與送出的部門都檢查）。
  * submitted＝true 表示問題出在「送出待審的資料」（p_unit／p_title）而不是目前身分。
  * 目前身分沒有單位（未認領）時只檢查送出資料；已停用帳號 → 空陣列。
  */
@@ -317,20 +318,22 @@ function stfFlagDetails_(o, org) {
   if (o.status === 'disabled') return out;
   var seen = {};
   var add = function (flag, submitted) { var k = flag + '|' + (submitted ? 1 : 0); if (!seen[k]) { seen[k] = true; out.push({ flag: flag, submitted: submitted }); } };
-  var check = function (unit, title, submitted) {
+  var check = function (unit, title, dept, submitted) {
     var u = org.unit[unit];
     if (!u || !u.active) add('unit_inactive', submitted);
+    if (dept) { var d = org.dept[dept]; if (!d || !d.active) add('dept_inactive', submitted); }
     if (title && u) {
       var t = org.title[title];
       if (!t || !t.active || t.parent !== (u.ladder || 'store')) add('title_ladder', submitted);
     }
   };
-  if (o.unit) check(o.unit, o.title, false);
+  if (o.unit) check(o.unit, o.title, o.dept || '', false);
   var pu = o.p_unit || '';
   var pt = o.p_title || '';
-  if (pu || pt) {
+  var pd = o.p_dept || '';
+  if (pu || pt || pd) {
     var eu = pu || o.unit;
-    if (eu) check(eu, pt, true);
+    if (eu) check(eu, pt, pd, true);
   }
   return out;
 }
@@ -1733,10 +1736,12 @@ function handleOrgRollback_(token) {
   stfAllRows_().forEach(function (r) {
     var unit = stfStr_(r.values[STF_COL.unit]);
     var title = stfStr_(r.values[STF_COL.title]);
-    if (!unit) return;
+    var dept = stfStr_(r.values[STF_COL.dept]);
+    var pdept = stfStr_(r.values[STF_COL.p_dept]);
     if (stfStr_(r.values[STF_COL.status]) === 'disabled') return;
-    if (!org.unit[unit] || (title && !org.title[title])) {
-      orphans.push({ emp_no: stfStr_(r.values[STF_COL.emp_no]), name: stfStr_(r.values[STF_COL.name]), unit: unit, title: title });
+    if (!unit && !(pdept && !org.dept[pdept])) return;
+    if ((unit && !org.unit[unit]) || (title && !org.title[title]) || (dept && !org.dept[dept]) || (pdept && !org.dept[pdept])) {
+      orphans.push({ emp_no: stfStr_(r.values[STF_COL.emp_no]), name: stfStr_(r.values[STF_COL.name]), unit: unit, title: title, dept: dept });
     }
   });
   stfSetUpgradeState_(null);   // 備份分頁保留；下次升級重新備份

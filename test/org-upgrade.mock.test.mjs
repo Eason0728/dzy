@@ -773,5 +773,28 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(fl(pend1.emp).indexOf('title_ladder') !== -1 && fl(pend2.emp).indexOf('unit_inactive') !== -1 && fl(chg.emp).indexOf('title_ladder') !== -1, 'R1 #3 升級後 staffList flags 看得到 p_* 的問題', [fl(pend1.emp), fl(pend2.emp), fl(chg.emp)]);
 })();
 
+(() => {
+  // #5：flags／orphans 也檢查 dept（主要與送出的部門代碼不存在或停用）
+  const app = legacyApp();
+  const { sb, tok } = app;
+  const it = app.P.hqIt;
+  const flagsOf = (emp) => post(sb, 'staffList', {}, tok).data.staff.find((x) => x.emp_no === emp).flags;
+  ok(flagsOf(it.emp).indexOf('dept_inactive') === -1, 'R1 #5 （前置）部門正常 → 無 dept_inactive');
+  app.sheets.org._data.find((r) => r[0] === 'dept' && r[1] === 'it')[7] = 'FALSE';
+  ok(flagsOf(it.emp).indexOf('dept_inactive') !== -1, 'R1 #5 主要部門停用 → dept_inactive');
+  app.sheets.org._data.find((r) => r[0] === 'dept' && r[1] === 'it')[7] = 'TRUE';
+  setStaff(app, it.emp, 'dept', 'ghost');
+  ok(flagsOf(it.emp).indexOf('dept_inactive') !== -1, 'R1 #5 主要部門代碼不存在 → dept_inactive');
+  setStaff(app, it.emp, 'dept', 'it');
+  setStaff(app, it.emp, 'p_dept', 'ghost2'); setStaff(app, it.emp, 'p_title', 'hm');
+  const dr = post(sb, 'orgUpgrade2026', { dryrun: true }, tok);
+  ok(dr.data.todo.some((x) => x.emp_no === it.emp && x.flag === 'dept_inactive' && x.submitted === true), 'R1 #5 送出的部門不存在 → todo dept_inactive＋submitted', dr.data.todo);
+  setStaff(app, it.emp, 'p_dept', ''); setStaff(app, it.emp, 'p_title', '');
+  post(sb, 'orgUpgrade2026', {}, tok);
+  setStaff(app, it.emp, 'dept', 'ghost');
+  const rb = post(sb, 'orgRollback2026', {}, tok);
+  ok(rb.ok && rb.data.orphans.some((o) => o.emp_no === it.emp && o.dept === 'ghost'), 'R1 #5 回退 orphans 也列出部門不存在的人', rb);
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
