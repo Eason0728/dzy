@@ -48,7 +48,7 @@ export function mountProfile(el, ctx) {
         <div class="card-row"><div class="card-title">${esc(p.name)}　${esc(p.emp_no)}</div><span class="${cls}">${esc(txt)}</span></div>
         ${p.status === 'rejected' ? `<div class="toast toast-danger">退回原因：${esc(p.reject_reason)}。請修改後再按「送出」。</div>` : ''}
         <div class="table-wrap"><table class="table"><tbody>
-          <tr><th>已確認</th><td>${esc(confirmed || '（還沒有）')}</td></tr>
+          <tr><th>已確認</th><td>${esc(confirmed || '（還沒有）')}${(p.extra_dept_names || []).length ? `<div class="text-muted" data-role="extra-depts">兼任：${esc(p.extra_dept_names.join('、'))}</div>` : ''}</td></tr>
           ${pending ? `<tr><th>等確認</th><td>${esc(pending)}</td></tr>` : ''}
           <tr><th>生日</th><td>${esc(p.birthday)}<span class="text-muted">（要改請找後台）</span></td></tr>
         </tbody></table></div>
