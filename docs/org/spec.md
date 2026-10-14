@@ -140,3 +140,42 @@
 - `STF_UNIT_VIEW_MIN_RANK.office＝5`（區督導以上算品牌辦公室主管）。
 - 審核表修正：門市同仁 → 同店 rank≥3，或該品牌辦公室 rank≥5；同階梯所以「職級比審核者高→擋」直接適用（區督導不能核准品牌總監），第 11 節第 2 條的跨階梯限制取消。
 - 升級對應（設計審第 5 條，照推薦 A）：品牌辦公室（mzt-hq／mala-hq）同仁職稱是 hq 階梯的，自動對應 hs 部門同仁→ft 正職同仁、hm 部門主管→sv 區督導；其他 hq 職稱（ceo／gm／chair）不動、列入 todo。預覽要逐人列出「從→到」。回退時一併還原這些人的 title（升級前備份 staff 受影響列的 emp_no＋title）。
+
+## 13. Eason 2026-10-14 職稱最終定案（覆蓋第 12 節與前文所有職稱相關內容）
+**門市（三品牌各店＋中央工廠 ck）職稱 ladder＝store，只剩三級：**
+| code | name | rank | active |
+|---|---|---|---|
+| pt | 計時同仁 | 1 | TRUE |
+| ft | 正職同仁 | 2 | TRUE |
+| sm | 店長 | 3 | TRUE |
+| am／sv／bd | 區經理／督導／品牌總監 | 4／5／6 | **FALSE**（停用不刪，舊資料照顯示） |
+
+**品牌辦公室（mzt-hq／mala-hq／yiwu-hq，ladder＝office）自己一套四級，title 列 parent＝office：**
+```
+['title','ofs','行政同仁','office','',1,1,'TRUE']
+['title','oam','區經理','office','',2,2,'TRUE']
+['title','osv','區督導','office','',3,3,'TRUE']
+['title','odir','總監','office','',4,4,'TRUE']
+```
+- 第 12 節的 stfTitleLadder_（office→store 對應）**取消**：office 職稱是資料列，既有「依 unit.ladder 篩職稱」邏輯原生適用；org-fields.js 不用改。
+- `STF_UNIT_VIEW_MIN_RANK.office＝2`（區經理以上算品牌辦公室主管）。
+
+**審核（Eason 2B：只有正上一層）最終表：**
+| 被審的人 | 誰可以審 |
+|---|---|
+| 門市計時／正職同仁 | 同店店長 |
+| 門市店長 | 該品牌辦公室區經理以上（oam／osv／odir） |
+| 中央工廠計時／正職 | 中央工廠店長（ck 的 sm） |
+| 中央工廠店長 | 執行長以上 |
+| 品牌辦公室任何人 | 營運部主管 |
+| 總部部門同仁 | 同主要部門的部門主管 |
+| 總部部門主管 | 執行長以上 |
+| 執行長以上 | 只有人資 |
+| 任何人 | 人資、BOSS |
+- 不同階梯不比職級（上表已經保證審核者在上一層）；同階梯職級比審核者高→擋。
+- 送出的職稱是停用職稱（am／sv／bd）→ 驗證就擋，不會進待審。
+
+**升級對應：**
+- 品牌辦公室同仁原 hq 職稱：hs 部門同仁→ofs 行政同仁、hm 部門主管→osv 區督導；ceo／gm／chair 不動、列 todo。
+- 門市同仁職稱是 am／sv／bd → **不自動搬**，列 todo（flag `title_ladder`），預覽逐人列出，由人資改派到品牌辦公室。
+- flags 只剩 `unit_inactive`、`title_ladder`（職稱停用或不屬於單位階梯）；`store_sv_bd` 取消。
