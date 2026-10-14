@@ -80,7 +80,7 @@
 6. **【Eason】驗登入回應沒有通行碼。** 請 Eason 在 mini 的終端機自己貼下面這段（帳號密碼由他自己輸入，畫面不顯示密碼；只印「有／沒有」，不印內容）：
    ```sh
    export PATH="$HOME/.local/node/bin:$PATH"
-   read -r -p '帳號：' U; read -r -s -p '密碼：' P; echo
+   read "U?帳號："; read -s "P?密碼："; echo
    U="$U" P="$P" node -e '
    fetch("http://127.0.0.1:8799/platform/api",{method:"POST",headers:{"Content-Type":"text/plain"},
      body:JSON.stringify({action:"login",token:"",payload:{username:process.env.U,password:process.env.P}})})
