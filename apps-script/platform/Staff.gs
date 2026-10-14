@@ -1456,6 +1456,18 @@ function stfCopyToNewSheet_(src, name, minWidth) {
 
 function stfStamp_() { return stfNowText_().replace(/\D/g, '').slice(0, 12); }
 
+/** 一次決定備份／快照分頁名：同一個時間戳＋共用序號（撞名就 _2、_3…），建立任何備份前先呼叫；真 Apps Script 的 insertSheet 遇同名會丟錯 */
+function stfPickBackupNames_(withClock) {
+  var base = stfStamp_();
+  for (var n = 1; n < 1000; n++) {
+    var suf = n === 1 ? base : base + '_' + n;
+    var names = { org_bak: 'org_bak_' + suf, clk_bak: withClock ? 'clk_bak_' + suf : '', stf_bak: 'stf_bak_' + suf, org_snap: 'org_upg_' + suf };
+    var clash = Object.keys(names).some(function (k) { return names[k] && stfSheet_(names[k]); });
+    if (!clash) return names;
+  }
+  throw new Error('備份分頁名稱無法決定');
+}
+
 /** 升級計畫（唯讀）：org 要改的格、新增的列、記憶體裡改完的 org 列、clock 狀態、職稱對應、todo */
 function stfUpgradePlan_() {
   var rowsRaw = stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length);
@@ -1573,14 +1585,11 @@ function handleOrgUpgrade_(token, payload) {
   if (dry) return { ok: true, data: data };
 
   // ① 備份（已有備份不覆蓋）：org 整份、clock_stores 整份、受影響同仁的職稱
-  var stamp = stfStamp_();
   if (!backupExists) {
-    state = { at: stfNowText_(), by: String(auth.user.id), org_bak: 'org_bak_' + stamp, clk_bak: '', stf_bak: 'stf_bak_' + stamp, org_snap: 'org_upg_' + stamp, org_hash: '' };
+    var nm = stfPickBackupNames_(!!stfSheet_('clock_stores'));
+    state = { at: stfNowText_(), by: String(auth.user.id), org_bak: nm.org_bak, clk_bak: nm.clk_bak, stf_bak: nm.stf_bak, org_snap: nm.org_snap, org_hash: '' };
     stfCopyToNewSheet_(stfSheet_(STF_SHEET_ORG), state.org_bak, STF_ORG_HEADERS.length);
-    if (stfSheet_('clock_stores')) {
-      state.clk_bak = 'clk_bak_' + stamp;
-      stfCopyToNewSheet_(stfSheet_('clock_stores'), state.clk_bak, 5);
-    }
+    if (state.clk_bak) stfCopyToNewSheet_(stfSheet_('clock_stores'), state.clk_bak, 5);
     var sb = SpreadsheetApp.getActive().insertSheet(state.stf_bak);
     stfPutBlock_(sb, [['emp_no', 'title', 'to_title']], 3);
     stfSetUpgradeState_(state);

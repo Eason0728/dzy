@@ -24,11 +24,16 @@ function ok(cond, label, extra) {
 function makeSheet(rows) {
   const data = (rows || []).map((r) => r.slice());
   const fmt = {};
+  let maxCols = Math.max(26, data.reduce((m, r) => Math.max(m, r.length), 0));   // 真 Google 新分頁預設 26 欄；越界讀寫會丟錯
   const sheet = {
+    getMaxColumns: () => maxCols,
+    insertColumnsAfter(after, n) { maxCols += n; },
+    _setMaxCols(n) { maxCols = n; data.forEach((r) => { if (r.length > n) r.length = n; }); },
     getLastRow: () => data.length,
     getLastColumn: () => data.reduce((m, r) => Math.max(m, r.length), 0),
     getRange(row, col, numRows, numCols) {
       numRows = numRows || 1; numCols = numCols || 1;
+      if (col < 1 || col + numCols - 1 > maxCols) throw new Error('The coordinates or dimensions of the range are invalid.');
       const range = {
         getValues() {
           const out = [];
@@ -78,7 +83,7 @@ function load(seed) {
   Object.keys(seed).forEach((k) => { sheets[k] = makeSheet(seed[k]); });
   const ss = {
     getSheetByName: (n) => sheets[n] || null,
-    insertSheet: (n) => { sheets[n] = makeSheet([]); return sheets[n]; }
+    insertSheet: (n) => { if (sheets[n]) throw new Error('A sheet with the name "' + n + '" already exists. Please enter another name.'); sheets[n] = makeSheet([]); return sheets[n]; }
   };
   const cache = new Map();
   const props = { HMAC_SECRET: 'fake-hmac-for-org-tests' };
@@ -534,39 +539,39 @@ const LEGACY_ORG = [
   ['dept', 'marketing', '行銷部', 'dzy-hq', '', '', 9, 'TRUE']
 ];
 
+const nonBlank = (rows) => rows.filter((r) => r.some((c) => String(c).trim() !== '')).map((r) => r.slice(0, 8).map((c) => String(c).trim().toUpperCase() === 'TRUE' || String(c).trim().toUpperCase() === 'FALSE' ? String(c).trim().toUpperCase() : String(c).trim()));
+const orgSnap = (app) => nonBlank(app.sheets.org._rows().slice(1));
+const clkHq = (app) => app.sheets.clock_stores._data.find((r) => String(r[0]).toLowerCase() === 'hq');
+
+/** 還原成升級前的樣子：舊 org、舊 clock hq 列、staff 尾端只有 hire_date／last_day，再建一批同仁 */
+function legacyApp(clockValue) {
+  const app = fresh();
+  const od = app.sheets.org._data;
+  od.length = 1;
+  LEGACY_ORG.forEach((r) => od.push(r.slice()));
+  clkHq(app)[2] = clockValue === undefined ? 'dzy-hq,mzt-hq,mala-hq' : clockValue;
+  app.sheets.staff._data[0][26] = '';
+  const P = {};
+  P.offHs = mk(app, '升甲', { brand: 'mzt', unit: 'mzt-hq', title: 'hs' });
+  P.offHm = mk(app, '升乙', { brand: 'mala', unit: 'mala-hq', title: 'hm' });
+  P.offCeo = mk(app, '升丙', { brand: 'mala', unit: 'mala-hq', title: 'ceo' });
+  P.storeAm = mk(app, '升丁', { brand: 'mala', unit: 'mala-gf', title: 'am' });
+  P.storeSv = mk(app, '升戊', { brand: 'mzt', unit: 'mzt-js', title: 'sv' });
+  P.storeBd = mk(app, '升己', { brand: 'mzt', unit: 'mzt-gf', title: 'bd' });
+  P.stopped = mk(app, '升庚', { brand: 'mzt', unit: 'mzt-mc', title: 'pt' });
+  P.normal = mk(app, '升辛', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+  P.ckPt = mk(app, '升壬', { brand: 'ck', unit: 'ck', title: 'pt' });
+  P.hqIt = mk(app, '升癸', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
+  app.P = P;
+  app.legacySnap = orgSnap(app);
+  app.legacyClock = app.sheets.clock_stores._rows().map((r) => r.slice());
+  return app;
+}
+const upg = (app, payload, t) => post(app.sb, 'orgUpgrade2026', payload || {}, t === undefined ? app.tok : t);
+const rbk = (app, t) => post(app.sb, 'orgRollback2026', {}, t === undefined ? app.tok : t);
+const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_bak|stf_bak|org_upg)_/.test(k)).sort();
+
 (() => {
-  const nonBlank = (rows) => rows.filter((r) => r.some((c) => String(c).trim() !== '')).map((r) => r.slice(0, 8).map((c) => String(c).trim().toUpperCase() === 'TRUE' || String(c).trim().toUpperCase() === 'FALSE' ? String(c).trim().toUpperCase() : String(c).trim()));
-  const orgSnap = (app) => nonBlank(app.sheets.org._rows().slice(1));
-  const clkHq = (app) => app.sheets.clock_stores._data.find((r) => String(r[0]).toLowerCase() === 'hq');
-
-  /** 還原成升級前的樣子：舊 org、舊 clock hq 列、staff 尾端只有 hire_date／last_day，再建一批同仁 */
-  function legacyApp(clockValue) {
-    const app = fresh();
-    const od = app.sheets.org._data;
-    od.length = 1;
-    LEGACY_ORG.forEach((r) => od.push(r.slice()));
-    clkHq(app)[2] = clockValue === undefined ? 'dzy-hq,mzt-hq,mala-hq' : clockValue;
-    app.sheets.staff._data[0][26] = '';
-    const P = {};
-    P.offHs = mk(app, '升甲', { brand: 'mzt', unit: 'mzt-hq', title: 'hs' });
-    P.offHm = mk(app, '升乙', { brand: 'mala', unit: 'mala-hq', title: 'hm' });
-    P.offCeo = mk(app, '升丙', { brand: 'mala', unit: 'mala-hq', title: 'ceo' });
-    P.storeAm = mk(app, '升丁', { brand: 'mala', unit: 'mala-gf', title: 'am' });
-    P.storeSv = mk(app, '升戊', { brand: 'mzt', unit: 'mzt-js', title: 'sv' });
-    P.storeBd = mk(app, '升己', { brand: 'mzt', unit: 'mzt-gf', title: 'bd' });
-    P.stopped = mk(app, '升庚', { brand: 'mzt', unit: 'mzt-mc', title: 'pt' });
-    P.normal = mk(app, '升辛', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
-    P.ckPt = mk(app, '升壬', { brand: 'ck', unit: 'ck', title: 'pt' });
-    P.hqIt = mk(app, '升癸', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
-    app.P = P;
-    app.legacySnap = orgSnap(app);
-    app.legacyClock = app.sheets.clock_stores._rows().map((r) => r.slice());
-    return app;
-  }
-  const upg = (app, payload, t) => post(app.sb, 'orgUpgrade2026', payload || {}, t === undefined ? app.tok : t);
-  const rbk = (app, t) => post(app.sb, 'orgRollback2026', {}, t === undefined ? app.tok : t);
-  const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_bak|stf_bak|org_upg)_/.test(k)).sort();
-
   const app = legacyApp();
   const { sb, tok, hrTok, P } = app;
   const sheetCount0 = Object.keys(app.sheets).length;
@@ -695,6 +700,24 @@ const LEGACY_ORG = [
   const before6 = a6.sheets.org._rows().map((r) => r.join('|')).join();
   const r6 = up(a6);
   ok(r6.ok === false && a6.sheets.org._rows().map((r) => r.join('|')).join() === before6 && !a6.props.ORG_UPGRADE_STATE, 'T4 staff 第 27 欄表頭不符 → 停下，什麼都不寫（含備份）', r6);
+})();
+
+// ============================================================
+// 第 1 輪審查修正（issue #3）
+// ============================================================
+(() => {
+  // #6／G6：備份名撞名 → 加序號；insertSheet 遇同名會丟錯（同真 Google）
+  const app = legacyApp();
+  const { sb } = app;
+  const stamp = sb.stfStamp_();
+  ['org_bak_', 'clk_bak_', 'stf_bak_', 'org_upg_'].forEach((p) => { app.sheets[p + stamp] = null; delete app.sheets[p + stamp]; });
+  app.sheets['stf_bak_' + stamp] = { _fake: true, getLastRow: () => 0 };
+  app.sheets['org_bak_' + stamp] = app.sheets.org;
+  const r = post(sb, 'orgUpgrade2026', {}, app.tok);
+  const st = JSON.parse(app.props.ORG_UPGRADE_STATE || '{}');
+  ok(r.ok, 'R1 #6 備份名已被占用時升級仍成功', r);
+  const names = [st.org_bak, st.clk_bak, st.stf_bak, st.org_snap];
+  ok(names.every((n) => n && app.sheets[n]) && new Set(names).size === 4 && names.every((n) => /_2$/.test(n)), 'R1 #6 三個（加快照共四個）名稱共用序號、互不相同、都已建立並存進 state', names);
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);
