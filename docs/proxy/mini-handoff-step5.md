@@ -30,18 +30,24 @@
    期望：audit ok 與 dorm ok 都 > 0；NO_SECRET＝0；最後一筆成功時間是近兩天。
    任一 ok＝0 → 停，回報（代表那個模組還沒人實際用代轉成功過，關開關前要先實測）。
 
-2. **刪前三個數字。**
+2. **刪前四個數字＋.env 最後修改時間。**
    ```sh
    cd ~/dzy-minikit
    grep -c '^GAS_PROP_LEGACY_SECRETS' apps/dzy-platform/.env
+   grep -c 'LEGACY_SECRETS' apps/dzy-platform/.env
    sqlite3 -readonly "$HOME/dzy-platform-data/app.db" "select count(*) from meta where k='prop:LEGACY_SECRETS';"
    ps eww "$(cat "$HOME/dzy-platform-data/server.pid")" | grep -c 'GAS_PROP_LEGACY_SECRETS'
+   stat -f '%Sm' apps/dzy-platform/.env; ps -o lstart= -p "$(cat "$HOME/dzy-platform-data/server.pid")"
+   ls -lt "$HOME"/dzy-minikit-work/ 2>/dev/null | head -5 | awk '{print $6,$7,$8,$9}'
    ```
-   期望：1、0、0。
-   - 第二個不是 0 ＝資料庫裡有執行期覆寫（它會**蓋過** `.env`，刪 .env 也沒用）→ 停，回報。
-   - 第三個不是 0 ＝旗標是從行程環境變數帶進來的（環境變數優先於 .env）→ 停，回報。
+   （第 1 個：正式那行；第 2 個：任何寫法（被註解、前面有空白）都算；第 3 個：資料庫執行期覆寫；第 4 個：執行中行程的環境變數；
+   接著是 .env 最後修改時間、目前後端行程啟動時間、work 資料夾裡最近的檔名——只列檔名不讀內容。）
+   - 2026-10-14 11:38 回報第 1 個＝1，22:07 第 4 段之二回報已是 0（誰刪的未確認）。**第 1、2 個是 0 或 1 都照實回報，不要停。**
+   - 第 3 個不是 0 ＝資料庫裡有執行期覆寫（它會**蓋過** `.env`，刪 .env 也沒用）→ 停，回報。
+   - 第 4 個不是 0 ＝旗標是從行程環境變數帶進來的（環境變數優先於 .env）→ 停，回報。
 
-3. **刪那一行（先備份到 repo 外的 `~/dzy-minikit-work`，不會被 git 收進去）。**
+3. **刪那一行（只有第 2 步第 1 個＝1 才做；是 0 就跳過本步，直接做第 4 步重啟）。**
+   先備份到 repo 外的 `~/dzy-minikit-work`，不會被 git 收進去：
    ```sh
    cd ~/dzy-minikit/apps/dzy-platform
    mkdir -p "$HOME/dzy-minikit-work" && chmod 700 "$HOME/dzy-minikit-work"
@@ -50,8 +56,9 @@
    grep -c '^GAS_PROP_LEGACY_SECRETS' .env; wc -l < .env; wc -l < "$(ls -t "$HOME"/dzy-minikit-work/platform-env.bak-* | head -1)"
    ```
    期望：0；新檔行數＝備份行數減 1。
+   第 2 個數字（任何寫法）是 1 但第 1 個是 0（例如被註解掉）→ 不用動，註解行不會生效。
 
-4. **只重啟 dzy-platform（不動另外三個系統）。**
+4. **只重啟 dzy-platform（不動另外三個系統）。** 不管第 3 步有沒有做都要重啟：確保執行中的後端讀的是現在的 `.env`（重啟 5–10 秒，目前沒有同仁在用；第 4 段已開的打卡寫入排程會跟著重新啟動）。
    現在由 LaunchAgent `com.dzy.minikit` 管。只殺 node，讓 dzy-platform 自己的重啟迴圈 5 秒後用新 `.env` 拉起來：
    ```sh
    export PATH="$HOME/.local/node/bin:$PATH"; cd ~/dzy-minikit; DATA="$HOME/dzy-platform-data"
@@ -91,8 +98,8 @@
    第 5 步回報（時間：____）
    - 0 時間／無其他交辦：OK / 不 OK
    - 1 代轉成功次數：audit ok=__ dorm ok=__ audit upstream_not_ok=__ dorm upstream_not_ok=__ NO_SECRET=__ 最後成功=____
-   - 2 刪前：.env 行數=__ 資料庫覆寫=__ 行程環境=__
-   - 3 刪後 .env 行數=__（新 __ 行／備份 __ 行）
+   - 2 刪前：.env 正式行=__ 任何寫法=__ 資料庫覆寫=__ 行程環境=__ .env 修改時間=____ 行程啟動時間=____ work 最近檔名=____
+   - 3 有做／跳過；有做的話刪後 .env 行數=__（新 __ 行／備份 __ 行）
    - 4 舊 pid=__ 新 pid=__ health=____ LaunchAgent 載入=是/否 四系統在跑=是/否
    - 5 行程環境=__ 代轉回=____
    - 6 登入 secrets：有 / 沒有
@@ -100,7 +107,7 @@
    ```
 
 ## 出事怎麼退
-登入後稽核或宿舍打不開、且看得出跟這次有關：
+登入後稽核或宿舍打不開、且看得出跟這次有關（第 3 步有做才有備份可還原；跳過的話這次沒改 .env，重啟回不去也不用回）：
 ```sh
 cd ~/dzy-minikit/apps/dzy-platform && cp -p "$(ls -t "$HOME"/dzy-minikit-work/platform-env.bak-* | head -1)" .env
 DATA="$HOME/dzy-platform-data"; kill "$(cat "$DATA/server.pid")"; sleep 10; curl -s -m 5 http://127.0.0.1:8799/platform/health | head -c 160; echo
