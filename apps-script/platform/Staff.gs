@@ -307,19 +307,37 @@ function stfExtraDeptName_(org, code) {
 }
 
 /**
- * 名單旗標（契約 plan.md，規格第 13 節）：'unit_inactive'＝單位已停用（或單位代碼已不存在）、
- * 'title_ladder'＝職稱停用、不存在或不屬於該單位的職稱階梯。沒有單位（未認領）或已停用帳號 → 空陣列。
+ * 名單旗標明細（契約 plan.md，規格第 13 節）：回 [{flag, submitted}]。
+ * 'unit_inactive'＝單位已停用（或單位代碼已不存在）、'title_ladder'＝職稱停用、不存在或不屬於該單位的職稱階梯。
+ * submitted＝true 表示問題出在「送出待審的資料」（p_unit／p_title）而不是目前身分。
+ * 目前身分沒有單位（未認領）時只檢查送出資料；已停用帳號 → 空陣列。
  */
-function stfFlags_(o, org) {
-  var flags = [];
-  if (!o.unit || o.status === 'disabled') return flags;
-  var u = org.unit[o.unit];
-  if (!u || !u.active) flags.push('unit_inactive');
-  if (o.title && u) {
-    var t = org.title[o.title];
-    if (!t || !t.active || t.parent !== (u.ladder || 'store')) flags.push('title_ladder');
+function stfFlagDetails_(o, org) {
+  var out = [];
+  if (o.status === 'disabled') return out;
+  var seen = {};
+  var add = function (flag, submitted) { var k = flag + '|' + (submitted ? 1 : 0); if (!seen[k]) { seen[k] = true; out.push({ flag: flag, submitted: submitted }); } };
+  var check = function (unit, title, submitted) {
+    var u = org.unit[unit];
+    if (!u || !u.active) add('unit_inactive', submitted);
+    if (title && u) {
+      var t = org.title[title];
+      if (!t || !t.active || t.parent !== (u.ladder || 'store')) add('title_ladder', submitted);
+    }
+  };
+  if (o.unit) check(o.unit, o.title, false);
+  var pu = o.p_unit || '';
+  var pt = o.p_title || '';
+  if (pu || pt) {
+    var eu = pu || o.unit;
+    if (eu) check(eu, pt, true);
   }
-  return flags;
+  return out;
+}
+
+function stfFlags_(o, org) {
+  var seen = {};
+  return stfFlagDetails_(o, org).map(function (x) { return x.flag; }).filter(function (f) { if (seen[f]) return false; seen[f] = true; return true; });
 }
 
 /** 把 extra_depts／extra_dept_names（及可選的 flags）補進 stfToObj_ 的結果 */
@@ -1538,16 +1556,17 @@ function stfUpgradePlan_() {
     var unit = stfStr_(r.values[STF_COL.unit]);
     var title = stfStr_(r.values[STF_COL.title]);
     var status = stfStr_(r.values[STF_COL.status]);
-    if (!unit) return;
     var effTitle = title;
-    if (STF_BRAND_OFFICES.indexOf(unit) !== -1 && STF_OFFICE_TITLE_MAP[title]) {
+    if (unit && STF_BRAND_OFFICES.indexOf(unit) !== -1 && STF_OFFICE_TITLE_MAP[title]) {
       effTitle = STF_OFFICE_TITLE_MAP[title];
       titles.push({ emp_no: emp, name: name, from: title, to: effTitle,
         from_name: newOrg.title[title] ? newOrg.title[title].name : title, to_name: newOrg.title[effTitle] ? newOrg.title[effTitle].name : effTitle, row: r.row });
     }
-    var flags = stfFlags_({ unit: unit, title: effTitle, status: status }, newOrg);
-    flags.forEach(function (f) {
-      todo.push({ emp_no: emp, name: name, unit_name: newOrg.unit[unit] ? newOrg.unit[unit].name : unit, flag: f });
+    var details = stfFlagDetails_({ unit: unit, title: effTitle, dept: stfStr_(r.values[STF_COL.dept]), status: status,
+      p_unit: stfStr_(r.values[STF_COL.p_unit]), p_title: stfStr_(r.values[STF_COL.p_title]), p_dept: stfStr_(r.values[STF_COL.p_dept]) }, newOrg);
+    details.forEach(function (f) {
+      var uc = f.submitted && stfStr_(r.values[STF_COL.p_unit]) ? stfStr_(r.values[STF_COL.p_unit]) : unit;
+      todo.push({ emp_no: emp, name: name, unit_name: newOrg.unit[uc] ? newOrg.unit[uc].name : uc, flag: f.flag, submitted: f.submitted });
     });
   });
   return { report: report, cells: cells, addRows: addRows, newOrg: newOrg, clock: clock, titles: titles, todo: todo };

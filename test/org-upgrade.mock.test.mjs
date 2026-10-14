@@ -753,5 +753,25 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(rb.ok === false && rb.data && rb.data.diff.some((d) => d.code === 'extra-x'), 'R1 #2 之後回退仍被拒並列出 extra-x', rb);
 })();
 
+(() => {
+  // #3：flags／升級預覽 todo 也看 p_*（送出待審的單位、職稱）
+  const app = legacyApp();
+  const { sb, tok } = app;
+  const pend1 = submitOnly(app, '待審甲', { brand: 'mzt', unit: 'mzt-hq', title: 'hs' });          // 送出的職稱 hs（hq 階梯），升級後 mzt-hq 變 office
+  const pend2 = submitOnly(app, '待審乙', { brand: 'mzt', unit: 'mzt-mc', title: 'pt' });          // 送出的單位 mzt-mc 升級後停用
+  const chg = app.P.offHm;                                                                       // 在職、送出晉升待確認 p_title=hm
+  setStaff(app, chg.emp, 'p_unit', 'mala-hq'); setStaff(app, chg.emp, 'p_title', 'hm');
+  const dr = post(sb, 'orgUpgrade2026', { dryrun: true }, tok);
+  const td = (emp) => dr.data.todo.filter((x) => x.emp_no === emp);
+  ok(td(pend1.emp).some((x) => x.flag === 'title_ladder' && x.submitted === true), 'R1 #3 預覽 todo：待審送出的 hs 升級後不屬 office 階梯 → title_ladder＋submitted', dr.data.todo);
+  ok(td(pend2.emp).some((x) => x.flag === 'unit_inactive' && x.submitted === true), 'R1 #3 預覽 todo：待審送出的 mzt-mc 停用 → unit_inactive＋submitted');
+  ok(td(chg.emp).some((x) => x.flag === 'title_ladder' && x.submitted === true), 'R1 #3 預覽 todo：在職送出的 p_title=hm 升級後不合 → title_ladder＋submitted');
+  ok(td(app.P.normal.emp).length === 0, 'R1 #3 沒有 p_* 的正常人不列');
+  post(sb, 'orgUpgrade2026', {}, tok);
+  const list = post(sb, 'staffList', {}, tok).data.staff;
+  const fl = (emp) => list.find((x) => x.emp_no === emp).flags;
+  ok(fl(pend1.emp).indexOf('title_ladder') !== -1 && fl(pend2.emp).indexOf('unit_inactive') !== -1 && fl(chg.emp).indexOf('title_ladder') !== -1, 'R1 #3 升級後 staffList flags 看得到 p_* 的問題', [fl(pend1.emp), fl(pend2.emp), fl(chg.emp)]);
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
