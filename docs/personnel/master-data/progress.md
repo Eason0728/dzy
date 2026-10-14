@@ -75,7 +75,7 @@
 - 之二－1：mini 清 clock-sync-state.json 的 daily.date 重啟 → 新程式 11:56 補跑每日同步，六店 ok、apply ok；首頁只剩 1 筆「沒有主店打卡編號」（Eason 本人 DZY014，單位小辛辣總部、總部打卡無帳號）。
 - 之二－2：mini `.env` CLOCK_WRITE 0→1（21:56），health green write=true，10 分鐘內 0 張積壓單；LEGACY_SECRETS 行數 0（與 11:38 回報不一致，另一對話查）。HUB_SVC_KEY 未設（7A 延後）。
 - E4 實測通過：DZY129 TEST（鼎兆元總部）新增→總部打卡名冊出現→登記離職 10/13→10/15 00:10 停用，「打卡已停 1/1」。測試列停用後保留當紀錄。
-- DZY014 用「在主店建打卡帳號」補建總部打卡，10-15 已建好（「建檔中」消失）（他的光復帳號本來就是支援，所以不會出現「舊主店」問題）。發現 clockAddHome 漏列同步員 TRIGGER_ACTIONS（要等 15 分鐘補撿）→ minikit b2039a9 修；它疊在組織改版後端 308cdd6 之上，等組織改版上線那次 mini pull＋重啟才一起生效（不急，未生效前只是多等 15 分鐘）。
+- DZY014 用「在主店建打卡帳號」補建總部打卡，10-15 已建好（「建檔中」消失）（他的光復帳號本來就是支援，所以不會出現「舊主店」問題）。發現 clockAddHome 漏列同步員 TRIGGER_ACTIONS（要等 15 分鐘補撿）→ minikit b2039a9 修；它疊在組織改版後端 308cdd6 之上，等組織改版上線那次 mini pull＋重啟才一起生效（2026-10-15 Eason 選 a；已請組織改版對話把 docs/org/mini-handoff.md 期望 HEAD 改 b2039a9＋加 grep clockAddHome 檢查；未生效前只是多等 15 分鐘）。
 - 個案 A（DZY058）單位空、不在 no_home_map；等她認領選墨竹亭總部後再按「在主店建打卡帳號」，建好在「舊主店」停用墨竹亭光復舊帳號。
 - **仍關**：六店 STAFF_MASTER_ADD_REDIRECT（值班核定新增改說明，等店長通知發出同日開）、7A（HUB_SVC_KEY＋光復 STAFF_HUB_URL／KEY，等白天找已綁 LINE 同仁實測）。店長通知草稿 segment4-notice-draft.md 待 Eason 審。
 - 第 6 段計時：寫入開放 2026-10-14 起兩週（2026-10-28）若「打卡上有、沒對照」零 → mgr_add_employee 停用。
