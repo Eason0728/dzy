@@ -1,0 +1,79 @@
+<title>組織架構設計審結果</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;800&display=swap">
+<style>
+/* 版面：單欄文件，上方決策題卡、下方改版前後對照與影響說明 */
+:root{
+  --bg:#f6f7f5; --paper:#ffffff; --ink:#1d2421; --muted:#5d6863; --line:#dde3df;
+  --accent:#1f6b52; --accent-soft:#e3f0ea; --warn:#a4561a; --warn-soft:#f8ecdf;
+  --display:"Noto Serif TC","Songti TC",serif; --body:"Noto Sans TC","PingFang TC",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141917; --paper:#1c2320; --ink:#e6ece9; --muted:#9aa7a1; --line:#2e3833;
+  --accent:#6fc5a3; --accent-soft:#1f3a30; --warn:#e7a46a; --warn-soft:#3a2a1c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --paper:#1c2320; --ink:#e6ece9; --muted:#9aa7a1; --line:#2e3833;
+  --accent:#6fc5a3; --accent-soft:#1f3a30; --warn:#e7a46a; --warn-soft:#3a2a1c; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:16px/1.75 var(--body);padding:0 16px}
+.wrap{max-width:760px;margin:0 auto;padding-block:40px 64px;display:flex;flex-direction:column;gap:36px}
+h1{font:800 clamp(26px,5vw,34px)/1.3 var(--display);margin:0;text-wrap:balance}
+h2{font:600 22px/1.4 var(--display);margin:0 0 12px;text-wrap:balance}
+.lede{color:var(--muted);margin:8px 0 0}
+.eyebrow{font-size:13px;letter-spacing:.08em;color:var(--accent);font-weight:700}
+.q{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:18px 20px;display:flex;flex-direction:column;gap:10px}
+.q h3{margin:0;font-size:17px;line-height:1.5}
+.q .why{color:var(--muted);font-size:14.5px;margin:0}
+.opt{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:10px 12px;border-radius:8px;border:1px solid var(--line)}
+.opt.rec{border-color:var(--accent);background:var(--accent-soft)}
+.opt b{font-size:14px;color:var(--accent)} .opt span{min-width:0}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--accent);color:var(--paper);margin-left:6px;vertical-align:2px}
+.qs{display:flex;flex-direction:column;gap:14px}
+.tree{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;font-size:15px}
+.tree ul{list-style:none;margin:0;padding-left:20px;border-left:1px dashed var(--line)}
+.tree>ul{padding-left:0;border:0}
+.tree li{padding:3px 0}
+.off{color:var(--muted);text-decoration:line-through}
+.new{color:var(--accent);font-weight:700}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:640px){.cols{grid-template-columns:1fr}}
+.cols>div{min-width:0}
+.cap{font-size:13px;font-weight:700;color:var(--muted);margin-bottom:6px;letter-spacing:.04em}
+.tbl{overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:700}
+tr:last-child td{border-bottom:0}
+.note{background:var(--warn-soft);border-radius:10px;padding:14px 18px;font-size:15px}
+.note b{color:var(--warn)}
+ul.plain{margin:0;padding-left:20px}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">鼎兆元管理系統｜開工前設計審</div>
+  <h1>GPT 挑了 12 個洞，11 個我直接補，1 個要你選</h1>
+  <p class="lede">開工前請 GPT 專挑規格的毛病。下面先放要你選的那一題，再列我補了什麼。</p>
+</header>
+
+<section><h2>要你選的 1 題</h2><div class="qs">
+<div class="q"><h3>原本墨竹亭總部、小辛辣總部的人，切換時職稱怎麼處理？</h3>
+<p class="why">他們現在的職稱是總部那一套（部門同仁、部門主管）。換成品牌辦公室後，職稱要改成品牌專員、品牌督導、品牌總監。在職稱改好之前，他們沒辦法審門市的人，只能由人資代審。</p>
+<div class="opt rec"><b>A</b><span>切換時自動對應：部門同仁→品牌專員、部門主管→品牌督導。按「切換組織」時會先跳出預覽，逐人列出「誰會從什麼變成什麼」，你看了不對可以不按。品牌總監之後由人資手動升。<span class="tag">推薦</span></span></div>
+<div class="opt"><b>B</b><span>不自動改。切換後人資一個一個改；改好之前，品牌辦公室的人審不了門市，全部由人資審。</span></div>
+</div></div></section>
+
+<section><h2>已經補上的 11 個洞</h2>
+<div class="tbl"><table>
+<tr><th>原本的問題</th><th>補法</th></tr>
+<tr><td>品牌督導可以核准門市同仁當「品牌總監」，等於核准比自己大的職位</td><td>品牌辦公室只能核准到區經理；門市督導、品牌總監一律轉人資</td></tr>
+<tr><td>停用門市的店長帳號還在，可能繼續審人</td><td>審核者所在門市和職稱必須是啟用中，否則沒有審核資格</td></tr>
+<tr><td>人資和 BOSS 可能看不到「待審核」分頁</td><td>人資、BOSS 一律看得到</td></tr>
+<tr><td>同仁把職稱往下填，就能換成比較好過的人審</td><td>如果系統裡已經有這個人原本的職位，原本和新填的兩個職位都要審得過才行</td></tr>
+<tr><td>切換做到一半當掉，系統會半新半舊</td><td>同時間只准一個人按；重按會從頭比對，已經改好的跳過</td></tr>
+<tr><td>退回只還原組織表，打卡那邊沒還原</td><td>組織表和打卡對照一起備份、一起還原</td></tr>
+<tr><td>第二次退回會把切換後人資的修改一起抹掉</td><td>每次切換的備份都標上時間；切換後如果有人改過組織表，退回鍵會停下來，並列出改過哪裡</td></tr>
+<tr><td>新加的資料列有幾格沒寫清楚，可能被當成停用</td><td>每一列八格都寫死在規格裡</td></tr>
+<tr><td>一悟品牌辦公室可能沒接上總部打卡</td><td>改成「沒有就補上」，原本自訂的不動</td></tr>
+<tr><td>兼任部門可能被一般同仁偷改，或在改其他資料時被清空</td><td>只有人資能改；沒動到就保留；主要部門改了，兼任清單會自動移掉重複的那個</td></tr>
+<tr><td>兼任中央工廠沒地方選</td><td>兼任選單多一個「中央工廠」</td></tr>
+</table></div></section>
+</div>

@@ -103,3 +103,32 @@
 2. **B：只有正上一層能審**（第 4 節已改）。
 3. **B：品牌辦公室另一套職稱**（第 2 節已改）。
 4. A：升級／回退只有 BOSS（admin）能按。
+
+## 11. 設計審修正（GPT 2026-10-14，原文 design-review-gpt.md；以本節為準，前文衝突處以此覆蓋）
+| # | 採納 | 修法 |
+|---|---|---|
+| 1 | 部分 | 待審列若已有「目前身分」（匯入時帶入的 unit／title），審核者必須同時夠格審「目前」與「送出」兩個身分，取嚴者。首次認領沒有目前身分＝只看送出的 |
+| 2 | 是 | 跨階梯限制：品牌辦公室審門市同仁時，只能核准門市職稱 pt／ft／sm／am；送出門市 sv／bd → 只有人資 |
+| 3 | 是 | 審核者本身的單位、職稱必須 active，且職稱屬於該單位階梯；否則沒有審核資格 |
+| 4 | 是 | 「待審核」分頁出現條件＝有審核者資格 **或** platform.staff **或** admin（前後端一致） |
+| 5 | 待 Eason | 見下方「升級預覽」：切換前先看會受影響的人（Q：要不要自動對應職稱） |
+| 6 | 是 | 升級／回退包在既有寫入鎖；org 列以 (kind, code) upsert，不會重複新增；每一步寫完驗後置條件，重跑從頭比對、已是目標值就跳過 |
+| 7 | 是 | 升級同時備份 org 整份＋clock_stores 整份；回退兩份都還原；回退報告列出「切換後被改成新單位／新職稱、回退後會變孤兒」的人 |
+| 8 | 是 | 備份分頁名帶時間：`org_bak_YYYYMMDDHHmm`、`clk_bak_YYYYMMDDHHmm`；Script Properties `ORG_UPGRADE_STATE`＝{backup 名、升級後 org 雜湊}。回退前比對雜湊，切換後 org 有人改過 → 拒絕整表覆蓋並列出差異 |
+| 9 | 是 | 新增列完整八欄見下表 |
+| 10 | 是 | clock_stores hq 列 unit_code 拆成集合，沒有 yiwu-hq 就加（保留自訂值與順序）；佈告欄 yiwu-hq＝不對應任何組別（與一悟各店相同，明文）；未知 ladder 一律當無主管權限 |
+| 11 | 是 | extra_depts 只在後端以目前身分判斷 platform.staff；沒帶＝保留；只寫該格不整列覆寫；主要部門有任何變動（核准、後台改）時自動從兼任裡移除新的主要部門 |
+| 12 | 是 | extra_depts 允許特別代碼 `ck`（顯示「中央工廠」），代表兼任中央工廠；不新增部門列 |
+
+### 11.1 新增 org 列完整八欄（kind, code, name, parent, ladder, rank, order, active）
+```
+['unit','yiwu-hq','一悟燒肉品牌辦公室','yiwu','office','',3,'TRUE']
+['title','os','品牌專員','office','',1,1,'TRUE']
+['title','osv','品牌督導','office','',2,2,'TRUE']
+['title','obd','品牌總監','office','',3,3,'TRUE']
+```
+（職稱列的 parent＝ladder 名，與既有 title 列 `['title','pt','計時同仁','store','',1,1,'TRUE']` 同格式）
+改動列：`['brand','ck','中央工廠',…]`、`['unit','ck','中央工廠（央廚）','ck','store',…]`、`['unit','mzt-hq','墨竹亭品牌辦公室','mzt','office',…]`、`['unit','mala-hq','小辛辣品牌辦公室','mala','office',…]`、`mzt-wx／mzt-rg／mzt-mc` active＝`FALSE`；其他欄維持原值。
+
+### 11.2 升級預覽
+`orgUpgrade2026` 加參數 `dryrun:true`：不寫任何東西，回傳同一份報告（會改哪些列、todo 名單）。BOSS 按「切換組織」時先顯示預覽，再按一次「確定切換」才寫入。
