@@ -63,6 +63,14 @@
 **開發位置**：程式都已併進各 repo main（dzy 5adc6ee、mala-clock-in 1fa6c73、minikit d11b9f3）；佈告欄仍在 ~/dzy-bulletin-wt-staffmaster（feature/staff-master，未上線）。可清掉的 worktree：~/dzy-wt-staffmaster、~/mala-clock-in-svcstaff、~/dzy-minikit-wt-jobs（佈告欄那個留到第 5 段）。
 **交辦檔小誤差**：mini-handoff-segment3.md 第 6 步「POST {} 期望 unauthorized」已過時，實際回 bad_input（上線前關 F7 改成先驗格式）；格式正確無金鑰才回 unauthorized。
 
+### 第 4 段之一（2026-10-14 03:xx 完成）
+- 寫入仍關（CLOCK_WRITE=0）。dzy 2cb53e4（前端先上，舊後端時按鈕自動隱藏）、minikit ee62b15（後端 clockAddHome）＋6040150（登入後自動啟動 LaunchAgent com.dzy.minikit，四套 app 一起帶起來）。
+- mini 回報：新後端載入、NO_SUCH_FUNCTION 0、四套綠燈、log 無網址金鑰；外網探針 clockAddHome 回「登入已失效」（已認得）。
+- 守門 mala-gas 263c102 已 clasp push（Eason 跑），dry-run 管理系統伺服器綠燈；副本 mala-fortune 63e1a12。
+- 今天 01:52 的每日同步是舊程式跑的 → 前置 1 要等 **2026-10-15 00:10** 新程式跑過。前置 2（自動啟動）✅、前置 3（守門）✅；前置 4（LEGACY_SECRETS 行數）mini 回報未提，待補問。
+- 尚未：新按鈕真瀏覽器實點（需總部登入）；店長通知草稿 segment4-notice-draft.md 待 Eason 看。
+- 下一步「第 4 段之二」：10/15 00:10 後查 log → 開寫入（.env CLOCK_WRITE=1＋HUB_SVC_KEY；光復 STAFF_HUB_URL／KEY；六店 STAFF_MASTER_ADD_REDIRECT=1）→ E4 實測 → 個案 A 用「在主店建打卡帳號」。
+
 ### 第 4 段（開放寫入）——建議新對話，口令「員工名單統一第 4 段」，先讀本檔與 spec §4、prelaunch-review.md
 前置（缺一不開，plan 5d）：
 1. ✅ 打卡對照全部確認（2026-10-14 總部完成，需總部處理與候選新人皆空）。⚠ 未認領者的 home／support 標籤要等「無單位推主店」修正上線後每日重算才正確——開寫入前確認已上線並跑過一次 00:10。
