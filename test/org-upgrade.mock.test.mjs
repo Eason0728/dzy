@@ -720,5 +720,23 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(names.every((n) => n && app.sheets[n]) && new Set(names).size === 4 && names.every((n) => /_2$/.test(n)), 'R1 #6 三個（加快照共四個）名稱共用序號、互不相同、都已建立並存進 state', names);
 })();
 
+(() => {
+  // #1：舊 staff 分頁只有 26 欄（未跑 setupStaff／orgUpgrade2026）→ 讀尾端欄依實際欄數，缺的當空字串
+  const app = legacyApp();
+  const { sb, tok } = app;
+  app.sheets.staff._setMaxCols(26);
+  ok(app.sheets.staff.getMaxColumns() === 26, 'R1 #1 （前置）staff 只有 26 欄');
+  const call = (a) => { try { return post(sb, a, {}, tok); } catch (e) { return { ok: false, thrown: String(e.message) }; } };
+  let all;
+  try { all = sb.clkStaffAll_(); } catch (e) { all = e.message; }
+  ok(Array.isArray(all) && all.length >= 10 && all.every((x) => x.values.length === 27 && x.values[26] === ''), 'R1 #1 clkStaffAll_ 對 26 欄分頁不丟錯、缺的第 27 欄補空字串', typeof all === 'string' ? all : all.length);
+  const sl = call('staffList');
+  ok(sl.ok && sl.data.staff.length >= 10, 'R1 #1 staffList 對 26 欄分頁可用（升級前 BOSS 要能開名單）', sl);
+  const ca = call('clockAlerts');
+  ok(ca.thrown === undefined && !/忙碌/.test(String(ca.error || '')), 'R1 #1 clockAlerts 對 26 欄分頁不爆', ca);
+  const up = post(sb, 'orgUpgrade2026', {}, tok);
+  ok(up.ok && app.sheets.staff.getMaxColumns() >= 27 && app.sheets.staff._data[0][26] === 'extra_depts', 'R1 #1 升級照常補欄', up);
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

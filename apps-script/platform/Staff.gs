@@ -134,7 +134,14 @@ function stfReadRows_(name, colCount) {
   if (!sh) return [];
   var last = sh.getLastRow();
   if (last < 2) return [];
-  return sh.getRange(2, 1, last - 1, colCount).getValues();
+  // 依實際欄數讀（舊分頁可能比 colCount 少，例如只有 26 欄；越界在真 Apps Script 會丟 range invalid），缺的欄補空字串
+  var have = typeof sh.getMaxColumns === 'function' ? Math.min(colCount, sh.getMaxColumns()) : colCount;
+  if (have < 1) have = 1;
+  var vals = sh.getRange(2, 1, last - 1, have).getValues();
+  if (have < colCount) {
+    vals = vals.map(function (r) { var o = r.slice(); while (o.length < colCount) o.push(''); return o; });
+  }
+  return vals;
 }
 
 /** 寫一整列前先把該列設成純文字，再 setValues（不用 appendRow，新列不一定繼承欄格式） */
