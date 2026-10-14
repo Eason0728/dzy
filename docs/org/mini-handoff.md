@@ -15,8 +15,8 @@
 ## 步驟
 1. **更新 minikit。**
    `cd ~/dzy-minikit && git pull --ff-only && git log --oneline -3`
-   期望：fast-forward 成功。
-   `grep -c "orgUpgrade2026" apps/dzy-platform/gas/Code.gs apps/dzy-platform/gas/Staff.gs` → 兩檔都 ≥1。
+   期望：fast-forward 成功，HEAD 是 `308cdd6`。
+   `grep -c "handleOrgUpgrade_" apps/dzy-platform/gas/Code.gs apps/dzy-platform/gas/Staff.gs` → 兩檔都 ≥1。
    `grep -c "extra_depts" apps/dzy-platform/gas/StaffClock.gs` → ≥1。
 
 2. **先備份資料庫（只複製，不改）。**
@@ -39,7 +39,7 @@
    tail -n 40 "$HOME/dzy-platform-data/logs/server.log" | grep -cE "NO_SUCH_FUNCTION|ReferenceError|SyntaxError"
    grep -cE "https://|svc_key|CLOCK_KEY" "$HOME/dzy-platform-data/logs/server.log"
    ```
-   期望：第一行是「未登入／token」類錯誤，**不是**「未知的 action／不支援」；後兩個數字是 0。
+   期望：第一行是登入相關的錯誤（例如請先登入、token 無效），**不是**「不支援的操作」（出現它＝還是舊程式）；後兩個數字是 0。
 
 5. **回報。** 請 Eason 把下面整段貼回 MacBook 的 Claude：
 ```
