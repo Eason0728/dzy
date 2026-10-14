@@ -161,10 +161,18 @@ export function mountList(el, ctx) {
     if (p.unit !== 'ck') list.push({ code: 'ck', name: '中央工廠' });
     return list;
   }
+  // 不在可選項裡的舊代碼（例如部門後來被停用）：畫面看不到、不可改，送出時原樣保留
+  function extraHidden(p) {
+    const vis = extraChoices(p).map((c) => c.code);
+    const names = p.extra_dept_names || [];
+    return (p.extra_depts || []).map((c, i) => ({ code: c, name: names[i] || c })).filter((x) => vis.indexOf(x.code) === -1);
+  }
   function extraHtml(p) {
     const have = p.extra_depts || [];
-    const boxes = extraChoices(p).map((c) => `<div class="checkbox-row"><input type="checkbox" id="ed-x-${esc(c.code)}"${have.indexOf(c.code) !== -1 ? ' checked' : ''}><label for="ed-x-${esc(c.code)}">${esc(c.name)}</label></div>`).join('');
-    return `<div class="field" data-role="extra-wrap"><span class="field-label">兼任部門</span>${boxes}<p class="field-hint">兼任不影響審核，審核只看主要部門。</p></div>`;
+    const boxes = extraChoices(p).map((c, i) => `<div class="checkbox-row"><input type="checkbox" id="ed-x-${i}" data-code="${esc(c.code)}"${have.indexOf(c.code) !== -1 ? ' checked' : ''}><label for="ed-x-${i}">${esc(c.name)}</label></div>`).join('');
+    const hid = extraHidden(p);
+    const hidden = hid.length ? `<p class="field-hint" data-role="extra-hidden">已停用（保留不動）：${esc(hid.map((x) => x.name).join('、'))}</p>` : '';
+    return `<div class="field" data-role="extra-wrap"><span class="field-label">兼任部門</span>${boxes}${hidden}<p class="field-hint">兼任不影響審核，審核只看主要部門。</p></div>`;
   }
 
   const li = (items) => (items.length ? `<ul>${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="text-muted">（無）</p>');
@@ -264,9 +272,12 @@ export function mountList(el, ctx) {
       const o = readOrgFields(body, 'ed');
       if (o.brand && (o.brand !== p.brand || o.unit !== p.unit || o.dept !== p.dept || o.title !== p.title)) Object.assign(payload, o);
       if (canExtra) {
-        const next = extraChoices(p).filter((c) => body.querySelector(`#ed-x-${c.code}`) && body.querySelector(`#ed-x-${c.code}`).checked).map((c) => c.code);
-        const before = (p.extra_depts || []).filter((c) => extraChoices(p).some((x) => x.code === c));
-        if (next.join(',') !== before.join(',') || next.length !== (p.extra_depts || []).length) payload.extra_depts = next;
+        const checked = Array.from(body.querySelectorAll('input[data-code]')).filter((n) => n.checked).map((n) => n.getAttribute('data-code'));
+        const next = extraChoices(p).map((c) => c.code).filter((c) => checked.indexOf(c) !== -1);
+        const hid = extraHidden(p).map((x) => x.code);
+        const before = (p.extra_depts || []).filter((c) => hid.indexOf(c) === -1);
+        // 只有使用者真的改了勾選才帶；帶的時候把看不到的舊代碼一起保留
+        if (next.length !== before.length || next.some((c) => before.indexOf(c) === -1)) payload.extra_depts = next.concat(hid);
       }
       run('staffEdit', payload, '已儲存');
     } else if (act === 'rename') {

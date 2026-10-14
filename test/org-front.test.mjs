@@ -26,6 +26,18 @@ class FakeNode {
   fire(t, ev) { for (const fn of (this._ls[t] || []).slice()) fn(Object.assign({ preventDefault() {}, target: this }, ev || {})); }
   getAttribute(k) { return this.attrs[k] === undefined ? null : this.attrs[k]; }
   closest(sel) { return this.getAttribute(sel.replace(/^\[|\]$/g, '')) !== null ? this : null; }
+  querySelectorAll(sel) {
+    if (sel !== 'input[data-code]') return [];
+    const key = '__all__' + sel;
+    if (!this._q.has(key)) {
+      const out = [];
+      for (const m of this._html.matchAll(/<input\b[^>]*\bdata-code="([^"]*)"[^>]*>/g)) {
+        const n = new FakeNode(); n.attrs['data-code'] = m[1]; n.checked = /\schecked[\s>]/.test(m[0]); out.push(n);
+      }
+      this._q.set(key, out);
+    }
+    return this._q.get(key);
+  }
   querySelector(sel) {
     if (this._q.has(sel)) return this._q.get(sel);
     const re = attrRe(sel);
@@ -41,6 +53,7 @@ class FakeNode {
   }
 }
 globalThis.document = { createElement: () => new FakeNode() };
+const xbox = (body, code) => body.querySelectorAll('input[data-code]').find((n) => n.getAttribute('data-code') === code);
 const btn = (act, emp) => { const n = new FakeNode(); n.attrs['data-act'] = act; n.attrs['data-emp'] = emp; return n; };
 
 const ORG = {
@@ -102,14 +115,14 @@ const rows = (el) => el.querySelector('[data-role="rows"]').innerHTML;
   const ctx = makeCtx(baseHandler(), { perms: ['platform.staff'] });
   const el = await mount(ctx);
   ctx.answers.push('ok');
-  ctx.fills.push((body) => { body.querySelector('#ed-x-training').checked = false; body.querySelector('#ed-x-ops').checked = true; body.querySelector('#ed-x-ck').checked = true; });
+  ctx.fills.push((body) => { xbox(body, 'training').checked = false; xbox(body, 'ops').checked = true; xbox(body, 'ck').checked = true; });
   el.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
   await flush();
   const body = ctx.dialogs[0].body.innerHTML;
-  ok(body.includes('id="ed-x-training"') && body.includes('id="ed-x-ops"') && body.includes('id="ed-x-ck"') && body.includes('中央工廠'), 'T5 對話框列 dzy-hq 部門＋中央工廠');
-  ok(!body.includes('id="ed-x-it"'), 'T5 排除這個人的主要部門（it）');
-  ok(!body.includes('id="ed-x-zzz"'), 'T5 不列別的單位底下的部門');
-  ok(/id="ed-x-training"[^>]*checked/.test(body), 'T5 目前兼任預先勾選');
+  ok(body.includes('data-code="training"') && body.includes('data-code="ops"') && body.includes('data-code="ck"') && body.includes('中央工廠'), 'T5 對話框列 dzy-hq 部門＋中央工廠');
+  ok(!body.includes('data-code="it"'), 'T5 排除這個人的主要部門（it）');
+  ok(!body.includes('data-code="zzz"'), 'T5 不列別的單位底下的部門');
+  ok(/data-code="training"[^>]*checked/.test(body), 'T5 目前兼任預先勾選');
   const call = ctx.calls.find((c) => c.action === 'staffEdit');
   ok(call && JSON.stringify(call.payload.extra_depts) === JSON.stringify(['ops', 'ck']), 'T5 送出帶 extra_depts（依勾選）', call);
 }
@@ -126,7 +139,7 @@ const rows = (el) => el.querySelector('[data-role="rows"]').innerHTML;
   const ctx = makeCtx(baseHandler(), { perms: ['platform.staff'] });
   const el = await mount(ctx);
   ctx.answers.push('ok');
-  ctx.fills.push((body) => { body.querySelector('#ed-x-training').checked = false; });
+  ctx.fills.push((body) => { xbox(body, 'training').checked = false; });
   el.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
   await flush();
   const call = ctx.calls.find((c) => c.action === 'staffEdit');
@@ -138,7 +151,7 @@ const rows = (el) => el.querySelector('[data-role="rows"]').innerHTML;
   ctx.answers.push('ok');
   el.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
   await flush();
-  ok(!ctx.dialogs[0].body.innerHTML.includes('ed-x-'), 'T5 ★沒有 platform.staff 看不到兼任區');
+  ok(!ctx.dialogs[0].body.innerHTML.includes('data-code='), 'T5 ★沒有 platform.staff 看不到兼任區');
   const call = ctx.calls.find((c) => c.action === 'staffEdit');
   ok(call && !('extra_depts' in call.payload), 'T5 沒權限不帶 extra_depts');
 }
@@ -204,6 +217,47 @@ async function profileHtml(extraNames) {
 ok((await profileHtml(['資訊部', '訓練部'])).includes('兼任：資訊部、訓練部'), 'T6 有兼任顯示「兼任：資訊部、訓練部」');
 ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
 { const h = await profileHtml(['資訊部']); ok(!/id="[^"]*extra/.test(h), 'T6 唯讀（沒有可編輯欄位）'); }
+
+
+// ── #4 修 ──
+{ // #1 停用部門的舊兼任：不動不帶、對話框唯讀列出
+  const P4 = Object.assign({}, P1, { extra_depts: ['training', 'old'], extra_dept_names: ['訓練部', '舊部門'] });
+  const h4 = (extra) => baseHandler((a) => (a === 'staffList' ? { ok: true, data: { staff: [P4, P2] } } : (extra && extra(a)) || null));
+  const ctx = makeCtx(h4(), { perms: ['platform.staff'] });
+  const el = await mount(ctx);
+  ctx.answers.push('ok');
+  el.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
+  await flush();
+  ok(ctx.dialogs[0].body.innerHTML.includes('已停用') && ctx.dialogs[0].body.innerHTML.includes('舊部門'), '#4-1 對話框唯讀列出「已停用：舊部門」');
+  let call = ctx.calls.find((c) => c.action === 'staffEdit');
+  ok(call && !('extra_depts' in call.payload), '#4-1 ★含停用代碼、不動直接儲存 → 不帶 extra_depts', call);
+  const ctx2 = makeCtx(h4(), { perms: ['platform.staff'] });
+  const el2 = await mount(ctx2);
+  ctx2.answers.push('ok');
+  ctx2.fills.push((body) => { xbox(body, 'ops').checked = true; });
+  el2.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
+  await flush();
+  call = ctx2.calls.find((c) => c.action === 'staffEdit');
+  ok(call && JSON.stringify(call.payload.extra_depts) === JSON.stringify(['training', 'ops', 'old']), '#4-1 ★有改勾選 → 帶的陣列保留不可見的舊代碼', call);
+}
+{ // #3 代碼含特殊字元也能正確讀勾選（不靠 id 選擇器）
+  const ORG3 = Object.assign({}, ORG, { depts: ORG.depts.concat([{ code: 'r.d', name: '特殊部', parent: 'dzy-hq' }]) });
+  const P3 = Object.assign({}, P1, { extra_depts: ['r.d'], extra_dept_names: ['特殊部'] });
+  const ctx = makeCtx((a) => (a === 'staffList' ? { ok: true, data: { staff: [P3] } } : a === 'orgOptions' ? { ok: true, data: ORG3 } : { ok: true, data: { staff: P3 } }), { perms: ['platform.staff'] });
+  const el = await mount(ctx);
+  ctx.answers.push('ok');
+  ctx.fills.push((body) => { xbox(body, 'ops').checked = true; });
+  el.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
+  await flush();
+  const call = ctx.calls.find((c) => c.action === 'staffEdit');
+  ok(call && JSON.stringify(call.payload.extra_depts) === JSON.stringify(['ops', 'r.d']), '#4-3 代碼含「.」時原本勾選仍被保留', call);
+  ok(!/id="ed-x-r/.test(ctx.dialogs[0].body.innerHTML), '#4-3 不再把代碼拼進 id');
+}
+{ // #2 試跑模式放行 orgUpgrade2026 dryrun:true，dryrun:false 與 rollback 仍攔
+  const { isReadAction } = await import('../platform/dryrun.js');
+  ok(isReadAction('platform', 'orgUpgrade2026', { dryrun: true }), '#4-2 orgUpgrade2026 {dryrun:true} 放行');
+  ok(!isReadAction('platform', 'orgUpgrade2026', { dryrun: false }) && !isReadAction('platform', 'orgUpgrade2026', {}) && !isReadAction('platform', 'orgRollback2026', {}), '#4-2 dryrun:false／無參數／orgRollback2026 仍攔');
+}
 
 // ── 檢查 ──
 for (const f of ['modules/staff/views/list.js', 'modules/me/views/profile.js']) {
