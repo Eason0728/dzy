@@ -214,7 +214,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(stores.map((r) => r[2]).join('|') === 'mala-gf|mzt-js|mzt-gf|mzt-lzl|dzy-hq,mzt-hq,mala-hq,yiwu-hq|ck', 'B1 unit_code 依 org 預設單位對上（hq 一列放四個總部與品牌辦公室單位）', stores.map((r) => r[2]));
   ok(stores.every((r) => String(r[3]) === 'TRUE'), 'B1 預設全部啟用');
   const head = sheets.staff._rows()[0];
-  ok(head.length === 26 && head[24] === 'hire_date' && head[25] === 'last_day', 'B1 staff 右側補 hire_date、last_day');
+  ok(head.length === 27 && head[24] === 'hire_date' && head[25] === 'last_day' && head[26] === 'extra_depts', 'B1 staff 右側補 hire_date、last_day、extra_depts');
   ok(head.slice(0, 24).join() === sb.STF_HEADERS.join(), 'B1 staff 原 24 欄不變');
   // 只補不覆蓋
   sheets.clock_stores._data[1][3] = 'FALSE';
@@ -227,7 +227,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   old.sheets.staff._data[0].length = 24;          // 模擬舊版 24 欄表頭
   ['clock_stores', 'staff_clock', 'clock_outbox'].forEach((n) => delete old.sheets[n]);
   old.sb.setupStaff();
-  ok(old.sheets.staff._rows()[0].length === 26 && old.sheets.clock_outbox && old.sheets.clock_stores._rows().length === 7, 'B1 舊試算表（24 欄、無新分頁）跑 setupStaff 後補齊');
+  ok(old.sheets.staff._rows()[0].length === 27 && old.sheets.clock_outbox && old.sheets.clock_stores._rows().length === 7, 'B1 舊試算表（24 欄、無新分頁）跑 setupStaff 後補齊');
   // unit_code 查不到 → 留空（org 預設少了央廚單位時）
   const noCk = load(freshSeed(HASHER));
   noCk.sb.STF_DEFAULT_ORG = noCk.sb.STF_DEFAULT_ORG.filter((r) => !(r[0] === 'unit' && r[1] === 'ck'));
