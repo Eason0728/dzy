@@ -9,8 +9,8 @@
 ## 前提（缺一不做）
 1. 第 5 步已完成且回報「登入 secrets：沒有」（開關沒關就換，新碼會再被發出去）。
 2. 舊獨立網址版處理方式：已決定 A（見下節）。
-3. 排程：Eason 2026-10-14 說 mini 有空、組織架構改版未定日期 → 第 5 步 10-14 14:30 後，第 6 步暫定 10-15 20:30 後。不是組織架構改版上線那晚、不在員工名單統一第 5 段切換（最快 10/21）前後一天；mini 上沒有別的交辦在跑。
-4. 時間：晚上（建議 20:30 後）。整段約 15 分鐘，其中**管理系統全部停 3–5 分鐘**（登入也不能用）。
+3. 排程（2026-10-14 更新）：管理系統尚未開放同仁、舊網址版已沒人用 → **日期與時段限制取消**，Eason 照順序一口氣做：第 4 段打開寫入 → 第 5 步 → 產生新碼 → 第 6 步 → 舊網址「已搬家」說明頁 → 員工名單第 5 段 → 組織改版。唯一條件：mini 上沒有別的交辦在跑。
+4. 整段約 15 分鐘，其中**管理系統全部停 3–5 分鐘**（登入也不能用；目前沒有同仁在用，不必挑時段）。
 
 ## 已決定：舊獨立網址版一起退場（Eason 2026-10-14 選 A）
 - 新碼只有 Eason 與 mini 知道，**不發給任何人**；事前產生碼用預設的 16 字亂碼。
@@ -33,7 +33,7 @@
 
 ## 分工與步驟
 
-### 事前（Eason，白天任何時間，約 5 分鐘）
+### 事前（Eason，約 5 分鐘）
 1. 在自己電腦（不是對話裡）產生三個新碼，存進密碼管理器，**不要貼給任何 Claude、不要傳 LINE**：
    ```sh
    for n in 會計 主管 宿舍; do printf '%s：' "$n"; openssl rand -base64 18 | tr -d '/+=' | cut -c1-16; done
@@ -43,7 +43,7 @@
    - 稽核試算表 →「設定」分頁，找到「會計通行碼」「主管通行碼」兩列。
    - 宿舍試算表 →「settings」分頁，找到 key＝`admin.pass` 那列（值在 B 欄）。
 
-### 當晚（mini 的 Claude ＋ Eason 輪流，照順序，一步一回報）
+### 換碼（mini 的 Claude ＋ Eason 輪流，照順序，一步一回報）
 
 **M1【mini Claude】準備**（還不停機）
 ```sh
@@ -86,9 +86,9 @@ bash kit/bin/autostart-status.sh
 **E3【Eason，手機】實測**（Cmd+Shift+R 或重開頁面）
 1. 管理系統登入 → 月初盤點抽查打得開、有資料（＝會計碼通了）。
 2. 宿舍合約 → 清單有資料（＝宿舍碼通了）。
-3. 請一位店長打開稽核、看得到自己店（＝主管碼通了；店長走唯讀碼）。不方便今晚找人 → 第二天下午由 mini 查 log 代替。
+3. 請一位店長打開稽核、看得到自己店（＝主管碼通了；店長走唯讀碼）。目前沒開放同仁 → 這項略過，改由 Eason 用一個只有唯讀權限的測試帳號開一次稽核；沒有這種帳號也可略過，之後開放時第一位店長打開就是實測。
 
-**M4【mini Claude】查 log**（E3 做完後；隔天下午再跑一次）
+**M4【mini Claude】查 log**（E3 做完後）
 ```sh
 DATA="$HOME/dzy-platform-data"
 cat "$DATA"/logs/server.log* | grep -E 'proxy:(audit|dorm)\.' | tail -n 30 | awk '{print $1, $2, $3}'
@@ -96,7 +96,7 @@ cat "$DATA"/logs/server.log* | grep -E 'proxy:(audit|dorm)\.' | tail -n 30 | awk
 期望：換碼後的 `proxy:audit.getAll ok`、`proxy:dorm.list ok` 都有；沒有 `upstream_not_ok`（＝舊後端說通行碼錯，代表某邊漏改或打錯）。
 有 `upstream_not_ok` → 停，回報是 audit 還是 dorm，Eason 回頭比對那張試算表的那一格。
 
-**收尾【mini Claude】**（隔天 log 確認都是 ok 之後）
+**收尾【mini Claude】**（M4 確認都是 ok 之後）
 ```sh
 rm -f "$HOME"/dzy-minikit-work/platform-app.db.bak-* "$HOME"/dzy-minikit-work/platform-env.bak-*
 ```
