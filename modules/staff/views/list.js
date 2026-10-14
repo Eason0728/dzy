@@ -204,7 +204,8 @@ export function mountList(el, ctx) {
     try { r = await ctx.api.call('staff', 'orgRollback2026', {}); } finally { ctx.ui.loading(false); }
     if (!alive) return;
     if (!r.ok) {
-      const diff = (r.data && r.data.diff) || [];
+      // 後端回 {ok:false,error,data:{diff}}；api.js 會把 data 整包放進 r.data，所以實際在 r.data.data.diff（兩種都收）
+      const diff = (r.data && (r.data.diff || (r.data.data && r.data.data.diff))) || [];
       if (diff.length) {
         const rows = diff.map((x) => `<tr><td>${esc(x.kind)}</td><td>${esc(x.code)}</td><td>${esc(x.field)}</td><td>${esc(x.expected)}</td><td>${esc(x.actual)}</td></tr>`).join('');
         await ctx.ui.dialog({ title: '退回被拒絕', body: domOf(`<p>${esc(r.error)}</p><div class="table-wrap"><table class="table"><thead><tr><th>類別</th><th>代碼</th><th>欄位</th><th>切換後應為</th><th>目前</th></tr></thead><tbody>${rows}</tbody></table></div>`), actions: OK_ONLY });

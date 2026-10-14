@@ -186,7 +186,7 @@ const PREVIEW = { ok: true, data: { dryrun: true, backup: 'created', org: [{ cod
   ok(ctx.calls.some((c) => c.action === 'orgRollback2026') && rb.includes('40') && rb.includes('DZY777') && rb.includes('測試乙') && rb.includes('孤兒'), 'T5 退回報告：restored／略過／孤兒名單');
 }
 { // 被拒 + diff
-  const ctx = makeCtx(baseHandler((a) => (a === 'orgRollback2026' ? { ok: false, error: '切換後組織資料又被改過，拒絕整表覆蓋', data: { diff: [{ kind: 'unit', code: 'ck', field: 'name', expected: 'A', actual: 'B' }] } } : null)), { role: 'admin' });
+  const ctx = makeCtx(baseHandler((a) => (a === 'orgRollback2026' ? { ok: false, error: '切換後組織資料又被改過，拒絕整表覆蓋', data: { data: { diff: [{ kind: 'unit', code: 'ck', field: 'name', expected: 'A', actual: 'B' }] } } } : null)), { role: 'admin' });
   const el = await mount(ctx);
   ctx.answers.push('ok');
   el.querySelector('[data-role="org-rollback"]').fire('click'); await flush();
