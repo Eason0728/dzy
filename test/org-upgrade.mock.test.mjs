@@ -796,5 +796,26 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(rb.ok && rb.data.orphans.some((o) => o.emp_no === it.emp && o.dept === 'ghost'), 'R1 #5 回退 orphans 也列出部門不存在的人', rb);
 })();
 
+(() => {
+  // G5：目標列缺失 → 以 (kind,code) 補整列八欄；G8：既有列 order 也校正
+  const app = legacyApp();
+  const { sb, tok } = app;
+  const od = app.sheets.org._data;
+  ['mzt-hq', 'ck', 'mzt-mc'].forEach((c) => { const i = od.findIndex((r) => r[0] === 'unit' && r[1] === c); od.splice(i, 1); });
+  ['am', 'bd'].forEach((c) => { const i = od.findIndex((r) => r[0] === 'title' && r[1] === c); od.splice(i, 1); });
+  od.splice(od.findIndex((r) => r[0] === 'brand' && r[1] === 'ck'), 1);
+  od.push(['title', 'osv', '區督導', 'office', '', 3, 99, 'TRUE']);
+  od.push(['unit', 'yiwu-hq', '舊名', 'yiwu', 'office', '', 77, 'TRUE']);
+  const r = post(sb, 'orgUpgrade2026', {}, tok);
+  ok(r.ok, 'R1 G5 缺列時升級成功（補整列）', r);
+  const row = (k, c) => app.sheets.org._rows().find((x) => x[0] === k && x[1] === c);
+  const eq = (x, y) => x && x.slice(0, 8).map(String).join('|') === y.map(String).join('|');
+  ok(eq(row('unit', 'mzt-hq'), ['unit', 'mzt-hq', '墨竹亭品牌辦公室', 'mzt', 'office', '', 7, 'TRUE']), 'R1 G5 缺的 mzt-hq 補成完整八欄', row('unit', 'mzt-hq'));
+  ok(eq(row('unit', 'ck'), ['unit', 'ck', '中央工廠（央廚）', 'ck', 'store', '', 1, 'TRUE']) && eq(row('brand', 'ck'), ['brand', 'ck', '中央工廠', '', '', '', 4, 'TRUE']), 'R1 G5 缺的 unit／brand ck 補成完整八欄');
+  ok(eq(row('unit', 'mzt-mc'), ['unit', 'mzt-mc', '台中美村', 'mzt', 'store', '', 6, 'FALSE']) && eq(row('title', 'am'), ['title', 'am', '區經理', 'store', '', 4, 4, 'FALSE']) && eq(row('title', 'bd'), ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'FALSE']), 'R1 G5 缺的 mzt-mc／am／bd 補成停用整列');
+  ok(row('title', 'osv')[6] === 3 && row('unit', 'yiwu-hq')[6] === 3 && row('unit', 'yiwu-hq')[2] === '一悟燒肉品牌辦公室', 'R1 G8 既有列 order 也校正（osv 99→3、yiwu-hq 77→3）', [row('title', 'osv'), row('unit', 'yiwu-hq')]);
+  ok(post(sb, 'orgUpgrade2026', { dryrun: true }, tok).data.org.length === 0, 'R1 G5 補完後預覽為空');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

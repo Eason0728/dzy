@@ -1412,7 +1412,20 @@ var STF_UPGRADE_SET = [
   ['unit', 'mzt-wx', 'active', 'FALSE'], ['unit', 'mzt-rg', 'active', 'FALSE'], ['unit', 'mzt-mc', 'active', 'FALSE'],
   ['title', 'am', 'active', 'FALSE'], ['title', 'sv', 'active', 'FALSE'], ['title', 'bd', 'active', 'FALSE']
 ];
-// (kind, code) upsert 的新列（完整八欄）；已存在就只對齊 name／parent／ladder／rank／active
+// STF_UPGRADE_SET 的目標列若整列缺失，就以這裡的完整八欄補上（舊值取自升級前預設 org；已存在的列只依 STF_UPGRADE_SET 改指定欄位，不動其他欄）
+var STF_UPGRADE_REQUIRED = [
+  ['brand', 'ck', '中央工廠', '', '', '', 4, 'TRUE'],
+  ['unit', 'ck', '中央工廠（央廚）', 'ck', 'store', '', 1, 'TRUE'],
+  ['unit', 'mzt-hq', '墨竹亭品牌辦公室', 'mzt', 'office', '', 7, 'TRUE'],
+  ['unit', 'mala-hq', '小辛辣品牌辦公室', 'mala', 'office', '', 2, 'TRUE'],
+  ['unit', 'mzt-wx', '台中文心', 'mzt', 'store', '', 4, 'FALSE'],
+  ['unit', 'mzt-rg', '內湖瑞光', 'mzt', 'store', '', 5, 'FALSE'],
+  ['unit', 'mzt-mc', '台中美村', 'mzt', 'store', '', 6, 'FALSE'],
+  ['title', 'am', '區經理', 'store', '', 4, 4, 'FALSE'],
+  ['title', 'sv', '督導', 'store', '', 5, 5, 'FALSE'],
+  ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'FALSE']
+];
+// (kind, code) upsert 的新列（完整八欄）；已存在就對齊 name／parent／ladder／rank／order／active
 var STF_UPGRADE_ADD = [
   ['unit', 'yiwu-hq', '一悟燒肉品牌辦公室', 'yiwu', 'office', '', 3, 'TRUE'],
   ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
@@ -1420,7 +1433,7 @@ var STF_UPGRADE_ADD = [
   ['title', 'osv', '區督導', 'office', '', 3, 3, 'TRUE'],
   ['title', 'odir', '總監', 'office', '', 4, 4, 'TRUE']
 ];
-var STF_UPGRADE_ADD_FIELDS = ['name', 'parent', 'ladder', 'rank', 'active'];
+var STF_UPGRADE_ADD_FIELDS = ['name', 'parent', 'ladder', 'rank', 'order', 'active'];
 
 function stfNormCell_(v, idx) {
   var t = (v === undefined || v === null) ? '' : String(v).trim();
@@ -1517,6 +1530,14 @@ function stfUpgradePlan_() {
     work[i][idx] = to;
     cells.push({ row: i + 2, col: idx + 1, value: to });
   };
+  // 必要列缺失 → 先整列補上（完整八欄）；之後 SET 對補上的列沒有差異
+  STF_UPGRADE_REQUIRED.forEach(function (row) {
+    if (find(row[0], row[1]) === -1) {
+      work.push(row.slice());
+      addRows.push(row.slice());
+      report.push({ code: row[1], kind: row[0], field: 'row', from: '', to: 'added' });
+    }
+  });
   STF_UPGRADE_SET.forEach(function (x) {
     var i = find(x[0], x[1]);
     if (i !== -1) setCell(i, x[2], x[3]);
@@ -1658,6 +1679,13 @@ function handleOrgUpgrade_(token, payload) {
   if (after.cells.length || after.addRows.length || after.clock.status === 'updated' || after.titles.length) {
     return { ok: false, error: '升級後驗證失敗（資料與目標不一致），請檢查後重跑；原始資料可用 orgRollback2026 還原' };
   }
+  // ⑥b 新增的整列要和目標逐欄（完整八欄）一致
+  var nowOrg = stfOrgSnapshot_();
+  var rowsOk = plan.addRows.every(function (ar) {
+    var want = ar.map(function (v, i) { return stfNormCell_(v, i); });
+    return nowOrg.some(function (cr) { return cr.join('|') === want.join('|'); });
+  });
+  if (!rowsOk) return { ok: false, error: '升級後驗證失敗（新增列與目標不一致），請檢查後重跑；原始資料可用 orgRollback2026 還原' };
   // ⑦ 「升級後」雜湊與快照只在首次成功時建立；已有基準就不更新（重跑不得把切換後別人的修改洗進基準）
   if (!state.org_hash) {
     state.org_hash = stfOrgHash_();
