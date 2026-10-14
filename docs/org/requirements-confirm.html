@@ -1,0 +1,176 @@
+<title>組織架構改版確認</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;800&display=swap">
+<style>
+/* 版面：單欄文件，上方決策題卡、下方改版前後對照與影響說明 */
+:root{
+  --bg:#f6f7f5; --paper:#ffffff; --ink:#1d2421; --muted:#5d6863; --line:#dde3df;
+  --accent:#1f6b52; --accent-soft:#e3f0ea; --warn:#a4561a; --warn-soft:#f8ecdf;
+  --display:"Noto Serif TC","Songti TC",serif; --body:"Noto Sans TC","PingFang TC",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141917; --paper:#1c2320; --ink:#e6ece9; --muted:#9aa7a1; --line:#2e3833;
+  --accent:#6fc5a3; --accent-soft:#1f3a30; --warn:#e7a46a; --warn-soft:#3a2a1c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --paper:#1c2320; --ink:#e6ece9; --muted:#9aa7a1; --line:#2e3833;
+  --accent:#6fc5a3; --accent-soft:#1f3a30; --warn:#e7a46a; --warn-soft:#3a2a1c; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:16px/1.75 var(--body);padding:0 16px}
+.wrap{max-width:760px;margin:0 auto;padding-block:40px 64px;display:flex;flex-direction:column;gap:36px}
+h1{font:800 clamp(26px,5vw,34px)/1.3 var(--display);margin:0;text-wrap:balance}
+h2{font:600 22px/1.4 var(--display);margin:0 0 12px;text-wrap:balance}
+.lede{color:var(--muted);margin:8px 0 0}
+.eyebrow{font-size:13px;letter-spacing:.08em;color:var(--accent);font-weight:700}
+.q{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:18px 20px;display:flex;flex-direction:column;gap:10px}
+.q h3{margin:0;font-size:17px;line-height:1.5}
+.q .why{color:var(--muted);font-size:14.5px;margin:0}
+.opt{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:10px 12px;border-radius:8px;border:1px solid var(--line)}
+.opt.rec{border-color:var(--accent);background:var(--accent-soft)}
+.opt b{font-size:14px;color:var(--accent)} .opt span{min-width:0}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--accent);color:var(--paper);margin-left:6px;vertical-align:2px}
+.qs{display:flex;flex-direction:column;gap:14px}
+.tree{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;font-size:15px}
+.tree ul{list-style:none;margin:0;padding-left:20px;border-left:1px dashed var(--line)}
+.tree>ul{padding-left:0;border:0}
+.tree li{padding:3px 0}
+.off{color:var(--muted);text-decoration:line-through}
+.new{color:var(--accent);font-weight:700}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:640px){.cols{grid-template-columns:1fr}}
+.cols>div{min-width:0}
+.cap{font-size:13px;font-weight:700;color:var(--muted);margin-bottom:6px;letter-spacing:.04em}
+.tbl{overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:700}
+tr:last-child td{border-bottom:0}
+.note{background:var(--warn-soft);border-radius:10px;padding:14px 18px;font-size:15px}
+.note b{color:var(--warn)}
+ul.plain{margin:0;padding-left:20px}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">鼎兆元管理系統｜需求確認</div>
+  <h1>組織架構改版：上線前還要你決定 6 件事</h1>
+  <p class="lede">今天上午定案的組織（總部 9 部門、營運部管三品牌）要改進管理系統。我先把程式和下游系統翻了一遍，下面 6 題是「定案沒講到、但會決定怎麼做」的地方。每題都標了我推薦的選項，全照推薦回「全照推薦」就好。</p>
+</header>
+
+<section>
+<h2>要你回答的 6 題</h2>
+<div class="qs">
+
+<div class="q">
+  <h3>1. 原本「墨竹亭總部」「小辛辣總部」底下的人，以後掛哪裡？</h3>
+  <p class="why">定案說兩個品牌總部要併進營運部，但品牌督導、品牌總監、品牌行政這些人還是需要一個「家」，審核時才知道他管哪個品牌。</p>
+  <div class="opt rec"><b>A</b><span>營運部底下開三個「品牌辦公室」：墨竹亭、小辛辣、一悟各一個。原兩個總部的人整批搬進對應的品牌辦公室。墨竹亭的督導就能審墨竹亭三家店的人。<span class="tag">推薦</span></span></div>
+  <div class="opt"><b>B</b><span>全部搬進「鼎兆元總部・營運部」，不分品牌。比較簡單，但督導會看到三個品牌全部的人。</span></div>
+</div>
+
+<div class="q">
+  <h3>2. 系統裡現在有一個「訓練部」，新的 9 部門沒有它，怎麼處理？</h3>
+  <p class="why">程式預設有訓練部；定案清單裡沒有，反而多了中央工廠。</p>
+  <div class="opt rec"><b>A</b><span>訓練部停用（不刪），原本選訓練部的人改掛人資部。<span class="tag">推薦</span></span></div>
+  <div class="opt"><b>B</b><span>保留訓練部，變成第 10 個部門。</span></div>
+</div>
+
+<div class="q">
+  <h3>3. 「中央工廠部」跟現在的「央廚」是什麼關係？</h3>
+  <p class="why">央廚現在是一個獨立單位，打卡和薪資（代碼 CF）都綁在它身上。</p>
+  <div class="opt rec"><b>A</b><span>打卡、薪資照舊認「央廚」這個地點，一行不動；組織圖上把央廚畫在中央工廠部底下，央廚主管就是中央工廠部門主管。<span class="tag">推薦</span></span></div>
+  <div class="opt"><b>B</b><span>央廚同仁全部改成「鼎兆元總部＋中央工廠部」，打卡和薪資的對照一起改。比較整齊，但要動打卡同步。</span></div>
+</div>
+
+<div class="q">
+  <h3>4. 兼任部門由誰設定？</h3>
+  <p class="why">例如你自己：主要部門＝營運部（小辛辣品牌主管），兼任資訊部。</p>
+  <div class="opt rec"><b>A</b><span>只有人資在「同仁名單」設定；本人在「我的資料」看得到、不能改。<span class="tag">推薦</span></span></div>
+  <div class="opt"><b>B</b><span>本人認領時自己勾，交給主管審核時一起確認。</span></div>
+</div>
+
+<div class="q">
+  <h3>5. 墨竹亭文心、瑞光、美村停用後，那邊如果還有同仁帳號怎麼辦？</h3>
+  <p class="why">正式資料在公司 Mac mini 上，我這台讀不到，所以還不確定有沒有人（上線前會先匯出核對）。</p>
+  <div class="opt rec"><b>A</b><span>帳號照常能用，同仁名單上標「所屬門市已停用」，人資一個一個改派。<span class="tag">推薦</span></span></div>
+  <div class="opt"><b>B</b><span>系統自動把他們搬到同品牌的第一家門市（新竹金山）。</span></div>
+</div>
+
+<div class="q">
+  <h3>6. 什麼時候切換？</h3>
+  <div class="opt rec"><b>A</b><span>做完後挑一天晚上 22:00 後一次切：切之前整份備份、可以一鍵退回；隔天下午你跟人資各登入看一次。<span class="tag">推薦</span></span></div>
+  <div class="opt"><b>B</b><span>先開一個試跑網址給人資看一週，沒問題再切。多一週，但正式資料一週內不會變。</span></div>
+</div>
+
+</div>
+</section>
+
+<section>
+<h2>改完之後組織長這樣</h2>
+<div class="cols">
+  <div>
+    <div class="cap">現在</div>
+    <div class="tree"><ul>
+      <li>鼎兆元總部
+        <ul><li>財務／人資／資訊／工程／加盟招商／採購／營運／<span class="off">訓練</span>／行銷</li></ul></li>
+      <li><span class="off">墨竹亭總部</span></li>
+      <li><span class="off">小辛辣總部</span></li>
+      <li>墨竹亭：金山、光復、六張犁、<span class="off">文心</span>、<span class="off">瑞光</span>、<span class="off">美村</span></li>
+      <li>麻的小辛辣：光復</li>
+      <li>一悟燒肉：金山、文興</li>
+      <li>央廚</li>
+    </ul></div>
+  </div>
+  <div>
+    <div class="cap">改版後（照第 1、3 題推薦）</div>
+    <div class="tree"><ul>
+      <li>鼎兆元總部
+        <ul>
+          <li>人資／工程／加盟招商／資訊／行銷／財務／採購</li>
+          <li><span class="new">中央工廠</span>
+            <ul><li>央廚（打卡地點不變）</li></ul></li>
+          <li>營運
+            <ul>
+              <li>麻的小辛辣：<span class="new">品牌辦公室</span>、新竹光復</li>
+              <li>墨竹亭：<span class="new">品牌辦公室</span>、新竹金山、新竹光復、台北六張犁</li>
+              <li>一悟燒肉：<span class="new">品牌辦公室</span>、新竹金山、竹北文興</li>
+            </ul></li>
+        </ul></li>
+    </ul></div>
+  </div>
+</div>
+</section>
+
+<section>
+<h2>誰審誰（定案內容，照做）</h2>
+<div class="tbl"><table>
+<tr><th>送出認領的人</th><th>誰可以審</th></tr>
+<tr><td>門市同仁（例：墨竹亭光復的計時同仁）</td><td>墨竹亭光復店長以上，加上墨竹亭的督導、品牌總監</td></tr>
+<tr><td>品牌辦公室的人（例：小辛辣督導）</td><td>營運部主管</td></tr>
+<tr><td>部門同仁（例：財務部會計）</td><td>財務部主管</td></tr>
+<tr><td>部門主管</td><td>執行長、總經理、董事長</td></tr>
+<tr><td>任何人</td><td>人資</td></tr>
+<tr><td>被審的人職級比審核者高</td><td>轉給人資</td></tr>
+</table></div>
+<p class="lede">審核只看主要部門；兼任部門只用來顯示，不給審核權。</p>
+</section>
+
+<section>
+<h2>會一起動到的地方</h2>
+<div class="tbl"><table>
+<tr><th>系統</th><th>會有什麼變化</th></tr>
+<tr><td>管理系統：認領畫面、我的資料、同仁名單</td><td>單位選單少掉兩個品牌總部與三家停用門市，多出三個品牌辦公室；同仁名單多一欄「兼任部門」</td></tr>
+<tr><td>打卡（總部那一套）</td><td>原本綁三個總部，改綁鼎兆元總部＋三個品牌辦公室；同仁打卡方式不變</td></tr>
+<tr><td>電子佈告欄</td><td>墨竹亭總部組、小辛辣總部組照舊存在，改由對應的品牌辦公室同仁進去；同仁看公告不受影響</td></tr>
+<tr><td>月初盤點、營運稽核、宿舍合約</td><td>不動（它們用的是另一套門市清單）</td></tr>
+</table></div>
+</section>
+
+<div class="note"><b>先講清楚的風險：</b>正式的組織表在上線那天不會自己跟著程式改，要另外跑一次「搬家」把現有人員對到新單位。搬之前會整份備份，搬壞了可以退回原狀。這一步需要公司 Mac mini 上的 Claude 配合執行。</div>
+
+<section>
+<h2>這次不做</h2>
+<ul class="plain">
+  <li>依職稱鎖定能用哪些系統（第二期）</li>
+  <li>表單往上簽核（第三期）</li>
+  <li>刪除任何門市或同仁資料（停用的都只是隱藏）</li>
+</ul>
+</section>
+</div>
