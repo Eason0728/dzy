@@ -817,5 +817,55 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(post(sb, 'orgUpgrade2026', { dryrun: true }, tok).data.org.length === 0, 'R1 G5 補完後預覽為空');
 })();
 
+(() => {
+  // #4：clock_stores 回退也要雜湊保護
+  const app = legacyApp();
+  const { sb, tok } = app;
+  post(sb, 'orgUpgrade2026', {}, tok);
+  const st = JSON.parse(app.props.ORG_UPGRADE_STATE);
+  ok(/^[0-9a-f]{64}$/.test(st.clk_hash || '') && st.clk_snap && app.sheets[st.clk_snap], 'R1 #4 升級後 state 記 clk_hash＋快照分頁', st);
+  const cs = app.sheets.clock_stores._data;
+  const orgBefore = app.sheets.org._rows().map((r) => r.join('|')).join();
+  cs.push(['newstore', '新店', 'x', 'y', 'z']);
+  const gf = cs.find((r) => r[0] === 'gf'); const oldPay = gf[3]; gf[3] = '改過';
+  const rb = post(sb, 'orgRollback2026', {}, tok);
+  ok(rb.ok === false && rb.data && rb.data.clock_diff && rb.data.clock_diff.some((d) => d.key === 'newstore' && d.actual === 'added') && rb.data.clock_diff.some((d) => d.key === 'gf' && d.actual === '改過'), 'R1 #4 clock_stores 被改過 → 回退拒絕並列差異', rb);
+  ok(app.sheets.org._rows().map((r) => r.join('|')).join() === orgBefore && app.props.ORG_UPGRADE_STATE && cs.some((r) => r[0] === 'newstore'), 'R1 #4 被拒時零寫入（org 不動、clock 不動、state 保留）');
+  cs.pop(); gf[3] = oldPay;
+  const rb2 = post(sb, 'orgRollback2026', {}, tok);
+  ok(rb2.ok && app.sheets.clock_stores._rows().map((r) => r.join('|')).join() === app.legacyClock.map((r) => r.join('|')).join(), 'R1 #4 差異處理掉後可回退', rb2);
+})();
+
+(() => {
+  // G4：回退寫入前檢查所有備份與正式分頁
+  const cases = [['stf_bak', (a, st) => { delete a.sheets[st.stf_bak]; }], ['clk_bak', (a, st) => { delete a.sheets[st.clk_bak]; }], ['clock_stores', (a) => { delete a.sheets.clock_stores; }], ['org_bak', (a, st) => { delete a.sheets[st.org_bak]; }]];
+  cases.forEach(([label, brk]) => {
+    const app = legacyApp();
+    const { sb, tok } = app;
+    post(sb, 'orgUpgrade2026', {}, tok);
+    const st = JSON.parse(app.props.ORG_UPGRADE_STATE);
+    brk(app, st);
+    const snapOrg = app.sheets.org._rows().map((r) => r.join('|')).join();
+    const titles = app.sheets.staff._rows().map((r) => r[0] + r[7]).join();
+    const rb = post(sb, 'orgRollback2026', {}, tok);
+    ok(rb.ok === false && /找不到/.test(rb.error) && app.props.ORG_UPGRADE_STATE === JSON.stringify(st) && app.sheets.org._rows().map((r) => r.join('|')).join() === snapOrg && app.sheets.staff._rows().map((r) => r[0] + r[7]).join() === titles, 'R1 G4 缺 ' + label + ' → 零寫入、回錯、保留 state', rb);
+  });
+})();
+
+(() => {
+  // G2：回退中斷（org 已蓋回、clock 寫入失敗）後可重跑
+  const app = legacyApp();
+  const { sb, tok } = app;
+  post(sb, 'orgUpgrade2026', {}, tok);
+  const sh = app.sheets.clock_stores; const orig = sh.getRange; let fail = true;
+  sh.getRange = (...a) => { const r = orig(...a); if (fail) r.setValues = () => { throw new Error('timeout'); }; return r; };
+  const rb1 = post(sb, 'orgRollback2026', {}, tok);
+  ok(rb1.ok === false && app.props.ORG_UPGRADE_STATE && orgSnap(app).join() === app.legacySnap.join(), 'R1 G2 （前置）回退在 clock 步驟中斷：org 已是備份、state 還在', rb1);
+  fail = false;
+  const rb2 = post(sb, 'orgRollback2026', {}, tok);
+  ok(rb2.ok === true && rb2.data.clock_restored === true && app.sheets.clock_stores._rows().map((r) => r.join('|')).join() === app.legacyClock.map((r) => r.join('|')).join() && !app.props.ORG_UPGRADE_STATE, 'R1 G2 重跑成功：續跑 clock、state 清除', rb2);
+  ok(orgSnap(app).join() === app.legacySnap.join() && staffOf(app, app.P.offHs.emp).title === 'hs', 'R1 G2 org 與職稱仍是還原後的樣子');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
