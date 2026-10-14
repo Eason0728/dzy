@@ -132,3 +132,11 @@
 
 ### 11.2 升級預覽
 `orgUpgrade2026` 加參數 `dryrun:true`：不寫任何東西，回傳同一份報告（會改哪些列、todo 名單）。BOSS 按「切換組織」時先顯示預覽，再按一次「確定切換」才寫入。
+
+## 12. Eason 2026-10-14 職稱定案（覆蓋第 2 節 office 職稱、第 4 節與第 11 節第 2、5 條）
+- **營運部（品牌辦公室＋各門市）共用一套職稱，由低到高：計時同仁 pt(1)、正職同仁 ft(2)、店長 sm(3)、區經理 am(4)、區督導 sv(5)、品牌總監 bd(6)。**
+- 職稱列 sv 改名「區督導」。**不新增 os／osv／obd**（11.1 的三個 title 列作廢）。
+- 品牌辦公室 ladder 仍是 `office`（審核規則要分辨），但**職稱階梯＝store**：程式加 `stfTitleLadder_(unit)`（office→store、空白→store），前端 org-fields.js 兩份同步（`titleLadder(unit)`）、後端 Staff.gs:209 改用它。
+- `STF_UNIT_VIEW_MIN_RANK.office＝5`（區督導以上算品牌辦公室主管）。
+- 審核表修正：門市同仁 → 同店 rank≥3，或該品牌辦公室 rank≥5；同階梯所以「職級比審核者高→擋」直接適用（區督導不能核准品牌總監），第 11 節第 2 條的跨階梯限制取消。
+- 升級對應（設計審第 5 條，照推薦 A）：品牌辦公室（mzt-hq／mala-hq）同仁職稱是 hq 階梯的，自動對應 hs 部門同仁→ft 正職同仁、hm 部門主管→sv 區督導；其他 hq 職稱（ceo／gm／chair）不動、列入 todo。預覽要逐人列出「從→到」。回退時一併還原這些人的 title（升級前備份 staff 受影響列的 emp_no＋title）。

@@ -19,8 +19,9 @@ T7 整套：全部 node 測試＋e2e 八支＋佈告欄 staffdzy 測試 → sync
 - API 回傳（同仁名單 list、我的資料 me 的 staff 物件）：`extra_depts: ['it','training']`、`extra_dept_names: ['資訊部','訓練部']`，沒有＝`[]`。
 - `staffEdit` payload：`extra_depts: ['it']`（陣列；不給＝不改；給 `[]`＝清空）。非 platform.staff 帶這欄 → `{ok:false,error:'沒有權限修改兼任部門'}`。
 - 名單每列 `flags: []`，可能值：`'unit_inactive'`（單位停用）、`'title_ladder'`（職稱不屬於單位階梯）、`'store_sv_bd'`（掛門市的督導／品牌總監）。
-- `orgUpgrade2026` 回傳 `{ok:true,data:{backup:'created'|'exists', org:[{code,kind,field,from,to}], clock:'updated'|'skipped'|'custom', staffColumn:'added'|'exists', todo:[{emp_no,name,unit_name,flag}]}}`；`orgRollback2026` 回傳 `{ok:true,data:{restored:<列數>}}`，沒有備份 → `{ok:false,error:'找不到備份 org_bak_20261014'}`。兩者只有 role admin。
-- 審核者種類代號（stfReviewScope_ 回傳 `kinds` 陣列）：`'store'`（同店店長以上）、`'brand'`（品牌辦公室 osv 以上，帶 brand）、`'ops'`（營運部主管）、`'dept'`（部門主管，帶 dept）、`'exec'`（執行長以上）、`'ck'`（中央工廠主管）。
+- 規格第 12 節優先於本檔與第 11 節。
+- `orgUpgrade2026` payload `{dryrun:true|false}`；回傳 `{ok:true,data:{backup:'created'|'exists', org:[{code,kind,field,from,to}], clock:'updated'|'skipped'|'custom', staffColumn:'added'|'exists', titles:[{emp_no,name,from,to}], todo:[{emp_no,name,unit_name,flag}]}}`；`orgRollback2026` 回傳 `{ok:true,data:{restored:<列數>}}`，沒有備份 → `{ok:false,error:'找不到備份 org_bak_20261014'}`。兩者只有 role admin。
+- 審核者種類代號（stfReviewScope_ 回傳 `kinds` 陣列）：`'store'`（同店店長以上）、`'brand'`（品牌辦公室區督導 sv 以上，帶 brand）、`'ops'`（營運部主管）、`'dept'`（部門主管，帶 dept）、`'exec'`（執行長以上）、`'ck'`（中央工廠主管）。
 
 ## 風險
 - users 分頁欄數陷阱（dzy-admin skill）：本案不碰 users 分頁。
