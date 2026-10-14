@@ -399,11 +399,13 @@ function stfWriteExtraCell_(row, codes) {
 }
 
 /** 主要部門有變動（核准、後台改）→ 新的主要部門自動從兼任裡移除（規格 11 第 11 條） */
-function stfPruneExtraDept_(row, empNo, newDept) {
-  if (!newDept || stfExtraColState_() !== 'ok') return;
+function stfPruneExtraDept_(row, empNo, newDept, newUnit) {
+  var dropCk = newUnit === STF_EXTRA_CK;
+  if ((!newDept && !dropCk) || stfExtraColState_() !== 'ok') return;
   var cur = stfSplitCodes_(stfReadExtraMap_()[stfNormEmp_(empNo)]);
-  if (cur.indexOf(newDept) === -1) return;
-  stfWriteExtraCell_(row, cur.filter(function (c) { return c !== newDept; }));
+  var next = cur.filter(function (c) { return !(newDept && c === newDept) && !(dropCk && c === STF_EXTRA_CK); });
+  if (next.length === cur.length) return;
+  stfWriteExtraCell_(row, next);
 }
 
 // ============================================================
@@ -949,7 +951,7 @@ function handleUnitApprove_(token, payload) {
   if (err) return { ok: false, error: err };
   t.v[STF_COL.updated_at] = stfNowText_();
   stfWriteRow_(STF_SHEET, t.hit.row, t.v, STF_COL_COUNT);
-  stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]));
+  stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]), stfStr_(t.v[STF_COL.unit]));
   stfLog_(t.emp, 'confirm', t.rv.user.id, 'unit_review');
   // 調店：確認後單位換了 → 新單位有打卡就開 add 單（StaffClock.gs；沒有那支檔案時略過）
   if (typeof clkAfterConfirm_ === 'function') clkAfterConfirm_(t.emp, oldUnit, stfStr_(t.v[STF_COL.unit]), t.rv.user.id);
@@ -1135,7 +1137,7 @@ function handleStaffConfirm_(token, payload) {
   var err = stfApplyConfirm_(t.v, stfReadOrg_());
   if (err) return { ok: false, error: err };
   var saved = stfSave_(t, 'confirm', '');
-  stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]));
+  stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]), stfStr_(t.v[STF_COL.unit]));
   if (typeof clkAfterConfirm_ === 'function') clkAfterConfirm_(t.emp, oldUnit, stfStr_(t.v[STF_COL.unit]), t.auth.user.id);
   return saved;
 }
@@ -1288,7 +1290,7 @@ function handleStaffEdit_(token, payload) {
   }
   // 兼任部門那一格先寫（只寫該格）；org 變動時主要部門自動從兼任移除（沒帶 extra_depts 的情況）
   if (extraNew) stfWriteExtraCell_(t.hit.row, extraNew);
-  else if (changed.indexOf('org') !== -1) stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]));
+  else if (changed.indexOf('org') !== -1) stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]), stfStr_(t.v[STF_COL.unit]));
   var savedEdit = stfSave_(t, 'admin_edit', '改了：' + changed.join(','));
   // 有打卡對照的人改單位一律走調店流程（StaffClock.gs clkAfterConfirm_）：新單位有打卡就開 add 單、舊主店降支援
   if (changed.indexOf('org') !== -1 && typeof clkAfterConfirm_ === 'function') {
@@ -1478,6 +1480,16 @@ function stfClockSnapshot_() {
 function stfClockHash_() { return stfHashText_(JSON.stringify(stfClockSnapshot_())); }
 function stfSameRows_(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
+/** 備份分頁「遺失」＝不存在，或存在但被清空（沒有表頭列）。回遺失的分頁名陣列 */
+function stfLostBackups_(state) {
+  var lost = [];
+  [state.org_bak, state.stf_bak, state.clk_bak].forEach(function (n) {
+    if (!n) return;
+    var sh = stfSheet_(n);
+    if (!sh || sh.getLastRow() < 1 || String(sh.getRange(1, 1, 1, 1).getValues()[0][0]).trim() === '') lost.push(n);
+  });
+  return lost;
+}
 function stfGetUpgradeState_() {
   var raw = PropertiesService.getScriptProperties().getProperty(STF_PROP_ORG_UPGRADE);
   if (!raw) return null;
@@ -1643,8 +1655,8 @@ function handleOrgUpgrade_(token, payload) {
   var dry = !!(payload && payload.dryrun === true);
   var st0 = stfGetUpgradeState_();
   if (st0) {
-    var lost = [st0.org_bak, st0.stf_bak, st0.clk_bak].filter(function (n) { return n && !stfSheet_(n); });
-    if (lost.length) return { ok: false, error: '已有升級紀錄，但備份分頁不見了：' + lost.join('、') + '。為避免之後回退沒有東西可還原，停止升級，請先處理（找回備份分頁，或確認要放棄回退能力）' };
+    var lost = stfLostBackups_(st0);
+    if (lost.length) return { ok: false, error: '已有升級紀錄，但備份分頁不見了或被清空：' + lost.join('、') + '。為避免之後回退沒有東西可還原，停止升級，請先處理（找回備份分頁，或確認要放棄回退能力）' };
   }
   var colState = stfExtraColState_();
   if (colState === 'mismatch') return { ok: false, error: '分頁「staff」第 ' + STF_EXTRA_DEPTS_COL_NO + ' 欄的表頭不是 extra_depts，停止升級以免資料錯位' };
@@ -1775,6 +1787,8 @@ function handleOrgRollback_(token) {
   if (hasClock && !stfSheet_(state.clk_bak)) return { ok: false, error: '找不到備份 ' + state.clk_bak + '（clock_stores 備份），為避免半套回退，什麼都沒有改' };
   if (hasClock && !stfSheet_('clock_stores')) return { ok: false, error: '找不到分頁 clock_stores，為避免半套回退，什麼都沒有改' };
   if (!stfSheet_(STF_SHEET)) return { ok: false, error: '找不到分頁 ' + STF_SHEET };
+  var emptied = stfLostBackups_(state);
+  if (emptied.length) return { ok: false, error: '備份分頁被清空了：' + emptied.join('、') + '，為避免半套回退，什麼都沒有改' };
 
   // ① 判斷各步狀態：已等於備份＝已完成；否則雜湊不符＝切換後被改過 → 拒絕
   var bakOrgRows = stfNormOrgRows_(stfSheetValues_(bak, STF_ORG_HEADERS.length));

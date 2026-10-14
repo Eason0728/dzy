@@ -919,5 +919,32 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(e.ok && app.sheets.staff._data.find((x) => x[0] === crew.emp)[26] === 'it,training,old', 'R2 兼任：staffEdit 帶入原有停用代碼可存', e);
 })();
 
+(() => {
+  // N4：備份分頁還在但被清空 → 升級／預覽／回退都拒絕、零寫入
+  ['org_bak', 'stf_bak', 'clk_bak'].forEach((k) => {
+    const app = legacyApp();
+    const { sb, tok } = app;
+    post(sb, 'orgUpgrade2026', {}, tok);
+    const st = JSON.parse(app.props.ORG_UPGRADE_STATE);
+    app.sheets[st[k]]._data.length = 0;
+    const snap = () => JSON.stringify([Object.keys(app.sheets).sort(), app.sheets.org._rows(), app.sheets.staff._rows(), app.sheets.clock_stores._rows(), app.props.ORG_UPGRADE_STATE]);
+    const before = snap();
+    const u1 = post(sb, 'orgUpgrade2026', {}, tok), u2 = post(sb, 'orgUpgrade2026', { dryrun: true }, tok), rb = post(sb, 'orgRollback2026', {}, tok);
+    ok(!u1.ok && !u2.ok && !rb.ok && u1.error.indexOf(st[k]) !== -1 && rb.error.indexOf(st[k]) !== -1 && snap() === before, 'R3 N4 ' + k + ' 被清空 → 升級／預覽／回退拒絕、零寫入', [u1, u2, rb]);
+  });
+})();
+
+(() => {
+  // N3：主要單位變成 ck → 自動從 extra_depts 移除 ck
+  const app = legacyApp();
+  const { sb, tok } = app;
+  const c = mk(app, '兼任乙', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
+  const row = () => app.sheets.staff._data.find((x) => x[0] === c.emp);
+  app.sheets.staff._data[0][26] = 'extra_depts';
+  row()[26] = 'fin,ck';
+  const e = post(sb, 'staffEdit', { emp_no: c.emp, brand: 'ck', unit: 'ck', dept: '', title: 'pt' }, tok);
+  ok(e.ok && row()[26] === 'fin', 'R3 N3 後台把主要單位改成 ck → extra_depts 的 ck 被移除（保留 fin）', [e, row()[26]]);
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
