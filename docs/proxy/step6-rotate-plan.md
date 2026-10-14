@@ -47,11 +47,13 @@
 
 **M1【mini Claude】準備**（還不停機）
 ```sh
-cd ~/dzy-minikit && git pull --ff-only && ls apps/dzy-platform/rotate-secrets.js
-export PATH="$HOME/.local/node/bin:$PATH"; node --check apps/dzy-platform/rotate-secrets.js && echo ok
+cd ~/dzy-minikit && git fetch -q origin && mkdir -p "$HOME/dzy-minikit-work" && chmod 700 "$HOME/dzy-minikit-work"
+git show 242b3f8:apps/dzy-platform/rotate-secrets.js > "$HOME/dzy-minikit-work/rotate-secrets.js"
+export PATH="$HOME/.local/node/bin:$PATH"; node --check "$HOME/dzy-minikit-work/rotate-secrets.js" && echo ok
 curl -s -m 5 http://127.0.0.1:8799/platform/health | head -c 160; echo
 ```
-期望：檔案在、`ok`、health green。回報後等 Eason 說「開始」。
+期望：`ok`、health green。
+**不要 `git pull`**：main 上還有組織改版的後端（308cdd6）等其他交辦，pull 會順便把它上線、打亂順序。只取出這一支工具放到 work 資料夾用。回報後等 Eason 說「開始」。
 
 **M2【mini Claude】停管理系統後端**（從這裡開始管理系統暫停）
 ```sh
@@ -64,7 +66,7 @@ sqlite3 "$HOME/dzy-platform-data/app.db" ".backup '$HOME/dzy-minikit-work/platfo
 
 **E1【Eason，在 mini 終端機】寫新碼進 mini**（畫面不會顯示碼；每個碼輸入兩次）
 ```sh
-cd ~/dzy-minikit && export PATH="$HOME/.local/node/bin:$PATH" && node apps/dzy-platform/rotate-secrets.js
+cd ~/dzy-minikit && export PATH="$HOME/.local/node/bin:$PATH" && node "$HOME/dzy-minikit-work/rotate-secrets.js"
 ```
 期望最後看到「已更新 audit/write」「已更新 audit/read」「已更新 dorm/write」「完成」。
 出現【停】＝什麼都沒寫，照訊息修正後重跑同一行。
@@ -98,7 +100,7 @@ cat "$DATA"/logs/server.log* | grep -E 'proxy:(audit|dorm)\.' | tail -n 30 | awk
 
 **收尾【mini Claude】**（M4 確認都是 ok 之後）
 ```sh
-rm -f "$HOME"/dzy-minikit-work/platform-app.db.bak-* "$HOME"/dzy-minikit-work/platform-env.bak-*
+rm -f "$HOME"/dzy-minikit-work/platform-app.db.bak-* "$HOME"/dzy-minikit-work/platform-env.bak-* "$HOME/dzy-minikit-work/rotate-secrets.js"
 ```
 （兩個備份都含舊碼／金鑰，確認不用回退就刪。）
 
