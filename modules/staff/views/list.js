@@ -24,7 +24,7 @@ export const FILTERS = [
   ['left', '已離職但打卡未停'], ['nohome', '沒有打卡編號'],
   ['overdue', '離職日已過未停用'], ['homestopped', '主店打卡被停'], ['flags', '需處理']
 ];
-const FLAG_TEXT = { unit_inactive: '所屬門市已停用', title_ladder: '職稱需重選' };
+const FLAG_TEXT = { unit_inactive: '所屬門市已停用', title_ladder: '職稱需重選', dept_inactive: '部門已停用' };
 const CLOCK_TEXT = { updated: '會更新（補上一悟總部）', skipped: '不用更新', custom: '有自訂值，保留不動' };
 
 export function mountList(el, ctx) {
@@ -169,9 +169,9 @@ export function mountList(el, ctx) {
   }
   function extraHtml(p) {
     const have = p.extra_depts || [];
-    const boxes = extraChoices(p).map((c, i) => `<div class="checkbox-row"><input type="checkbox" id="ed-x-${i}" data-code="${esc(c.code)}"${have.indexOf(c.code) !== -1 ? ' checked' : ''}><label for="ed-x-${i}">${esc(c.name)}</label></div>`).join('');
-    const hid = extraHidden(p);
-    const hidden = hid.length ? `<p class="field-hint" data-role="extra-hidden">已停用（保留不動）：${esc(hid.map((x) => x.name).join('、'))}</p>` : '';
+    const all = extraChoices(p).map((c) => ({ code: c.code, name: c.name })).concat(extraHidden(p).map((x) => ({ code: x.code, name: x.name + '（已停用）' })));
+    const boxes = all.map((c, i) => `<div class="checkbox-row"><input type="checkbox" id="ed-x-${i}" data-code="${esc(c.code)}"${have.indexOf(c.code) !== -1 ? ' checked' : ''}><label for="ed-x-${i}">${esc(c.name)}</label></div>`).join('');
+    const hidden = '';
     return `<div class="field" data-role="extra-wrap"><span class="field-label">兼任部門</span>${boxes}${hidden}<p class="field-hint">兼任不影響審核，審核只看主要部門。</p></div>`;
   }
 
@@ -181,7 +181,7 @@ export function mountList(el, ctx) {
 
   function upgradeReportHtml(d, done) {
     const titles = (d.titles || []).map((t) => `${t.emp_no} ${t.name}：${t.from_name || t.from} → ${t.to_name || t.to}`);
-    const todo = (d.todo || []).map((t) => `${t.emp_no} ${t.name}（${t.unit_name || ''}）：${FLAG_TEXT[t.flag] || t.flag}`);
+    const todo = (d.todo || []).map((t) => `${t.emp_no} ${t.name}（${t.unit_name || ''}）：${FLAG_TEXT[t.flag] || t.flag}${t.submitted ? '（送出待審的資料）' : ''}`);
     const orgRows = (d.org || []).map((o) => `${o.kind} ${o.code}　${o.field === 'row' ? '新增一列' : `${o.field}：${o.from || '（空）'} → ${o.to}`}`);
     return `<p>備份：${d.backup === 'exists' ? '已有備份（不覆蓋）' : done ? '已建立' : '會建立'}　・　同仁表兼任欄：${d.staffColumn === 'added' ? (done ? '已新增' : '會新增') : '已存在'}</p>
       <p data-role="pv-clock">打卡對照：${esc(CLOCK_TEXT[d.clock] || d.clock)}</p>
@@ -213,15 +213,18 @@ export function mountList(el, ctx) {
     if (!alive) return;
     if (!r.ok) {
       // 後端回 {ok:false,error,data:{diff}}；api.js 會把 data 整包放進 r.data，所以實際在 r.data.data.diff（兩種都收）
-      const diff = (r.data && (r.data.diff || (r.data.data && r.data.data.diff))) || [];
-      if (diff.length) {
-        const rows = diff.map((x) => `<tr><td>${esc(x.kind)}</td><td>${esc(x.code)}</td><td>${esc(x.field)}</td><td>${esc(x.expected)}</td><td>${esc(x.actual)}</td></tr>`).join('');
-        await ctx.ui.dialog({ title: '退回被拒絕', body: domOf(`<p>${esc(r.error)}</p><div class="table-wrap"><table class="table"><thead><tr><th>類別</th><th>代碼</th><th>欄位</th><th>切換後應為</th><th>目前</th></tr></thead><tbody>${rows}</tbody></table></div>`), actions: OK_ONLY });
+      const rd = (r.data && (r.data.diff || r.data.clock_diff ? r.data : r.data.data)) || {};
+      const diff = rd.diff || [];
+      const cdiff = rd.clock_diff || [];
+      if (diff.length || cdiff.length) {
+        const orgTbl = diff.length ? `<p><b>組織表差異</b></p><div class="table-wrap"><table class="table"><thead><tr><th>類別</th><th>代碼</th><th>欄位</th><th>切換後應為</th><th>目前</th></tr></thead><tbody>${diff.map((x) => `<tr><td>${esc(x.kind)}</td><td>${esc(x.code)}</td><td>${esc(x.field)}</td><td>${esc(x.expected)}</td><td>${esc(x.actual)}</td></tr>`).join('')}</tbody></table></div>` : '';
+        const clkTbl = cdiff.length ? `<p><b>打卡對照差異</b></p><div class="table-wrap"><table class="table"><thead><tr><th>店別</th><th>欄位</th><th>切換後應為</th><th>目前</th></tr></thead><tbody>${cdiff.map((x) => `<tr><td>${esc(x.key)}</td><td>${esc(x.field)}</td><td>${esc(x.expected)}</td><td>${esc(x.actual)}</td></tr>`).join('')}</tbody></table></div>` : '';
+        await ctx.ui.dialog({ title: '退回被拒絕', body: domOf(`<p>${esc(r.error)}</p>${orgTbl}${clkTbl}`), actions: OK_ONLY });
       } else ctx.ui.toast(r.error || '退回失敗', 'danger');
       return;
     }
     const d = r.data || {};
-    const orphans = (d.orphans || []).map((o) => `${o.emp_no} ${o.name}（單位 ${o.unit || '—'}／職稱 ${o.title || '—'}）`);
+    const orphans = (d.orphans || []).map((o) => `${o.emp_no} ${o.name}（單位 ${o.unit || '—'}／部門 ${o.dept || '—'}／職稱 ${o.title || '—'}）`);
     await ctx.ui.dialog({
       title: '組織已退回',
       body: domOf(`<p>組織表還原 ${esc(d.restored)} 列${d.clock_restored ? '，打卡對照也已還原' : ''}；職稱還原 ${esc(d.titles_restored || 0)} 人。</p>
@@ -272,12 +275,12 @@ export function mountList(el, ctx) {
       const o = readOrgFields(body, 'ed');
       if (o.brand && (o.brand !== p.brand || o.unit !== p.unit || o.dept !== p.dept || o.title !== p.title)) Object.assign(payload, o);
       if (canExtra) {
+        // 停用部門的舊代碼也是勾選框（預設勾選）；取消勾選＝移除，保持勾選＝原樣送回
         const checked = Array.from(body.querySelectorAll('input[data-code]')).filter((n) => n.checked).map((n) => n.getAttribute('data-code'));
-        const next = extraChoices(p).map((c) => c.code).filter((c) => checked.indexOf(c) !== -1);
-        const hid = extraHidden(p).map((x) => x.code);
-        const before = (p.extra_depts || []).filter((c) => hid.indexOf(c) === -1);
-        // 只有使用者真的改了勾選才帶；帶的時候把看不到的舊代碼一起保留
-        if (next.length !== before.length || next.some((c) => before.indexOf(c) === -1)) payload.extra_depts = next.concat(hid);
+        const order = extraChoices(p).map((c) => c.code).concat(extraHidden(p).map((x) => x.code));
+        const next = order.filter((c) => checked.indexOf(c) !== -1);
+        const before = p.extra_depts || [];
+        if (next.length !== before.length || next.some((c) => before.indexOf(c) === -1)) payload.extra_depts = next;
       }
       run('staffEdit', payload, '已儲存');
     } else if (act === 'rename') {

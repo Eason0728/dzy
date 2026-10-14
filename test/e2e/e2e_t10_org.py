@@ -38,7 +38,7 @@ class Mock10(MockBackend):
         base_row = lambda emp, nm, **kw: dict({'emp_no': emp, 'name': nm, 'status': 'active', 'brand': 'dzy', 'unit': 'dzy-hq', 'dept': 'it', 'title': 'hs',
                                                'phone': '0911000%03d' % int(emp[3:]), 'birthday': '1990-01-01', 'address': '測試路1號', 'extra': ['training'], 'flags': []}, **kw)
         self.staff = [base_row('DZY001', '測試甲'),
-                      base_row('DZY002', '測試乙', unit='mala-old', brand='mala', dept='', title='sv', extra=[], flags=['unit_inactive', 'title_ladder']),
+                      base_row('DZY002', '測試乙', unit='mala-old', brand='mala', dept='', title='sv', extra=[], flags=['unit_inactive', 'title_ladder', 'dept_inactive']),
                       base_row('DZY003', '測試丙', extra=[])]
         self.log10 = []
         self.edits = []
@@ -85,14 +85,15 @@ class Mock10(MockBackend):
                 'dryrun': bool(p.get('dryrun')), 'backup': 'created', 'clock': 'custom', 'staffColumn': 'added',
                 'org': [{'code': 'ck', 'kind': 'brand', 'field': 'name', 'from': '央廚', 'to': '中央工廠'}, {'code': 'yiwu-hq', 'kind': 'unit', 'field': 'row', 'from': '', 'to': 'added'}],
                 'titles': [{'emp_no': 'DZY010', 'name': '測試丁', 'from': 'hs', 'to': 'ofs', 'from_name': '部門同仁', 'to_name': '行政同仁'}],
-                'todo': [{'emp_no': 'DZY002', 'name': '測試乙', 'unit_name': '舊店（已停用）', 'flag': 'title_ladder'}]}}
+                'todo': [{'emp_no': 'DZY002', 'name': '測試乙', 'unit_name': '舊店（已停用）', 'flag': 'title_ladder', 'submitted': False}, {'emp_no': 'DZY002', 'name': '測試乙', 'unit_name': '舊店（已停用）', 'flag': 'dept_inactive', 'submitted': True}]}}
         if action == 'orgRollback2026':
             self.rollbacks += 1
             if self.tamper:
                 return {'ok': False, 'error': '切換後組織資料又被改過，為避免蓋掉新的修改，拒絕整表覆蓋；差異已列出',
-                        'data': {'diff': [{'kind': 'unit', 'code': 'ck', 'field': 'name', 'expected': '中央工廠（央廚）', 'actual': '央廚改名測試'}]}}
+                        'data': {'diff': [{'kind': 'unit', 'code': 'ck', 'field': 'name', 'expected': '中央工廠（央廚）', 'actual': '央廚改名測試'}],
+                                'clock_diff': [{'key': 'hq', 'field': 'unit_code', 'expected': 'dzy-hq', 'actual': 'yiwu-x-hq'}]}}
             return {'ok': True, 'data': {'restored': 41, 'clock_restored': True, 'titles_restored': 2, 'titles_skipped': ['DZY777'],
-                                          'orphans': [{'emp_no': 'DZY002', 'name': '測試乙', 'unit': 'mala-old', 'title': 'sv'}], 'backup': 'org_bak_202610141200'}}
+                                          'orphans': [{'emp_no': 'DZY002', 'name': '測試乙', 'unit': 'mala-old', 'dept': 'olddept', 'title': 'sv'}], 'backup': 'org_bak_202610141200'}}
         if action == 'myProfile':
             r = next((x for x in self.staff if x['emp_no'] == who), None)
             return {'ok': True, 'data': self.obj(r)} if r else {'ok': True, 'data': {'none': True}}
@@ -135,7 +136,7 @@ def main():
             r1 = ad.inner_text('[data-role="rows"] tr:has-text("DZY001")')
             check('兼任：訓練部' in r1, '有兼任的人顯示「兼任：訓練部」')
             r2 = ad.inner_text('[data-role="rows"] tr:has-text("DZY002")')
-            check('所屬門市已停用' in r2 and '職稱需重選' in r2, '★flags 標籤：所屬門市已停用／職稱需重選')
+            check('所屬門市已停用' in r2 and '職稱需重選' in r2 and '部門已停用' in r2, '★flags 標籤：所屬門市已停用／職稱需重選')
             check('所屬門市已停用' not in ad.inner_text('[data-role="rows"] tr:has-text("DZY003")'), '沒 flags 的人沒有標籤')
             shot(ad, 'list_tags_extra')
             ad.select_option('#stf-f', 'flags')
@@ -168,7 +169,7 @@ def main():
             pv = ad.inner_text('.dialog')
             check(mock.upgrades == [True], '★按「切換組織」先送 dryrun:true：%s' % mock.upgrades)
             check('測試丁' in pv and '部門同仁' in pv and '行政同仁' in pv, '預覽逐人列 姓名：從→到')
-            check('測試乙' in pv and '職稱需重選' in pv and '自訂' in pv and 'yiwu-hq' in pv, '預覽有需處理名單、打卡對照狀態、組織表變更')
+            check('（送出待審的資料）' in pv and '測試乙' in pv and '職稱需重選' in pv and '自訂' in pv and 'yiwu-hq' in pv, '預覽有需處理名單、打卡對照狀態、組織表變更')
             shot(ad, 'upgrade_preview')
             ad.click('.dialog .btn:has-text("取消")')
             ad.wait_for_function("() => !document.querySelector('.dialog')")
@@ -197,7 +198,7 @@ def main():
             ad.click('.dialog .btn-primary:has-text("確定")')
             ad.wait_for_selector('.dialog:has-text("組織已退回")')
             rb = ad.inner_text('.dialog')
-            check(mock.rollbacks == 1 and '41' in rb and 'DZY777' in rb and '測試乙' in rb and '孤兒' in rb, '★退回報告：還原列數／略過／孤兒名單')
+            check(mock.rollbacks == 1 and '41' in rb and 'DZY777' in rb and '測試乙' in rb and '孤兒' in rb and 'olddept' in rb, '★退回報告：還原列數／略過／孤兒名單')
             shot(ad, 'rollback_report')
             ad.click('.dialog .btn:has-text("知道了")')
             ad.wait_for_function("() => !document.querySelector('.dialog')")
@@ -207,7 +208,7 @@ def main():
             ad.click('.dialog .btn-primary:has-text("確定")')
             ad.wait_for_selector('.dialog:has-text("拒絕整表覆蓋")')
             df = ad.inner_text('.dialog')
-            check('央廚改名測試' in df and '中央工廠（央廚）' in df and 'name' in df, '★退回被拒 → 顯示原因與差異表')
+            check('打卡對照差異' in df and 'yiwu-x-hq' in df and df.index('組織表差異') < df.index('打卡對照差異') and '央廚改名測試' in df and '中央工廠（央廚）' in df and 'name' in df, '★退回被拒 → 顯示原因與差異表')
             shot(ad, 'rollback_diff')
             ad.click('.dialog .btn:has-text("知道了")')
 

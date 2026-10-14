@@ -228,7 +228,7 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ctx.answers.push('ok');
   el.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
   await flush();
-  ok(ctx.dialogs[0].body.innerHTML.includes('已停用') && ctx.dialogs[0].body.innerHTML.includes('舊部門'), '#4-1 對話框唯讀列出「已停用：舊部門」');
+  ok(/data-code="old"[^>]*checked/.test(ctx.dialogs[0].body.innerHTML) && ctx.dialogs[0].body.innerHTML.includes('舊部門（已停用）'), '#4-1 停用代碼是預設勾選的勾選框「舊部門（已停用）」');
   let call = ctx.calls.find((c) => c.action === 'staffEdit');
   ok(call && !('extra_depts' in call.payload), '#4-1 ★含停用代碼、不動直接儲存 → 不帶 extra_depts', call);
   const ctx2 = makeCtx(h4(), { perms: ['platform.staff'] });
@@ -238,7 +238,18 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   el2.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
   await flush();
   call = ctx2.calls.find((c) => c.action === 'staffEdit');
-  ok(call && JSON.stringify(call.payload.extra_depts) === JSON.stringify(['training', 'ops', 'old']), '#4-1 ★有改勾選 → 帶的陣列保留不可見的舊代碼', call);
+  ok(call && JSON.stringify(call.payload.extra_depts) === JSON.stringify(['training', 'ops', 'old']), '#4-1 ★改別的勾選、停用代碼保持勾選 → 原樣送回', call);
+}
+{ // 停用兼任取消勾選就移除
+  const P4 = Object.assign({}, P1, { extra_depts: ['training', 'old'], extra_dept_names: ['訓練部', '舊部門'] });
+  const ctx = makeCtx((a) => (a === 'staffList' ? { ok: true, data: { staff: [P4] } } : a === 'orgOptions' ? { ok: true, data: ORG } : { ok: true, data: { staff: P4 } }), { perms: ['platform.staff'] });
+  const el = await mount(ctx);
+  ctx.answers.push('ok');
+  ctx.fills.push((body) => { xbox(body, 'old').checked = false; });
+  el.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
+  await flush();
+  const call = ctx.calls.find((c) => c.action === 'staffEdit');
+  ok(call && JSON.stringify(call.payload.extra_depts) === JSON.stringify(['training']), '#4-1 取消勾選停用代碼 → 從 extra_depts 移除', call);
 }
 { // #3 代碼含特殊字元也能正確讀勾選（不靠 id 選擇器）
   const ORG3 = Object.assign({}, ORG, { depts: ORG.depts.concat([{ code: 'r.d', name: '特殊部', parent: 'dzy-hq' }]) });
@@ -257,6 +268,41 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   const { isReadAction } = await import('../platform/dryrun.js');
   ok(isReadAction('platform', 'orgUpgrade2026', { dryrun: true }), '#4-2 orgUpgrade2026 {dryrun:true} 放行');
   ok(!isReadAction('platform', 'orgUpgrade2026', { dryrun: false }) && !isReadAction('platform', 'orgUpgrade2026', {}) && !isReadAction('platform', 'orgRollback2026', {}), '#4-2 dryrun:false／無參數／orgRollback2026 仍攔');
+}
+
+// ── dept_inactive／submitted／orphans.dept／clock_diff ──
+{
+  const P5 = Object.assign({}, P1, { emp_no: 'DZY005', name: '測試戊', flags: ['dept_inactive'] });
+  const pv = JSON.parse(JSON.stringify(PREVIEW)); pv.data.todo.push({ emp_no: 'DZY005', name: '測試戊', unit_name: '總部', flag: 'dept_inactive', submitted: true });
+  const ctx = makeCtx(baseHandler((a, p) => (a === 'staffList' ? { ok: true, data: { staff: [P1, P5] } } : a === 'orgUpgrade2026' ? pv : a === 'orgRollback2026' ? { ok: false, error: '切換後打卡店別對照又被改過，拒絕整表覆蓋', data: { data: { clock_diff: [{ key: 'hq', field: 'unit_code', expected: 'dzy-hq', actual: 'x-hq' }] } } } : null)), { role: 'admin' });
+  const el = await mount(ctx);
+  ok(el.innerHTML.includes('部門已停用'), '標籤：dept_inactive →「部門已停用」');
+  el.querySelector('#stf-f').value = 'flags'; el.querySelector('#stf-f').fire('change');
+  ok(rows(el).includes('DZY005') && !rows(el).includes('DZY001'), '「需處理」也算 dept_inactive');
+  ctx.answers.push(null);
+  el.querySelector('[data-role="org-upgrade"]').fire('click'); await flush();
+  const t = ctx.dialogs[0].body.innerHTML;
+  ok(/測試戊[^<]*部門已停用[^<]*（送出待審的資料）/.test(t), '預覽需處理名單：submitted → 後面加「（送出待審的資料）」', t);
+  ok(!/測試乙[^<]*（送出待審的資料）/.test(t), '非 submitted 不加註');
+  ctx.dialogs.length = 0; ctx.answers.push('ok');
+  el.querySelector('[data-role="org-rollback"]').fire('click'); await flush();
+  const d = ctx.dialogs[0] && ctx.dialogs[0].body.innerHTML;
+  ok(d && d.includes('打卡對照差異') && d.includes('x-hq') && d.includes('unit_code') && d.includes('dzy-hq'), '退回被拒：只有 clock_diff 也顯示「打卡對照差異」', d);
+}
+{
+  const ctx = makeCtx(baseHandler((a) => (a === 'orgRollback2026' ? { ok: false, error: '被改過', data: { data: { diff: [{ kind: 'unit', code: 'ck', field: 'name', expected: 'A', actual: 'B' }], clock_diff: [{ key: 'hq', field: 'unit_code', expected: 'E1', actual: 'A1' }] } } } : null)), { role: 'admin' });
+  const el = await mount(ctx);
+  ctx.answers.push('ok');
+  el.querySelector('[data-role="org-rollback"]').fire('click'); await flush();
+  const d = ctx.dialogs[0].body.innerHTML;
+  ok(d.indexOf('組織表差異') !== -1 && d.indexOf('組織表差異') < d.indexOf('打卡對照差異') && d.includes('E1'), '兩種差異：組織表在上、打卡對照在下');
+}
+{
+  const ctx = makeCtx(baseHandler((a) => (a === 'orgRollback2026' ? { ok: true, data: { restored: 1, orphans: [{ emp_no: 'DZY009', name: '測試己', unit: 'u1', dept: 'olddept', title: 't1' }] } } : null)), { role: 'admin' });
+  const el = await mount(ctx);
+  ctx.answers.push('ok');
+  el.querySelector('[data-role="org-rollback"]').fire('click'); await flush();
+  ok(ctx.dialogs[0].body.innerHTML.includes('olddept'), '孤兒名單顯示部門');
 }
 
 // ── 檢查 ──
