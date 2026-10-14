@@ -30,7 +30,8 @@ var STF_EMP_RE = /^DZY[0-9]{3}$/;
 var STF_ORG_FIELDS = ['brand', 'unit', 'dept', 'title'];
 
 // 門檻（§6.4）：store 職級 rank≥3（店長）、hq 職級 rank≥2（部門主管）可看單位通訊錄
-var STF_UNIT_VIEW_MIN_RANK = { store: 3, hq: 2 };
+// office（品牌辦公室，職稱階梯＝store）：rank≥5 區督導以上才算品牌辦公室主管（規格第 12 節）
+var STF_UNIT_VIEW_MIN_RANK = { store: 3, hq: 2, office: 5 };
 
 // 忘記密碼（§6.6）
 var STF_RESET_FAIL_LIMIT = 5;
@@ -188,6 +189,12 @@ function stfReadOrg_() {
   return org;
 }
 
+/** 職稱階梯（規格第 12 節）：office（品牌辦公室）與空白都用 store 那套職稱；其他 ladder 照原值（unit 為單位物件） */
+function stfTitleLadder_(unit) {
+  var l = unit ? (unit.ladder || 'store') : 'store';
+  return l === 'office' ? 'store' : l;
+}
+
 function stfActiveDeptsOf_(org, unitCode) {
   return org.list.dept.filter(function (d) { return d.active && d.parent === unitCode; });
 }
@@ -206,7 +213,7 @@ function stfValidateOrg_(org, v) {
     return '這個單位不用選部門';
   }
   var t = org.title[v.title];
-  if (!t || !t.active || t.parent !== (u.ladder || 'store')) return '請選擇這個單位適用的職稱';
+  if (!t || !t.active || t.parent !== stfTitleLadder_(u)) return '請選擇這個單位適用的職稱';
   return null;
 }
 
@@ -1038,26 +1045,27 @@ var STF_DEFAULT_ORG = [
   ['brand', 'mzt', '墨竹亭', '', '', '', 1, 'TRUE'],
   ['brand', 'mala', '麻的小辛辣', '', '', '', 2, 'TRUE'],
   ['brand', 'yiwu', '一悟燒肉', '', '', '', 3, 'TRUE'],
-  ['brand', 'ck', '央廚', '', '', '', 4, 'TRUE'],
+  ['brand', 'ck', '中央工廠', '', '', '', 4, 'TRUE'],
   ['brand', 'dzy', '鼎兆元總部', '', '', '', 5, 'TRUE'],
   ['unit', 'mzt-js', '新竹金山', 'mzt', 'store', '', 1, 'TRUE'],
   ['unit', 'mzt-gf', '新竹光復', 'mzt', 'store', '', 2, 'TRUE'],
   ['unit', 'mzt-lzl', '台北六張犁', 'mzt', 'store', '', 3, 'TRUE'],
-  ['unit', 'mzt-wx', '台中文心', 'mzt', 'store', '', 4, 'TRUE'],
-  ['unit', 'mzt-rg', '內湖瑞光', 'mzt', 'store', '', 5, 'TRUE'],
-  ['unit', 'mzt-mc', '台中美村', 'mzt', 'store', '', 6, 'TRUE'],
-  ['unit', 'mzt-hq', '墨竹亭總部', 'mzt', 'hq', '', 7, 'TRUE'],
+  ['unit', 'mzt-wx', '台中文心', 'mzt', 'store', '', 4, 'FALSE'],
+  ['unit', 'mzt-rg', '內湖瑞光', 'mzt', 'store', '', 5, 'FALSE'],
+  ['unit', 'mzt-mc', '台中美村', 'mzt', 'store', '', 6, 'FALSE'],
+  ['unit', 'mzt-hq', '墨竹亭品牌辦公室', 'mzt', 'office', '', 7, 'TRUE'],
   ['unit', 'mala-gf', '新竹光復', 'mala', 'store', '', 1, 'TRUE'],
-  ['unit', 'mala-hq', '小辛辣總部', 'mala', 'hq', '', 2, 'TRUE'],
+  ['unit', 'mala-hq', '小辛辣品牌辦公室', 'mala', 'office', '', 2, 'TRUE'],
   ['unit', 'yiwu-js', '新竹金山', 'yiwu', 'store', '', 1, 'TRUE'],
   ['unit', 'yiwu-wx', '竹北文興', 'yiwu', 'store', '', 2, 'TRUE'],
-  ['unit', 'ck', '央廚', 'ck', 'store', '', 1, 'TRUE'],
+  ['unit', 'yiwu-hq', '一悟燒肉品牌辦公室', 'yiwu', 'office', '', 3, 'TRUE'],
+  ['unit', 'ck', '中央工廠（央廚）', 'ck', 'store', '', 1, 'TRUE'],
   ['unit', 'dzy-hq', '鼎兆元總部', 'dzy', 'hq', '', 1, 'TRUE'],
   ['title', 'pt', '計時同仁', 'store', '', 1, 1, 'TRUE'],
   ['title', 'ft', '正職同仁', 'store', '', 2, 2, 'TRUE'],
   ['title', 'sm', '店長', 'store', '', 3, 3, 'TRUE'],
   ['title', 'am', '區經理', 'store', '', 4, 4, 'TRUE'],
-  ['title', 'sv', '督導', 'store', '', 5, 5, 'TRUE'],
+  ['title', 'sv', '區督導', 'store', '', 5, 5, 'TRUE'],
   ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'TRUE'],
   ['title', 'hs', '部門同仁', 'hq', '', 1, 1, 'TRUE'],
   ['title', 'hm', '部門主管', 'hq', '', 2, 2, 'TRUE'],

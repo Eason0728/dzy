@@ -21,6 +21,12 @@ export function orgFieldsHtml(prefix) {
     <div class="form-grid-2">${f('dept', '部門')}${f('title', '職稱')}</div>`;
 }
 
+/** 職稱階梯（規格第 12 節）：品牌辦公室（ladder＝office）與空白都用 store 那套職稱；hq 用 hq 那套 */
+export function titleLadder(unit) {
+  const l = unit ? (unit.ladder || 'store') : '';
+  return l === 'office' ? 'store' : l;
+}
+
 function options(list, selected, placeholder) {
   return `<option value="">${esc(placeholder)}</option>` +
     list.map((o) => `<option value="${esc(o.code)}"${o.code === selected ? ' selected' : ''}>${esc(o.name)}</option>`).join('');
@@ -49,7 +55,8 @@ export function bindOrgFields(root, prefix, org, initial) {
     if (!depts.some((d) => d.code === cur.dept)) cur.dept = '';
     $('dept').innerHTML = options(depts, cur.dept, '請選擇');
     wrap('dept').hidden = depts.length === 0;
-    const titles = ladder ? org.titles.filter((t) => t.parent === ladder) : [];
+    const tl = titleLadder(unit);
+    const titles = tl ? org.titles.filter((t) => t.parent === tl) : [];
     if (!titles.some((t) => t.code === cur.title)) cur.title = '';
     $('title').innerHTML = options(titles, cur.title, cur.unit ? '請選擇' : '先選單位');
     $('title').disabled = !cur.unit;

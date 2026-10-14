@@ -185,12 +185,12 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   ok(v({}) === null, 'A2 正確組合通過');
   ok(v({ unit: 'mala-gf' }) !== null, 'A2 單位不屬於品牌 → 擋');
   ok(v({ title: 'hs' }) !== null, 'A2 門市單位選總部職稱 → 擋');
-  ok(v({ unit: 'mzt-hq', title: 'hs' }) === null, 'A2 總部單位用總部職稱、沒有部門清單時不必選部門');
-  ok(v({ unit: 'mzt-hq', title: 'hs', dept: 'x' }) !== null, 'A2 沒有部門清單時填了部門 → 擋');
+  ok(v({ unit: 'mzt-hq', title: 'ft' }) === null, 'A2 品牌辦公室用門市職稱（office 算 store）、不必選部門');
+  ok(v({ unit: 'mzt-hq', title: 'ft', dept: 'x' }) !== null, 'A2 品牌辦公室填了部門 → 擋');
   ok(org.list.dept.length === 9 && org.list.dept.every((d) => d.parent === 'dzy-hq'), 'A2 預設九個部門、全部掛鼎兆元總部');
   ok(v({ brand: 'dzy', unit: 'dzy-hq', dept: '', title: 'hs' }) !== null, 'A2 鼎兆元總部有部門清單 → 部門必填');
   ok(v({ brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' }) === null, 'A2 鼎兆元總部選對部門通過');
-  ok(v({ brand: 'mala', unit: 'mala-hq', dept: '', title: 'hm' }) === null, 'A2 小辛辣總部沒有部門 → 不必選');
+  ok(v({ brand: 'mala', unit: 'mala-hq', dept: '', title: 'sv' }) === null, 'A2 小辛辣品牌辦公室沒有部門 → 不必選');
   ok(sb.stfValidateBirthday_('1995-02-30') !== null, 'A2 不存在的日期擋');
   ok(sb.stfValidateBirthday_('1995-02-28') === null, 'A2 正常生日通過');
   ok(sb.stfValidatePhone_('0911222333') === null && sb.stfValidatePhone_('0211222333') !== null, 'A2 手機 09 開頭 10 碼');
@@ -391,7 +391,7 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
     ok(mut.indexOf(a + ': 1') !== -1, 'A8 ' + a + ' 有上寫入鎖');
   });
   ok(post(sb, 'nope', {}).error === '不支援的操作', 'A8 未知 action 照舊拒絕');
-  ok(post(sb, 'orgOptions', {}).data.units.length === 13, 'A8 orgOptions 不需登入即可取得下拉');
+  ok(post(sb, 'orgOptions', {}).data.units.length === 11, 'A8 orgOptions 不需登入即可取得下拉（停用的三店不列）');
 })();
 
 // ============================================================
