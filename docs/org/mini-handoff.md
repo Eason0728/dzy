@@ -9,7 +9,7 @@
 - 本次只重啟 `dzy-platform` 一個系統（約 10 秒無法登入管理系統）；耗損、調撥、其他系統不動。
 
 三條硬規則：
-- **你不讀、不印任何金鑰與網址**；不要 cat `.env`，`.env` 一個字都不改。
+- **你不讀、不印任何金鑰與網址**；不要 cat `.env`，`.env` 一個字都不改（`CLOCK_WRITE` 現在是 1，維持不動）。
 - **不要呼叫 orgUpgrade2026／orgRollback2026**（那是 Eason 在網頁上按的）。
 - 任何一步和「期望」不同：把現象貼給 Eason，**停**，不要自己修。
 
@@ -18,9 +18,10 @@
 
 1. **更新 minikit。**
    `cd ~/dzy-minikit && git pull --ff-only && git log --oneline -3`
-   期望：fast-forward 成功，HEAD 是 `308cdd6`。
+   期望：fast-forward 成功，HEAD 是 `b2039a9`（含組織改版 308cdd6＋同步員立即處理「在主店建打卡帳號」b2039a9；若管理部追加又同步，以 MacBook 的 Claude 給的最新 hash 為準）。
    `grep -c "handleOrgUpgrade_" apps/dzy-platform/gas/Code.gs apps/dzy-platform/gas/Staff.gs` → 兩檔都 ≥1。
    `grep -c "extra_depts" apps/dzy-platform/gas/StaffClock.gs` → ≥1。
+   `grep -c "'clockAddHome'" apps/dzy-platform/jobs.js` → ≥1（同步員立即處理「在主店建打卡帳號」；重啟後不需另外驗證）。
 
 2. **先備份資料庫（只複製，不改）。**
    ```
