@@ -1,0 +1,114 @@
+<title>鼎兆元組織架構確認</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700&display=swap">
+<style>
+/* 版面：單欄文件；最上面待決題目，中間組織樹（縮排樹狀＝真的上下隸屬），最後新舊對照 */
+:root{
+  --bg:#f6f7f9; --paper:#ffffff; --fg:#1c2330; --muted:#5b6676; --line:#dce1e9;
+  --accent:#1f4e8c; --accent-soft:#e8eef7; --new:#1f7a4d; --new-soft:#e6f4ec; --gone:#a2452f; --gone-soft:#f8ebe7;
+  --display:"Noto Serif TC",serif; --body:"Noto Sans TC",-apple-system,"PingFang TC",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#13171e; --paper:#1b212a; --fg:#e5e8ed; --muted:#99a3b1; --line:#2d3541;
+  --accent:#8db4ea; --accent-soft:#1f2c3f; --new:#5cc58f; --new-soft:#1c3328; --gone:#e59580; --gone-soft:#3a2520; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#13171e; --paper:#1b212a; --fg:#e5e8ed; --muted:#99a3b1; --line:#2d3541;
+  --accent:#8db4ea; --accent-soft:#1f2c3f; --new:#5cc58f; --new-soft:#1c3328; --gone:#e59580; --gone-soft:#3a2520; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.7}
+main{max-width:860px;margin:0 auto;padding:32px 16px 64px;display:grid;gap:26px}
+h1{font-family:var(--display);font-size:1.8rem;margin:0;text-wrap:balance}
+h2{font-size:1.2rem;margin:0 0 10px;text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0}
+section{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px 18px;min-width:0}
+.q{display:grid;gap:16px}
+.qi{border-left:3px solid var(--accent);padding:2px 0 2px 14px}
+.qi b{display:block}
+.qi p{margin:4px 0 0;color:var(--muted)}
+.rec{display:inline-block;background:var(--accent-soft);color:var(--accent);font-size:.82rem;font-weight:700;padding:1px 8px;border-radius:4px;margin-right:6px}
+.tree,.tree ul{list-style:none;margin:0;padding-left:20px}
+.tree{padding-left:0}
+.tree li{position:relative;padding:3px 0 3px 14px;border-left:1px solid var(--line)}
+.tree li::before{content:"";position:absolute;left:0;top:15px;width:10px;border-top:1px solid var(--line)}
+.tree .lvl{font-size:.75rem;color:var(--muted);margin-left:6px;letter-spacing:.04em}
+.tree .root{font-weight:700}
+.tag{display:inline-block;font-size:.75rem;padding:0 6px;border-radius:4px;margin-left:6px}
+.t-new{background:var(--new-soft);color:var(--new)}
+.t-q{background:var(--gone-soft);color:var(--gone)}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:540px;font-size:.93rem}
+th,td{border-bottom:1px solid var(--line);padding:9px 8px;text-align:left;vertical-align:top}
+th{font-size:.8rem;color:var(--muted);font-weight:500}
+.foot{color:var(--muted);font-size:.85rem}
+</style>
+<main>
+<header>
+<h1>鼎兆元組織架構確認</h1>
+<p class="sub">依 Eason 2026-10-14 決定整理｜管理系統的單位、部門、門市要照這張改｜目前只是草稿，還沒動系統</p>
+</header>
+
+<section>
+<h2>要你回答的 6 題</h2>
+<div class="q">
+<div class="qi"><b>1. 「墨竹亭總部」「小辛辣總部」這兩個單位怎麼處理？</b>
+<p><span class="rec">推薦：併進營運部底下的品牌</span>品牌總監、督導這些人改掛在「營運部 › 墨竹亭」「營運部 › 麻的小辛辣」這一層，不再另外有兩個總部單位。現在掛在這兩個單位的人，搬過去時要逐一確認。</p></div>
+<div class="qi"><b>2. 沒列在新架構的門市怎麼處理？</b>
+<p><span class="rec">推薦：先停用，不刪</span>墨竹亭 台中文心、內湖瑞光、台中美村；一悟燒肉 新竹金山、竹北文興；麻的小辛辣 台中美村、員林南昌。如果是加盟店（同仁不歸集團管），就停用；之後要加回來可以恢復。若其中有直營店，請點名。</p></div>
+<div class="qi"><b>3. 一悟燒肉要不要放進營運部？</b>
+<p><span class="rec">推薦：問清楚再決定</span>新架構的營運部只有麻的小辛辣、墨竹亭。一悟燒肉如果還在營運，應該是營運部底下第三個品牌。</p></div>
+<div class="qi"><b>4. 中央工廠的同仁怎麼掛？</b>
+<p><span class="rec">推薦：中央工廠當成一個部門，同仁職稱沿用現在央廚的職稱</span>打卡照舊用央廚那套，只是在管理系統裡歸到「鼎兆元總部 › 中央工廠」。</p></div>
+<div class="qi"><b>5. 一個人身兼好幾個部門，怎麼記？</b>
+<p><span class="rec">推薦：每人一個「主要部門」，另外可加「兼任部門」</span>審核看主要部門；兼任部門只顯示在通訊錄，讓人知道找誰。這樣不會出現「同一個人有兩個主管都能改他資料」的混亂。</p></div>
+<div class="qi"><b>6. 審核改成「往上一層的主管審」？</b>
+<p><span class="rec">推薦：要</span>門市新人 → 該店店長以上（含該品牌的督導、品牌總監）；品牌層的人 → 營運部主管；各部門同仁 → 該部門主管；部門主管 → 執行長以上；人資一律都能審。職級比自己高的人，交給人資審。</p></div>
+</div>
+</section>
+
+<section>
+<h2>新架構</h2>
+<ul class="tree">
+<li><span class="root">鼎兆元總部</span><span class="lvl">集團</span>
+<ul>
+<li>人資部<span class="lvl">部門</span></li>
+<li>工程部<span class="lvl">部門</span><span class="tag t-new">新</span></li>
+<li>加盟招商部<span class="lvl">部門</span><span class="tag t-new">新</span></li>
+<li>資訊部<span class="lvl">部門</span></li>
+<li>行銷部<span class="lvl">部門</span><span class="tag t-new">新</span></li>
+<li>財務部<span class="lvl">部門</span></li>
+<li>採購部<span class="lvl">部門</span><span class="tag t-new">新</span></li>
+<li>營運部<span class="lvl">部門</span><span class="tag t-new">新</span>
+<ul>
+<li>麻的小辛辣<span class="lvl">品牌</span>
+<ul><li>新竹光復店<span class="lvl">門市</span></li></ul></li>
+<li>墨竹亭<span class="lvl">品牌</span>
+<ul><li>新竹金山店<span class="lvl">門市</span></li><li>新竹光復店<span class="lvl">門市</span></li><li>台北六張犁店<span class="lvl">門市</span></li></ul></li>
+<li>一悟燒肉？<span class="lvl">品牌</span><span class="tag t-q">第 3 題</span></li>
+</ul></li>
+<li>中央工廠<span class="lvl">部門</span><span class="tag t-new">新</span><span class="tag t-q">第 4 題</span></li>
+</ul></li>
+</ul>
+</section>
+
+<section>
+<h2>跟現在的系統差在哪</h2>
+<div class="tw"><table>
+<thead><tr><th>項目</th><th>現在</th><th>改成</th></tr></thead>
+<tbody>
+<tr><td>總部</td><td>三個獨立單位：鼎兆元總部、墨竹亭總部、小辛辣總部</td><td>只剩鼎兆元總部；另外兩個併進營運部（第 1 題）</td></tr>
+<tr><td>部門</td><td>3 個：財務、人資、資訊</td><td>9 個：人資、工程、加盟招商、資訊、行銷、財務、採購、營運、中央工廠</td></tr>
+<tr><td>門市</td><td>10 個（墨竹亭 6、小辛辣 1、一悟 2、央廚 1）</td><td>4 個：小辛辣光復；墨竹亭金山、光復、六張犁（第 2 題）</td></tr>
+<tr><td>央廚</td><td>當成一家「門市」</td><td>鼎兆元總部底下的中央工廠部門（第 4 題）</td></tr>
+<tr><td>層級</td><td>品牌 › 單位 › 部門（只有兩層）</td><td>總部 › 部門 › 品牌 › 門市（四層）</td></tr>
+</tbody></table></div>
+</section>
+
+<section>
+<h2>會連帶影響的地方</h2>
+<ul>
+<li><b>員工名單統一</b>：打卡、薪資、佈告欄都用「單位」判斷主店，單位改了要一起對照，不然有人會被判成支援人員。</li>
+<li><b>電子佈告欄</b>：佈告欄自己的分類（墨竹亭／小辛辣／央廚＋三個總部組）也要跟著改，誰要簽哪則公告會變。</li>
+<li><b>已認領的同仁</b>：單位或部門被改到的人，要由總部批次改，不用本人重新認領。</li>
+</ul>
+</section>
+
+<p class="foot">這是討論草稿。6 題確認後，再出改系統的計畫（建議另開一個對話做），改之前會先在試跑模式驗證。</p>
+</main>
