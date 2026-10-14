@@ -169,7 +169,7 @@ export function mountList(el, ctx) {
   }
   function extraHtml(p) {
     const have = p.extra_depts || [];
-    const all = extraChoices(p).map((c) => ({ code: c.code, name: c.name })).concat(extraHidden(p).map((x) => ({ code: x.code, name: x.name + '（已停用）' })));
+    const all = extraChoices(p).map((c) => ({ code: c.code, name: c.name })).concat(extraHidden(p).map((x) => ({ code: x.code, name: x.name + '（目前不可選，保留不動）' })));
     const boxes = all.map((c, i) => `<div class="checkbox-row"><input type="checkbox" id="ed-x-${i}" data-code="${esc(c.code)}"${have.indexOf(c.code) !== -1 ? ' checked' : ''}><label for="ed-x-${i}">${esc(c.name)}</label></div>`).join('');
     const hidden = '';
     return `<div class="field" data-role="extra-wrap"><span class="field-label">兼任部門</span>${boxes}${hidden}<p class="field-hint">兼任不影響審核，審核只看主要部門。</p></div>`;
@@ -202,6 +202,7 @@ export function mountList(el, ctx) {
     try { w = await ctx.api.call('staff', 'orgUpgrade2026', { dryrun: false }); } finally { ctx.ui.loading(false); }
     if (!alive) return;
     if (!w.ok) { ctx.ui.toast(w.error || '切換失敗', 'danger'); return; }
+    if (w.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
     await ctx.ui.dialog({ title: '組織已切換完成', body: domOf(upgradeReportHtml(w.data, true)), actions: OK_ONLY });
     if (alive) load();
   }
@@ -223,6 +224,7 @@ export function mountList(el, ctx) {
       } else ctx.ui.toast(r.error || '退回失敗', 'danger');
       return;
     }
+    if (r.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
     const d = r.data || {};
     const orphans = (d.orphans || []).map((o) => `${o.emp_no} ${o.name}（單位 ${o.unit || '—'}／部門 ${o.dept || '—'}／職稱 ${o.title || '—'}）`);
     await ctx.ui.dialog({

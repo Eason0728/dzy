@@ -228,7 +228,7 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ctx.answers.push('ok');
   el.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
   await flush();
-  ok(/data-code="old"[^>]*checked/.test(ctx.dialogs[0].body.innerHTML) && ctx.dialogs[0].body.innerHTML.includes('舊部門（已停用）'), '#4-1 停用代碼是預設勾選的勾選框「舊部門（已停用）」');
+  ok(/data-code="old"[^>]*checked/.test(ctx.dialogs[0].body.innerHTML) && ctx.dialogs[0].body.innerHTML.includes('舊部門（目前不可選，保留不動）'), '#5 不可選舊代碼是預設勾選的勾選框「舊部門（目前不可選，保留不動）」');
   let call = ctx.calls.find((c) => c.action === 'staffEdit');
   ok(call && !('extra_depts' in call.payload), '#4-1 ★含停用代碼、不動直接儲存 → 不帶 extra_depts', call);
   const ctx2 = makeCtx(h4(), { perms: ['platform.staff'] });
@@ -303,6 +303,20 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ctx.answers.push('ok');
   el.querySelector('[data-role="org-rollback"]').fire('click'); await flush();
   ok(ctx.dialogs[0].body.innerHTML.includes('olddept'), '孤兒名單顯示部門');
+}
+
+// ── 試跑模式：被 api.js 攔下（回 dryrun:true）不顯示假報告、不重載 ──
+{
+  const DRY = { ok: true, dryrun: true, data: { dryRun: true } };
+  const ctx = makeCtx(baseHandler((a, p) => (a === 'orgUpgrade2026' ? (p.dryrun ? PREVIEW : DRY) : a === 'orgRollback2026' ? DRY : null)), { role: 'admin' });
+  const el = await mount(ctx);
+  ctx.answers.push('go');
+  const n0 = ctx.calls.filter((c) => c.action === 'staffList').length;
+  el.querySelector('[data-role="org-upgrade"]').fire('click'); await flush();
+  ok(ctx.dialogs.length === 1 && ctx.toasts.some((t) => t[0] === '試跑模式：未寫入') && ctx.calls.filter((c) => c.action === 'staffList').length === n0, '#4 試跑：確定切換只 toast「試跑模式：未寫入」，沒有完成報告、不重載');
+  ctx.dialogs.length = 0; ctx.toasts.length = 0;
+  el.querySelector('[data-role="org-rollback"]').fire('click'); await flush();
+  ok(ctx.dialogs.length === 0 && ctx.toasts.some((t) => t[0] === '試跑模式：未寫入') && ctx.calls.filter((c) => c.action === 'staffList').length === n0, '#4 試跑：退回組織只 toast，沒有報告、不重載');
 }
 
 // ── 檢查 ──
