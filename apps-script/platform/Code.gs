@@ -26,7 +26,9 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'clockMapBuild', 'clockMapList', 'clockMapDecide', 'clockCandidateCreate', 'clockCandidateDismiss',
   'clockOutboxRetry', 'clockOutboxCancel', 'clockSetHome', 'clockOldHomeDecide', 'clockLink', 'clockJobStatus', 'clockAlerts', 'svcDirectory',
   // 2026-10-14：第 4 段，總部在主店補建打卡帳號（no_home_map 異常列）
-  'clockAddHome'];
+  'clockAddHome',
+  // 2026-10-14：組織架構改版一次性升級／回退（只有 role admin；Staff.gs 第 10 節）
+  'orgUpgrade2026', 'orgRollback2026'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -82,7 +84,8 @@ function dispatch_(e) {
     logout: 1, unitApprove: 1, unitReject: 1,
     staffCreateByUnit: 1, staffLeave: 1, staffLeaveCancel: 1, staffRename: 1, staffReinstate: 1,
     clockMapBuild: 1, clockMapDecide: 1, clockCandidateCreate: 1, clockCandidateDismiss: 1,
-    clockOutboxRetry: 1, clockOutboxCancel: 1, clockSetHome: 1, clockOldHomeDecide: 1, clockLink: 1, clockAddHome: 1 };
+    clockOutboxRetry: 1, clockOutboxCancel: 1, clockSetHome: 1, clockOldHomeDecide: 1, clockLink: 1, clockAddHome: 1,
+    orgUpgrade2026: 1, orgRollback2026: 1 };
   if (MUTATING_ACTIONS[action]) {
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) {
@@ -170,6 +173,8 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'clockJobStatus': return handleClockJobStatus_(token, payload);
     case 'clockAlerts': return handleClockAlerts_(token);
     case 'svcDirectory': return handleSvcDirectory_(payload);
+    case 'orgUpgrade2026': return handleOrgUpgrade_(token, payload);
+    case 'orgRollback2026': return handleOrgRollback_(token);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };

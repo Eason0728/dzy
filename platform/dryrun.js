@@ -49,6 +49,9 @@ export function isReadAction(backendId, action, payload) {
   if (Array.isArray(list) && list.includes(action)) return true;
   if (backendId === 'platform' && action === 'staffImport'
     && payload && payload.preview === true) return true;
+  // 切換組織先 dryrun:true 預覽（Staff.gs 在寫入前就 return）視為讀取；dryrun:false 與 orgRollback2026 仍攔
+  if (backendId === 'platform' && action === 'orgUpgrade2026'
+    && payload && payload.dryrun === true) return true;
   // 復職先 preview（只回舊對照清單、後端在寫入前就 return）視為讀取
   if (backendId === 'platform' && action === 'staffReinstate'
     && payload && payload.preview === true) return true;

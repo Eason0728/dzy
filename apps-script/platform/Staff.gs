@@ -29,8 +29,15 @@ var STF_STATUSES = ['unclaimed', 'pending', 'active', 'rejected', 'disabled'];
 var STF_EMP_RE = /^DZY[0-9]{3}$/;
 var STF_ORG_FIELDS = ['brand', 'unit', 'dept', 'title'];
 
+// 兼任部門（組織改版 T2）：staff 分頁尾端第 27 欄 extra_depts（排在 StaffClock.gs CLK_STAFF_EXTRA 的 hire_date、last_day 之後；
+// 不改 STF_HEADERS）。值＝部門代碼以半形逗號相連、無空白、依 org order 排序；特別代碼 ck＝兼任中央工廠。
+var STF_EXTRA_DEPTS_HEADER = 'extra_depts';
+var STF_EXTRA_DEPTS_COL_NO = STF_COL_COUNT + 3;   // 1-based 欄號
+var STF_EXTRA_CK = 'ck';
+
 // 門檻（§6.4）：store 職級 rank≥3（店長）、hq 職級 rank≥2（部門主管）可看單位通訊錄
-var STF_UNIT_VIEW_MIN_RANK = { store: 3, hq: 2 };
+// office（品牌辦公室，自己一套 ofs/oam/osv/odir 職稱）：rank≥2 區經理以上算品牌辦公室主管（規格第 13 節）
+var STF_UNIT_VIEW_MIN_RANK = { store: 3, hq: 2, office: 2 };
 
 // 忘記密碼（§6.6）
 var STF_RESET_FAIL_LIMIT = 5;
@@ -71,6 +78,7 @@ var STF_MSG = {
   LOGIN_PENDING: '帳號還在等主管審核',
   LOGIN_REJECTED: '帳號資料被退回，請找人資重新開通',
   NOT_REVIEWER: '只有單位主管可以審核',
+  NO_EXTRA_PERM: '沒有權限修改兼任部門',
   REVIEW_SELF: '不能審核自己',
   NOT_PENDING_REVIEW: '這位同仁不在等待審核',
   REASON_TOO_LONG: '退回原因最多 200 個字'
@@ -126,7 +134,14 @@ function stfReadRows_(name, colCount) {
   if (!sh) return [];
   var last = sh.getLastRow();
   if (last < 2) return [];
-  return sh.getRange(2, 1, last - 1, colCount).getValues();
+  // 依實際欄數讀（舊分頁可能比 colCount 少，例如只有 26 欄；越界在真 Apps Script 會丟 range invalid），缺的欄補空字串
+  var have = typeof sh.getMaxColumns === 'function' ? Math.min(colCount, sh.getMaxColumns()) : colCount;
+  if (have < 1) have = 1;
+  var vals = sh.getRange(2, 1, last - 1, have).getValues();
+  if (have < colCount) {
+    vals = vals.map(function (r) { var o = r.slice(); while (o.length < colCount) o.push(''); return o; });
+  }
+  return vals;
 }
 
 /** 寫一整列前先把該列設成純文字，再 setValues（不用 appendRow，新列不一定繼承欄格式） */
@@ -168,7 +183,11 @@ function stfLog_(empNo, event, by, detail) {
 // ============================================================
 
 function stfReadOrg_() {
-  var rows = stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length);
+  return stfBuildOrg_(stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length));
+}
+
+/** org 分頁的資料列（不含表頭，八欄）→ 查表物件；升級預覽用記憶體裡改過的列來建 */
+function stfBuildOrg_(rows) {
   var org = { brand: {}, unit: {}, dept: {}, title: {}, list: { brand: [], unit: [], dept: [], title: [] } };
   rows.forEach(function (r) {
     var kind = stfStr_(r[0]);
@@ -249,6 +268,142 @@ function handleOrgOptions_() {
       titles: pick('title', ['parent', 'rank'])
     }
   };
+}
+
+// ============================================================
+// 2b. 兼任部門 extra_depts（組織改版 T2）與名單旗標
+// ============================================================
+
+/** staff 第 27 欄狀態：'ok'＝表頭是 extra_depts；'missing'＝還沒有這欄（或欄數不夠）；'mismatch'＝那格有別的表頭；'nosheet' */
+function stfExtraColState_() {
+  var sh = stfSheet_(STF_SHEET);
+  if (!sh) return 'nosheet';
+  var cur;
+  try { cur = String(sh.getRange(1, STF_EXTRA_DEPTS_COL_NO, 1, 1).getValues()[0][0]).trim(); } catch (e) { return 'missing'; }
+  if (cur === STF_EXTRA_DEPTS_HEADER) return 'ok';
+  return cur === '' ? 'missing' : 'mismatch';
+}
+
+function stfSplitCodes_(str) {
+  return stfStr_(str) === '' ? [] : stfStr_(str).split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x; });
+}
+
+/** {emp_no(大寫): 'it,training'}；欄位還沒建就回空物件 */
+function stfReadExtraMap_() {
+  var map = {};
+  if (stfExtraColState_() !== 'ok') return map;
+  var sh = stfSheet_(STF_SHEET);
+  var last = sh.getLastRow();
+  if (last < 2) return map;
+  var emps = sh.getRange(2, 1, last - 1, 1).getValues();
+  var ex = sh.getRange(2, STF_EXTRA_DEPTS_COL_NO, last - 1, 1).getValues();
+  for (var i = 0; i < emps.length; i++) map[stfNormEmp_(emps[i][0])] = stfStr_(ex[i][0]);
+  return map;
+}
+
+function stfExtraDeptName_(org, code) {
+  if (code === STF_EXTRA_CK) return org.brand.ck ? org.brand.ck.name : '中央工廠';
+  return org.dept[code] ? org.dept[code].name : code;
+}
+
+/**
+ * 名單旗標明細（契約 plan.md，規格第 13 節）：回 [{flag, submitted}]。
+ * 'unit_inactive'＝單位已停用（或單位代碼已不存在）、'title_ladder'＝職稱停用、不存在或不屬於該單位的職稱階梯、
+ * 'dept_inactive'＝部門代碼不存在或已停用（主要部門與送出的部門都檢查）。
+ * submitted＝true 表示問題出在「送出待審的資料」（p_unit／p_title）而不是目前身分。
+ * 目前身分沒有單位（未認領）時只檢查送出資料；已停用帳號 → 空陣列。
+ */
+function stfFlagDetails_(o, org) {
+  var out = [];
+  if (o.status === 'disabled') return out;
+  var seen = {};
+  var add = function (flag, submitted) { var k = flag + '|' + (submitted ? 1 : 0); if (!seen[k]) { seen[k] = true; out.push({ flag: flag, submitted: submitted }); } };
+  var check = function (unit, title, dept, submitted) {
+    var u = org.unit[unit];
+    if (!u || !u.active) add('unit_inactive', submitted);
+    if (dept) { var d = org.dept[dept]; if (!d || !d.active) add('dept_inactive', submitted); }
+    if (title && u) {
+      var t = org.title[title];
+      if (!t || !t.active || t.parent !== (u.ladder || 'store')) add('title_ladder', submitted);
+    }
+  };
+  if (o.unit) check(o.unit, o.title, o.dept || '', false);
+  var pu = o.p_unit || '';
+  var pt = o.p_title || '';
+  var pd = o.p_dept || '';
+  if (pu || pt || pd) {
+    var eu = pu || o.unit;
+    if (eu) check(eu, pt, pd, true);
+  }
+  return out;
+}
+
+function stfFlags_(o, org) {
+  var seen = {};
+  return stfFlagDetails_(o, org).map(function (x) { return x.flag; }).filter(function (f) { if (seen[f]) return false; seen[f] = true; return true; });
+}
+
+/** 把 extra_depts／extra_dept_names（及可選的 flags）補進 stfToObj_ 的結果 */
+function stfDecorate_(o, extraMap, org, withFlags) {
+  var codes = stfSplitCodes_(extraMap[stfNormEmp_(o.emp_no)]);
+  o.extra_depts = codes;
+  o.extra_dept_names = codes.map(function (c) { return stfExtraDeptName_(org, c); });
+  if (withFlags) o.flags = stfFlags_(o, org);
+  return o;
+}
+
+/**
+ * 驗證兼任部門陣列。回 {error} 或 {codes: 排序後的代碼陣列}。
+ * 規則：陣列；每個是 dzy-hq 底下 active 的部門（或特別代碼 ck）；不得等於主要部門（主要單位是 ck 也不能再兼任 ck）；不得重複。
+ */
+function stfCleanExtraDepts_(org, list, mainUnit, mainDept, existing) {
+  existing = existing || [];   // 這個人目前就有的兼任代碼：停用或已不存在也原樣放行；新加入的才要求啟用中
+  if (!Array.isArray(list)) return { error: '兼任部門格式錯誤' };
+  var seen = {};
+  var codes = [];
+  for (var i = 0; i < list.length; i++) {
+    if (typeof list[i] !== 'string') return { error: '兼任部門格式錯誤' };
+    var c = list[i].trim();
+    if (!c) return { error: '兼任部門格式錯誤' };
+    if (seen[c]) return { error: '兼任部門不能重複' };
+    seen[c] = true;
+    if (c === STF_EXTRA_CK) {
+      if (mainUnit === STF_EXTRA_CK) return { error: '主要單位已經是中央工廠，不用再兼任' };
+    } else {
+      var d = org.dept[c];
+      if ((!d || !d.active || d.parent !== 'dzy-hq') && existing.indexOf(c) === -1) return { error: '兼任部門只能選鼎兆元總部底下啟用中的部門' };
+      if (c === mainDept) return { error: '兼任部門不能和主要部門相同' };
+    }
+    codes.push(c);
+  }
+  var orderOf = function (c) { return c === STF_EXTRA_CK ? 1e9 : (org.dept[c] ? org.dept[c].order : 5e8); };
+  codes.sort(function (a, b) { return orderOf(a) - orderOf(b) || (a < b ? -1 : 1); });
+  return { codes: codes };
+}
+
+/** 寫入前確保第 27 欄存在。回 null＝可寫，否則回錯誤字串（表頭不符一律停） */
+function stfEnsureExtraCol_() {
+  var st = stfExtraColState_();
+  if (st === 'ok') return null;
+  if (st === 'mismatch') return '分頁「staff」第 ' + STF_EXTRA_DEPTS_COL_NO + ' 欄的表頭不是 extra_depts，停止寫入以免資料錯位';
+  if (st === 'nosheet' || typeof clkEnsureStaffExtra_ !== 'function') return '分頁「staff」還沒有兼任部門欄，請先執行 setupStaff';
+  try { clkEnsureStaffExtra_(SpreadsheetApp.getActive()); } catch (e) { return '分頁初始化失敗：' + (e && e.message ? e.message : e); }
+  return stfExtraColState_() === 'ok' ? null : '分頁「staff」兼任部門欄補欄失敗';
+}
+
+/** 只寫那一格（不整列覆寫） */
+function stfWriteExtraCell_(row, codes) {
+  var r = stfSheet_(STF_SHEET).getRange(row, STF_EXTRA_DEPTS_COL_NO, 1, 1);
+  r.setNumberFormat('@');
+  r.setValue(codes.join(','));
+}
+
+/** 主要部門有變動（核准、後台改）→ 新的主要部門自動從兼任裡移除（規格 11 第 11 條） */
+function stfPruneExtraDept_(row, empNo, newDept) {
+  if (!newDept || stfExtraColState_() !== 'ok') return;
+  var cur = stfSplitCodes_(stfReadExtraMap_()[stfNormEmp_(empNo)]);
+  if (cur.indexOf(newDept) === -1) return;
+  stfWriteExtraCell_(row, cur.filter(function (c) { return c !== newDept; }));
 }
 
 // ============================================================
@@ -525,6 +680,7 @@ function stfRequire_(token, perm) {
 function stfMyProfileData_(hit, org) {
   var o = stfToObj_(hit.values, org, true);
   delete o.reset_locked; // reset_* 不給本人（§6.2）
+  stfDecorate_(o, stfReadExtraMap_(), org, false);   // 兼任部門唯讀顯示（T2）
   return o;
 }
 
@@ -642,10 +798,99 @@ function stfLoginGate_(userId) {
   var status = stfStr_(hit.values[STF_COL.status]);
   if (status === 'pending') return { block: STF_MSG.LOGIN_PENDING };
   if (status === 'rejected') return { block: STF_MSG.LOGIN_REJECTED };
-  return { review: !!stfManagerScope_(hit.values, stfReadOrg_()) };
+  // 衍生權限 platform.review 的「審核者資格」部分：改用新規則（stfReviewScope_）。人資／admin 由 Auth.gs 另外補
+  return { review: !!stfReviewScope_(hit.values, stfReadOrg_()) };
 }
 
-/** 審核者：platform.staff（人資／admin）一律可審；否則要是單位主管（stfManagerScope_） */
+/**
+ * 審核者範圍（規格第 13 節；組織改版 T3）。回 null＝沒有審核資格；否則
+ * {kinds, unit, unit_name, brand, dept, rank, titleLadder}。kinds 可能值：
+ *   'store' 同店店長（門市 sm）　　'brand' 品牌辦公室區經理以上（rank≥2，帶 brand）
+ *   'ops' 營運部主管（dzy-hq、主要部門 ops、部門主管）　'dept' 部門主管（帶 dept）
+ *   'exec' 執行長以上（dzy-hq、hq 職級≥3）　　'ck' 中央工廠店長（單位 ck、rank≥3）
+ * 審核者本人必須 status active、單位 active、職稱 active 且屬於該單位的職稱階梯；未知 ladder 一律沒有資格。
+ * 人資（platform.staff）與 admin 不在這裡判斷（stfReviewer_ 另外放行）。
+ */
+function stfReviewScope_(values, org) {
+  if (stfStr_(values[STF_COL.status]) !== 'active') return null;
+  var unitCode = stfStr_(values[STF_COL.unit]);
+  var unit = org.unit[unitCode];
+  var title = org.title[stfStr_(values[STF_COL.title])];
+  if (!unit || !unit.active || !title || !title.active) return null;
+  var ladder = unit.ladder || 'store';
+  if (title.parent !== ladder) return null;
+  var dept = stfStr_(values[STF_COL.dept]);
+  var kinds = [];
+  if (ladder === 'store') {
+    if (title.rank >= (STF_UNIT_VIEW_MIN_RANK.store || 99)) kinds.push(unitCode === 'ck' ? 'ck' : 'store');
+  } else if (ladder === 'office') {
+    if (title.rank >= (STF_UNIT_VIEW_MIN_RANK.office || 99)) kinds.push('brand');
+  } else if (ladder === 'hq') {
+    if (unitCode === 'dzy-hq' && title.rank >= 3) {
+      kinds.push('exec');
+    } else if (title.rank === 2) {
+      var d = org.dept[dept];
+      if (d && d.active && d.parent === unitCode) {
+        kinds.push('dept');
+        if (unitCode === 'dzy-hq' && dept === 'ops') kinds.push('ops');
+      }
+    }
+  }
+  if (!kinds.length) return null;
+  return { kinds: kinds, unit: unitCode, unit_name: unit.name, brand: unit.parent, dept: dept, rank: title.rank, titleLadder: title.parent };
+}
+
+/** 被審的一個身分（單位、部門、職稱）需要哪一種審核者；回 null＝資料已不合規或沒有上一層 → 只有人資 */
+function stfReviewNeed_(org, unitCode, dept, titleCode) {
+  var u = org.unit[unitCode];
+  var t = org.title[titleCode];
+  if (!u || !u.active || !t || !t.active) return null;
+  var ladder = u.ladder || 'store';
+  if (t.parent !== ladder) return null;
+  var need = { title: t };
+  if (ladder === 'office') { need.kind = 'ops'; return need; }
+  if (ladder === 'store') {
+    if (unitCode === 'ck') { need.kind = t.rank >= 3 ? 'exec' : 'ck'; need.unit = 'ck'; return need; }
+    if (t.rank >= 3) { need.kind = 'brand'; need.brand = u.parent; return need; }
+    need.kind = 'store'; need.unit = unitCode; return need;
+  }
+  if (ladder === 'hq') {
+    if (t.rank >= 3) return null;                    // 執行長以上：只有人資
+    if (t.rank === 2) { need.kind = 'exec'; return need; }   // 部門主管：執行長以上
+    var d = org.dept[dept];
+    if (!d || !d.active || d.parent !== unitCode) return null;
+    need.kind = 'dept'; need.dept = dept; return need;       // 部門同仁：同主要部門的部門主管
+  }
+  return null;
+}
+
+function stfScopeMeets_(scope, need) {
+  if (!scope || !need || scope.kinds.indexOf(need.kind) === -1) return false;
+  if ((need.kind === 'store' || need.kind === 'ck') && scope.unit !== need.unit) return false;
+  if (need.kind === 'brand' && scope.brand !== need.brand) return false;
+  if (need.kind === 'dept' && scope.dept !== need.dept) return false;
+  // 同一個職稱階梯才比職級：被審的人職級比審核者高 → 擋（不同階梯不比）
+  if (scope.titleLadder === need.title.parent && scope.rank < need.title.rank) return false;
+  return true;
+}
+
+/**
+ * 這位審核者（scope）能不能審這一列待審（不含「自己」與 status 判斷）。
+ * 被審的人看「送出的」p_unit／p_dept／p_title；若列上已有「目前身分」（unit 有值，例如店長建檔後退回認領保留的組織欄），
+ * 兩個身分都要夠格才算（取嚴者）。首次認領沒有目前身分＝只看送出的。
+ */
+function stfCanReview_(scope, values, org) {
+  if (!scope) return false;
+  var submitted = stfReviewNeed_(org, stfStr_(values[STF_COL.p_unit]), stfStr_(values[STF_COL.p_dept]), stfStr_(values[STF_COL.p_title]));
+  if (!stfScopeMeets_(scope, submitted)) return false;
+  if (stfStr_(values[STF_COL.unit]) !== '') {
+    var current = stfReviewNeed_(org, stfStr_(values[STF_COL.unit]), stfStr_(values[STF_COL.dept]), stfStr_(values[STF_COL.title]));
+    if (!stfScopeMeets_(scope, current)) return false;
+  }
+  return true;
+}
+
+/** 審核者：platform.staff（人資／admin）一律可審；否則要有審核者範圍（stfReviewScope_） */
 function stfReviewer_(token) {
   var me = handleMe_(token);
   if (!me.ok) return me;
@@ -654,21 +899,18 @@ function stfReviewer_(token) {
   var scope = null;
   if (hasPerm_(me.data.perms, 'platform.self')) {
     var hit = stfFindByUserId_(me.data.user.id);
-    if (hit) scope = stfManagerScope_(hit.values, org);
+    if (hit) scope = stfReviewScope_(hit.values, org);
   }
   if (!isHr && !scope) return { ok: false, error: STF_MSG.NOT_REVIEWER };
   return { ok: true, user: me.data.user, isHr: isHr, scope: scope, org: org };
 }
 
-/** 這一列是不是「這位審核者可以審的認領待審」（不含自己；主管只看填的單位／部門＝自己的） */
+/** 這一列是不是「這位審核者可以審的認領待審」（不能審自己；人資全可審；其他看 stfCanReview_） */
 function stfCanReviewRow_(rv, values) {
   if (stfStr_(values[STF_COL.status]) !== 'pending') return false;
   if (stfStr_(values[STF_COL.user_id]) === String(rv.user.id)) return false;
   if (rv.isHr) return true;
-  var s = rv.scope;
-  if (!s || stfStr_(values[STF_COL.p_unit]) !== s.unit) return false;
-  if (s.sameDept && stfStr_(values[STF_COL.p_dept]) !== s.dept) return false;
-  return true;
+  return stfCanReview_(rv.scope, values, rv.org);
 }
 
 function handleUnitPending_(token) {
@@ -707,6 +949,7 @@ function handleUnitApprove_(token, payload) {
   if (err) return { ok: false, error: err };
   t.v[STF_COL.updated_at] = stfNowText_();
   stfWriteRow_(STF_SHEET, t.hit.row, t.v, STF_COL_COUNT);
+  stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]));
   stfLog_(t.emp, 'confirm', t.rv.user.id, 'unit_review');
   // 調店：確認後單位換了 → 新單位有打卡就開 add 單（StaffClock.gs；沒有那支檔案時略過）
   if (typeof clkAfterConfirm_ === 'function') clkAfterConfirm_(t.emp, oldUnit, stfStr_(t.v[STF_COL.unit]), t.rv.user.id);
@@ -801,7 +1044,8 @@ function handleStaffList_(token) {
     try { setupStaff(); } finally { lock.releaseLock(); }
   }
   var org = stfReadOrg_();
-  var list = stfAllRows_().map(function (r) { return stfToObj_(r.values, org, true); });
+  var extraMap = stfReadExtraMap_();
+  var list = stfAllRows_().map(function (r) { return stfDecorate_(stfToObj_(r.values, org, true), extraMap, org, true); });
   // 員工名單統一（StaffClock.gs）：多帶 hire_date／last_day／打卡對照摘要；沒有那支檔案時照舊
   if (typeof clkDecorateStaffList_ === 'function') list = clkDecorateStaffList_(list, token);
   return { ok: true, data: { staff: list } };
@@ -878,7 +1122,8 @@ function stfSave_(t, event, detail) {
   t.v[STF_COL.updated_at] = stfNowText_();
   stfWriteRow_(STF_SHEET, t.hit.row, t.v, STF_COL_COUNT);
   stfLog_(t.emp, event, t.auth.user.id, detail || '');
-  return { ok: true, data: { staff: stfToObj_(t.v, stfReadOrg_(), true) } };
+  var orgS = stfReadOrg_();
+  return { ok: true, data: { staff: stfDecorate_(stfToObj_(t.v, orgS, true), stfReadExtraMap_(), orgS, true) } };
 }
 
 function handleStaffConfirm_(token, payload) {
@@ -890,6 +1135,7 @@ function handleStaffConfirm_(token, payload) {
   var err = stfApplyConfirm_(t.v, stfReadOrg_());
   if (err) return { ok: false, error: err };
   var saved = stfSave_(t, 'confirm', '');
+  stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]));
   if (typeof clkAfterConfirm_ === 'function') clkAfterConfirm_(t.emp, oldUnit, stfStr_(t.v[STF_COL.unit]), t.auth.user.id);
   return saved;
 }
@@ -970,6 +1216,12 @@ function handleStaffUnlockReset_(token, payload) {
 }
 
 function handleStaffEdit_(token, payload) {
+  // 兼任部門只有 platform.staff（人資）與 admin 能寫（以 token 目前身分判斷，規格 11 第 11 條）
+  if (payload && payload.extra_depts !== undefined) {
+    var meX = handleMe_(token);
+    if (!meX.ok) return meX;
+    if (!hasPerm_(meX.data.perms, 'platform.staff')) return { ok: false, error: STF_MSG.NO_EXTRA_PERM };
+  }
   var t = stfAdminTarget_(token, payload);
   if (!t.ok) return t;
   payload = payload || {};
@@ -1017,11 +1269,26 @@ function handleStaffEdit_(token, payload) {
     STF_ORG_FIELDS.forEach(function (f) { t.v[STF_COL[f]] = o[f]; });
     changed.push('org');
   }
+  var extraNew = null;
+  if (payload.extra_depts !== undefined) {
+    var ex = stfCleanExtraDepts_(org, payload.extra_depts, stfStr_(t.v[STF_COL.unit]), stfStr_(t.v[STF_COL.dept]), stfSplitCodes_(stfReadExtraMap_()[t.emp]));
+    if (ex.error) return { ok: false, error: ex.error };
+    // 清單已用（可能剛改過的）新主要部門驗過；和現值不同才寫
+    if (ex.codes.join(',') !== stfStr_(stfReadExtraMap_()[t.emp])) {
+      var colErr = stfEnsureExtraCol_();
+      if (colErr) return { ok: false, error: colErr };
+      extraNew = ex.codes;
+      changed.push('extra_depts');
+    }
+  }
   if (!changed.length) return { ok: false, error: '沒有要改的欄位' };
   if (changed.indexOf('name') !== -1) {
     var userRow = findUsrRowById_(stfStr_(t.v[STF_COL.user_id]));
     if (userRow) stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.name + 1).setValue(authSafeCell_(t.v[STF_COL.name]));
   }
+  // 兼任部門那一格先寫（只寫該格）；org 變動時主要部門自動從兼任移除（沒帶 extra_depts 的情況）
+  if (extraNew) stfWriteExtraCell_(t.hit.row, extraNew);
+  else if (changed.indexOf('org') !== -1) stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]));
   var savedEdit = stfSave_(t, 'admin_edit', '改了：' + changed.join(','));
   // 有打卡對照的人改單位一律走調店流程（StaffClock.gs clkAfterConfirm_）：新單位有打卡就開 add 單、舊主店降支援
   if (changed.indexOf('org') !== -1 && typeof clkAfterConfirm_ === 'function') {
@@ -1038,27 +1305,32 @@ var STF_DEFAULT_ORG = [
   ['brand', 'mzt', '墨竹亭', '', '', '', 1, 'TRUE'],
   ['brand', 'mala', '麻的小辛辣', '', '', '', 2, 'TRUE'],
   ['brand', 'yiwu', '一悟燒肉', '', '', '', 3, 'TRUE'],
-  ['brand', 'ck', '央廚', '', '', '', 4, 'TRUE'],
+  ['brand', 'ck', '中央工廠', '', '', '', 4, 'TRUE'],
   ['brand', 'dzy', '鼎兆元總部', '', '', '', 5, 'TRUE'],
   ['unit', 'mzt-js', '新竹金山', 'mzt', 'store', '', 1, 'TRUE'],
   ['unit', 'mzt-gf', '新竹光復', 'mzt', 'store', '', 2, 'TRUE'],
   ['unit', 'mzt-lzl', '台北六張犁', 'mzt', 'store', '', 3, 'TRUE'],
-  ['unit', 'mzt-wx', '台中文心', 'mzt', 'store', '', 4, 'TRUE'],
-  ['unit', 'mzt-rg', '內湖瑞光', 'mzt', 'store', '', 5, 'TRUE'],
-  ['unit', 'mzt-mc', '台中美村', 'mzt', 'store', '', 6, 'TRUE'],
-  ['unit', 'mzt-hq', '墨竹亭總部', 'mzt', 'hq', '', 7, 'TRUE'],
+  ['unit', 'mzt-wx', '台中文心', 'mzt', 'store', '', 4, 'FALSE'],
+  ['unit', 'mzt-rg', '內湖瑞光', 'mzt', 'store', '', 5, 'FALSE'],
+  ['unit', 'mzt-mc', '台中美村', 'mzt', 'store', '', 6, 'FALSE'],
+  ['unit', 'mzt-hq', '墨竹亭品牌辦公室', 'mzt', 'office', '', 7, 'TRUE'],
   ['unit', 'mala-gf', '新竹光復', 'mala', 'store', '', 1, 'TRUE'],
-  ['unit', 'mala-hq', '小辛辣總部', 'mala', 'hq', '', 2, 'TRUE'],
+  ['unit', 'mala-hq', '小辛辣品牌辦公室', 'mala', 'office', '', 2, 'TRUE'],
   ['unit', 'yiwu-js', '新竹金山', 'yiwu', 'store', '', 1, 'TRUE'],
   ['unit', 'yiwu-wx', '竹北文興', 'yiwu', 'store', '', 2, 'TRUE'],
-  ['unit', 'ck', '央廚', 'ck', 'store', '', 1, 'TRUE'],
+  ['unit', 'yiwu-hq', '一悟燒肉品牌辦公室', 'yiwu', 'office', '', 3, 'TRUE'],
+  ['unit', 'ck', '中央工廠（央廚）', 'ck', 'store', '', 1, 'TRUE'],
   ['unit', 'dzy-hq', '鼎兆元總部', 'dzy', 'hq', '', 1, 'TRUE'],
   ['title', 'pt', '計時同仁', 'store', '', 1, 1, 'TRUE'],
   ['title', 'ft', '正職同仁', 'store', '', 2, 2, 'TRUE'],
   ['title', 'sm', '店長', 'store', '', 3, 3, 'TRUE'],
-  ['title', 'am', '區經理', 'store', '', 4, 4, 'TRUE'],
-  ['title', 'sv', '督導', 'store', '', 5, 5, 'TRUE'],
-  ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'TRUE'],
+  ['title', 'am', '區經理', 'store', '', 4, 4, 'FALSE'],
+  ['title', 'sv', '督導', 'store', '', 5, 5, 'FALSE'],
+  ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'FALSE'],
+  ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
+  ['title', 'oam', '區經理', 'office', '', 2, 2, 'TRUE'],
+  ['title', 'osv', '區督導', 'office', '', 3, 3, 'TRUE'],
+  ['title', 'odir', '總監', 'office', '', 4, 4, 'TRUE'],
   ['title', 'hs', '部門同仁', 'hq', '', 1, 1, 'TRUE'],
   ['title', 'hm', '部門主管', 'hq', '', 2, 2, 'TRUE'],
   ['title', 'ceo', '執行長', 'hq', '', 3, 3, 'TRUE'],
@@ -1120,4 +1392,473 @@ function setupStaff() {
   // 員工名單統一（StaffClock.gs）：clock_stores／staff_clock／clock_outbox 三分頁＋staff 右側 hire_date、last_day（只補不覆蓋）
   if (typeof clkSetup_ === 'function') clkSetup_(ss);
   return { ok: true };
+}
+
+// ============================================================
+// 10. 組織改版一次性升級／回退（組織改版 T4；規格第 6、11、13 節；只有 role admin）
+// ============================================================
+
+var STF_PROP_ORG_UPGRADE = 'ORG_UPGRADE_STATE';
+var STF_ORG_COL = { kind: 0, code: 1, name: 2, parent: 3, ladder: 4, rank: 5, order: 6, active: 7 };
+var STF_BRAND_OFFICES = ['mzt-hq', 'mala-hq', 'yiwu-hq'];
+// 品牌辦公室同仁原 hq 職稱 → office 職稱（第 13 節）；ceo／gm／chair 不動、列 todo
+var STF_OFFICE_TITLE_MAP = { hs: 'ofs', hm: 'osv' };
+
+// 既有列只改指定欄位：[kind, code, 欄位, 目標值]
+var STF_UPGRADE_SET = [
+  ['brand', 'ck', 'name', '中央工廠'],
+  ['unit', 'ck', 'name', '中央工廠（央廚）'],
+  ['unit', 'mzt-hq', 'name', '墨竹亭品牌辦公室'], ['unit', 'mzt-hq', 'ladder', 'office'],
+  ['unit', 'mala-hq', 'name', '小辛辣品牌辦公室'], ['unit', 'mala-hq', 'ladder', 'office'],
+  ['unit', 'mzt-wx', 'active', 'FALSE'], ['unit', 'mzt-rg', 'active', 'FALSE'], ['unit', 'mzt-mc', 'active', 'FALSE'],
+  ['title', 'am', 'active', 'FALSE'], ['title', 'sv', 'active', 'FALSE'], ['title', 'bd', 'active', 'FALSE']
+];
+// STF_UPGRADE_SET 的目標列若整列缺失，就以這裡的完整八欄補上（舊值取自升級前預設 org；已存在的列只依 STF_UPGRADE_SET 改指定欄位，不動其他欄）
+var STF_UPGRADE_REQUIRED = [
+  ['brand', 'ck', '中央工廠', '', '', '', 4, 'TRUE'],
+  ['unit', 'ck', '中央工廠（央廚）', 'ck', 'store', '', 1, 'TRUE'],
+  ['unit', 'mzt-hq', '墨竹亭品牌辦公室', 'mzt', 'office', '', 7, 'TRUE'],
+  ['unit', 'mala-hq', '小辛辣品牌辦公室', 'mala', 'office', '', 2, 'TRUE'],
+  ['unit', 'mzt-wx', '台中文心', 'mzt', 'store', '', 4, 'FALSE'],
+  ['unit', 'mzt-rg', '內湖瑞光', 'mzt', 'store', '', 5, 'FALSE'],
+  ['unit', 'mzt-mc', '台中美村', 'mzt', 'store', '', 6, 'FALSE'],
+  ['title', 'am', '區經理', 'store', '', 4, 4, 'FALSE'],
+  ['title', 'sv', '督導', 'store', '', 5, 5, 'FALSE'],
+  ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'FALSE']
+];
+// (kind, code) upsert 的新列（完整八欄）；已存在就對齊 name／parent／ladder／rank／order／active
+var STF_UPGRADE_ADD = [
+  ['unit', 'yiwu-hq', '一悟燒肉品牌辦公室', 'yiwu', 'office', '', 3, 'TRUE'],
+  ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
+  ['title', 'oam', '區經理', 'office', '', 2, 2, 'TRUE'],
+  ['title', 'osv', '區督導', 'office', '', 3, 3, 'TRUE'],
+  ['title', 'odir', '總監', 'office', '', 4, 4, 'TRUE']
+];
+var STF_UPGRADE_ADD_FIELDS = ['name', 'parent', 'ladder', 'rank', 'order', 'active'];
+
+function stfNormCell_(v, idx) {
+  var t = (v === undefined || v === null) ? '' : String(v).trim();
+  return idx === STF_ORG_COL.active ? t.toUpperCase() : t;
+}
+
+/** org 分頁現況（正規化成字串、略過空列）：[[8 欄]…] */
+function stfOrgSnapshot_() {
+  return stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length).map(function (r) {
+    return r.map(function (v, i) { return stfNormCell_(v, i); });
+  }).filter(function (r) { return r[0] !== '' || r[1] !== ''; });
+}
+
+function stfHashText_(text) {
+  var d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text);
+  var hex = '';
+  for (var i = 0; i < d.length; i++) hex += ((d[i] + 256) % 256 + 256).toString(16).slice(1);
+  return hex;
+}
+function stfOrgHash_() { return stfHashText_(JSON.stringify(stfOrgSnapshot_())); }
+
+/** 備份分頁（含表頭列）的值 → 與 stfOrgSnapshot_ 同樣正規化後的列（用來判斷「org 已經等於備份」） */
+function stfNormOrgRows_(vals) {
+  return vals.slice(1).map(function (r) {
+    return r.slice(0, STF_ORG_HEADERS.length).map(function (v, i) { return stfNormCell_(v, i); });
+  }).filter(function (r) { return r[0] !== '' || r[1] !== ''; });
+}
+
+/** clock_stores 的值（含表頭列）→ 去頭尾空白、去掉列尾空格、略過空列 */
+function stfNormClockRows_(vals) {
+  return vals.map(function (r) {
+    var o = r.map(function (v) { return (v === undefined || v === null) ? '' : String(v).trim(); });
+    while (o.length && o[o.length - 1] === '') o.pop();
+    return o;
+  }).filter(function (r) { return r.length > 0; });
+}
+function stfClockSnapshot_() {
+  var sh = stfSheet_('clock_stores');
+  return sh ? stfNormClockRows_(stfSheetValues_(sh, 5)) : [];
+}
+function stfClockHash_() { return stfHashText_(JSON.stringify(stfClockSnapshot_())); }
+function stfSameRows_(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+function stfGetUpgradeState_() {
+  var raw = PropertiesService.getScriptProperties().getProperty(STF_PROP_ORG_UPGRADE);
+  if (!raw) return null;
+  try { var o = JSON.parse(raw); return (o && typeof o === 'object' && o.org_bak) ? o : null; } catch (e) { return null; }
+}
+function stfSetUpgradeState_(o) {
+  PropertiesService.getScriptProperties().setProperty(STF_PROP_ORG_UPGRADE, o ? JSON.stringify(o) : '');
+}
+
+/** 把整塊值寫進分頁（含表頭列），原本更長的部分補空白；回寫的列數 */
+function stfPutBlock_(sh, rows, width) {
+  var oldLast = sh.getLastRow();
+  var n = Math.max(rows.length, oldLast);
+  if (n === 0) return 0;
+  var out = [];
+  for (var i = 0; i < n; i++) {
+    var r = i < rows.length ? rows[i].slice(0, width) : [];
+    while (r.length < width) r.push('');
+    out.push(r);
+  }
+  sh.getRange(1, 1, n, width).setValues(out);
+  return rows.length;
+}
+
+/** 整張分頁的值（含表頭，至少 minWidth 欄） */
+function stfSheetValues_(sh, minWidth) {
+  var last = sh.getLastRow();
+  if (last < 1) return [];
+  var width = Math.max(minWidth || 1, typeof sh.getLastColumn === 'function' ? sh.getLastColumn() : 1);
+  return sh.getRange(1, 1, last, width).getValues();
+}
+
+function stfCopyToNewSheet_(src, name, minWidth) {
+  var ss = SpreadsheetApp.getActive();
+  var vals = stfSheetValues_(src, minWidth);
+  var dst = ss.getSheetByName(name) || ss.insertSheet(name);
+  if (vals.length) stfPutBlock_(dst, vals, vals[0].length);
+  return vals.length;
+}
+
+function stfStamp_() { return stfNowText_().replace(/\D/g, '').slice(0, 12); }
+
+/** 一次決定備份／快照分頁名：同一個時間戳＋共用序號（撞名就 _2、_3…），建立任何備份前先呼叫；真 Apps Script 的 insertSheet 遇同名會丟錯 */
+function stfPickBackupNames_(withClock) {
+  var base = stfStamp_();
+  for (var n = 1; n < 1000; n++) {
+    var suf = n === 1 ? base : base + '_' + n;
+    var names = { org_bak: 'org_bak_' + suf, clk_bak: withClock ? 'clk_bak_' + suf : '', clk_snap: withClock ? 'clk_upg_' + suf : '', stf_bak: 'stf_bak_' + suf, org_snap: 'org_upg_' + suf };
+    var clash = Object.keys(names).some(function (k) { return names[k] && stfSheet_(names[k]); });
+    if (!clash) return names;
+  }
+  throw new Error('備份分頁名稱無法決定');
+}
+
+/** 升級計畫（唯讀）：org 要改的格、新增的列、記憶體裡改完的 org 列、clock 狀態、職稱對應、todo */
+function stfUpgradePlan_() {
+  var rowsRaw = stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length);
+  var work = rowsRaw.map(function (r) { return r.slice(); });
+  var report = [];
+  var cells = [];      // 要寫的格：{row(試算表列號), col(1-based), value}
+  var addRows = [];
+  var find = function (kind, code) {
+    for (var i = 0; i < work.length; i++) {
+      if (stfStr_(work[i][STF_ORG_COL.kind]) === kind && stfStr_(work[i][STF_ORG_COL.code]) === code) return i;
+    }
+    return -1;
+  };
+  var setCell = function (i, field, to) {
+    var idx = STF_ORG_COL[field];
+    var from = stfNormCell_(work[i][idx], idx);
+    if (from === stfNormCell_(to, idx)) return;
+    report.push({ code: stfStr_(work[i][STF_ORG_COL.code]), kind: stfStr_(work[i][STF_ORG_COL.kind]), field: field, from: from, to: String(to) });
+    work[i][idx] = to;
+    cells.push({ row: i + 2, col: idx + 1, value: to });
+  };
+  // 必要列缺失 → 先整列補上（完整八欄）；之後 SET 對補上的列沒有差異
+  STF_UPGRADE_REQUIRED.forEach(function (row) {
+    if (find(row[0], row[1]) === -1) {
+      work.push(row.slice());
+      addRows.push(row.slice());
+      report.push({ code: row[1], kind: row[0], field: 'row', from: '', to: 'added' });
+    }
+  });
+  STF_UPGRADE_SET.forEach(function (x) {
+    var i = find(x[0], x[1]);
+    if (i !== -1) setCell(i, x[2], x[3]);
+  });
+  STF_UPGRADE_ADD.forEach(function (row) {
+    var i = find(row[0], row[1]);
+    if (i === -1) {
+      work.push(row.slice());
+      addRows.push(row.slice());
+      report.push({ code: row[1], kind: row[0], field: 'row', from: '', to: 'added' });
+    } else {
+      STF_UPGRADE_ADD_FIELDS.forEach(function (f) { setCell(i, f, row[STF_ORG_COL[f]]); });
+    }
+  });
+  var newOrg = stfBuildOrg_(work);
+
+  // 打卡 clock_stores 的 hq 列：unit_code 當集合，沒有 yiwu-hq 就補（保留自訂值與順序）
+  var clock = { status: 'custom', row: 0, value: '' };
+  var csh = stfSheet_('clock_stores');
+  if (csh && csh.getLastRow() >= 2) {
+    var crows = csh.getRange(2, 1, csh.getLastRow() - 1, 3).getValues();
+    for (var c = 0; c < crows.length; c++) {
+      if (stfStr_(crows[c][0]).toLowerCase() !== 'hq') continue;
+      var cur = stfStr_(crows[c][2]);
+      if (cur === '') break;
+      var set = cur.split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x; });
+      if (set.indexOf('yiwu-hq') !== -1) { clock = { status: 'skipped', row: c + 2, value: cur }; }
+      else { clock = { status: 'updated', row: c + 2, value: set.concat(['yiwu-hq']).join(',') }; }
+      break;
+    }
+  }
+
+  // 同仁：職稱對應與 todo
+  var titles = [];
+  var todo = [];
+  var rows = stfAllRows_();
+  rows.forEach(function (r) {
+    var emp = stfStr_(r.values[STF_COL.emp_no]);
+    var name = stfStr_(r.values[STF_COL.name]);
+    var unit = stfStr_(r.values[STF_COL.unit]);
+    var title = stfStr_(r.values[STF_COL.title]);
+    var status = stfStr_(r.values[STF_COL.status]);
+    var effTitle = title;
+    if (unit && STF_BRAND_OFFICES.indexOf(unit) !== -1 && STF_OFFICE_TITLE_MAP[title]) {
+      effTitle = STF_OFFICE_TITLE_MAP[title];
+      titles.push({ emp_no: emp, name: name, from: title, to: effTitle,
+        from_name: newOrg.title[title] ? newOrg.title[title].name : title, to_name: newOrg.title[effTitle] ? newOrg.title[effTitle].name : effTitle, row: r.row });
+    }
+    var details = stfFlagDetails_({ unit: unit, title: effTitle, dept: stfStr_(r.values[STF_COL.dept]), status: status,
+      p_unit: stfStr_(r.values[STF_COL.p_unit]), p_title: stfStr_(r.values[STF_COL.p_title]), p_dept: stfStr_(r.values[STF_COL.p_dept]) }, newOrg);
+    details.forEach(function (f) {
+      var uc = f.submitted && stfStr_(r.values[STF_COL.p_unit]) ? stfStr_(r.values[STF_COL.p_unit]) : unit;
+      todo.push({ emp_no: emp, name: name, unit_name: newOrg.unit[uc] ? newOrg.unit[uc].name : uc, flag: f.flag, submitted: f.submitted });
+    });
+  });
+  return { report: report, cells: cells, addRows: addRows, newOrg: newOrg, clock: clock, titles: titles, todo: todo };
+}
+
+/** 只有 role admin（人資也不行） */
+function stfRequireAdmin_(token) {
+  var me = handleMe_(token);
+  if (!me.ok) return me;
+  if (String(me.data.user.role) !== 'admin') return { ok: false, error: STF_MSG.NO_PERM };
+  return { ok: true, user: me.data.user };
+}
+
+function stfOrgSheetProblem_() {
+  var sh = stfSheet_(STF_SHEET_ORG);
+  if (!sh || !stfSheet_(STF_SHEET)) return '找不到 org 或 staff 分頁，請先執行 setupStaff';
+  var head = sh.getRange(1, 1, 1, STF_ORG_HEADERS.length).getValues()[0].map(function (v) { return String(v).trim(); });
+  if (head.join('|') !== STF_ORG_HEADERS.join('|')) return '分頁「org」的表頭與程式不一致，停止升級：' + head.join(',');
+  return '';
+}
+
+function handleOrgUpgrade_(token, payload) {
+  var auth = stfRequireAdmin_(token);
+  if (!auth.ok) return auth;
+  var problem = stfOrgSheetProblem_();
+  if (problem) return { ok: false, error: problem };
+  var dry = !!(payload && payload.dryrun === true);
+  var st0 = stfGetUpgradeState_();
+  if (st0) {
+    var lost = [st0.org_bak, st0.stf_bak, st0.clk_bak].filter(function (n) { return n && !stfSheet_(n); });
+    if (lost.length) return { ok: false, error: '已有升級紀錄，但備份分頁不見了：' + lost.join('、') + '。為避免之後回退沒有東西可還原，停止升級，請先處理（找回備份分頁，或確認要放棄回退能力）' };
+  }
+  var colState = stfExtraColState_();
+  if (colState === 'mismatch') return { ok: false, error: '分頁「staff」第 ' + STF_EXTRA_DEPTS_COL_NO + ' 欄的表頭不是 extra_depts，停止升級以免資料錯位' };
+  var plan = stfUpgradePlan_();
+  var state = stfGetUpgradeState_();
+  var backupExists = !!(state && stfSheet_(state.org_bak));
+  var data = {
+    dryrun: dry,
+    backup: backupExists ? 'exists' : 'created',
+    org: plan.report,
+    clock: plan.clock.status,
+    staffColumn: colState === 'ok' ? 'exists' : 'added',
+    titles: plan.titles.map(function (t) { return { emp_no: t.emp_no, name: t.name, from: t.from, to: t.to, from_name: t.from_name, to_name: t.to_name }; }),
+    todo: plan.todo
+  };
+  if (dry) return { ok: true, data: data };
+
+  // ① 備份（已有備份不覆蓋）：org 整份、clock_stores 整份、受影響同仁的職稱
+  if (!backupExists) {
+    var nm = stfPickBackupNames_(!!stfSheet_('clock_stores'));
+    state = { at: stfNowText_(), by: String(auth.user.id), org_bak: nm.org_bak, clk_bak: nm.clk_bak, stf_bak: nm.stf_bak, org_snap: nm.org_snap, clk_snap: nm.clk_snap, org_hash: '', clk_hash: '' };
+    stfCopyToNewSheet_(stfSheet_(STF_SHEET_ORG), state.org_bak, STF_ORG_HEADERS.length);
+    if (state.clk_bak) stfCopyToNewSheet_(stfSheet_('clock_stores'), state.clk_bak, 5);
+    var sb = SpreadsheetApp.getActive().insertSheet(state.stf_bak);
+    stfPutBlock_(sb, [['emp_no', 'title', 'to_title']], 3);
+    stfSetUpgradeState_(state);
+  }
+  // 受影響同仁的原職稱：已在備份裡的不覆蓋（保留最早的原值），新出現的補在後面
+  var bakSheet = stfSheet_(state.stf_bak) || SpreadsheetApp.getActive().insertSheet(state.stf_bak);
+  var bakVals = stfSheetValues_(bakSheet, 3);
+  if (!bakVals.length) bakVals = [['emp_no', 'title', 'to_title']];
+  var have = {};
+  bakVals.slice(1).forEach(function (r) { have[stfNormEmp_(r[0])] = true; });
+  var added = plan.titles.filter(function (t) { return !have[stfNormEmp_(t.emp_no)]; });
+  if (added.length) {
+    added.forEach(function (t) { bakVals.push([t.emp_no, t.from, t.to]); });
+    stfPutBlock_(bakSheet, bakVals, 3);
+  }
+
+  // ② staff 兼任部門欄
+  if (colState !== 'ok') {
+    var colErr = stfEnsureExtraCol_();
+    if (colErr) return { ok: false, error: colErr };
+  }
+  // ③ org 列（只寫要改的格；新列一次寫完）
+  var osh = stfSheet_(STF_SHEET_ORG);
+  plan.cells.forEach(function (c) { osh.getRange(c.row, c.col, 1, 1).setValue(c.value); });
+  if (plan.addRows.length) stfAppendBlock_(STF_SHEET_ORG, plan.addRows, STF_ORG_HEADERS.length, false);
+  // ④ clock_stores hq 列
+  if (plan.clock.status === 'updated') stfSheet_('clock_stores').getRange(plan.clock.row, 3, 1, 1).setValue(plan.clock.value);
+  // ⑤ 同仁職稱
+  plan.titles.forEach(function (t) {
+    var cur = stfFindByEmp_(t.emp_no);
+    if (!cur || stfStr_(cur.values[STF_COL.title]) !== t.from) return;
+    stfSheet_(STF_SHEET).getRange(cur.row, STF_COL.title + 1, 1, 1).setValue(t.to);
+    stfLog_(t.emp_no, 'org_upgrade', String(auth.user.id), 'title:' + t.from + '>' + t.to);
+  });
+  // ⑥ 後置條件：重新算一次計畫，org／clock／職稱都不該再有差異
+  var after = stfUpgradePlan_();
+  if (after.cells.length || after.addRows.length || after.clock.status === 'updated' || after.titles.length) {
+    return { ok: false, error: '升級後驗證失敗（資料與目標不一致），請檢查後重跑；原始資料可用 orgRollback2026 還原' };
+  }
+  // ⑥b 新增的整列要和目標逐欄（完整八欄）一致
+  var nowOrg = stfOrgSnapshot_();
+  var rowsOk = plan.addRows.every(function (ar) {
+    var want = ar.map(function (v, i) { return stfNormCell_(v, i); });
+    return nowOrg.some(function (cr) { return cr.join('|') === want.join('|'); });
+  });
+  if (!rowsOk) return { ok: false, error: '升級後驗證失敗（新增列與目標不一致），請檢查後重跑；原始資料可用 orgRollback2026 還原' };
+  // ⑦ 「升級後」雜湊與快照只在首次成功時建立；已有基準就不更新（重跑不得把切換後別人的修改洗進基準）
+  if (!state.org_hash) {
+    state.org_hash = stfOrgHash_();
+    var snapSheet = stfSheet_(state.org_snap) || SpreadsheetApp.getActive().insertSheet(state.org_snap);
+    stfPutBlock_(snapSheet, [STF_ORG_HEADERS].concat(stfOrgSnapshot_()), STF_ORG_HEADERS.length);
+    // clock_stores 同一套：升級後雜湊＋快照（沒有 clock_stores 或沒備份就不管）
+    if (state.clk_bak && state.clk_snap && stfSheet_('clock_stores')) {
+      state.clk_hash = stfClockHash_();
+      var csnap = stfSheet_(state.clk_snap) || SpreadsheetApp.getActive().insertSheet(state.clk_snap);
+      var cvals = stfClockSnapshot_();
+      var cw = cvals.reduce(function (m, r) { return Math.max(m, r.length); }, 5);
+      stfPutBlock_(csnap, cvals, cw);
+    }
+    state.upgraded_at = stfNowText_();
+    stfSetUpgradeState_(state);
+  }
+  return { ok: true, data: data };
+}
+
+/** 兩份「列」的差異：以第 0 欄為 key；欄位名由 heads 取（沒有就 colN） */
+function stfDiffClockRows_(expectRows, curRows) {
+  var diff = [];
+  var index = function (rows) {
+    var m = {}, seen = {};
+    rows.forEach(function (r, i) { var k = r[0] || ('#' + i); seen[k] = (seen[k] || 0) + 1; m[seen[k] > 1 ? k + '~' + seen[k] : k] = r; });
+    return m;
+  };
+  var em = index(expectRows), cm = index(curRows);
+  var head = expectRows[0] || [];
+  Object.keys(em).forEach(function (k) {
+    var e = em[k], c = cm[k];
+    if (!c) { diff.push({ key: k, field: 'row', expected: 'exists', actual: 'removed' }); return; }
+    var n = Math.max(e.length, c.length);
+    for (var i = 0; i < n; i++) {
+      var ev = e[i] === undefined ? '' : e[i], cv = c[i] === undefined ? '' : c[i];
+      if (ev !== cv) diff.push({ key: k, field: head[i] || ('col' + (i + 1)), expected: ev, actual: cv });
+    }
+  });
+  Object.keys(cm).forEach(function (k) { if (!em[k]) diff.push({ key: k, field: 'row', expected: 'absent', actual: 'added' }); });
+  return diff;
+}
+
+/**
+ * 回退：org（和 clock_stores）整份蓋回備份。
+ * - 寫入前先檢查 state 指向的備份分頁與正式分頁都在，缺一零寫入失敗、保留 state。
+ * - 某一份「已等於備份」視為該步已完成（回退中斷後可重跑）；否則切換後被改過（與升級後雜湊不符）就拒絕並列出差異。
+ */
+function handleOrgRollback_(token) {
+  var auth = stfRequireAdmin_(token);
+  if (!auth.ok) return auth;
+  var state = stfGetUpgradeState_();
+  if (!state) return { ok: false, error: '找不到升級紀錄，沒有可退回的備份' };
+  var bak = stfSheet_(state.org_bak);
+  if (!bak) return { ok: false, error: '找不到備份 ' + state.org_bak };
+  var osh = stfSheet_(STF_SHEET_ORG);
+  if (!osh) return { ok: false, error: '找不到 org 分頁' };
+  if (state.stf_bak && !stfSheet_(state.stf_bak)) return { ok: false, error: '找不到備份 ' + state.stf_bak + '（同仁職稱備份），為避免半套回退，什麼都沒有改' };
+  var hasClock = !!state.clk_bak;
+  if (hasClock && !stfSheet_(state.clk_bak)) return { ok: false, error: '找不到備份 ' + state.clk_bak + '（clock_stores 備份），為避免半套回退，什麼都沒有改' };
+  if (hasClock && !stfSheet_('clock_stores')) return { ok: false, error: '找不到分頁 clock_stores，為避免半套回退，什麼都沒有改' };
+  if (!stfSheet_(STF_SHEET)) return { ok: false, error: '找不到分頁 ' + STF_SHEET };
+
+  // ① 判斷各步狀態：已等於備份＝已完成；否則雜湊不符＝切換後被改過 → 拒絕
+  var bakOrgRows = stfNormOrgRows_(stfSheetValues_(bak, STF_ORG_HEADERS.length));
+  var orgDone = stfSameRows_(stfOrgSnapshot_(), bakOrgRows);
+  var clockDone = false;
+  if (hasClock) clockDone = stfSameRows_(stfClockSnapshot_(), stfNormClockRows_(stfSheetValues_(stfSheet_(state.clk_bak), 5)));
+  var orgBad = !orgDone && !!state.org_hash && stfOrgHash_() !== state.org_hash;
+  var clockBad = hasClock && !clockDone && !!state.clk_hash && stfClockHash_() !== state.clk_hash;
+  if (orgBad || clockBad) {
+    var out = {};
+    if ((orgBad && !stfSheet_(state.org_snap)) || (clockBad && !(state.clk_snap && stfSheet_(state.clk_snap)))) {
+      return { ok: false, error: '找不到切換後快照，無法比對差異；請先確認組織表沒被改過' };
+    }
+    if (orgBad) {
+      var diff = [];
+      var snap = stfSheet_(state.org_snap);
+      var expectRows = snap ? stfSheetValues_(snap, STF_ORG_HEADERS.length).slice(1).map(function (r) { return r.slice(0, 8).map(function (v, i) { return stfNormCell_(v, i); }); }) : [];
+      var key = function (r) { return r[0] + '|' + r[1]; };
+      var curRows = stfOrgSnapshot_();
+      var expMap = {}, curMap = {};
+      expectRows.forEach(function (r) { expMap[key(r)] = r; });
+      curRows.forEach(function (r) { curMap[key(r)] = r; });
+      Object.keys(expMap).forEach(function (k) {
+        var e = expMap[k], c = curMap[k];
+        if (!c) { diff.push({ kind: e[0], code: e[1], field: 'row', expected: 'exists', actual: 'removed' }); return; }
+        STF_ORG_HEADERS.forEach(function (f, i) { if (e[i] !== c[i]) diff.push({ kind: e[0], code: e[1], field: f, expected: e[i], actual: c[i] }); });
+      });
+      Object.keys(curMap).forEach(function (k) {
+        if (!expMap[k]) diff.push({ kind: curMap[k][0], code: curMap[k][1], field: 'row', expected: 'absent', actual: 'added' });
+      });
+      out.diff = diff;
+    }
+    if (clockBad) {
+      var csnap = state.clk_snap ? stfSheet_(state.clk_snap) : null;
+      out.clock_diff = stfDiffClockRows_(csnap ? stfNormClockRows_(stfSheetValues_(csnap, 5)) : [], stfClockSnapshot_());
+    }
+    return { ok: false, error: '切換後' + (orgBad ? '組織資料' : '') + (orgBad && clockBad ? '和' : '') + (clockBad ? '打卡店別對照（clock_stores）' : '') + '又被改過，為避免蓋掉新的修改，拒絕整表覆蓋；差異已列出', data: out };
+  }
+
+  // ② 先還原同仁職稱（只還原「目前仍是升級後職稱」的人；之後被改過的不動；重跑時已還原的不受影響）
+  var titlesRestored = 0, titlesSkipped = [];
+  var stfBak = stfSheet_(state.stf_bak);
+  if (stfBak) {
+    stfSheetValues_(stfBak, 3).slice(1).forEach(function (r) {
+      var emp = stfStr_(r[0]);
+      if (!emp) return;
+      var cur = stfFindByEmp_(emp);
+      if (!cur) return;
+      var now = stfStr_(cur.values[STF_COL.title]);
+      if (now === stfStr_(r[2])) {
+        stfSheet_(STF_SHEET).getRange(cur.row, STF_COL.title + 1, 1, 1).setValue(stfStr_(r[1]));
+        stfLog_(emp, 'org_rollback', String(auth.user.id), 'title:' + now + '>' + stfStr_(r[1]));
+        titlesRestored++;
+      } else if (now !== stfStr_(r[1])) {
+        titlesSkipped.push(emp);
+      }
+    });
+  }
+  // ③ org 整份蓋回（已等於備份就略過）
+  var bakVals = stfSheetValues_(bak, STF_ORG_HEADERS.length);
+  var restored = orgDone ? bakVals.length - 1 : stfPutBlock_(osh, bakVals, STF_ORG_HEADERS.length) - 1;
+  // ④ clock_stores 整份蓋回（已等於備份就略過）
+  var clockRestored = false;
+  if (hasClock) {
+    if (!clockDone) {
+      var cv = stfSheetValues_(stfSheet_(state.clk_bak), 5);
+      stfPutBlock_(stfSheet_('clock_stores'), cv, cv.length ? cv[0].length : 5);
+    }
+    clockRestored = true;
+  }
+  // ⑤ 孤兒：回退後單位／職稱在 org 裡找不到（或已停用）的同仁，只列不改
+  var org = stfReadOrg_();
+  var orphans = [];
+  stfAllRows_().forEach(function (r) {
+    var unit = stfStr_(r.values[STF_COL.unit]);
+    var title = stfStr_(r.values[STF_COL.title]);
+    var dept = stfStr_(r.values[STF_COL.dept]);
+    var pdept = stfStr_(r.values[STF_COL.p_dept]);
+    if (stfStr_(r.values[STF_COL.status]) === 'disabled') return;
+    if (!unit && !(pdept && !org.dept[pdept])) return;
+    if ((unit && !org.unit[unit]) || (title && !org.title[title]) || (dept && !org.dept[dept]) || (pdept && !org.dept[pdept])) {
+      orphans.push({ emp_no: stfStr_(r.values[STF_COL.emp_no]), name: stfStr_(r.values[STF_COL.name]), unit: unit, title: title, dept: dept });
+    }
+  });
+  stfSetUpgradeState_(null);   // 備份分頁保留；下次升級重新備份
+  return { ok: true, data: { restored: restored, clock_restored: clockRestored, titles_restored: titlesRestored, titles_skipped: titlesSkipped, orphans: orphans, backup: state.org_bak } };
 }
