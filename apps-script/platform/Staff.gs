@@ -765,10 +765,99 @@ function stfLoginGate_(userId) {
   var status = stfStr_(hit.values[STF_COL.status]);
   if (status === 'pending') return { block: STF_MSG.LOGIN_PENDING };
   if (status === 'rejected') return { block: STF_MSG.LOGIN_REJECTED };
-  return { review: !!stfManagerScope_(hit.values, stfReadOrg_()) };
+  // 衍生權限 platform.review 的「審核者資格」部分：改用新規則（stfReviewScope_）。人資／admin 由 Auth.gs 另外補
+  return { review: !!stfReviewScope_(hit.values, stfReadOrg_()) };
 }
 
-/** 審核者：platform.staff（人資／admin）一律可審；否則要是單位主管（stfManagerScope_） */
+/**
+ * 審核者範圍（規格第 13 節；組織改版 T3）。回 null＝沒有審核資格；否則
+ * {kinds, unit, unit_name, brand, dept, rank, titleLadder}。kinds 可能值：
+ *   'store' 同店店長（門市 sm）　　'brand' 品牌辦公室區經理以上（rank≥2，帶 brand）
+ *   'ops' 營運部主管（dzy-hq、主要部門 ops、部門主管）　'dept' 部門主管（帶 dept）
+ *   'exec' 執行長以上（dzy-hq、hq 職級≥3）　　'ck' 中央工廠店長（單位 ck、rank≥3）
+ * 審核者本人必須 status active、單位 active、職稱 active 且屬於該單位的職稱階梯；未知 ladder 一律沒有資格。
+ * 人資（platform.staff）與 admin 不在這裡判斷（stfReviewer_ 另外放行）。
+ */
+function stfReviewScope_(values, org) {
+  if (stfStr_(values[STF_COL.status]) !== 'active') return null;
+  var unitCode = stfStr_(values[STF_COL.unit]);
+  var unit = org.unit[unitCode];
+  var title = org.title[stfStr_(values[STF_COL.title])];
+  if (!unit || !unit.active || !title || !title.active) return null;
+  var ladder = unit.ladder || 'store';
+  if (title.parent !== ladder) return null;
+  var dept = stfStr_(values[STF_COL.dept]);
+  var kinds = [];
+  if (ladder === 'store') {
+    if (title.rank >= (STF_UNIT_VIEW_MIN_RANK.store || 99)) kinds.push(unitCode === 'ck' ? 'ck' : 'store');
+  } else if (ladder === 'office') {
+    if (title.rank >= (STF_UNIT_VIEW_MIN_RANK.office || 99)) kinds.push('brand');
+  } else if (ladder === 'hq') {
+    if (unitCode === 'dzy-hq' && title.rank >= 3) {
+      kinds.push('exec');
+    } else if (title.rank === 2) {
+      var d = org.dept[dept];
+      if (d && d.active && d.parent === unitCode) {
+        kinds.push('dept');
+        if (unitCode === 'dzy-hq' && dept === 'ops') kinds.push('ops');
+      }
+    }
+  }
+  if (!kinds.length) return null;
+  return { kinds: kinds, unit: unitCode, unit_name: unit.name, brand: unit.parent, dept: dept, rank: title.rank, titleLadder: title.parent };
+}
+
+/** 被審的一個身分（單位、部門、職稱）需要哪一種審核者；回 null＝資料已不合規或沒有上一層 → 只有人資 */
+function stfReviewNeed_(org, unitCode, dept, titleCode) {
+  var u = org.unit[unitCode];
+  var t = org.title[titleCode];
+  if (!u || !u.active || !t || !t.active) return null;
+  var ladder = u.ladder || 'store';
+  if (t.parent !== ladder) return null;
+  var need = { title: t };
+  if (ladder === 'office') { need.kind = 'ops'; return need; }
+  if (ladder === 'store') {
+    if (unitCode === 'ck') { need.kind = t.rank >= 3 ? 'exec' : 'ck'; need.unit = 'ck'; return need; }
+    if (t.rank >= 3) { need.kind = 'brand'; need.brand = u.parent; return need; }
+    need.kind = 'store'; need.unit = unitCode; return need;
+  }
+  if (ladder === 'hq') {
+    if (t.rank >= 3) return null;                    // 執行長以上：只有人資
+    if (t.rank === 2) { need.kind = 'exec'; return need; }   // 部門主管：執行長以上
+    var d = org.dept[dept];
+    if (!d || !d.active || d.parent !== unitCode) return null;
+    need.kind = 'dept'; need.dept = dept; return need;       // 部門同仁：同主要部門的部門主管
+  }
+  return null;
+}
+
+function stfScopeMeets_(scope, need) {
+  if (!scope || !need || scope.kinds.indexOf(need.kind) === -1) return false;
+  if ((need.kind === 'store' || need.kind === 'ck') && scope.unit !== need.unit) return false;
+  if (need.kind === 'brand' && scope.brand !== need.brand) return false;
+  if (need.kind === 'dept' && scope.dept !== need.dept) return false;
+  // 同一個職稱階梯才比職級：被審的人職級比審核者高 → 擋（不同階梯不比）
+  if (scope.titleLadder === need.title.parent && scope.rank < need.title.rank) return false;
+  return true;
+}
+
+/**
+ * 這位審核者（scope）能不能審這一列待審（不含「自己」與 status 判斷）。
+ * 被審的人看「送出的」p_unit／p_dept／p_title；若列上已有「目前身分」（unit 有值，例如店長建檔後退回認領保留的組織欄），
+ * 兩個身分都要夠格才算（取嚴者）。首次認領沒有目前身分＝只看送出的。
+ */
+function stfCanReview_(scope, values, org) {
+  if (!scope) return false;
+  var submitted = stfReviewNeed_(org, stfStr_(values[STF_COL.p_unit]), stfStr_(values[STF_COL.p_dept]), stfStr_(values[STF_COL.p_title]));
+  if (!stfScopeMeets_(scope, submitted)) return false;
+  if (stfStr_(values[STF_COL.unit]) !== '') {
+    var current = stfReviewNeed_(org, stfStr_(values[STF_COL.unit]), stfStr_(values[STF_COL.dept]), stfStr_(values[STF_COL.title]));
+    if (!stfScopeMeets_(scope, current)) return false;
+  }
+  return true;
+}
+
+/** 審核者：platform.staff（人資／admin）一律可審；否則要有審核者範圍（stfReviewScope_） */
 function stfReviewer_(token) {
   var me = handleMe_(token);
   if (!me.ok) return me;
@@ -777,21 +866,18 @@ function stfReviewer_(token) {
   var scope = null;
   if (hasPerm_(me.data.perms, 'platform.self')) {
     var hit = stfFindByUserId_(me.data.user.id);
-    if (hit) scope = stfManagerScope_(hit.values, org);
+    if (hit) scope = stfReviewScope_(hit.values, org);
   }
   if (!isHr && !scope) return { ok: false, error: STF_MSG.NOT_REVIEWER };
   return { ok: true, user: me.data.user, isHr: isHr, scope: scope, org: org };
 }
 
-/** 這一列是不是「這位審核者可以審的認領待審」（不含自己；主管只看填的單位／部門＝自己的） */
+/** 這一列是不是「這位審核者可以審的認領待審」（不能審自己；人資全可審；其他看 stfCanReview_） */
 function stfCanReviewRow_(rv, values) {
   if (stfStr_(values[STF_COL.status]) !== 'pending') return false;
   if (stfStr_(values[STF_COL.user_id]) === String(rv.user.id)) return false;
   if (rv.isHr) return true;
-  var s = rv.scope;
-  if (!s || stfStr_(values[STF_COL.p_unit]) !== s.unit) return false;
-  if (s.sameDept && stfStr_(values[STF_COL.p_dept]) !== s.dept) return false;
-  return true;
+  return stfCanReview_(rv.scope, values, rv.org);
 }
 
 function handleUnitPending_(token) {

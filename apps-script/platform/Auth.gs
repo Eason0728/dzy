@@ -698,7 +698,9 @@ function authStaffGate_(user) {
 /** 角色權限＋衍生權限 platform.review（只讓「待審核」分頁出現；審核 action 本身仍在後端重算資格） */
 function authPermsWithGate_(role, gate) {
   var perms = getRolePerms_(role);
-  if (gate && gate.review && perms.indexOf('platform.review') === -1 && perms.indexOf('*') === -1) {
+  // 「待審核」分頁出現條件＝有審核者資格（gate.review）或 platform.staff（人資）或 admin（'*' 本來就全有）
+  var canReview = (gate && gate.review) || perms.indexOf('platform.staff') !== -1;
+  if (canReview && perms.indexOf('platform.review') === -1 && perms.indexOf('*') === -1) {
     perms = perms.concat(['platform.review']);
   }
   return perms;
