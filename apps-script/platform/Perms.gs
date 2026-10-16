@@ -574,7 +574,10 @@ function permAuditDisabled_(by, values) {
 function permStaffChangeCheck_(isAdmin, beforeValues, beforeExtra, afterValues, afterExtra) {
   var ctx = permLoadCtx_(true);
   // 一律以「若在職」計算：停用中的人 permCompute_ 回空，會讓停用期間改組織欄 / 之後啟用繞過檢查
-  var b = permComputeRow_(ctx, permAsActive_(beforeValues), beforeExtra);
+  // 從沒開通過的列（未認領／待審／被退回）：組織欄只是預填，不算「原本就有」的權限 → before 當空權限
+  var bSt = permStr_(beforeValues[STF_COL.status]);
+  var neverActive = bSt === 'unclaimed' || bSt === 'pending' || bSt === 'rejected';
+  var b = neverActive ? { perms: [] } : permComputeRow_(ctx, permAsActive_(beforeValues), beforeExtra);
   var a = permComputeRow_(ctx, permAsActive_(afterValues), afterExtra);
   var res = { block: null, diff: null, inited: ctx.inited };
   // 鎖碼家族（PERM_LOCKED 全部碼，含 platform.users、platform.permmap）：任一有無改變且非 admin → 擋
@@ -587,6 +590,35 @@ function permStaffChangeCheck_(isAdmin, beforeValues, beforeExtra, afterValues, 
   }
   res.diff = permDiff_(b.perms, a.perms);
   return res;
+}
+
+/**
+ * 啟用／復職成功後呼叫：對方（此刻以在職計算）若有任何權限 → 寫一列 perm_audit（added＝那些權限，cause＝staff_edit）。
+ * perm 表未初始化＝沒有規則可算，不寫。
+ */
+function permAuditEnabled_(by, values) {
+  try {
+    var ctx = permLoadCtx_(false);
+    if (!ctx.inited) return false;
+    var emp = permStr_(values[STF_COL.emp_no]).toUpperCase();
+    var extra = stfSplitCodes_(stfReadExtraMap_()[emp]);
+    var r = permComputeRow_(ctx, permAsActive_(values), extra);
+    if (!r.perms.length) return false;
+    return permAuditAppend_(by, emp, r.perms.join(','), '', 'staff_edit');
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * 非 admin 新建同仁列（組織欄一併寫入）前呼叫：這列若在職會拿到任一 PERM_LOCKED 碼 → 回 perm_admin_only 的錯誤，否則 null。
+ * values 是準備寫入的 staff 一列。
+ */
+function permNewRowBlock_(isAdmin, values) {
+  if (isAdmin) return null;
+  var r = permComputeRow_(permLoadCtx_(true), permAsActive_(values), []);
+  var hit = PERM_LOCKED.some(function (c) { return r.perms.indexOf(c) !== -1; });
+  return hit ? { ok: false, error: PERM_MSG_ADMIN_ONLY, code: 'perm_admin_only' } : null;
 }
 
 /** 追加一列 perm_audit（分頁不存在或表頭不對就略過，回 false）。added／removed 是字串（逗號相連的權限碼，或 perm_map 的 JSON 明細） */

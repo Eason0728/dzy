@@ -214,7 +214,9 @@ function transformResponse_(backendId, json) {
     delete rest.ok;
     delete rest.error;
     const out = { ok: false, error: json.error || json.message || '請求失敗' };
-    if (Object.keys(rest).length > 0) out.data = rest;
+    // 稽核的非 ok 回應也要過一次範圍裁切（其他後端原樣；宿舍的軟性警告需要完整欄位）
+    const kept = maybeFilterOwnNode_(backendId, rest);
+    if (kept && Object.keys(kept).length > 0) out.data = kept;
     return out;
   }
 

@@ -1262,7 +1262,9 @@ function handleStaffSetActive_(token, payload) {
   t.v[STF_COL.status] = STF_STATUSES.indexOf(prev) !== -1 && prev !== 'disabled' ? prev : 'pending';
   t.v[STF_COL.prev_status] = '';
   usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('TRUE');
-  return stfSave_(t, 'enable', '');
+  var savedOn = stfSave_(t, 'enable', '');
+  if (savedOn && savedOn.ok !== false && typeof permAuditEnabled_ === 'function') permAuditEnabled_(t.auth.user.id, t.v);   // 恢復的權限留一筆異動紀錄
+  return savedOn;
 }
 
 function handleStaffUnclaim_(token, payload) {

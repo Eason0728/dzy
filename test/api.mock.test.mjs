@@ -403,6 +403,25 @@ await (async function test7scope() {
 })();
 
 // ============================================================
+// P2-N2 稽核回應 ok 不是 true 時，受裁切的人也不能拿到未裁資料
+// ============================================================
+await (async function testN2() {
+  await loginAs({
+    token: 'tok-n2',
+    user: { id: 'u202', name: '同仁', role: 'staff', node: '' },
+    perms: ['audit.read.own'],
+    audit_scope: ['ck']
+  });
+  const odd = { ok: false, error: '請重試', records: [{ store: 'ck', v: 1 }, { store: 'other', v: 2 }], leak: 'x' };
+  globalThis.fetch = makeFetchMock({ getAll: () => odd });
+  const res = await call('audit', 'getAll', {});
+  const txt = JSON.stringify(res);
+  assertTrue(res.ok === false && !txt.includes('other') && !txt.includes('"leak"'), 'N2: 稽核非 ok 回應受裁切時，別店資料與非白名單鍵不交給畫面', res);
+  armGuard();
+  await quietLogout();
+})();
+
+// ============================================================
 // 7y. 稽核範圍只管稽核：audit_scope='none'（或陣列）的人拿宿舍資料要完整，不被稽核裁切裁空
 // ============================================================
 await (async function test7dorm() {

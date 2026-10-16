@@ -702,5 +702,47 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   ok(post(sb, 'staffEdit', { emp_no: P.fin.emp, dept: 'it' }, A).ok, '13f: admin 做同一件事 → 成功');
 }
 
+// ============================================================
+// P2-N3 啟用（復職）後對方若有權限 → 寫 perm_audit（added）
+// ============================================================
+{
+  const app = scene();
+  init(app); on(app);
+  const { sb, sheets, P } = app;
+  const A = sb.__admin;
+  ok(post(sb, 'staffSetActive', { emp_no: P.sm.emp, active: false }, A).ok, 'N3 前置：停用店長');
+  const n0 = sheets.perm_audit._rows().length;
+  ok(post(sb, 'staffSetActive', { emp_no: P.sm.emp, active: true }, A).ok, 'N3 前置：重新啟用');
+  const rows = sheets.perm_audit._rows();
+  const last = rows[rows.length - 1];
+  ok(rows.length === n0 + 1 && last[2] === P.sm.emp && String(last[3]).length > 0 && String(last[4]) === '' && last[5] === 'staff_edit', 'N3 啟用後寫一列 perm_audit（added＝對方拿回的權限、cause＝staff_edit）', last);
+}
+
+// ============================================================
+// P2-N4 roles 分頁裡含鎖碼的角色，視為高權限（非 admin 不能指派、不能動該帳號）
+// ============================================================
+{
+  const app = scene();
+  init(app); on(app);
+  const { sb, sheets } = app;
+  const A = sb.__admin;
+  sheets.roles._data.push(['permrole', '權限管理員', 'platform.permmap'], ['ulead', '帳號管理', 'platform.users,platform.self']);
+  const salt = 'salt-n4';
+  sheets.users._data.push(['u090', 'ulead1', '帳號管理員', 'ulead', '', salt, sb.hashPassword_('fake-ul-pw-01', salt), 'TRUE', '', '']);
+  sheets.users._data.push(['u091', 'pm1', '權限管理員', 'permrole', '', salt, sb.hashPassword_('fake-pm-pw-01', salt), 'TRUE', '', '']);
+  const ul = post(sb, 'login', { username: 'ulead1', password: 'fake-ul-pw-01' });
+  ok(ul.ok, 'N4 前置：非 admin 帳號管理員登入', ul);
+  const n0 = sheets.users._rows().length;
+  const ins = post(sb, 'saveUser', { username: 'newperm', name: '新權限者', role: 'permrole', password: 'fake-np-pw-01' }, ul.data.token);
+  ok(ins.ok === false && sheets.users._rows().length === n0, 'N4 非 admin 新增含鎖碼角色的帳號 → 擋', ins);
+  const before91 = sheets.users._rows().find((r) => r[0] === 'u091')[6];
+  const reset = post(sb, 'resetPassword', { id: 'u091', newPassword: 'fake-reset-pw-01' }, ul.data.token);
+  ok(reset.ok === false && sheets.users._rows().find((r) => r[0] === 'u091')[6] === before91, 'N4 非 admin 重設含鎖碼角色帳號的密碼 → 擋', reset);
+  const off = post(sb, 'setActive', { id: 'u091', active: false }, ul.data.token);
+  ok(off.ok === false && sheets.users._rows().find((r) => r[0] === 'u091')[7] === 'TRUE', 'N4 非 admin 停用含鎖碼角色帳號 → 擋', off);
+  const ins2 = post(sb, 'saveUser', { username: 'newperm2', name: '新權限者二', role: 'permrole', password: 'fake-np-pw-01' }, A);
+  ok(ins2.ok, 'N4 admin 指派同一角色 → 成功', ins2);
+}
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

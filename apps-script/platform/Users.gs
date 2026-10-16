@@ -72,7 +72,13 @@ function usrRoleIsSuper_(role) {
   role = String(role === undefined || role === null ? '' : role).trim();
   if (!role) return false;
   if (role === 'admin') return true;
-  return getRolePerms_(role).indexOf('*') !== -1;
+  var perms = getRolePerms_(role);
+  if (perms.indexOf('*') !== -1) return true;
+  // 角色含任一鎖碼（platform.users／platform.permmap）也視為高權限：只有 admin 能指派、能動該帳號
+  if (typeof PERM_LOCKED !== 'undefined') {
+    return PERM_LOCKED.some(function (c) { return perms.indexOf(c) !== -1; });
+  }
+  return false;
 }
 
 /** 操作者是不是 role admin（有 platform.users 的非 admin 不能動管理員／全權角色的帳號） */
@@ -275,7 +281,10 @@ function handleSaveUser_(token, payload) {
   if (!isValidNode_(node)) return { ok: false, error: USR_MSG_NODE_INVALID };
   var actorIsAdmin = usrActorIsAdmin_(auth);
   // 非 admin 不能建立或把帳號改成管理員／全權角色
-  if (!actorIsAdmin && usrRoleIsSuper_(role)) return { ok: false, error: USR_MSG_ADMIN_ONLY };
+  // （改自己且角色不變，例如改顯示名稱，不算指派高權限）
+  var selfRow = id ? findUsrRowById_(id) : null;
+  var selfUnchanged = !!selfRow && String(selfRow.values[USR_COL.id]) === String(auth.user.id) && String(selfRow.values[USR_COL.role]) === role;
+  if (!actorIsAdmin && !selfUnchanged && usrRoleIsSuper_(role)) return { ok: false, error: USR_MSG_ADMIN_ONLY };
 
   var existingByUsername = findUsrRowByUsername_(username);
   var existingById = null;
@@ -291,10 +300,10 @@ function handleSaveUser_(token, payload) {
     if (String(existingById.values[USR_COL.role]) === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
     if (!actorIsAdmin) {
       // 非 admin 不能改管理員／全權角色的帳號，也不能改自己的角色
-      if (usrRoleIsSuper_(existingById.values[USR_COL.role])) return { ok: false, error: USR_MSG_ADMIN_ONLY };
-      if (String(existingById.values[USR_COL.id]) === String(auth.user.id) && String(existingById.values[USR_COL.role]) !== role) {
-        return { ok: false, error: USR_MSG_SELF_ROLE };
-      }
+      var isSelfRow = String(existingById.values[USR_COL.id]) === String(auth.user.id);
+      if (isSelfRow && String(existingById.values[USR_COL.role]) !== role) return { ok: false, error: USR_MSG_SELF_ROLE };
+      // 改自己且角色不變（例如改顯示名稱）不算動到別人的高權限帳號
+      if (!isSelfRow && usrRoleIsSuper_(existingById.values[USR_COL.role])) return { ok: false, error: USR_MSG_ADMIN_ONLY };
     }
     if (existingByUsername && existingByUsername.row !== existingById.row) {
       return { ok: false, error: USR_MSG_USERNAME_TAKEN };

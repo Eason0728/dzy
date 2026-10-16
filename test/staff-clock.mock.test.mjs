@@ -1992,5 +1992,49 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(sb.stfBulletinGate_(rowsOf(app, 'staff').find((r) => r.emp_no === st2.emp).user_id) === false, 'BUL ★清單裡但狀態非 active → 不給');
 })();
 
+// ============================================================
+// P2-N1 非 admin 人資建出「會拿到鎖碼」的列（新增→認領→確認）要被擋
+// ============================================================
+(() => {
+  const app = fresh();
+  const { sb, tok } = app;
+  const hr = claimApprove(app, '人資同仁甲', 'hr-a-pw-0001', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
+  post(sb, 'permInit', {}, tok);
+  app.props.PERMS_ON = '1';
+  const body = { name: '新主管甲', dept: 'hr', unit: 'dzy-hq', title: 'hm', hire_date: dayT(-1), phone: '0922000777' };
+  const before = app.sheets.staff._rows().length;
+  const r = post(sb, 'staffCreateByUnit', body, hr.token);
+  ok(r.ok === false && r.code === 'perm_admin_only' && app.sheets.staff._rows().length === before, 'N1a 非 admin 人資新增會拿到鎖碼的同仁列 → perm_admin_only、不寫列', r);
+  const okRow = post(sb, 'staffCreateByUnit', Object.assign({}, body, { name: '新同仁乙', dept: 'ops', title: 'hs' }), hr.token);
+  ok(okRow.ok, 'N1a 一般同仁照放', okRow);
+  const adm = post(sb, 'staffCreateByUnit', Object.assign({}, body, { name: '新主管丙' }), tok);
+  ok(adm.ok, 'N1a admin 新增同一種列 → 成功', adm);
+  // 縱深：未認領列（組織欄已填好）被認領後，非 admin 確認要擋；admin 確認放行
+  post(sb, 'staffImport', { names: ['直寫列丁'] }, tok);
+  const lk = post(sb, 'claimLookup', { name: '直寫列丁' });
+  setStaff(app, lk.data.emp_no, 'brand', 'dzy'); setStaff(app, lk.data.emp_no, 'unit', 'dzy-hq');
+  setStaff(app, lk.data.emp_no, 'dept', 'hr'); setStaff(app, lk.data.emp_no, 'title', 'hm');
+  const sub = post(sb, 'claimSubmit', { name: '直寫列丁', emp_no: lk.data.emp_no, password: 'fake-d-pw-0001', brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hm', birthday: '1990-01-02', phone: '0922000778', address: '新竹市測試路9號' });
+  ok(sub.ok, 'N1b 前置：認領成功', sub);
+  const cf = post(sb, 'staffConfirm', { emp_no: lk.data.emp_no }, hr.token);
+  ok(cf.ok === false && cf.code === 'perm_admin_only', 'N1b 未認領列已填鎖碼組織欄 → 非 admin 確認被擋', cf);
+  ok(post(sb, 'staffConfirm', { emp_no: lk.data.emp_no }, tok).ok, 'N1b admin 確認 → 成功');
+})();
+
+// P2-N3 復職（staffReinstate）後對方若有權限 → 寫 perm_audit（added）
+(() => {
+  const app = fresh();
+  const { sb, tok, sheets } = app;
+  const sm = claimApprove(app, '店長復職甲', 'mgr-r-pw-0001', MZT_GF('sm'));
+  post(sb, 'permInit', {}, tok);
+  app.props.PERMS_ON = '1';
+  ok(post(sb, 'staffSetActive', { emp_no: sm.emp, active: false }, tok).ok, 'N3c 前置：停用');
+  const n0 = sheets.perm_audit._rows().length;
+  const re = post(sb, 'staffReinstate', { emp_no: sm.emp, stores: [] }, tok);
+  const rows = sheets.perm_audit._rows();
+  const last = rows[rows.length - 1];
+  ok(re.ok && rows.length === n0 + 1 && last[2] === sm.emp && String(last[3]).length > 0 && last[5] === 'staff_edit', 'N3c 復職後寫一列 perm_audit（added）', { re, last });
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
