@@ -181,16 +181,6 @@ def main():
             ad.wait_for_function("() => document.querySelector('[data-role=\"rows\"]').innerText.includes('訓練部、營運部')")
             check(mock.edits[-1].get('extra_depts') == ['training', 'ops'], '★勾選營運部 → 帶 extra_depts=[training, ops]：%s' % mock.edits[-1].get('extra_depts'))
             check('兼任：訓練部、營運部' in ad.inner_text(row1), '儲存後名單兼任文字更新')
-            check('bulletin_admin' not in mock.edits[-1], '★公告管理沒動 → 不帶 bulletin_admin：%s' % mock.edits[-1])
-            # ③b 公告管理權限勾選（2026-10-17）
-            ad.click(row1 + ' [data-act="edit"]')
-            ad.wait_for_selector('#ed-bul')
-            check(not ad.is_checked('#ed-bul'), '公告管理預設沒勾')
-            ad.check('#ed-bul')
-            ad.click('.dialog .btn-primary:has-text("儲存")')
-            ad.wait_for_function("() => !document.querySelector('.dialog')")
-            ad.wait_for_timeout(300)
-            check(mock.edits[-1] == {'emp_no': 'DZY001', 'bulletin_admin': True}, '★勾「可管理公告」→ 只帶 bulletin_admin=true：%s' % mock.edits[-1])
 
             # ④ 切換組織
             ad.click('[data-role="org-upgrade"]')

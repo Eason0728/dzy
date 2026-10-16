@@ -79,7 +79,6 @@ var STF_MSG = {
   LOGIN_REJECTED: '帳號資料被退回，請找人資重新開通',
   NOT_REVIEWER: '只有單位主管可以審核',
   NO_EXTRA_PERM: '沒有權限修改兼任部門',
-  NO_BULLETIN_PERM: '沒有權限設定公告管理',
   REVIEW_SELF: '不能審核自己',
   NOT_PENDING_REVIEW: '這位同仁不在等待審核',
   REASON_TOO_LONG: '退回原因最多 200 個字'
@@ -119,21 +118,6 @@ function stfDate_(v) {
 }
 
 function stfNormEmp_(v) { return stfStr_(v).toUpperCase(); }
-
-// 公告管理權限（2026-10-17 Eason：同仁名單逐人勾選、人資與 admin 可設）：可管理電子佈告欄公告的同仁編號清單，
-// 存在 Script Property BULLETIN_ADMINS（逗號分隔 DZY###）。不另開 staff 尾端欄位（尾端欄有組織升級／備份機制，改動面太大）。
-// 有勾的人登入時衍生權限 platform.bulletin（Auth.gs authPermsWithGate_）；admin（'*'）本來就有。
-var STF_PROP_BULLETIN = 'BULLETIN_ADMINS';
-function stfBulletinAdmins_() {
-  var raw = PropertiesService.getScriptProperties().getProperty(STF_PROP_BULLETIN) || '';
-  return raw.split(',').map(function (x) { return stfNormEmp_(x); }).filter(function (x) { return STF_EMP_RE.test(x); });
-}
-function stfSetBulletinAdmin_(emp, on) {
-  var e = stfNormEmp_(emp), list = stfBulletinAdmins_().filter(function (x) { return x !== e; });
-  if (on) list.push(e);
-  list.sort();
-  PropertiesService.getScriptProperties().setProperty(STF_PROP_BULLETIN, list.join(','));
-}
 
 /** 原始欄位長度超過上限 → true（非字串、非數字一律當超過；undefined／null 當空字串通過） */
 function stfTooLong_(v, max) {
@@ -373,7 +357,6 @@ function stfDecorate_(o, extraMap, org, withFlags) {
   var codes = stfSplitCodes_(extraMap[stfNormEmp_(o.emp_no)]);
   o.extra_depts = codes;
   o.extra_dept_names = codes.map(function (c) { return stfExtraDeptName_(org, c); });
-  o.bulletin_admin = stfBulletinAdmins_().indexOf(stfNormEmp_(o.emp_no)) !== -1;
   if (withFlags) o.flags = stfFlags_(o, org);
   return o;
 }
@@ -827,9 +810,7 @@ function stfLoginGate_(userId) {
   if (status === 'pending') return { block: STF_MSG.LOGIN_PENDING };
   if (status === 'rejected') return { block: STF_MSG.LOGIN_REJECTED };
   // 衍生權限 platform.review 的「審核者資格」部分：改用新規則（stfReviewScope_）。人資／admin 由 Auth.gs 另外補
-  // bulletin＝公告管理權限（BULLETIN_ADMINS 有勾、且在職）→ Auth.gs 補 platform.bulletin
-  var bulletin = status !== 'disabled' && stfBulletinAdmins_().indexOf(stfNormEmp_(hit.values[STF_COL.emp_no])) !== -1;
-  return { review: !!stfReviewScope_(hit.values, stfReadOrg_()), bulletin: bulletin };
+  return { review: !!stfReviewScope_(hit.values, stfReadOrg_()) };
 }
 
 /**
@@ -1254,13 +1235,6 @@ function handleStaffEdit_(token, payload) {
     if (!meX.ok) return meX;
     if (!hasPerm_(meX.data.perms, 'platform.staff')) return { ok: false, error: STF_MSG.NO_EXTRA_PERM };
   }
-  // 公告管理權限同樣只有 platform.staff（人資）與 admin 能設
-  if (payload && payload.bulletin_admin !== undefined) {
-    if (typeof payload.bulletin_admin !== 'boolean') return { ok: false, error: '公告管理權限格式錯誤' };
-    var meB = handleMe_(token);
-    if (!meB.ok) return meB;
-    if (!hasPerm_(meB.data.perms, 'platform.staff')) return { ok: false, error: STF_MSG.NO_BULLETIN_PERM };
-  }
   var t = stfAdminTarget_(token, payload);
   if (!t.ok) return t;
   payload = payload || {};
@@ -1320,13 +1294,7 @@ function handleStaffEdit_(token, payload) {
       changed.push('extra_depts');
     }
   }
-  var bulletinNew = null;
-  if (payload.bulletin_admin !== undefined && payload.bulletin_admin !== (stfBulletinAdmins_().indexOf(t.emp) !== -1)) {
-    bulletinNew = payload.bulletin_admin;
-    changed.push('bulletin_admin');
-  }
   if (!changed.length) return { ok: false, error: '沒有要改的欄位' };
-  if (bulletinNew !== null) stfSetBulletinAdmin_(t.emp, bulletinNew);
   if (changed.indexOf('name') !== -1) {
     var userRow = findUsrRowById_(stfStr_(t.v[STF_COL.user_id]));
     if (userRow) stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.name + 1).setValue(authSafeCell_(t.v[STF_COL.name]));
