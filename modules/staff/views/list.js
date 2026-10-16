@@ -24,7 +24,7 @@ export const FILTERS = [
   ['left', '已離職但打卡未停'], ['nohome', '沒有打卡編號'],
   ['overdue', '離職日已過未停用'], ['homestopped', '主店打卡被停'], ['flags', '需處理']
 ];
-const FLAG_TEXT = { unit_inactive: '所屬門市已停用', title_ladder: '職稱需重選', dept_inactive: '部門已停用' };
+const FLAG_TEXT = { unit_inactive: '所屬門市已停用', title_ladder: '職稱需重選', dept_inactive: '部門已停用', exec_misplaced: '建議改到鼎兆元總部／管理部' };
 const CLOCK_TEXT = { updated: '會更新（補上一悟總部）', skipped: '不用更新', custom: '有自訂值，保留不動' };
 
 export function mountList(el, ctx) {

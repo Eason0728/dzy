@@ -270,6 +270,20 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ok(!isReadAction('platform', 'orgUpgrade2026', { dryrun: false }) && !isReadAction('platform', 'orgUpgrade2026', {}) && !isReadAction('platform', 'orgRollback2026', {}), '#4-2 dryrun:false／無參數／orgRollback2026 仍攔');
 }
 
+// ── exec_misplaced ──
+{
+  const P6 = Object.assign({}, P1, { emp_no: 'DZY006', name: '測試己', title: 'ceo', title_name: '執行長', flags: ['exec_misplaced'] });
+  const pv = JSON.parse(JSON.stringify(PREVIEW)); pv.data.todo.push({ emp_no: 'DZY006', name: '測試己', unit_name: '小辛辣品牌辦公室', flag: 'exec_misplaced', submitted: false });
+  const ctx = makeCtx(baseHandler((a, p) => (a === 'staffList' ? { ok: true, data: { staff: [P1, P6] } } : a === 'orgUpgrade2026' ? pv : null)), { role: 'admin' });
+  const el = await mount(ctx);
+  ok(el.innerHTML.includes('建議改到鼎兆元總部／管理部'), '標籤：exec_misplaced →「建議改到鼎兆元總部／管理部」');
+  el.querySelector('#stf-f').value = 'flags'; el.querySelector('#stf-f').fire('change');
+  ok(rows(el).includes('DZY006') && !rows(el).includes('DZY001'), '「需處理」也算 exec_misplaced');
+  ctx.answers.push(null);
+  el.querySelector('[data-role="org-upgrade"]').fire('click'); await flush();
+  ok(/測試己[^<]*建議改到鼎兆元總部／管理部/.test(ctx.dialogs[0].body.innerHTML), '預覽需處理名單顯示 exec_misplaced', ctx.dialogs[0].body.innerHTML);
+}
+
 // ── dept_inactive／submitted／orphans.dept／clock_diff ──
 {
   const P5 = Object.assign({}, P1, { emp_no: 'DZY005', name: '測試戊', flags: ['dept_inactive'] });
