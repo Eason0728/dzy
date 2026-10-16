@@ -115,7 +115,7 @@ export function mountMy(root, ctx) {
   const historyBodyEl = el('tbody', { id: 'my-history-body' });
   const historyCard = el('div', { class: 'card' }, [
     el('div', { class: 'card-title', text: '歷史紀錄' }),
-    el('p', { class: 'field-hint', text: '這家店歷次月初盤點抽查的結果，最新的在最上面。' }),
+    el('p', { class: 'field-hint', text: '這家店歷次盤點抽查的結果，最新的在最上面。' }),
     el('div', { class: 'table-wrap' }, [
       el('table', { class: 'table', id: 'my-history-table' }, [
         el('thead', {}, [

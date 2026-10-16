@@ -19,7 +19,7 @@ export default {
   id:      'audit-ops',                // 4.1 格式，全系統唯一
   ns:      'audit',                    // 權限命名空間（與 audit-stock 共用）
   backend: 'audit',                    // 用哪一支後端／哪一組通行碼
-  name:    '營運稽核表',                // 顯示名，2–8 字
+  name:    '營運稽核',                  // 顯示名，2–8 字
   desc:    '19 項檢查，合格率統計',      // 卡片副標，一句話 ≤20 字
   icon:    'audit-ops',                // 對應 assets/icons/audit-ops.svg
   dept: 'mgmt',                  // 左側選單掛在哪個部門（platform/config.js DEPARTMENTS）

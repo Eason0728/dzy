@@ -38,7 +38,7 @@ def main():
                   '卡片順序＝registry 順序，實際：%s' % ids)
 
             titles = page.locator('[data-role="module-card"] .card-title').all_inner_texts()
-            check(titles == ['人員管理', '月初盤點抽查', '營運稽核表', '宿舍合約', '同仁名單', '我的資料', '公告專區'],
+            check(titles == ['人員管理', '盤點抽查', '營運稽核', '宿舍合約', '同仁名單', '我的資料', '公告專區'],
                   '卡片標題顯示 manifest.name，實際：%s' % titles)
 
             # 圖示真的載入（不是 404 的裂圖）
@@ -54,7 +54,7 @@ def main():
                           ?.textContent === '5'""",
                 timeout=8000,
             )
-            check(True, '月初盤點抽查 badge = 5（五店本月未稽核，模組自己算的）')
+            check(True, '盤點抽查 badge = 5（五店本月未稽核，模組自己算的）')
 
             os.makedirs(SHOTS, exist_ok=True)
             page.screenshot(path=os.path.join(SHOTS, 'home-1280.png'), full_page=True)

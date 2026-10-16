@@ -13,7 +13,7 @@ export default {
   id:      'audit-stock',              // 4.1 格式，全系統唯一
   ns:      'audit',                    // 權限命名空間（與 audit-ops 共用）
   backend: 'audit',                    // 用哪一支後端／哪一組通行碼
-  name:    '月初盤點抽查',              // 顯示名，2–8 字
+  name:    '盤點抽查',                // 顯示名，2–8 字
   desc:    '品項抽查 20 項＋金庫抽查',   // 卡片副標，一句話 ≤20 字
   icon:    'audit-stock',              // 對應 assets/icons/audit-stock.svg
   dept: 'mgmt',                  // 左側選單掛在哪個部門（platform/config.js DEPARTMENTS）
