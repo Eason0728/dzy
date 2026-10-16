@@ -113,8 +113,8 @@ def main():
         with sync_playwright() as p:
             browser = p.chromium.launch()
 
-            def open_as(user, pw, route, width=1280):
-                pg = browser.new_context(viewport={'width': width, 'height': 900}).new_page()
+            def open_as(user, pw, route, width=1280, height=900):
+                pg = browser.new_context(viewport={'width': width, 'height': height}).new_page()
                 mock.install(pg)
                 pg.goto(base + '/index.html')
                 pg.fill('#login-username', user)
@@ -144,6 +144,23 @@ def main():
             ad.select_option('#stf-f', 'flags')
             check(ad.locator('[data-role="rows"] tr:has-text("DZY002")').count() == 1 and ad.locator('[data-role="rows"] tr:has-text("DZY004")').count() == 1 and ad.locator('[data-role="rows"] tr:has-text("DZY001")').count() == 0, '★「需處理」篩選只留 flags 非空的人（含 exec_misplaced）')
             ad.select_option('#stf-f', 'all')
+
+            # ③-0 改資料視窗在矮畫面可以捲到儲存鈕（2026-10-16 Eason 回報：兼任清單變長、儲存鈕被切掉）
+            for (vw, vh, tag) in [(375, 560, 'mobile'), (1280, 600, 'desktop')]:
+                sm = open_as('admin', 'e2e-admin', '/staff/list', width=vw, height=vh)
+                sm.wait_for_selector('[data-role="rows"] tr:has-text("DZY001")')
+                sm.click('[data-role="rows"] tr:has-text("DZY001") [data-act="edit"]')
+                sm.wait_for_selector('#ed-name')
+                box = sm.locator('.dialog').bounding_box()
+                btn = sm.locator('.dialog .btn-primary:has-text("儲存")').bounding_box()
+                scrollable = sm.evaluate("() => { const b = document.querySelector('.dialog-body'); return b.scrollHeight > b.clientHeight && getComputedStyle(b).overflowY === 'auto'; }")
+                check(box['y'] >= 0 and box['y'] + box['height'] <= vh + 1, '★%s %dx%d：改資料視窗整個在畫面內（y=%.0f h=%.0f）' % (tag, vw, vh, box['y'], box['height']))
+                check(btn['y'] + btn['height'] <= vh + 1, '★%s：儲存鈕看得到（底=%.0f ≤ %d）' % (tag, btn['y'] + btn['height'], vh))
+                check(scrollable, '★%s：中間內容可以捲動' % tag)
+                sm.evaluate("() => { const b = document.querySelector('.dialog-body'); b.scrollTop = b.scrollHeight; }")
+                check(sm.locator('[data-code="ck"]').is_visible(), '★%s：捲到底看得到「中央工廠」' % tag)
+                shot(sm, 'edit_dialog_' + tag)
+                sm.context.close()
 
             # ③ 改資料兼任區
             row1 = '[data-role="rows"] tr:has-text("DZY001")'
