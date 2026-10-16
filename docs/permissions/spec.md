@@ -1,7 +1,7 @@
 # 規格：個人帳號第二期｜依單位＋職稱給系統權限
 
 - 版本：v1（2026-10-17）
-- 狀態：等 Eason 確認
+- 狀態：已確認（2026-10-17 Eason「規格 OK，二題照推薦」：改對照表只給人資部主管；上線時自動寫入預設規則）
 - 上游：`docs/permissions/requirements.md` v1（2026-10-17 確認）
 - 優先序：本檔 > `docs/personnel/spec.md` > `docs/spec.md`（只在第二期涉及的範圍）
 
@@ -64,7 +64,8 @@
 | hq | mgmt | * | audit.read, audit.write |
 | hq | fin | * | audit.read, audit.write |
 | hq | — | ceo, gm, chair（各兩條） | audit.read, dorm.read |
-| hq | hr | * | platform.staff, dorm.read, dorm.write, platform.permmap |
+| hq | hr | * | platform.staff, dorm.read, dorm.write |
+| hq | hr | hm | platform.permmap（只給人資部主管；2026-10-17 Eason 規格第 1 題 A） |
 
 部門代碼取自 `Staff.gs` 預設 org :1353-1362（fin 財務、hr 人資、ops 營運、mgmt 管理）；**實作時再讀一次正式 orgOptions 核對，不一致就停下來問**。
 
