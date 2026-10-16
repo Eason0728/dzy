@@ -23,11 +23,11 @@ export default {
   desc:    '19 項檢查，合格率統計',      // 卡片副標，一句話 ≤20 字
   icon:    'audit-ops',                // 對應 assets/icons/audit-ops.svg
   dept: 'mgmt',                  // 左側選單掛在哪個部門（platform/config.js DEPARTMENTS）
-  requires: ['audit.read', 'audit.read.own'],  // 任一符合即可進入本模組
+  requires: ['audit.read', 'audit.read.brand', 'audit.read.own'],  // 任一符合即可進入本模組（2026-10-17 加 brand：區督導）
   views: [                             // 模組內分頁；陣列第一個＝預設分頁
-    { id: 'overview', name: '總覽',     requires: ['audit.read'] },
+    { id: 'overview', name: '總覽',     requires: ['audit.read', 'audit.read.brand'] },
     { id: 'fill',     name: '稽核填寫', requires: ['audit.write'] },
-    { id: 'report',   name: '報告',     requires: ['audit.read'] },
+    { id: 'report',   name: '報告',     requires: ['audit.read', 'audit.read.brand'] },
     { id: 'my',       name: '我的門市', requires: ['audit.read.own'] }
   ],
   entry: () => import('./index.js')    // 動態載入模組本體

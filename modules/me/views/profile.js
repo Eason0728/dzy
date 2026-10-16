@@ -6,6 +6,7 @@
 'use strict';
 
 import { orgFieldsHtml, bindOrgFields, readOrgFields } from '../../staff-shared/org-fields.js';
+import { mountPermBlock } from '../perm-block.js';
 
 const STATUS_TEXT = {
   pending: ['tag tag-warn', '等後台確認'],
@@ -72,6 +73,7 @@ export function mountProfile(el, ctx) {
         <button class="btn btn-primary" type="submit" data-role="submit">${p.status === 'rejected' ? '送出' : '儲存'}</button>
       </form>`;
     bindOrgFields(el, 'me', org, initial);
+    mountPermBlock(el, ctx, p, () => alive); // 個人資料頁下方：我能用的功能（myPerms enabled:false 時不顯示）
     const form = el.querySelector('[data-role="form"]');
     const box = el.querySelector('[data-role="error"]');
     // 改手機要帶目前密碼（2026-10-12 後端修正：防偷到登入的人改手機再走忘記密碼搶帳號）
