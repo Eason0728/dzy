@@ -267,7 +267,7 @@ export function mountList(el, ctx) {
     } else if (act === 'edit') {
       const body = domOf(`${field('ed-name', '姓名', p.name)}${orgFieldsHtml('ed')}
         <div class="form-grid-2">${field('ed-birthday', '生日', p.birthday, 'date')}${field('ed-phone', '手機', p.phone, 'tel')}</div>
-        ${field('ed-address', '居住地址', p.address)}${canExtra ? extraHtml(p) + bulletinHtml(p) : ''}<p class="field-hint">後台直接改正式資料，不必再確認。</p>`);
+        ${field('ed-address', '居住地址', p.address)}${canExtra ? extraHtml(p) + (p.status === 'active' ? bulletinHtml(p) : '') : ''}<p class="field-hint">後台直接改正式資料，不必再確認。</p>`);
       bindOrgFields(body, 'ed', org, { brand: p.brand, unit: p.unit, dept: p.dept, title: p.title });
       const v = await ctx.ui.dialog({ title: `改資料 ${who}`, body, actions: [{ label: '取消', value: null, variant: 'secondary' }, { label: '儲存', value: 'ok', variant: 'primary' }] });
       if (v !== 'ok') return;
@@ -289,8 +289,9 @@ export function mountList(el, ctx) {
         const next = order.filter((c) => checked.indexOf(c) !== -1);
         const before = p.extra_depts || [];
         if (next.length !== before.length || next.some((c) => before.indexOf(c) === -1)) payload.extra_depts = next;
-        const bul = body.querySelector('#ed-bul').checked;
-        if (bul !== !!p.bulletin_admin) payload.bulletin_admin = bul;
+        // 只有已開通的同仁有這個勾選框（後端也只接受 active；審查 dzy-bulletin#44-12）
+        const bulEl = body.querySelector('#ed-bul');
+        if (bulEl && bulEl.checked !== !!p.bulletin_admin) payload.bulletin_admin = bulEl.checked;
       }
       run('staffEdit', payload, '已儲存');
     } else if (act === 'rename') {

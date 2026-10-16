@@ -1971,6 +1971,25 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: false }, hr.token).ok, 'BUL 人資可以設別人');
   ok(post(sb, 'staffEdit', { emp_no: hr.emp, bulletin_admin: true }, tok).ok && perms(hr.token).indexOf('platform.bulletin') !== -1 && tkA(hr.token).ok, 'BUL ★人資角色被別人勾了 → 有 platform.bulletin、換得到管理券');
   ok(post(sb, 'staffEdit', { emp_no: 'DZY999', bulletin_admin: true }, tok).ok === false, 'BUL 不存在的編號 → 失敗');
+  // 審查 dzy-bulletin#44-12：未認領列不能勾（否則人資勾完自己去認領就多一個有權限的帳號）
+  post(sb, 'staffImport', { names: ['公告未認領戊'] }, tok);
+  const un = rowsOf(app, 'staff').find((r) => r.name === '公告未認領戊');
+  ok(un && un.status === 'unclaimed' && post(sb, 'staffEdit', { emp_no: un.emp_no, bulletin_admin: true }, tok).error === '只有已開通的同仁可以設定公告管理權限', 'BUL ★未認領列不能勾');
+  // 撤回認領、停用都收回
+  ok(props.BULLETIN_ADMINS.split(',').indexOf(hr.emp) !== -1, 'BUL 前提：人資丁有權限');
+  const uc = post(sb, 'staffUnclaim', { emp_no: hr.emp }, tok);
+  ok(uc.ok && props.BULLETIN_ADMINS.split(',').indexOf(hr.emp) === -1, 'BUL ★撤回認領 → 從清單移除', uc);
+  const st2 = claimApprove(app, '公告同仁己', 'bul-pw-0005');
+  post(sb, 'staffEdit', { emp_no: st2.emp, bulletin_admin: true }, tok);
+  ok(props.BULLETIN_ADMINS.split(',').indexOf(st2.emp) !== -1, 'BUL 前提：同仁己有權限');
+  post(sb, 'staffSetActive', { emp_no: st2.emp, active: false }, tok);
+  ok(props.BULLETIN_ADMINS.split(',').indexOf(st2.emp) === -1, 'BUL ★停用 → 從清單移除（復職要重新勾）');
+  post(sb, 'staffSetActive', { emp_no: st2.emp, active: true }, tok);
+  ok(listed(st2.emp).bulletin_admin === false, 'BUL 復職後不會自動恢復權限');
+  // 待審（pending）的人即使在清單裡也沒有權限（#44-13）
+  props.BULLETIN_ADMINS = [props.BULLETIN_ADMINS, st2.emp].filter(Boolean).join(',');
+  setStaff(app, st2.emp, 'status', 'pending');
+  ok(sb.stfBulletinGate_(rowsOf(app, 'staff').find((r) => r.emp_no === st2.emp).user_id) === false, 'BUL ★清單裡但狀態非 active → 不給');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

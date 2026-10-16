@@ -561,6 +561,7 @@ function clkDisableStaff_(s, by, detail, d) {
   v[STF_COL.prev_status] = status;
   v[STF_COL.status] = 'disabled';
   v[STF_COL.updated_at] = clkNowText_(d);
+  stfSetBulletinAdmin_(v[STF_COL.emp_no], false);   // 離職停用收回公告管理權限（審查 dzy-bulletin#44-10）
   if (userRow) {
     stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
     setTokenAfter_(userRow.row);

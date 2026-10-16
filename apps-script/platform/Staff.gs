@@ -132,7 +132,7 @@ function stfBulletinAdmins_() {
 function stfBulletinGate_(userId) {
   if (!stfSheet_(STF_SHEET)) return false;
   var hit = stfFindByUserId_(userId);
-  if (!hit || stfStr_(hit.values[STF_COL.status]) === 'disabled') return false;
+  if (!hit || stfStr_(hit.values[STF_COL.status]) !== 'active') return false;   // 只有已開通（審查 #44-13）
   return stfBulletinAdmins_().indexOf(stfNormEmp_(hit.values[STF_COL.emp_no])) !== -1;
 }
 function stfSetBulletinAdmin_(emp, on) {
@@ -835,7 +835,7 @@ function stfLoginGate_(userId) {
   if (status === 'rejected') return { block: STF_MSG.LOGIN_REJECTED };
   // 衍生權限 platform.review 的「審核者資格」部分：改用新規則（stfReviewScope_）。人資／admin 由 Auth.gs 另外補
   // bulletin＝公告管理權限（BULLETIN_ADMINS 有勾、且在職）→ Auth.gs 補 platform.bulletin
-  var bulletin = status !== 'disabled' && stfBulletinAdmins_().indexOf(stfNormEmp_(hit.values[STF_COL.emp_no])) !== -1;
+  var bulletin = status === 'active' && stfBulletinAdmins_().indexOf(stfNormEmp_(hit.values[STF_COL.emp_no])) !== -1;
   return { review: !!stfReviewScope_(hit.values, stfReadOrg_()), bulletin: bulletin };
 }
 
@@ -1050,6 +1050,8 @@ function stfClearClaim_(v) {
   v[STF_COL.reset_fail] = 0;
   v[STF_COL.reset_lock_count] = 0;
   v[STF_COL.status] = 'unclaimed';
+  // 撤回認領＝帳號回到沒人用：公告管理權限一併收回，免得下一個認領這個名字的人接手（審查 dzy-bulletin#44-12）
+  stfSetBulletinAdmin_(v[STF_COL.emp_no], false);
 }
 
 // ============================================================
@@ -1217,6 +1219,7 @@ function handleStaffSetActive_(token, payload) {
     if (t.status === 'disabled') return { ok: false, error: STF_MSG.BAD_STATE };
     t.v[STF_COL.prev_status] = t.status;
     t.v[STF_COL.status] = 'disabled';
+    stfSetBulletinAdmin_(t.emp, false);   // 停用收回公告管理權限（復職要重新勾；審查 #44-10）
     usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
     setTokenAfter_(userRow.row);
     var saved = stfSave_(t, 'disable', '');
@@ -1331,6 +1334,8 @@ function handleStaffEdit_(token, payload) {
   if (payload.bulletin_admin !== undefined && payload.bulletin_admin !== (stfBulletinAdmins_().indexOf(t.emp) !== -1)) {
     // 不能設定自己的（含人資幫自己開；審查 dzy-bulletin#44-3）
     if (stfStr_(t.v[STF_COL.user_id]) && stfStr_(t.v[STF_COL.user_id]) === String(t.auth.user.id)) return { ok: false, error: '不能設定自己的公告管理權限' };
+    // 只能勾已開通的同仁：未認領／待審的列勾了，之後自己去認領就多一個有權限的帳號（審查 #44-12）
+    if (payload.bulletin_admin && t.status !== 'active') return { ok: false, error: '只有已開通的同仁可以設定公告管理權限' };
     bulletinNew = payload.bulletin_admin;
     // 紀錄寫明開／關：權限清單存在 Script Property（不在試算表備份裡），staff_log 是可追溯、可重建的那份（審查 #44-4）
     changed.push('bulletin_admin=' + (bulletinNew ? '開' : '關'));
