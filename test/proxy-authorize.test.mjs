@@ -14,7 +14,7 @@ import { READ_ACTIONS } from '../platform/dryrun.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Perms.gs', 'PermActions.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 
 let passed = 0;
 let failed = 0;
@@ -328,6 +328,124 @@ const snapshot = (sheets) => JSON.stringify(Object.keys(sheets).sort().map((k) =
   const forged = u && sb.issueToken_({ id: u.id, role: 'staff', node: '' });
   const r = sb.proxyAuthorize_(forged, 'audit', 'getAll');
   ok(r.ok === false && r.code === 'BAD_TOKEN', '10c: 認領待審的同仁即使有合法簽章 token 也 BAD_TOKEN', r);
+}
+
+// ============================================================
+// 11. 第二期：role staff 依職稱／部門算出的稽核範圍（PERMS_ON='1'）
+// ============================================================
+let phoneSeq = 0;
+function mkStaff(sb, bossTok, name, org, pw) {
+  post(sb, 'staffImport', { names: [name] }, bossTok);
+  const lk = post(sb, 'claimLookup', { name });
+  phoneSeq++;
+  const prof = Object.assign({ dept: '', birthday: '1990-01-0' + (1 + (phoneSeq % 8)), phone: '09' + String(10000000 + phoneSeq), address: '新竹市測試路' + phoneSeq + '號' }, org);
+  const sub = post(sb, 'claimSubmit', Object.assign({ name, emp_no: lk.data.emp_no, password: pw || 'fake-staff-pw-1' }, prof));
+  if (!sub.ok) throw new Error('claimSubmit 失敗 ' + sub.error);
+  const cf = post(sb, 'staffConfirm', { emp_no: lk.data.emp_no }, bossTok);
+  if (!cf.ok) throw new Error('staffConfirm 失敗 ' + cf.error);
+  const lg = post(sb, 'login', { username: lk.data.emp_no, password: pw || 'fake-staff-pw-1' });
+  if (!lg.ok) throw new Error('同仁登入失敗 ' + lg.error);
+  return { emp: lk.data.emp_no, token: lg.data.token, login: lg };
+}
+const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('PERMS_ON', '1');
+{
+  const { sb, sheets } = fresh();
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  const sm = mkStaff(sb, boss, '店長甲', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+  const osv = mkStaff(sb, boss, '區督導乙', { brand: 'mzt', unit: 'mzt-hq', title: 'osv' });
+  const smNo = mkStaff(sb, boss, '店長丙', { brand: 'yiwu', unit: 'yiwu-js', title: 'sm' });
+  const pt = mkStaff(sb, boss, '計時丁', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+  const fin = mkStaff(sb, boss, '財務戊', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' });
+  const hr = mkStaff(sb, boss, '人資己', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
+  const wr = mkStaff(sb, boss, '純寫庚', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+
+  // ── 開關關（預設）：同仁照舊——沒有任何稽核權限、不讀 perm 表、login／me 沒有 audit_scope
+  sb.permLoadTables_ = () => { throw new Error('開關關時不該讀 perm 表'); };
+  sb.permInit_({ role: 'admin', id: 'u001' }); // permInit_ 不讀 permLoadTables_，只建表
+  const offSm = sb.proxyAuthorize_(sm.token, 'audit', 'getAll');
+  ok(offSm.ok === false && offSm.code === 'FORBIDDEN', '11a: 開關關 → 同仁（店長）照舊 FORBIDDEN', offSm);
+  const offMe = post(sb, 'me', {}, sm.token);
+  ok(offMe.ok && !('audit_scope' in offMe.data) && offMe.data.perms.join() === 'platform.self,platform.review', '11a2: 開關關 → me 沒有任何稽核權限（只有 self＋店長的 review）、沒有 audit_scope', offMe.data);
+  ok(sb.proxyAuthorize_(fin.token, 'audit', 'submitAudit').code === 'FORBIDDEN', '11a3: 開關關 → 財務同仁不能寫');
+}
+{
+  const { sb, sheets } = fresh();
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  const mk = (n, o) => mkStaff(sb, boss, n, o);
+  const sm = mk('店長甲', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+  const osv = mk('區督導乙', { brand: 'mzt', unit: 'mzt-hq', title: 'osv' });
+  const smNo = mk('店長丙', { brand: 'yiwu', unit: 'yiwu-js', title: 'sm' });
+  const pt = mk('計時丁', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+  const fin = mk('財務戊', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' });
+  const hr = mk('人資己', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
+  const wr = mk('純寫庚', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+  const ini = sb.permInit_({ role: 'admin', id: 'u001' });
+  ok(ini.ok === true, '11 前置：permInit_ 建表', ini);
+  // 純 write：只靠個別例外給 audit.write（沒有 audit.read）
+  sheets.perm_ex.appendRow(['X001', wr.emp, 'audit.write', 'add', '', '測試', 'TRUE', '', 'u001', '', '']);
+  turnOn(sb);
+
+  // 對照組：開關開了之後，系統帳號行為逐字不變
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'lead1', PW.lead), 'audit', 'getAll').filterNode === 'sxl-gf', '11b0: 開關開 → 系統店長仍回字串節點 sxl-gf');
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'acc1', PW.acc), 'audit', 'getAll').filterNode === null, '11b0: 開關開 → 系統會計仍 null');
+
+  const smR = sb.proxyAuthorize_(sm.token, 'audit', 'getAll');
+  ok(smR.ok && JSON.stringify(smR.filterNode) === '["sxl-gf"]' && smR.secret === SECRETS.auditRead && smR.isWrite === false, '11b: 店長（同仁）→ filterNode 陣列 ["sxl-gf"]、read 碼', smR);
+  const osvR = sb.proxyAuthorize_(osv.token, 'audit', 'getAll');
+  ok(osvR.ok && JSON.stringify(osvR.filterNode) === '["mzt-gf","mzt-js","mzt-lzl"]' && osvR.secret === SECRETS.auditRead, '11c: 區督導（brand）→ 自己品牌的店陣列、read 碼（brand 永不回 null）', osvR);
+  const noR = sb.proxyAuthorize_(smNo.token, 'audit', 'getAll');
+  ok(noR.ok && Array.isArray(noR.filterNode) && noR.filterNode.length === 0, '11d: 店長的店沒有店別對照 → 空陣列 []（全部裁空，仍放行）', noR);
+  const ptR = sb.proxyAuthorize_(pt.token, 'audit', 'getAll');
+  ok(ptR.ok === false && ptR.code === 'FORBIDDEN' && !hasAnySecret(ptR), '11e: 計時同仁（none）→ 403 FORBIDDEN', ptR);
+  const finR = sb.proxyAuthorize_(fin.token, 'audit', 'getAll');
+  ok(finR.ok && finR.filterNode === null && finR.secret === SECRETS.auditWrite, '11f: 財務同仁（audit.read＋write → all）→ filterNode null、write 碼', finR);
+  ok(sb.proxyAuthorize_(fin.token, 'audit', 'submitAudit').ok === true, '11f2: 財務同仁可寫入');
+  ok(sb.proxyAuthorize_(sm.token, 'audit', 'submitAudit').code === 'FORBIDDEN', '11g: 店長（同仁）不能寫入');
+  ok(sb.proxyAuthorize_(osv.token, 'audit', 'submitAudit').code === 'FORBIDDEN', '11g2: 區督導不能寫入');
+  const wrR = sb.proxyAuthorize_(wr.token, 'audit', 'getAll');
+  ok(wrR.ok && wrR.filterNode === null && wrR.secret === SECRETS.auditWrite, '11h: 純 audit.write 的同仁（例外給）→ 讀取回 null（write 視同 read，scope all）', wrR);
+  const wrMe = post(sb, 'me', {}, wr.token);
+  ok(wrMe.data.perms.indexOf('audit.read') !== -1 && wrMe.data.perms.indexOf('audit.write') !== -1 && wrMe.data.audit_scope === 'all', '11h2: audit.write 存在時 perms 也補 audit.read、audit_scope=all', wrMe.data);
+  const hrD = sb.proxyAuthorize_(hr.token, 'dorm', 'list');
+  ok(hrD.ok && hrD.filterNode === null && hrD.secret === SECRETS.dormWrite, '11i: 人資同仁 dorm.list → 不裁切（dorm 照舊）', hrD);
+  ok(sb.proxyAuthorize_(hr.token, 'audit', 'getAll').code === 'FORBIDDEN', '11i2: 人資同仁沒有稽核權限 → FORBIDDEN');
+  ok(sb.proxyAuthorize_(sm.token, 'dorm', 'list').code === 'FORBIDDEN', '11i3: 店長沒有宿舍權限 → FORBIDDEN');
+
+  // login／me 對外：perms 陣列＋audit_scope
+  const lg = post(sb, 'login', { username: sm.emp, password: 'fake-staff-pw-1' });
+  ok(lg.ok && Array.isArray(lg.data.perms) && lg.data.perms.indexOf('audit.read.own') !== -1 && JSON.stringify(lg.data.audit_scope) === '["sxl-gf"]', '11j: login 回 perms 陣列含 audit.read.own，另有 audit_scope', lg.data);
+  ok(post(sb, 'me', {}, osv.token).data.audit_scope.join() === 'mzt-gf,mzt-js,mzt-lzl', '11j2: me 的 audit_scope 是陣列');
+  ok(post(sb, 'me', {}, pt.token).data.audit_scope === 'none', '11j3: 沒權限的同仁 audit_scope=\'none\'');
+
+  // 永不回 secrets（即使 LEGACY_SECRETS=1）；系統帳號照舊
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '1');
+  const l2 = post(sb, 'login', { username: fin.emp, password: 'fake-staff-pw-1' });
+  const m2 = post(sb, 'me', {}, fin.token);
+  ok(l2.ok && !('secrets' in l2.data) && !('secrets' in m2.data) && !hasAnySecret(l2) && !hasAnySecret(m2), '11k: LEGACY_SECRETS=1 → role staff 的 login／me 仍沒有 secrets', [l2.data, m2.data]);
+  ok(post(sb, 'me', {}, tokenOf(sb, 'acc1', PW.acc)).data.secrets !== undefined, '11k2: LEGACY_SECRETS=1 → 系統帳號照舊回 secrets');
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '');
+
+  // 非 active：staff 列被改成 disabled（users 仍 active）→ session 拒絕
+  const ri = sheets.staff._rows().findIndex((r) => r[0] === sm.emp);
+  sheets.staff.getRange(ri + 1, sb.STF_COL.status + 1).setValue('disabled');
+  ok(post(sb, 'me', {}, sm.token).ok === false, '11l: 開關開 → staff 列不是 active → me 拒絕');
+  ok(sb.proxyAuthorize_(sm.token, 'audit', 'getAll').code === 'BAD_TOKEN', '11l2: 同上 → 代轉 BAD_TOKEN');
+  ok(post(sb, 'login', { username: sm.emp, password: 'fake-staff-pw-1' }).ok === false, '11l3: 同上 → login 拒絕');
+  // staff 列不存在
+  const gone = sheets.staff._rows().findIndex((r) => r[0] === osv.emp);
+  sheets.staff.deleteRow(gone + 1);
+  ok(post(sb, 'me', {}, osv.token).ok === false, '11l4: 開關開 → staff 列不存在 → me 拒絕');
+}
+{
+  // 開關關時 staff 列不存在／非 active 照舊（不改行為）
+  const { sb, sheets } = fresh();
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  const sm = mkStaff(sb, boss, '店長甲', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+  const ri = sheets.staff._rows().findIndex((r) => r[0] === sm.emp);
+  sheets.staff.deleteRow(ri + 1);
+  ok(post(sb, 'me', {}, sm.token).ok === true, '11m: 開關關 → staff 列不存在仍照舊放行（不改行為）');
+  sb.PropertiesService.getScriptProperties().setProperty('PERMS_ON', 'true');
+  ok(post(sb, 'me', {}, sm.token).ok === true, '11m2: PERMS_ON 不是恰好 \'1\'（\'true\'）→ 視為關');
 }
 
 if (failed > 0) {

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Perms.gs', 'PermActions.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 
 let passed = 0;
 let failed = 0;
@@ -703,6 +703,69 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   const good = post(sb, 'changePassword', { oldPassword: 'fake-acc-pw-01', newPassword: 'fake-new-pw-0001' }, tok);
   ok(good.ok === true && calls >= 1, 'A15-6 驗舊密碼（對）也走 authSafeEqual_、改密碼成功', { good, calls });
   sb.authSafeEqual_ = orig;
+})();
+
+// ============================================================
+// P2a 第二期：開關開 → 依單位＋職稱＋部門（含兼任）算權限（docs/permissions/spec.md §4、13）
+// ============================================================
+(() => {
+  const { sb, sheets, props } = fresh();
+  const tok = adminToken(sb);
+  post(sb, 'staffImport', { names: ['權限甲', '權限乙', '權限丙'] }, tok);
+  const smP = Object.assign({}, PROFILE, { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+  const hsP = Object.assign({}, PROFILE, { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs', phone: '0911222444' });
+  const ptP = Object.assign({}, PROFILE, { phone: '0911222555' });
+  const sm = claimAndApprove(sb, tok, '權限甲', 'fake-sm-pw-001', smP);
+  const hs = claimAndApprove(sb, tok, '權限乙', 'fake-hs-pw-001', hsP);
+  const pt = claimAndApprove(sb, tok, '權限丙', 'fake-pt-pw-001', ptP);
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok, 'P2a 前置：permInit_ 建表（預設規則）');
+
+  // 開關關：店長 me 沒有 audit.read.own、沒有 audit_scope
+  let me = post(sb, 'me', {}, sm.claim.data.token);
+  ok(me.ok && me.data.perms.indexOf('audit.read.own') === -1 && !('audit_scope' in me.data), 'P2a 開關關：店長 me 沒有 audit.read.own、沒有 audit_scope', me.data);
+  props.PERMS_ON = '1';
+  me = post(sb, 'me', {}, sm.claim.data.token);
+  ok(me.ok && me.data.perms.indexOf('audit.read.own') !== -1 && me.data.perms.indexOf('platform.self') !== -1 && JSON.stringify(me.data.audit_scope) === '["sxl-gf"]', 'P2a 開關開：店長 me 有 audit.read.own 與 audit_scope=["sxl-gf"]', me.data);
+  const lg = post(sb, 'login', { username: sm.emp, password: 'fake-sm-pw-001' });
+  ok(lg.ok && lg.data.perms.indexOf('audit.read.own') !== -1 && JSON.stringify(lg.data.audit_scope) === '["sxl-gf"]' && !('secrets' in lg.data), 'P2a 開關開：login 也一樣，且沒有 secrets', lg.data);
+
+  // 資訊部同仁：沒有稽核權限；兼任 fin → audit.write＋audit.read（all）
+  me = post(sb, 'me', {}, hs.claim.data.token);
+  ok(me.ok && me.data.perms.indexOf('audit.write') === -1 && me.data.audit_scope === 'none', 'P2a 資訊部同仁：沒有 audit.write、audit_scope=none', me.data);
+  sheets.staff.getRange(1, sb.STF_EXTRA_DEPTS_COL_NO).setValue('extra_depts');   // 沒載入 StaffClock.gs，兼任欄表頭手動補
+  const ed = post(sb, 'staffEdit', { emp_no: hs.emp, extra_depts: ['fin'] }, tok);
+  ok(ed.ok, 'P2a 前置：admin 給資訊部同仁兼任財務部', ed);
+  me = post(sb, 'me', {}, hs.claim.data.token);
+  ok(me.ok && me.data.perms.indexOf('audit.write') !== -1 && me.data.perms.indexOf('audit.read') !== -1 && me.data.audit_scope === 'all', 'P2a 兼任財務部 → me 有 audit.write＋audit.read、audit_scope=all', me.data);
+  ok(post(sb, 'me', {}, pt.claim.data.token).data.perms.join() === 'platform.self', 'P2a 計時同仁：只有 platform.self');
+
+  // perm 表未初始化＝等同沒有規則
+  const { sb: sb2 } = (() => { const a = fresh(); return a; })();
+  const tok2 = adminToken(sb2);
+  post(sb2, 'staffImport', { names: ['權限甲'] }, tok2);
+  const sm2 = claimAndApprove(sb2, tok2, '權限甲', 'fake-sm-pw-001', smP);
+  sb2.PropertiesService.getScriptProperties().setProperty('PERMS_ON', '1');
+  const me2 = post(sb2, 'me', {}, sm2.claim.data.token);
+  ok(me2.ok && me2.data.perms.indexOf('audit.read.own') === -1 && me2.data.audit_scope === 'none', 'P2a 開關開但 perm 表沒初始化 → 沒有規則、audit_scope=none', me2.data);
+
+  // 非 active 被拒
+  const ri = sheets.staff._rows().findIndex((r) => r[0] === pt.emp);
+  sheets.staff._data[ri][COL('status')] = 'disabled';
+  ok(post(sb, 'me', {}, pt.claim.data.token).ok === false, 'P2a 開關開：staff 列非 active → me 被拒');
+  ok(post(sb, 'login', { username: pt.emp, password: 'fake-pt-pw-001' }).ok === false, 'P2a 開關開：staff 列非 active → login 被拒');
+  props.PERMS_ON = '0';
+  ok(post(sb, 'me', {}, pt.claim.data.token).ok === true, 'P2a 開關關：同一個非 active 同仁照舊放行（不改行為）');
+
+  // role staff 永遠不回 secrets
+  props.PERMS_ON = '1'; props.LEGACY_SECRETS = '1';
+  sheets.module_secrets._data.push(['audit', 'read', 'FAKE-P2-AUDIT-R']);
+  const l3 = post(sb, 'login', { username: sm.emp, password: 'fake-sm-pw-001' });
+  const m3 = post(sb, 'me', {}, sm.claim.data.token);
+  ok(l3.ok && m3.ok && !('secrets' in l3.data) && !('secrets' in m3.data) && JSON.stringify([l3, m3]).indexOf('FAKE-P2-AUDIT-R') === -1, 'P2a LEGACY_SECRETS=1 開關開：role staff 不回 secrets');
+  props.PERMS_ON = '0';
+  const l4 = post(sb, 'login', { username: sm.emp, password: 'fake-sm-pw-001' });
+  ok(l4.ok && !('secrets' in l4.data), 'P2a LEGACY_SECRETS=1 開關關：role staff 仍不回 secrets');
+  ok(post(sb, 'me', {}, adminToken(sb)).data.secrets !== undefined, 'P2a LEGACY_SECRETS=1：系統帳號照舊回 secrets');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

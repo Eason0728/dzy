@@ -52,6 +52,7 @@ var AUTH_LOG_DISABLED = 'disabled';
 var AUTH_MSG_LOCKED = '嘗試次數過多，請 15 分鐘後再試'; // spec §5.2 逐字
 var AUTH_MSG_BAD_PASSWORD = '帳號或密碼錯誤';
 var AUTH_MSG_DISABLED = '帳號已停用';
+var AUTH_MSG_NOT_IN_STAFF = '此帳號不在同仁名單，請聯絡人資';
 var AUTH_MSG_INVALID_TOKEN = '登入已失效，請重新登入';
 
 // ============================================================
@@ -260,6 +261,16 @@ function pickSecretFor_(perms, ns, byBackend) {
 }
 
 /**
+ * proxyPickSecret_(perms, ns, byBackend?) — 代轉專用取碼（第二期）：同 pickSecretFor_，另外讓 <ns>.read.brand 也取 read 碼。
+ * 不改 pickSecretFor_（login／me 共用）：有 .write 仍是 write 碼；brand、own 都只取 read 碼。
+ */
+function proxyPickSecret_(perms, ns, byBackend) {
+  var p = Array.isArray(perms) ? perms : [];
+  if (hasPerm_(p, ns + '.read.brand') && !hasPerm_(p, ns + '.read')) p = p.concat([ns + '.read']);
+  return pickSecretFor_(p, ns, byBackend);
+}
+
+/**
  * pickSecrets_(perms) → {backend_id: secret}
  * ⚠ 2026-10-12 起**沒有任何對外回應使用它**（login／me 不再下發通行碼，改由 Mac mini 代轉，
  *   見 proxyAuthorize_）。只留給測試驗「哪個身分該用哪一級碼」；不准再接回任何 handler 的回傳值。
@@ -315,6 +326,24 @@ function proxyAuthorize_(token, ns, action) {
 
   // 2／4. 授權
   var perms = sess.perms;
+
+  // 第二期：role staff 且權限開關開（sess.auditScope 非 null）→ 依職稱／部門算出的稽核範圍決定；系統帳號與開關關走下面照舊的路徑
+  if (String(sess.user.role) === 'staff' && sess.auditScope !== null && sess.auditScope !== undefined) {
+    var sWrite = hasPerm_(perms, ns + '.write');
+    var sReadAny = sWrite || hasPerm_(perms, ns + '.read') || hasPerm_(perms, ns + '.read.own') || hasPerm_(perms, ns + '.read.brand');
+    if (isWrite ? !sWrite : !sReadAny) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+    var sNode = null;
+    if (ns === 'audit') {
+      // 只由 scope 決定：'all'→不裁；陣列（可為 []）→照陣列裁；其餘（none／未知形狀）一律擋
+      if (sess.auditScope === 'all') sNode = null;
+      else if (Array.isArray(sess.auditScope)) sNode = sess.auditScope.slice();
+      else return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+    }
+    var sSecret = proxyPickSecret_(perms, ns, byBackend);
+    if (!sSecret) return { ok: false, code: 'NO_SECRET', error: '這個系統尚未設定通行碼，請聯絡管理者' };
+    return { ok: true, secret: sSecret, filterNode: sNode, isWrite: isWrite };
+  }
+
   var canWrite = hasPerm_(perms, ns + '.write');
   var canRead = hasPerm_(perms, ns + '.read');
   var canOwn = hasPerm_(perms, ns + '.read.own');
@@ -597,7 +626,8 @@ function handleLogin_(payload, ipHash) {
   updateLastLogin_(recheck.row);
   writeLoginLog_(username, ipHash, AUTH_LOG_OK);
 
-  var perms = authPermsWithGate_(user.role, gate);
+  var pc = authPermsAndScope_(user, gate);
+  var perms = pc.perms;
   // 2026-10-12：預設不再下發 secrets（稽核／宿舍改由 Mac mini 代轉，見 proxyAuthorize_）；過渡期 LEGACY_SECRETS=1 才回
   // 剛登出（token_after＝現在）同一毫秒內再登入時，新 token 也要比 token_after 新才過得了嚴格大於
   var token = issueToken_(user, (Number(recheck.values[AUTH_USERS_COL.token_after]) || 0) + 1);
@@ -607,7 +637,9 @@ function handleLogin_(payload, ipHash) {
     user: { id: user.id, name: user.name, role: user.role, node: user.node },
     perms: perms
   };
-  if (authLegacySecretsOn_()) data.secrets = pickSecrets_(perms);
+  if (pc.auditScope !== null && pc.auditScope !== undefined) data.audit_scope = pc.auditScope;
+  // role staff 永遠不回 secrets（第二期；即使 LEGACY_SECRETS=1）
+  if (authLegacySecretsOn_() && String(user.role) !== 'staff') data.secrets = pickSecrets_(perms);
   return { ok: true, data: data };
 }
 
@@ -657,7 +689,8 @@ function authResolveSession_(token) {
   if (gate.block) {
     return { ok: false, error: gate.block };
   }
-  return { ok: true, user: user, perms: authPermsWithGate_(user.role, gate) };
+  var pc = authPermsAndScope_(user, gate);
+  return { ok: true, user: user, perms: pc.perms, auditScope: pc.auditScope, permSources: pc.sources };
 }
 
 /**
@@ -672,7 +705,8 @@ function handleMe_(token) {
     user: { id: user.id, name: user.name, role: user.role, node: user.node },
     perms: sess.perms
   };
-  if (authLegacySecretsOn_()) data.secrets = pickSecrets_(sess.perms);
+  if (sess.auditScope !== null && sess.auditScope !== undefined) data.audit_scope = sess.auditScope;
+  if (authLegacySecretsOn_() && String(user.role) !== 'staff') data.secrets = pickSecrets_(sess.perms);
   return { ok: true, data: data };
 }
 
@@ -694,7 +728,15 @@ function authStaffGate_(user) {
   // 非 staff 角色（例如人資 hr）：不擋登入、不算審核資格，但同仁名單勾了「可管理公告」一樣給 platform.bulletin（審查 dzy-bulletin#44-2）
   if (String(user.role) !== 'staff') return typeof stfBulletinGate_ === 'function' ? { bulletin: stfBulletinGate_(user.id) } : {};
   if (typeof stfLoginGate_ !== 'function') return {};
-  return stfLoginGate_(user.id) || {};
+  var gate = stfLoginGate_(user.id) || {};
+  // 權限開關開（PERMS_ON='1'，Perms.gs；第二期）：staff 列不存在或 status≠active → 一律拒絕（登入與 token 都擋）
+  if (!gate.block && typeof permEnabled_ === 'function' && permEnabled_()) {
+    var hit = typeof stfFindByUserId_ === 'function' ? stfFindByUserId_(user.id) : null;
+    if (!hit) return { block: AUTH_MSG_NOT_IN_STAFF };
+    if (String(hit.values[STF_COL.status]).trim() !== 'active') return { block: AUTH_MSG_DISABLED };
+    gate.staffValues = hit.values;
+  }
+  return gate;
 }
 
 /** 角色權限＋衍生權限 platform.review（只讓「待審核」分頁出現；審核 action 本身仍在後端重算資格） */
@@ -710,6 +752,19 @@ function authPermsWithGate_(role, gate) {
     perms = perms.concat(['platform.bulletin']);
   }
   return perms;
+}
+
+/**
+ * 第二期：角色權限＋衍生＋（role staff 且 PERMS_ON）職稱／部門對照表計算結果。
+ * 回 {perms, auditScope, sources}；auditScope／sources 在「不走計算」時是 null（系統帳號、開關關）。
+ * 同一個請求只在這裡算一次，login／me／proxyAuthorize_ 都吃這個結果。
+ */
+function authPermsAndScope_(user, gate) {
+  var base = authPermsWithGate_(user.role, gate);
+  if (String(user.role) === 'staff' && gate && gate.staffValues && typeof permSessionCompute_ === 'function') {
+    return permSessionCompute_(base, gate.staffValues);
+  }
+  return { perms: base, auditScope: null, sources: null };
 }
 
 /**

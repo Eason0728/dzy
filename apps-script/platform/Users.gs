@@ -38,6 +38,8 @@ var USR_MSG_PASSWORD_TOO_SHORT = '密碼至少需要 8 個字元';
 var USR_MSG_OLD_PASSWORD_WRONG = '目前密碼不正確';
 var USR_MSG_PASSWORD_SAME = '新密碼不能與目前密碼相同';
 var USR_MSG_STAFF_ELSEWHERE = '同仁帳號請到同仁名單操作';
+var USR_MSG_ADMIN_ONLY = '只有系統管理員能建立、修改或停用管理員帳號';
+var USR_MSG_SELF_ROLE = '不能修改自己的角色';
 var USR_MSG_USERNAME_TOO_LONG = '帳號最多 64 個字';
 var USR_MSG_USERNAME_BAD_START = '帳號不能用 = + - @ 開頭';
 // minikit 假試算表會把純數字字串轉成數字，存一次就登不進去（GPT 複審第 5 條，2026-10-12）
@@ -63,6 +65,25 @@ function requirePlatformUsers_(token) {
     return { ok: false, error: USR_MSG_NO_PERM };
   }
   return { ok: true, user: me.data.user, perms: me.data.perms };
+}
+
+/** 超級角色：role 為 admin，或 roles 分頁該角色的 perms 含 '*'（全部功能） */
+function usrRoleIsSuper_(role) {
+  role = String(role === undefined || role === null ? '' : role).trim();
+  if (!role) return false;
+  if (role === 'admin') return true;
+  var perms = getRolePerms_(role);
+  if (perms.indexOf('*') !== -1) return true;
+  // 角色含任一鎖碼（platform.users／platform.permmap）也視為高權限：只有 admin 能指派、能動該帳號
+  if (typeof PERM_LOCKED !== 'undefined') {
+    return PERM_LOCKED.some(function (c) { return perms.indexOf(c) !== -1; });
+  }
+  return false;
+}
+
+/** 操作者是不是 role admin（有 platform.users 的非 admin 不能動管理員／全權角色的帳號） */
+function usrActorIsAdmin_(auth) {
+  return !!(auth && auth.user && String(auth.user.role) === 'admin');
 }
 
 // ============================================================
@@ -258,6 +279,12 @@ function handleSaveUser_(token, payload) {
   if (role === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
   if (!roleExists_(role)) return { ok: false, error: USR_MSG_ROLE_NOT_FOUND };
   if (!isValidNode_(node)) return { ok: false, error: USR_MSG_NODE_INVALID };
+  var actorIsAdmin = usrActorIsAdmin_(auth);
+  // 非 admin 不能建立或把帳號改成管理員／全權角色
+  // （改自己且角色不變，例如改顯示名稱，不算指派高權限）
+  var selfRow = id ? findUsrRowById_(id) : null;
+  var selfUnchanged = !!selfRow && String(selfRow.values[USR_COL.id]) === String(auth.user.id) && String(selfRow.values[USR_COL.role]) === role;
+  if (!actorIsAdmin && !selfUnchanged && usrRoleIsSuper_(role)) return { ok: false, error: USR_MSG_ADMIN_ONLY };
 
   var existingByUsername = findUsrRowByUsername_(username);
   var existingById = null;
@@ -271,6 +298,13 @@ function handleSaveUser_(token, payload) {
     existingById = findUsrRowById_(id);
     if (!existingById) return { ok: false, error: USR_MSG_NOT_FOUND };
     if (String(existingById.values[USR_COL.role]) === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
+    if (!actorIsAdmin) {
+      // 非 admin 不能改管理員／全權角色的帳號，也不能改自己的角色
+      var isSelfRow = String(existingById.values[USR_COL.id]) === String(auth.user.id);
+      if (isSelfRow && String(existingById.values[USR_COL.role]) !== role) return { ok: false, error: USR_MSG_SELF_ROLE };
+      // 改自己且角色不變（例如改顯示名稱）不算動到別人的高權限帳號
+      if (!isSelfRow && usrRoleIsSuper_(existingById.values[USR_COL.role])) return { ok: false, error: USR_MSG_ADMIN_ONLY };
+    }
     if (existingByUsername && existingByUsername.row !== existingById.row) {
       return { ok: false, error: USR_MSG_USERNAME_TAKEN };
     }
@@ -326,6 +360,7 @@ function handleSetActive_(token, payload) {
   if (!found) return { ok: false, error: USR_MSG_NOT_FOUND };
   // 同仁帳號停用／啟用要走 staffSetActive，才會同步 staff 分頁的狀態（2026-10-12）
   if (String(found.values[USR_COL.role]) === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
+  if (!usrActorIsAdmin_(auth) && usrRoleIsSuper_(found.values[USR_COL.role])) return { ok: false, error: USR_MSG_ADMIN_ONLY };
 
   var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
   sheet.getRange(found.row, USR_COL.active + 1).setValue(payload.active ? 'TRUE' : 'FALSE');
@@ -355,6 +390,7 @@ function handleResetPassword_(token, payload) {
   if (!found) return { ok: false, error: USR_MSG_NOT_FOUND };
   // 同仁帳號：admin 直接設密碼會讓「還沒認領」的編號跳過認領就能登入（2026-10-12）
   if (String(found.values[USR_COL.role]) === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
+  if (!usrActorIsAdmin_(auth) && usrRoleIsSuper_(found.values[USR_COL.role])) return { ok: false, error: USR_MSG_ADMIN_ONLY };
 
   var newSalt = Utilities.getUuid();
   var newHash = hashPassword_(newPassword, newSalt);

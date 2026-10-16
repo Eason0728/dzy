@@ -568,6 +568,7 @@ function clkDisableStaff_(s, by, detail, d) {
   }
   stfWriteRow_(STF_SHEET, s.row, v, STF_COL_COUNT);
   stfLog_(s.emp, 'disable', by, detail || '');
+  if (typeof permAuditDisabled_ === 'function') permAuditDisabled_(by, v);   // 離職停用收回的權限留一筆異動紀錄
   return userRow ? { ok: true } : { ok: true, warn: 'user_missing' };
 }
 function clkEnableStaff_(s, by, detail, d) {
@@ -582,6 +583,7 @@ function clkEnableStaff_(s, by, detail, d) {
   stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.active + 1).setValue('TRUE');
   stfWriteRow_(STF_SHEET, s.row, v, STF_COL_COUNT);
   stfLog_(s.emp, 'enable', by, detail || '');
+  if (typeof permAuditEnabled_ === 'function') permAuditEnabled_(by, v);   // 恢復的權限留一筆異動紀錄
   return { ok: true };
 }
 
@@ -668,6 +670,8 @@ function handleStaffCreateByUnit_(token, payload) {
 
   var nowText = clkNowText_(d);
   var rows = clkNewStaffRows_(empNo, name, o, hire, phone, nowText);
+  var lockBlock = typeof permNewRowBlock_ === 'function' ? permNewRowBlock_(stfActorIsAdmin_(a.user), rows.staff.slice(0, STF_COL_COUNT)) : null;
+  if (lockBlock) return lockBlock;
   var store = clkStoreOfUnit_(o.unit);
   var by = clkActorLabel_(a);
   // 同一支呼叫內寫完：users → staff → 待辦單 → log

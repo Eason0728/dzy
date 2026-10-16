@@ -30,7 +30,10 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   // 2026-10-14：組織架構改版一次性升級／回退（只有 role admin；Staff.gs 第 10 節）
   'orgUpgrade2026', 'orgRollback2026',
   // 2026-10-16：公告專區自動登入電子佈告欄（StaffClock.gs SSO 節）
-  'ssoTicket', 'svcSsoRedeem'];
+  'ssoTicket', 'svcSsoRedeem',
+  // 2026-10-17：個人帳號第二期，依單位＋職稱給權限（PermActions.gs）
+  'permInit', 'permMapGet', 'permMapSave', 'permExList', 'permExSave', 'permExRevoke',
+  'permStoreGet', 'permStoreSave', 'myPerms', 'permAuditList', 'permAuditSeen'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -87,7 +90,8 @@ function dispatch_(e) {
     staffCreateByUnit: 1, staffLeave: 1, staffLeaveCancel: 1, staffRename: 1, staffReinstate: 1,
     clockMapBuild: 1, clockMapDecide: 1, clockCandidateCreate: 1, clockCandidateDismiss: 1,
     clockOutboxRetry: 1, clockOutboxCancel: 1, clockSetHome: 1, clockOldHomeDecide: 1, clockLink: 1, clockAddHome: 1,
-    orgUpgrade2026: 1, orgRollback2026: 1 };
+    orgUpgrade2026: 1, orgRollback2026: 1,
+    permInit: 1, permMapSave: 1, permExSave: 1, permExRevoke: 1, permStoreSave: 1, permAuditSeen: 1 };
   if (MUTATING_ACTIONS[action]) {
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) {
@@ -179,6 +183,17 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'svcSsoRedeem': return handleSvcSsoRedeem_(payload);
     case 'orgUpgrade2026': return handleOrgUpgrade_(token, payload);
     case 'orgRollback2026': return handleOrgRollback_(token);
+    case 'permInit': return handlePermInit_(token);
+    case 'permMapGet': return handlePermMapGet_(token);
+    case 'permMapSave': return handlePermMapSave_(token, payload);
+    case 'permExList': return handlePermExList_(token, payload);
+    case 'permExSave': return handlePermExSave_(token, payload);
+    case 'permExRevoke': return handlePermExRevoke_(token, payload);
+    case 'permStoreGet': return handlePermStoreGet_(token);
+    case 'permStoreSave': return handlePermStoreSave_(token, payload);
+    case 'myPerms': return handleMyPerms_(token);
+    case 'permAuditList': return handlePermAuditList_(token, payload);
+    case 'permAuditSeen': return handlePermAuditSeen_(token, payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };

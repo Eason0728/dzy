@@ -206,7 +206,7 @@ class MockBackend:
         perms = u['perms']
         has = lambda p: '*' in perms or p in perms
         is_write = action not in PROXY_READ_ACTIONS[ns]
-        allowed = has(ns + '.write') if is_write else (has(ns + '.write') or has(ns + '.read') or has(ns + '.read.own'))
+        allowed = has(ns + '.write') if is_write else (has(ns + '.write') or has(ns + '.read') or has(ns + '.read.brand') or has(ns + '.read.own'))  # 2026-10-17：區督導 read.brand（資料已在 mini 裁切，mock 不再裁）
         if not allowed:
             return 403, {'ok': False, 'error': '沒有權限', 'code': 'FORBIDDEN'}
         flat = dict(body.get('payload') or {})

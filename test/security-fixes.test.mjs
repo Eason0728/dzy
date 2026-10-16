@@ -170,7 +170,7 @@ await t('3 混入一列沒有 store 的資料：仍裁切，只剩自己店的�
   assert.deepEqual(r.data.records, [{ store: 'ck', v: 1 }]);
   assert.deepEqual(r.data.items, [], '只有別店與無 store 的列 → 全丟');
   assert.deepEqual(r.data.details, [], '空陣列照舊');
-  assert.equal(r.data.config.stores.length, 2, '參考用對照表（欄位 code）不受影響');
+  assert.deepEqual(r.data.config.stores, [{ code: 'ck' }], 'config.stores 也依 code 裁（第二期白名單）');
 });
 
 await t('3b 全節點權限者不裁切（含無 store 的列照給）', async () => {

@@ -369,12 +369,84 @@ await (async function test7() {
 
   assertEqual(
     res.data.config.stores.map((s) => s.code),
-    STORE_CODES,
-    '7i: config.stores 是店名參考清單（欄位叫 code 不叫 store），不被裁切，店長仍看得到全部店名可供選單使用'
+    ['sxl-gf'],
+    '7i: config.stores 也依 code 裁成看得到的店（第二期白名單：不再讓店長看到別店名單）'
   );
 
   armGuard();
   await quietLogout();
+})();
+
+// ============================================================
+// 7x. 後端給 audit_scope 時以它為準（第二期）：陣列／'none'／'all'；同仁帳號 node 是空字串也能裁
+// ============================================================
+await (async function test7scope() {
+  const cases = [
+    ['陣列兩店', ['ck', 'mzt-gf'], ['ck', 'mzt-gf']],
+    ['none', 'none', []],
+    ['all', 'all', STORE_CODES]
+  ];
+  for (const [label, scope, want] of cases) {
+    await loginAs({
+      token: 'tok-scope-' + label,
+      user: { id: 'u200', name: '同仁', role: 'staff', node: '' },
+      perms: ['audit.read.own'],
+      audit_scope: scope
+    });
+    const auditResp = buildAuditGetAllResponse();
+    globalThis.fetch = makeFetchMock({ getAll: () => auditResp });
+    const res = await call('audit', 'getAll', {});
+    assertEqual(res.data.records.map((r) => r.store), want, '7x: audit_scope=' + label + ' 時 records 依它裁');
+    armGuard();
+    await quietLogout();
+  }
+})();
+
+// ============================================================
+// P2-N2 稽核回應 ok 不是 true 時，受裁切的人也不能拿到未裁資料
+// ============================================================
+await (async function testN2() {
+  await loginAs({
+    token: 'tok-n2',
+    user: { id: 'u202', name: '同仁', role: 'staff', node: '' },
+    perms: ['audit.read.own'],
+    audit_scope: ['ck']
+  });
+  const odd = { ok: false, error: '請重試', records: [{ store: 'ck', v: 1 }, { store: 'other', v: 2 }], leak: 'x' };
+  globalThis.fetch = makeFetchMock({ getAll: () => odd });
+  const res = await call('audit', 'getAll', {});
+  const txt = JSON.stringify(res);
+  assertTrue(res.ok === false && !txt.includes('other') && !txt.includes('"leak"'), 'N2: 稽核非 ok 回應受裁切時，別店資料與非白名單鍵不交給畫面', res);
+  armGuard();
+  await quietLogout();
+})();
+
+// ============================================================
+// 7y. 稽核範圍只管稽核：audit_scope='none'（或陣列）的人拿宿舍資料要完整，不被稽核裁切裁空
+// ============================================================
+await (async function test7dorm() {
+  for (const scope of ['none', ['ck']]) {
+    await loginAs({
+      token: 'tok-dorm-scope',
+      user: { id: 'u201', name: '人資', role: 'staff', node: '' },
+      perms: ['dorm.read', 'dorm.write'],
+      audit_scope: scope
+    });
+    const listResp = {
+      ok: true,
+      contracts: [{ contract_id: 'C1', name: '測試一', room: '二樓', status: '待簽' }, { contract_id: 'C2', name: '測試二', room: '三樓', status: '在住' }],
+      records: [{ store: 'other', v: 1 }],
+      extra_flag: true
+    };
+    globalThis.fetch = makeFetchMock({ list: () => listResp });
+    const res = await call('dorm', 'list', {});
+    assertTrue(res.ok === true, '7y: 宿舍 list 成功（audit_scope=' + JSON.stringify(scope) + '）');
+    assertEqual(res.data.contracts, listResp.contracts, '7y: 宿舍資料完整（contracts 沒被稽核範圍裁掉）');
+    assertEqual(res.data.records, listResp.records, '7y: 宿舍回應其他欄位也原樣不動（不套用稽核白名單）');
+    assertEqual(res.data.extra_flag, true, '7y: 宿舍回應的未知鍵不被刪');
+    armGuard();
+    await quietLogout();
+  }
 })();
 
 // ============================================================
@@ -548,8 +620,8 @@ await (async function test15() {
   assertEqual(res.data.items.length, 0, '15c: items 同樣清空');
   assertEqual(res.data.details.length, 0, '15d: details 同樣清空');
   assertTrue(
-    Array.isArray(res.data.config && res.data.config.stores) && res.data.config.stores.length > 0,
-    '15e: 設定與對照表（config.stores）保留，只清「一列一店」的資料'
+    Array.isArray(res.data.config && res.data.config.stores) && res.data.config.stores.length === 0,
+    '15e: 拿不到節點時 config.stores 也清空（白名單 fail closed），其餘設定鍵保留'
   );
   await quietLogout();
 })();

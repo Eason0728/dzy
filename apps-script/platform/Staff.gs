@@ -441,6 +441,20 @@ function stfPruneExtraDept_(row, empNo, newDept, newUnit) {
   stfWriteExtraCell_(row, next);
 }
 
+/** stfPruneExtraDept_ 的純計算版（不寫表）：主要部門／單位改成 newDept／newUnit 後，兼任代碼剩哪些 */
+function stfExtraAfterPrune_(cur, newDept, newUnit) {
+  var dropCk = newUnit === STF_EXTRA_CK;
+  return cur.filter(function (c) { return !(newDept && c === newDept) && !(dropCk && c === STF_EXTRA_CK); });
+}
+
+/** 第二期：這位操作者是不是系統管理者（role admin；人資 platform.staff 不算） */
+function stfActorIsAdmin_(user) { return !!user && String(user.role) === 'admin'; }
+/** 第二期：目標列是不是操作者本人 */
+function stfTargetIsSelf_(v, user) { return !!user && stfStr_(v[STF_COL.user_id]) === String(user.id); }
+function stfSelfOrgErr_() {
+  return { ok: false, error: typeof PERM_MSG_SELF_ORG === 'string' ? PERM_MSG_SELF_ORG : '不能修改自己的單位、部門或職稱', code: 'self_org_edit' };
+}
+
 // ============================================================
 // 3. staff 列讀取
 // ============================================================
@@ -908,8 +922,8 @@ function stfScopeMeets_(scope, need) {
   if ((need.kind === 'store' || need.kind === 'ck') && scope.unit !== need.unit) return false;
   if (need.kind === 'brand' && scope.brand !== need.brand) return false;
   if (need.kind === 'dept' && scope.dept !== need.dept) return false;
-  // 同一個職稱階梯才比職級：被審的人職級比審核者高 → 擋（不同階梯不比）
-  if (scope.titleLadder === need.title.parent && scope.rank < need.title.rank) return false;
+  // 同一個職稱階梯才比職級：被審的人職級跟審核者同級或更高 → 擋（不同階梯不比；第二期起職稱＝權限，不能核准同級或更高）
+  if (scope.titleLadder === need.title.parent && scope.rank <= need.title.rank) return false;
   return true;
 }
 
@@ -986,10 +1000,16 @@ function handleUnitApprove_(token, payload) {
   var oldUnit = stfStr_(t.v[STF_COL.unit]);
   var err = stfApplyConfirm_(t.v, t.rv.org);
   if (err) return { ok: false, error: err };
+  // 第二期：非 admin 核准後對方會拿到（或失去）platform.permmap → 擋
+  var exBeforeU = stfSplitCodes_(stfReadExtraMap_()[t.emp]);
+  var chkU = typeof permStaffChangeCheck_ === 'function'
+    ? permStaffChangeCheck_(stfActorIsAdmin_(t.rv.user), t.hit.values, exBeforeU, t.v, stfExtraAfterPrune_(exBeforeU, stfStr_(t.v[STF_COL.dept]), stfStr_(t.v[STF_COL.unit]))) : null;
+  if (chkU && chkU.block) return chkU.block;
   t.v[STF_COL.updated_at] = stfNowText_();
   stfWriteRow_(STF_SHEET, t.hit.row, t.v, STF_COL_COUNT);
   stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]), stfStr_(t.v[STF_COL.unit]));
   stfLog_(t.emp, 'confirm', t.rv.user.id, 'unit_review');
+  if (typeof permAuditStaffChange_ === 'function') permAuditStaffChange_(t.rv.user.id, t.emp, chkU, 'confirm');
   // 調店：確認後單位換了 → 新單位有打卡就開 add 單（StaffClock.gs；沒有那支檔案時略過）
   if (typeof clkAfterConfirm_ === 'function') clkAfterConfirm_(t.emp, oldUnit, stfStr_(t.v[STF_COL.unit]), t.rv.user.id);
   return { ok: true, data: { emp_no: t.emp } };
@@ -1172,11 +1192,20 @@ function handleStaffConfirm_(token, payload) {
   if (!t.ok) return t;
   var hasP = STF_ORG_FIELDS.some(function (f) { return stfStr_(t.v[STF_COL['p_' + f]]) !== ''; });
   if (!(t.status === 'pending' || (t.status === 'active' && hasP))) return { ok: false, error: STF_MSG.NO_PENDING };
+  var isAdminC = stfActorIsAdmin_(t.auth.user);
+  // 第二期：非 admin 不能確認自己的組織欄變更（確認＝把待確認的單位／部門／職稱搬成正式值＝自己給自己改權限）
+  if (!isAdminC && stfTargetIsSelf_(t.v, t.auth.user)) return stfSelfOrgErr_();
   var oldUnit = stfStr_(t.v[STF_COL.unit]);
   var err = stfApplyConfirm_(t.v, stfReadOrg_());
   if (err) return { ok: false, error: err };
+  // 第二期：非 admin 確認後對方會拿到（或失去）platform.permmap → 擋（人資主管只有系統管理者能設）
+  var exBeforeC = stfSplitCodes_(stfReadExtraMap_()[t.emp]);
+  var chkC = typeof permStaffChangeCheck_ === 'function'
+    ? permStaffChangeCheck_(isAdminC, t.hit.values, exBeforeC, t.v, stfExtraAfterPrune_(exBeforeC, stfStr_(t.v[STF_COL.dept]), stfStr_(t.v[STF_COL.unit]))) : null;
+  if (chkC && chkC.block) return chkC.block;
   var saved = stfSave_(t, 'confirm', '');
   stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]), stfStr_(t.v[STF_COL.unit]));
+  if (typeof permAuditStaffChange_ === 'function') permAuditStaffChange_(t.auth.user.id, t.emp, chkC, 'confirm');
   if (typeof clkAfterConfirm_ === 'function') clkAfterConfirm_(t.emp, oldUnit, stfStr_(t.v[STF_COL.unit]), t.auth.user.id);
   return saved;
 }
@@ -1223,6 +1252,7 @@ function handleStaffSetActive_(token, payload) {
     usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
     setTokenAfter_(userRow.row);
     var saved = stfSave_(t, 'disable', '');
+    if (typeof permAuditDisabled_ === 'function') permAuditDisabled_(t.auth.user.id, t.v);   // 停用收回的權限留一筆異動紀錄
     // 員工名單統一：舊「停用」按鈕只停平台帳號——同時對他每個打卡對照發停用單（StaffClock.gs）
     if (typeof clkAfterDisable_ === 'function') clkAfterDisable_(t.emp, t.auth.user.id);
     return saved;
@@ -1232,7 +1262,9 @@ function handleStaffSetActive_(token, payload) {
   t.v[STF_COL.status] = STF_STATUSES.indexOf(prev) !== -1 && prev !== 'disabled' ? prev : 'pending';
   t.v[STF_COL.prev_status] = '';
   usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('TRUE');
-  return stfSave_(t, 'enable', '');
+  var savedOn = stfSave_(t, 'enable', '');
+  if (savedOn && savedOn.ok !== false && typeof permAuditEnabled_ === 'function') permAuditEnabled_(t.auth.user.id, t.v);   // 恢復的權限留一筆異動紀錄
+  return savedOn;
 }
 
 function handleStaffUnclaim_(token, payload) {
@@ -1277,6 +1309,8 @@ function handleStaffEdit_(token, payload) {
   var changed = [];
   var org = stfReadOrg_();
   var oldUnitForClock = stfStr_(t.v[STF_COL.unit]);
+  var isAdminE = stfActorIsAdmin_(t.auth.user);
+  var selfBlockE = !isAdminE && stfTargetIsSelf_(t.v, t.auth.user);
 
   if (payload.name !== undefined) {
     var name = stfStr_(payload.name);
@@ -1313,6 +1347,8 @@ function handleStaffEdit_(token, payload) {
   if (orgGiven) {
     var o = {};
     STF_ORG_FIELDS.forEach(function (f) { o[f] = payload[f] !== undefined ? stfStr_(payload[f]) : stfStr_(t.v[STF_COL[f]]); });
+    // 第二期：非 admin 不能改自己的單位／部門／職稱（個資欄照放）；先擋、再驗證，免得驗證訊息洩漏組織細節
+    if (selfBlockE && STF_ORG_FIELDS.some(function (f) { return o[f] !== stfStr_(t.v[STF_COL[f]]); })) return stfSelfOrgErr_();
     var oe = stfValidateOrg_(org, o);
     if (oe) return { ok: false, error: oe };
     STF_ORG_FIELDS.forEach(function (f) { t.v[STF_COL[f]] = o[f]; });
@@ -1324,6 +1360,7 @@ function handleStaffEdit_(token, payload) {
     if (ex.error) return { ok: false, error: ex.error };
     // 清單已用（可能剛改過的）新主要部門驗過；和現值不同才寫
     if (ex.codes.join(',') !== stfStr_(stfReadExtraMap_()[t.emp])) {
+      if (selfBlockE) return stfSelfOrgErr_();
       var colErr = stfEnsureExtraCol_();
       if (colErr) return { ok: false, error: colErr };
       extraNew = ex.codes;
@@ -1341,6 +1378,14 @@ function handleStaffEdit_(token, payload) {
     changed.push('bulletin_admin=' + (bulletinNew ? '開' : '關'));
   }
   if (!changed.length) return { ok: false, error: '沒有要改的欄位' };
+  // 第二期：改組織欄／兼任部門前後各算一次權限；非 admin 若讓對方拿到（失去）platform.permmap → 擋
+  var chkE = null;
+  if ((changed.indexOf('org') !== -1 || changed.indexOf('extra_depts') !== -1) && typeof permStaffChangeCheck_ === 'function') {
+    var exBeforeE = stfSplitCodes_(stfReadExtraMap_()[t.emp]);
+    var exAfterE = extraNew || (changed.indexOf('org') !== -1 ? stfExtraAfterPrune_(exBeforeE, stfStr_(t.v[STF_COL.dept]), stfStr_(t.v[STF_COL.unit])) : exBeforeE);
+    chkE = permStaffChangeCheck_(isAdminE, t.hit.values, exBeforeE, t.v, exAfterE);
+    if (chkE.block) return chkE.block;
+  }
   if (bulletinNew !== null) stfSetBulletinAdmin_(t.emp, bulletinNew);
   if (changed.indexOf('name') !== -1) {
     var userRow = findUsrRowById_(stfStr_(t.v[STF_COL.user_id]));
@@ -1350,6 +1395,7 @@ function handleStaffEdit_(token, payload) {
   if (extraNew) stfWriteExtraCell_(t.hit.row, extraNew);
   else if (changed.indexOf('org') !== -1) stfPruneExtraDept_(t.hit.row, t.emp, stfStr_(t.v[STF_COL.dept]), stfStr_(t.v[STF_COL.unit]));
   var savedEdit = stfSave_(t, 'admin_edit', '改了：' + changed.join(','));
+  if (chkE && typeof permAuditStaffChange_ === 'function') permAuditStaffChange_(t.auth.user.id, t.emp, chkE, 'staff_edit');
   // 有打卡對照的人改單位一律走調店流程（StaffClock.gs clkAfterConfirm_）：新單位有打卡就開 add 單、舊主店降支援
   if (changed.indexOf('org') !== -1 && typeof clkAfterConfirm_ === 'function') {
     clkAfterConfirm_(t.emp, oldUnitForClock, stfStr_(t.v[STF_COL.unit]), t.auth.user.id);
@@ -1389,8 +1435,8 @@ var STF_DEFAULT_ORG = [
   ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'FALSE'],
   ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
   ['title', 'oam', '區經理', 'office', '', 2, 2, 'TRUE'],
-  ['title', 'osv', '區督導', 'office', '', 3, 3, 'TRUE'],
-  ['title', 'odir', '總監', 'office', '', 4, 4, 'TRUE'],
+  ['title', 'osv', '區督導', 'office', '', 2, 3, 'TRUE'],
+  ['title', 'odir', '總監', 'office', '', 3, 4, 'TRUE'],
   ['title', 'hs', '部門同仁', 'hq', '', 1, 1, 'TRUE'],
   ['title', 'hm', '部門主管', 'hq', '', 2, 2, 'TRUE'],
   ['title', 'ceo', '執行長', 'hq', '', 3, 3, 'TRUE'],
@@ -1495,8 +1541,8 @@ var STF_UPGRADE_ADD = [
   ['unit', 'yiwu-hq', '一悟燒肉品牌辦公室', 'yiwu', 'office', '', 3, 'TRUE'],
   ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
   ['title', 'oam', '區經理', 'office', '', 2, 2, 'TRUE'],
-  ['title', 'osv', '區督導', 'office', '', 3, 3, 'TRUE'],
-  ['title', 'odir', '總監', 'office', '', 4, 4, 'TRUE'],
+  ['title', 'osv', '區督導', 'office', '', 2, 3, 'TRUE'],
+  ['title', 'odir', '總監', 'office', '', 3, 4, 'TRUE'],
   ['dept', 'mgmt', '管理部', 'dzy-hq', '', '', 10, 'TRUE']
 ];
 var STF_UPGRADE_ADD_FIELDS = ['name', 'parent', 'ladder', 'rank', 'order', 'active'];
