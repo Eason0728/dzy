@@ -18,9 +18,10 @@
 
 1. **更新 minikit。**
    `cd ~/dzy-minikit && git pull --ff-only && git log --oneline -3`
-   期望：fast-forward 成功，HEAD 是 `b2039a9`（含組織改版 308cdd6＋同步員立即處理「在主店建打卡帳號」b2039a9；若管理部追加又同步，以 MacBook 的 Claude 給的最新 hash 為準）。
+   期望：fast-forward 成功，HEAD 是 `13fadc5`（含組織改版 308cdd6、同步員立即處理「在主店建打卡帳號」b2039a9、管理部 13fadc5）。
    `grep -c "handleOrgUpgrade_" apps/dzy-platform/gas/Code.gs apps/dzy-platform/gas/Staff.gs` → 兩檔都 ≥1。
    `grep -c "extra_depts" apps/dzy-platform/gas/StaffClock.gs` → ≥1。
+   `grep -c "'mgmt'" apps/dzy-platform/gas/Staff.gs` → ≥1（管理部）。
    `grep -c "'clockAddHome'" apps/dzy-platform/jobs.js` → ≥1（同步員立即處理「在主店建打卡帳號」；重啟後不需另外驗證）。
 
 2. **先備份資料庫（只複製，不改）。**
