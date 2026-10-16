@@ -1961,7 +1961,16 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const e3 = post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true, phone: '0922333444' }, tok);
   ok(e3.ok && listed(st.emp).bulletin_admin === true, 'BUL 與其他欄位一起改', e3);
   // 寫進同仁紀錄
-  ok(JSON.stringify(rowsOf(app, 'staff_log')).indexOf('bulletin_admin') !== -1, 'BUL 同仁紀錄有「改了：bulletin_admin」');
+  ok(JSON.stringify(rowsOf(app, 'staff_log')).indexOf('bulletin_admin=開') !== -1 && JSON.stringify(rowsOf(app, 'staff_log')).indexOf('bulletin_admin=關') !== -1, 'BUL ★同仁紀錄寫明開／關（權限清單可從紀錄重建）');
+  // 人資角色（role hr，非 staff）：被勾一樣有權限；不能幫自己開（審查 dzy-bulletin#44-2、#44-3）
+  const hr = claimApprove(app, '公告人資丁', 'bul-pw-0003');
+  const ui = app.sheets.users._data.findIndex((r) => String(r[1]).toUpperCase() === hr.emp);
+  setCell(app, 'users', ui, 'role', 'hr');
+  ok(perms(hr.token).indexOf('platform.staff') !== -1 && perms(hr.token).indexOf('platform.bulletin') === -1, 'BUL 人資角色預設沒有 platform.bulletin');
+  ok(post(sb, 'staffEdit', { emp_no: hr.emp, bulletin_admin: true }, hr.token).error === '不能設定自己的公告管理權限', 'BUL ★人資不能幫自己開');
+  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: false }, hr.token).ok, 'BUL 人資可以設別人');
+  ok(post(sb, 'staffEdit', { emp_no: hr.emp, bulletin_admin: true }, tok).ok && perms(hr.token).indexOf('platform.bulletin') !== -1 && tkA(hr.token).ok, 'BUL ★人資角色被別人勾了 → 有 platform.bulletin、換得到管理券');
+  ok(post(sb, 'staffEdit', { emp_no: 'DZY999', bulletin_admin: true }, tok).ok === false, 'BUL 不存在的編號 → 失敗');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

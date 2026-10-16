@@ -128,6 +128,13 @@ function stfBulletinAdmins_() {
   var raw = PropertiesService.getScriptProperties().getProperty(STF_PROP_BULLETIN) || '';
   return raw.split(',').map(function (x) { return stfNormEmp_(x); }).filter(function (x) { return STF_EMP_RE.test(x); });
 }
+/** 這個帳號（users id）對應的同仁列有勾「可管理公告」且未停用 → true（給非 staff 角色用；staff 角色走 stfLoginGate_） */
+function stfBulletinGate_(userId) {
+  if (!stfSheet_(STF_SHEET)) return false;
+  var hit = stfFindByUserId_(userId);
+  if (!hit || stfStr_(hit.values[STF_COL.status]) === 'disabled') return false;
+  return stfBulletinAdmins_().indexOf(stfNormEmp_(hit.values[STF_COL.emp_no])) !== -1;
+}
 function stfSetBulletinAdmin_(emp, on) {
   var e = stfNormEmp_(emp), list = stfBulletinAdmins_().filter(function (x) { return x !== e; });
   if (on) list.push(e);
@@ -1322,8 +1329,11 @@ function handleStaffEdit_(token, payload) {
   }
   var bulletinNew = null;
   if (payload.bulletin_admin !== undefined && payload.bulletin_admin !== (stfBulletinAdmins_().indexOf(t.emp) !== -1)) {
+    // 不能設定自己的（含人資幫自己開；審查 dzy-bulletin#44-3）
+    if (stfStr_(t.v[STF_COL.user_id]) && stfStr_(t.v[STF_COL.user_id]) === String(t.auth.user.id)) return { ok: false, error: '不能設定自己的公告管理權限' };
     bulletinNew = payload.bulletin_admin;
-    changed.push('bulletin_admin');
+    // 紀錄寫明開／關：權限清單存在 Script Property（不在試算表備份裡），staff_log 是可追溯、可重建的那份（審查 #44-4）
+    changed.push('bulletin_admin=' + (bulletinNew ? '開' : '關'));
   }
   if (!changed.length) return { ok: false, error: '沒有要改的欄位' };
   if (bulletinNew !== null) stfSetBulletinAdmin_(t.emp, bulletinNew);
