@@ -26,19 +26,20 @@ export const APP_NAME = '鼎兆元餐飲集團｜管理系統';
 /**
  * 左側選單的部門分組（2026-10-16 Eason：選單改成部門、十個部門全列，沒功能的也顯示）。
  * 代碼＝org 分頁 dept 列（apps-script/platform/Staff.gs）；順序＝選單由上到下。
+ * 選單名稱一律四個字（Eason 2026-10-16：加「部門」二字，加盟招商不加），跟 org 分頁的部門全名分開。
  * 模組 manifest 填 dept 掛到該部門底下；沒填 dept（例如「我的資料」）排在首頁下面、不進部門。
  */
 export const DEPARTMENTS = [
-  { id: 'hr', name: '人資部' },
-  { id: 'eng', name: '工程部' },
-  { id: 'franchise', name: '加盟招商部' },
-  { id: 'it', name: '資訊部' },
-  { id: 'marketing', name: '行銷部' },
-  { id: 'fin', name: '財務部' },
-  { id: 'purchase', name: '採購部' },
-  { id: 'ops', name: '營運部' },
-  { id: 'training', name: '訓練部' },
-  { id: 'mgmt', name: '管理部' }
+  { id: 'ops', name: '營運部門' },
+  { id: 'mgmt', name: '管理部門' },
+  { id: 'hr', name: '人資部門' },
+  { id: 'fin', name: '財務部門' },
+  { id: 'purchase', name: '採購部門' },
+  { id: 'eng', name: '工程部門' },
+  { id: 'training', name: '訓練部門' },
+  { id: 'marketing', name: '行銷部門' },
+  { id: 'it', name: '資訊部門' },
+  { id: 'franchise', name: '加盟招商' }
 ];
 
 export const BACKENDS = {

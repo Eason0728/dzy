@@ -305,6 +305,8 @@ export function getUser() {
 export function can(perm) {
   if (!currentUser) return false;
   if (typeof perm !== 'string' || perm === '') return false;
+  // platform.login＝「已登入」本身：每個登入者都有，不寫進 roles 分頁（公告專區用，2026-10-16）
+  if (perm === 'platform.login') return true;
   if (currentPerms.indexOf('*') !== -1) return true;
   return currentPerms.indexOf(perm) !== -1;
 }
