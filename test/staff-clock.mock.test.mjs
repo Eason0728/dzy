@@ -1882,5 +1882,42 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(mut.indexOf('clockAddHome: 1') !== -1, 'ADDH clockAddHome 上全域寫入鎖');
 })();
 
+// ── SSO：公告專區自動登入佈告欄（2026-10-16）───────────────────
+(() => {
+  const app = fresh();
+  const { sb, tok, props, cache } = app;
+  const st = claimApprove(app, '單登同仁甲', 'sso-pw-0001');
+  const tk = (t, p) => post(sb, 'ssoTicket', p === undefined ? { aud: 'bulletin' } : p, t);
+  const rd = (p) => post(sb, 'svcSsoRedeem', p);
+  // 發券
+  ok(tk('').ok === false, 'SSO 沒登入 → 不發券');
+  ok(tk(st.token, { aud: 'evil' }).code === 'bad_aud' && tk(st.token, {}).code === 'bad_aud' && tk(st.token, { aud: 'hasOwnProperty' }).code === 'bad_aud', 'SSO ★aud 不是 bulletin → bad_aud（含原型鍵）');
+  ok(tk(tok).code === 'no_emp', 'SSO ★系統帳號（admin）沒有同仁編號 → no_emp');
+  const t1 = tk(st.token);
+  ok(t1.ok && /^[0-9a-f]{64}$/.test(t1.data.ticket) && t1.data.expires_in === 60, 'SSO 同仁拿到 64 位十六進位券、60 秒', t1);
+  ok(JSON.stringify(t1).indexOf(st.emp) === -1, 'SSO 發券回應不含同仁編號');
+  ok(tk(st.token).data.ticket !== t1.data.ticket, 'SSO 每次的券都不同');
+  // 兌換
+  ok(rd({ ticket: t1.data.ticket, aud: 'bulletin' }).code === 'unauthorized', 'SSO ★沒設 BULLETIN_SVC_KEY → 兌換全拒');
+  props.BULLETIN_SVC_KEY = 'fake-bulletin-key-0001';
+  ok(rd({ svc_key: 'wrong', ticket: t1.data.ticket, aud: 'bulletin' }).code === 'unauthorized', 'SSO ★錯金鑰 → unauthorized');
+  ok(cache.has('sso_tkt:' + t1.data.ticket), 'SSO 錯金鑰不會把券用掉');
+  ok(rd({ svc_key: 'fake-bulletin-key-0001', ticket: t1.data.ticket, aud: 'other' }).code === 'ticket_invalid', 'SSO ★aud 不符 → ticket_invalid');
+  ok(rd({ svc_key: 'fake-bulletin-key-0001', ticket: t1.data.ticket, aud: 'bulletin' }).code === 'ticket_invalid', 'SSO ★aud 不符那次已把券作廢');
+  const t2 = tk(st.token).data.ticket;
+  const r2 = rd({ svc_key: 'fake-bulletin-key-0001', ticket: t2, aud: 'bulletin' });
+  ok(r2.ok && r2.data.emp_no === st.emp && Object.keys(r2.data).join() === 'emp_no', 'SSO ★兌換成功只回 emp_no', r2);
+  ok(rd({ svc_key: 'fake-bulletin-key-0001', ticket: t2, aud: 'bulletin' }).code === 'ticket_invalid', 'SSO ★同一張券只能換一次');
+  ok(rd({ svc_key: 'fake-bulletin-key-0001', ticket: 'abc', aud: 'bulletin' }).code === 'ticket_invalid' && rd({ svc_key: 'fake-bulletin-key-0001', ticket: ['x'], aud: 'bulletin' }).code === 'ticket_invalid', 'SSO 券格式不對 → ticket_invalid');
+  // 過期
+  const t3 = tk(st.token).data.ticket;
+  cache.get('sso_tkt:' + t3).exp = Date.now() - 1;
+  ok(rd({ svc_key: 'fake-bulletin-key-0001', ticket: t3, aud: 'bulletin' }).code === 'ticket_invalid', 'SSO ★過期 → ticket_invalid');
+  // 停用的人拿不到新券
+  post(sb, 'staffSetActive', { emp_no: st.emp, active: false }, tok);
+  ok(tk(st.token).ok === false, 'SSO ★停用後舊登入換不到券');
+  ok(sb.CODE_ALLOWED_ACTIONS.indexOf('ssoTicket') !== -1 && sb.CODE_ALLOWED_ACTIONS.indexOf('svcSsoRedeem') !== -1, 'SSO 分派白名單有兩支');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

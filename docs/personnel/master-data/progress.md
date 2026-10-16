@@ -111,6 +111,8 @@
 - 切換後新人流程：佈告欄不再從打卡自動加人；總部在管理系統「打卡對照 › 候選新人」確認並選單位後，下一輪 mirror（每小時）才加。管理系統單位空白者（未認領，約 115 筆 notes）佈告欄單位不動、不新增。
 - 待辦：拆舊（CLOCK_PRIMARY_、syncClock、resolveClockRows、按鈕）等穩定兩週後另案；組織改版要同步改 staff-dzy.js UNIT_OF_DZY（yiwu-hq 等）。
 
+**2026-10-16 S-046 LINE 自動登入個案（結案不處理）**：S-046（DZY122，cf:CF11）從打卡官方帳號圖文選單點「佈告欄」直接出現名單、無提示字。已查：伺服器端正常（lineHash 有且與橋接 CF11 相同、無撞號、切換後未被清、10/15–16 lineLogin 25 次全 ok 0 錯誤）；LIFF 2011292256-iTZEbOWG endpoint＝line.html、圖文選單連結正確。剩 B（登入後讀公告 AUTH）／C（瀏覽器存不了 localStorage，UI.store 靜默失敗）未分辨。**Eason 決定：個案不處理、不重試、不調紀錄；line.html 修正（含失敗提示改走網址參數）先不做**——之後打卡官方帳號圖文選單「佈告欄」改連管理系統，佈告欄改由管理系統「公告專區」SSO 進入（dzy#6、佈告欄 v0.7.7 dzyLogin），只要求管理系統能正常連結。
+
 ### 第 6 段：第 4 段開放後兩週，若「打卡上有、沒對照」異常為零 → 六店 mgr_add_employee 回 disabled（task H1）。
 - 第 6 段前提追加（2026-10-16）：店長通知**不發**，所以第 6 段上線時，值班核定「新增同仁」的停用訊息（含 STAFF_MASTER_ADD_REDIRECT 的說明文字與 mgr_add_employee 回 disabled 的訊息）必須自己講清楚：新增同仁請到管理系統 https://dzy.mozhuting.com/ →「同仁名單」→「新增」，由本單位店長／部門主管處理，有問題找誰（上線前跟 Eason 確認窗口）。
 - 第 6 段**等 Eason 說才開始**；兩週零異常只是必要條件，不是自動觸發。

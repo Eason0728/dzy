@@ -2202,6 +2202,49 @@ function handleSvcDirectory_(payload) {
   return { ok: true, data: data, total: data.length, generated_at: clkNowText_(new Date()) };
 }
 
+// ============================================================
+// SSO：公告專區自動登入電子佈告欄（2026-10-16）
+// 流程：管理系統前端（已登入）→ ssoTicket 換一張一次性入場券（60 秒）→ postMessage 給嵌在 iframe 裡的佈告欄 →
+// 佈告欄的 Mac mini 伺服器拿券＋BULLETIN_SVC_KEY 打 svcSsoRedeem → 回同仁編號（DZY###）→ 佈告欄依 staff.dzy 登入那位。
+// 登入 token 本身永遠不離開管理系統；券只能換一次、只回編號、只給有服務金鑰的佈告欄伺服器換。
+// ⚠ ssoTicket／svcSsoRedeem 永遠不可列進 minikit apps/dzy-platform/app.json 的 readActions（唯讀動作在鏡像／回退模式可能被重放＝券能用兩次；審查 dzy-bulletin#42-6）
+// ============================================================
+var SSO_TTL_SEC = 60;
+var SSO_CACHE_PREFIX = 'sso_tkt:';
+var SSO_AUDS = { bulletin: 1 };
+
+/** 已登入的同仁換一張入場券。系統帳號（admin、會計等沒有 DZY 編號的）回 no_emp，佈告欄那邊照舊選名字。 */
+function handleSsoTicket_(token, payload) {
+  var aud = payload && typeof payload.aud === 'string' ? payload.aud : '';
+  if (!SSO_AUDS.hasOwnProperty(aud)) return clkErr_('bad_aud', '不支援的系統');
+  var res = authResolveSession_(token);
+  if (!res.ok) return res;
+  var emp = String(res.user.username || '').toUpperCase();
+  if (res.user.role !== 'staff' || !STF_EMP_RE.test(emp)) return clkErr_('no_emp', '這個帳號沒有同仁編號');
+  // 兩個隨機 UUID 雜湊成 64 位十六進位（不依賴 getUuid 的字串格式）
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + ':' + Utilities.getUuid());
+  var ticket = digest.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
+  CacheService.getScriptCache().put(SSO_CACHE_PREFIX + ticket, JSON.stringify({ emp: emp, aud: aud }), SSO_TTL_SEC);
+  return { ok: true, data: { ticket: ticket, expires_in: SSO_TTL_SEC } };
+}
+
+/** 佈告欄伺服器兌換入場券（服務金鑰同 svcDirectory）。一張券只能兌換一次；過期、換過、系統不符都回 ticket_invalid。 */
+function handleSvcSsoRedeem_(payload) {
+  var want = PropertiesService.getScriptProperties().getProperty(CLK_PROP_SVC_KEY);
+  var got = payload && typeof payload.svc_key === 'string' ? payload.svc_key : '';
+  if (!want || !got || !authSafeEqual_(got, want)) return clkErr_('unauthorized', CLK_MSG.UNAUTHORIZED);
+  var ticket = payload && typeof payload.ticket === 'string' ? payload.ticket : '';
+  var aud = payload && typeof payload.aud === 'string' ? payload.aud : '';
+  if (!/^[0-9a-f]{64}$/.test(ticket)) return clkErr_('ticket_invalid', '入場券無效');
+  var cache = CacheService.getScriptCache(), key = SSO_CACHE_PREFIX + ticket;
+  var raw = cache.get(key);
+  cache.remove(key);
+  var rec = null;
+  try { rec = raw ? JSON.parse(raw) : null; } catch (e) { rec = null; }
+  if (!rec || rec.aud !== aud || !STF_EMP_RE.test(String(rec.emp || ''))) return clkErr_('ticket_invalid', '入場券無效或已過期');
+  return { ok: true, data: { emp_no: rec.emp } };
+}
+
 /** Staff.gs stfClearClaim_ 的掛勾：有到職日（店長新增才會有）或已有 confirmed 打卡對照 → 退回認領時保留品牌、單位、部門、職稱 */
 function clkKeepOrgOnClear_(v) {
   if (!clkSheetsReady_()) return false;

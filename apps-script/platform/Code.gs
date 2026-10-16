@@ -28,7 +28,9 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   // 2026-10-14：第 4 段，總部在主店補建打卡帳號（no_home_map 異常列）
   'clockAddHome',
   // 2026-10-14：組織架構改版一次性升級／回退（只有 role admin；Staff.gs 第 10 節）
-  'orgUpgrade2026', 'orgRollback2026'];
+  'orgUpgrade2026', 'orgRollback2026',
+  // 2026-10-16：公告專區自動登入電子佈告欄（StaffClock.gs SSO 節）
+  'ssoTicket', 'svcSsoRedeem'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -173,6 +175,8 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'clockJobStatus': return handleClockJobStatus_(token, payload);
     case 'clockAlerts': return handleClockAlerts_(token);
     case 'svcDirectory': return handleSvcDirectory_(payload);
+    case 'ssoTicket': return handleSsoTicket_(token, payload);
+    case 'svcSsoRedeem': return handleSvcSsoRedeem_(payload);
     case 'orgUpgrade2026': return handleOrgUpgrade_(token, payload);
     case 'orgRollback2026': return handleOrgRollback_(token);
     default:
