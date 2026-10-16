@@ -115,18 +115,18 @@ export function mountVaultCard(ctx, getConfig, getState, onChange) {
     bodyEl.appendChild(el('div', { class: 'audit-vault-row field' }, [
       escEl(ctx, 'label', { class: 'field-label' }, '零找金（標準 ' + stdLabel(config.change_fund_std) + '）'),
       buildChoiceGroup('change_fund', ['正確', '不正確'], state.change_fund,
-        (g, v) => onChange({ [g]: v }), 'audit-vault-btn')
+        (g, v) => { onChange({ [g]: v }); refresh(); }, 'audit-vault-btn')
     ]));
     bodyEl.appendChild(el('div', { class: 'audit-vault-row field' }, [
       escEl(ctx, 'label', { class: 'field-label' }, '零用金（標準 ' + stdLabel(config.petty_cash_std) + '）'),
       buildChoiceGroup('petty_cash', ['正確', '不正確'], state.petty_cash,
-        (g, v) => onChange({ [g]: v }), 'audit-vault-btn')
+        (g, v) => { onChange({ [g]: v }); refresh(); }, 'audit-vault-btn')
     ]));
     bodyEl.appendChild(el('div', { class: 'audit-vault-row field' }, [
       el('label', { for: 'audit-tip-amount', class: 'field-label', text: '小費金額' }),
       tipInput,
       buildChoiceGroup('tip_match', ['相符', '不相符'], state.tip_match,
-        (g, v) => onChange({ [g]: v }), 'audit-vault-btn')
+        (g, v) => { onChange({ [g]: v }); refresh(); }, 'audit-vault-btn')
     ]));
 
     noteEl.value = state.note || '';
