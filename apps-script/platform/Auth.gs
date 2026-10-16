@@ -690,7 +690,9 @@ function setTokenAfter_(rowNumber) {
  * 其他角色、或 Staff.gs 不在（舊測試沙盒）→ {}。
  */
 function authStaffGate_(user) {
-  if (!user || String(user.role) !== 'staff') return {};
+  if (!user) return {};
+  // 非 staff 角色（例如人資 hr）：不擋登入、不算審核資格，但同仁名單勾了「可管理公告」一樣給 platform.bulletin（審查 dzy-bulletin#44-2）
+  if (String(user.role) !== 'staff') return typeof stfBulletinGate_ === 'function' ? { bulletin: stfBulletinGate_(user.id) } : {};
   if (typeof stfLoginGate_ !== 'function') return {};
   return stfLoginGate_(user.id) || {};
 }
@@ -702,6 +704,10 @@ function authPermsWithGate_(role, gate) {
   var canReview = (gate && gate.review) || perms.indexOf('platform.staff') !== -1;
   if (canReview && perms.indexOf('platform.review') === -1 && perms.indexOf('*') === -1) {
     perms = perms.concat(['platform.review']);
+  }
+  // 公告管理權限（同仁名單勾選，Staff.gs stfBulletinAdmins_）
+  if (gate && gate.bulletin && perms.indexOf('platform.bulletin') === -1 && perms.indexOf('*') === -1) {
+    perms = perms.concat(['platform.bulletin']);
   }
   return perms;
 }

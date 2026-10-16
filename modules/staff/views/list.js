@@ -86,7 +86,8 @@ export function mountList(el, ctx) {
       const reason = p.reject_reason && (p.status === 'rejected' || p.status === 'unclaimed')
         ? `<div class="text-muted">${p.status === 'unclaimed' ? '上次退回' : '原因'}：${esc(p.reject_reason)}</div>` : '';
       const extra = (p.extra_dept_names || []).length ? `<div class="text-muted" data-role="extra-depts">兼任：${esc(p.extra_dept_names.join('、'))}</div>` : '';
-      const flagTags = (p.flags || []).map((f) => `<span class="tag tag-warn" data-role="flag-tag">${esc(FLAG_TEXT[f] || f)}</span>`).join(' ');
+      const bul = p.bulletin_admin ? '<span class="tag tag-ok" data-role="bulletin-admin-tag">可管理公告</span>' : '';
+      const flagTags = bul + (p.flags || []).map((f) => `<span class="tag tag-warn" data-role="flag-tag">${esc(FLAG_TEXT[f] || f)}</span>`).join(' ');
       const priv = showPrivate && p.status !== 'unclaimed'
         ? `<div class="text-muted">生日 ${esc(p.birthday)}・手機 ${esc(p.phone)}・${esc(p.address)}</div>` : '';
       return `<tr>
@@ -175,6 +176,11 @@ export function mountList(el, ctx) {
     return `<div class="field" data-role="extra-wrap"><span class="field-label">兼任部門</span>${boxes}${hidden}<p class="field-hint">兼任不影響審核，審核只看主要部門。</p></div>`;
   }
 
+  // 公告管理權限（2026-10-17）：勾了＝管理系統「公告專區」多出「公告管理」「新增公告」分頁
+  function bulletinHtml(p) {
+    return `<div class="field" data-role="bulletin-wrap"><span class="field-label">電子佈告欄</span><div class="checkbox-row"><input type="checkbox" id="ed-bul"${p.bulletin_admin ? ' checked' : ''}><label for="ed-bul">可管理公告（公告專區多出「公告管理」「新增公告」）</label></div></div>`;
+  }
+
   const li = (items) => (items.length ? `<ul>${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="text-muted">（無）</p>');
   const OK_ONLY = [{ label: '知道了', value: 'ok', variant: 'primary' }];
   const CANCEL = { label: '取消', value: null, variant: 'secondary' };
@@ -261,7 +267,7 @@ export function mountList(el, ctx) {
     } else if (act === 'edit') {
       const body = domOf(`${field('ed-name', '姓名', p.name)}${orgFieldsHtml('ed')}
         <div class="form-grid-2">${field('ed-birthday', '生日', p.birthday, 'date')}${field('ed-phone', '手機', p.phone, 'tel')}</div>
-        ${field('ed-address', '居住地址', p.address)}${canExtra ? extraHtml(p) : ''}<p class="field-hint">後台直接改正式資料，不必再確認。</p>`);
+        ${field('ed-address', '居住地址', p.address)}${canExtra ? extraHtml(p) + (p.status === 'active' ? bulletinHtml(p) : '') : ''}<p class="field-hint">後台直接改正式資料，不必再確認。</p>`);
       bindOrgFields(body, 'ed', org, { brand: p.brand, unit: p.unit, dept: p.dept, title: p.title });
       const v = await ctx.ui.dialog({ title: `改資料 ${who}`, body, actions: [{ label: '取消', value: null, variant: 'secondary' }, { label: '儲存', value: 'ok', variant: 'primary' }] });
       if (v !== 'ok') return;
@@ -283,6 +289,9 @@ export function mountList(el, ctx) {
         const next = order.filter((c) => checked.indexOf(c) !== -1);
         const before = p.extra_depts || [];
         if (next.length !== before.length || next.some((c) => before.indexOf(c) === -1)) payload.extra_depts = next;
+        // 只有已開通的同仁有這個勾選框（後端也只接受 active；審查 dzy-bulletin#44-12）
+        const bulEl = body.querySelector('#ed-bul');
+        if (bulEl && bulEl.checked !== !!p.bulletin_admin) payload.bulletin_admin = bulEl.checked;
       }
       run('staffEdit', payload, '已儲存');
     } else if (act === 'rename') {
