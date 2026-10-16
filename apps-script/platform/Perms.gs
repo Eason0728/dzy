@@ -506,3 +506,53 @@ function permSessionCompute_(base, staffValues) {
   if (base.indexOf('*') !== -1 || base.indexOf('audit.read') !== -1 || base.indexOf('audit.write') !== -1) scope = 'all';
   return { perms: perms, auditScope: scope, sources: sources };
 }
+
+// ============================================================
+// 8. 組織欄改動的防呆與異動紀錄（P2b；spec 13.1）
+// ============================================================
+
+var PERM_MSG_ADMIN_ONLY = '人資主管要請系統管理員設定';
+var PERM_MSG_SELF_ORG = '不能修改自己的單位、部門或職稱，請找人資或系統管理員';
+
+function permDiff_(before, after) {
+  var added = after.filter(function (p) { return before.indexOf(p) === -1; });
+  var removed = before.filter(function (p) { return after.indexOf(p) === -1; });
+  return (added.length || removed.length) ? { added: added, removed: removed } : null;
+}
+
+/**
+ * 非 admin 改某位同仁的組織欄（brand／unit／dept／title／extra_depts）前後各算一次：
+ * 對方的 platform.permmap 有無改變 → block（perm_admin_only）。perm 表未初始化也擋（用預設規則算），開關關時也擋。
+ * 另回 diff（完整權限前後差異，沒差異是 null）與 inited，給呼叫端成功後寫 perm_audit 用。
+ * before／after 是 staff 分頁一列的值（after 的 status 要是改完後的狀態）。
+ */
+function permStaffChangeCheck_(isAdmin, beforeValues, beforeExtra, afterValues, afterExtra) {
+  var ctx = permLoadCtx_(true);
+  var b = permComputeRow_(ctx, beforeValues, beforeExtra);
+  var a = permComputeRow_(ctx, afterValues, afterExtra);
+  var res = { block: null, diff: null, inited: ctx.inited };
+  var hb = b.perms.indexOf('platform.permmap') !== -1;
+  var ha = a.perms.indexOf('platform.permmap') !== -1;
+  if (!isAdmin && hb !== ha) {
+    res.block = { ok: false, error: PERM_MSG_ADMIN_ONLY, code: 'perm_admin_only' };
+    return res;
+  }
+  res.diff = permDiff_(b.perms, a.perms);
+  return res;
+}
+
+/** 追加一列 perm_audit（分頁不存在或表頭不對就略過，回 false）。added／removed 是字串（逗號相連的權限碼，或 perm_map 的 JSON 明細） */
+function permAuditAppend_(by, empNo, added, removed, cause) {
+  var ss = SpreadsheetApp.getActive();
+  var sh = ss.getSheetByName(PERM_SHEET_AUDIT);
+  if (!sh || permHeaderProblem_(ss, PERM_SHEET_AUDIT, PERM_AUDIT_HEADERS) !== '') return false;
+  if (sh.getRange(1, 1, 1, PERM_AUDIT_HEADERS.length).getValues()[0].every(function (v) { return String(v).trim() === ''; })) return false;
+  sh.getRange(sh.getLastRow() + 1, 1, 1, PERM_AUDIT_HEADERS.length).setValues([[permNowText_(), permStr_(by), permStr_(empNo), added, removed, cause, 'FALSE']]);
+  return true;
+}
+
+/** 組織欄改動成功後呼叫：diff 非空才寫一列（cause＝staff_edit｜confirm） */
+function permAuditStaffChange_(by, empNo, check, cause) {
+  if (!check || !check.diff || !check.inited) return false;
+  return permAuditAppend_(by, empNo, check.diff.added.join(','), check.diff.removed.join(','), cause);
+}

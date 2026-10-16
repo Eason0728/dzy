@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'StaffClock.gs', 'Perms.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'StaffClock.gs', 'Perms.gs', 'PermActions.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 
 let passed = 0;
 let failed = 0;
@@ -487,7 +487,9 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   // 職級比較只在同階梯（單元）
   const m = (kinds, rank, tl, extra) => Object.assign({ kinds, unit: 'x', brand: 'b', dept: 'd', rank, titleLadder: tl }, extra || {});
   const nd = (kind, rank, parent, extra) => Object.assign({ kind, title: { rank, parent }, unit: 'x', brand: 'b', dept: 'd' }, extra || {});
-  ok(sb.stfScopeMeets_(m(['store'], 3, 'store'), nd('store', 3, 'store')) === true, 'T3 同階梯同級可以審');
+  ok(sb.stfScopeMeets_(m(['store'], 3, 'store'), nd('store', 3, 'store')) === false, 'T3 反（第二期 13：職稱＝權限）：同階梯同級不能審（< 改 <=）');
+  ok(sb.stfScopeMeets_(m(['store'], 3, 'store'), nd('store', 2, 'store')) === true, 'T3 正：同階梯高審低可以審');
+  ok(sb.stfScopeMeets_(m(['dept'], 2, 'hq'), nd('dept', 2, 'hq')) === false && sb.stfScopeMeets_(m(['ops'], 2, 'hq'), nd('ops', 2, 'hq')) === false, 'T3 反：部門階梯同級也擋');
   ok(sb.stfScopeMeets_(m(['store'], 3, 'store'), nd('store', 4, 'store')) === false, 'T3 反：同階梯、被審的職級比審核者高 → 擋');
   ok(sb.stfScopeMeets_(m(['brand'], 2, 'office'), nd('brand', 3, 'store')) === true, 'T3 正：不同階梯不比職級（辦公室 rank2 審門市 rank3 店長）');
   ok(sb.stfScopeMeets_(m(['dept'], 2, 'hq'), nd('dept', 1, 'hq')) === true && sb.stfScopeMeets_(m(['dept'], 1, 'hq'), nd('dept', 2, 'hq')) === false, 'T3 部門階梯：高審低可、低審高擋');
