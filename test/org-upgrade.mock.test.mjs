@@ -1032,5 +1032,29 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(fl(mgCeo.emp) === 'exec_misplaced', 'U1 升級後 staffList 與預覽一致');
 })();
 
+(() => {
+  // 管理部 hm → title_ladder；mgmt 列不存在時不判斷
+  const app = fresh();
+  const { sb } = app;
+  const o = sb.stfReadOrg_();
+  const fl = (x) => sb.stfFlagDetails_(Object.assign({ status: 'active', unit: 'dzy-hq', dept: 'mgmt', title: 'hm' }, x), o).map((d) => d.flag + (d.submitted ? '*' : '')).sort().join();
+  ok(fl({}) === 'title_ladder', 'F1 管理部 hm → title_ladder', fl({}));
+  ok(fl({ dept: 'it' }) === '' && fl({ dept: 'mgmt', title: 'hs' }) === '', 'F1 反：別部門 hm、管理部 hs 無 flag');
+  ok(fl({ unit: '', dept: '', title: '', p_unit: 'dzy-hq', p_dept: 'mgmt', p_title: 'hm' }) === 'title_ladder*', 'F1 送出待審的管理部 hm → title_ladder＋submitted');
+  const o2 = sb.stfReadOrg_(); delete o2.dept.mgmt;
+  const f2 = (x) => sb.stfFlagDetails_(Object.assign({ status: 'active', unit: 'dzy-hq', dept: 'hr', title: 'ceo' }, x), o2).map((d) => d.flag).join();
+  ok(f2({}) === '' && f2({ dept: 'mgmt', title: 'hm' }) === 'dept_inactive', 'F2 org 沒有 mgmt 列：不出 exec_misplaced／管理部 title_ladder');
+  const o3 = sb.stfReadOrg_(); o3.dept.mgmt.active = false;
+  ok(sb.stfFlagDetails_({ status: 'active', unit: 'dzy-hq', dept: 'hr', title: 'ceo' }, o3).length === 0, 'F2 mgmt 停用同樣不出 exec_misplaced');
+  // 升級預覽：升級前 org 沒 mgmt，todo 以升級後 org 判斷 → 會列
+  const lg = legacyApp();
+  const hm = mk(lg, '管理辛', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hm' });
+  setStaff(lg, hm.emp, 'dept', 'mgmt');
+  const dr = upg(lg, { dryrun: true });
+  ok(dr.data.todo.some((x) => x.emp_no === hm.emp && x.flag === 'title_ladder'), 'F1 升級預覽 todo 列出管理部 hm', dr.data.todo);
+  const lgf = lg.sb.stfFlagDetails_({ status: 'active', unit: 'dzy-hq', dept: 'mgmt', title: 'hm' }, lg.sb.stfReadOrg_()).map((d) => d.flag).join();
+  ok(lgf === 'dept_inactive', 'F2 切換前（legacy org）不出 title_ladder／exec_misplaced', lgf);
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

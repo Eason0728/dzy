@@ -327,8 +327,14 @@ function stfFlagDetails_(o, org) {
       var t = org.title[title];
       if (!t || !t.active || t.parent !== (u.ladder || 'store')) add('title_ladder', submitted);
     }
-    // 執行長以上應掛鼎兆元總部／管理部（只標記，不自動搬）
-    if (title && STF_EXEC_TITLES.indexOf(title) !== -1 && (unit !== 'dzy-hq' || execDept !== STF_MGMT_DEPT)) add('exec_misplaced', submitted);
+    // 管理部（org 有啟用的 mgmt 列才判斷；切換組織之前不出，免得人資照建議改卻選不到管理部）
+    var mg = org.dept[STF_MGMT_DEPT];
+    if (mg && mg.active && title) {
+      // 執行長以上應掛鼎兆元總部／管理部（只標記，不自動搬）
+      if (STF_EXEC_TITLES.indexOf(title) !== -1 && (unit !== 'dzy-hq' || execDept !== STF_MGMT_DEPT)) add('exec_misplaced', submitted);
+      // 管理部不設部門主管：hm 職稱需重選
+      if (title === 'hm' && unit === 'dzy-hq' && execDept === STF_MGMT_DEPT) add('title_ladder', submitted);
+    }
   };
   if (o.unit) check(o.unit, o.title, o.dept || '', false, o.dept || '');
   var pu = o.p_unit || '';
