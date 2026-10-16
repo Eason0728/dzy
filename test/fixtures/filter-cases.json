@@ -1,0 +1,2281 @@
+{
+ "_doc": "稽核回應裁切共用案例。dzy-wt-perm 與 dzy-minikit 兩份必須逐字相同。filterNode：null｜字串｜字串陣列。",
+ "cases": [
+  {
+   "name": "null 原樣不動（含未知鍵）",
+   "filterNode": null,
+   "data": {
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ],
+     "secret_thing": "x"
+    },
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "dry": true,
+    "evil": [
+     1
+    ],
+    "token": "t"
+   },
+   "expect": {
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ],
+     "secret_thing": "x"
+    },
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "dry": true,
+    "evil": [
+     1
+    ],
+    "token": "t"
+   }
+  },
+  {
+   "name": "字串單店：五陣列＋config 都裁",
+   "filterNode": "sxl-gf",
+   "data": {
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ],
+     "secret_thing": "x"
+    },
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "dry": true,
+    "evil": [
+     1
+    ],
+    "token": "t"
+   },
+   "expect": {
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     }
+    ],
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      }
+     ]
+    },
+    "dry": true
+   }
+  },
+  {
+   "name": "字串另一店",
+   "filterNode": "ck",
+   "data": {
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ],
+     "secret_thing": "x"
+    },
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "dry": true,
+    "evil": [
+     1
+    ],
+    "token": "t"
+   },
+   "expect": {
+    "items": [
+     {
+      "store": "ck",
+      "id": 1
+     }
+    ],
+    "records": [
+     {
+      "store": "ck",
+      "id": 1
+     }
+    ],
+    "details": [
+     {
+      "store": "ck",
+      "id": 1
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "ck",
+      "id": 1
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "ck",
+      "id": 1
+     }
+    ],
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      }
+     ]
+    },
+    "dry": true
+   }
+  },
+  {
+   "name": "字串不存在的店＝全清",
+   "filterNode": "zzz",
+   "data": {
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ],
+     "secret_thing": "x"
+    },
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "dry": true,
+    "evil": [
+     1
+    ],
+    "token": "t"
+   },
+   "expect": {
+    "items": [],
+    "records": [],
+    "details": [],
+    "ops_records": [],
+    "ops_details": [],
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [],
+     "all_stores": []
+    },
+    "dry": true
+   }
+  },
+  {
+   "name": "空字串＝全清",
+   "filterNode": "",
+   "data": {
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ],
+     "secret_thing": "x"
+    },
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "dry": true,
+    "evil": [
+     1
+    ],
+    "token": "t"
+   },
+   "expect": {
+    "items": [],
+    "records": [],
+    "details": [],
+    "ops_records": [],
+    "ops_details": [],
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [],
+     "all_stores": []
+    },
+    "dry": true
+   }
+  },
+  {
+   "name": "陣列單店",
+   "filterNode": [
+    "mzt-gf"
+   ],
+   "data": {
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ],
+     "secret_thing": "x"
+    },
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "dry": true,
+    "evil": [
+     1
+    ],
+    "token": "t"
+   },
+   "expect": {
+    "items": [
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ]
+    },
+    "dry": true
+   }
+  },
+  {
+   "name": "陣列兩店",
+   "filterNode": [
+    "sxl-gf",
+    "mzt-gf"
+   ],
+   "data": {
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ],
+     "secret_thing": "x"
+    },
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "dry": true,
+    "evil": [
+     1
+    ],
+    "token": "t"
+   },
+   "expect": {
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ]
+    },
+    "dry": true
+   }
+  },
+  {
+   "name": "空陣列＝全清",
+   "filterNode": [],
+   "data": {
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ],
+     "secret_thing": "x"
+    },
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "dry": true,
+    "evil": [
+     1
+    ],
+    "token": "t"
+   },
+   "expect": {
+    "items": [],
+    "records": [],
+    "details": [],
+    "ops_records": [],
+    "ops_details": [],
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [],
+     "all_stores": []
+    },
+    "dry": true
+   }
+  },
+  {
+   "name": "陣列含不存在的店",
+   "filterNode": [
+    "ck",
+    "nope"
+   ],
+   "data": {
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "order": 2
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf",
+       "name": "Nsxl-gf",
+       "tab": "Tsxl-gf",
+       "active": true,
+       "order": 0
+      },
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      },
+      {
+       "code": "mzt-gf",
+       "name": "Nmzt-gf",
+       "tab": "Tmzt-gf",
+       "active": true,
+       "order": 2
+      }
+     ],
+     "secret_thing": "x"
+    },
+    "items": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "sxl-gf",
+      "id": 0
+     },
+     {
+      "store": "ck",
+      "id": 1
+     },
+     {
+      "store": "mzt-gf",
+      "id": 2
+     }
+    ],
+    "dry": true,
+    "evil": [
+     1
+    ],
+    "token": "t"
+   },
+   "expect": {
+    "items": [
+     {
+      "store": "ck",
+      "id": 1
+     }
+    ],
+    "records": [
+     {
+      "store": "ck",
+      "id": 1
+     }
+    ],
+    "details": [
+     {
+      "store": "ck",
+      "id": 1
+     }
+    ],
+    "ops_records": [
+     {
+      "store": "ck",
+      "id": 1
+     }
+    ],
+    "ops_details": [
+     {
+      "store": "ck",
+      "id": 1
+     }
+    ],
+    "config": {
+     "reasons": [
+      "a",
+      "b"
+     ],
+     "change_fund_std": 3000,
+     "petty_cash_std": 5000,
+     "accountant_ok": true,
+     "stores": [
+      {
+       "code": "ck",
+       "name": "Nck",
+       "order": 1
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "ck",
+       "name": "Nck",
+       "tab": "Tck",
+       "active": true,
+       "order": 1
+      }
+     ]
+    },
+    "dry": true
+   }
+  },
+  {
+   "name": "單一陣列鍵 items：字串 a",
+   "filterNode": "a",
+   "data": {
+    "items": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "b",
+      "id": 1
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   },
+   "expect": {
+    "items": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   }
+  },
+  {
+   "name": "單一陣列鍵 items：陣列 [b]",
+   "filterNode": [
+    "b"
+   ],
+   "data": {
+    "items": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "b",
+      "id": 1
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   },
+   "expect": {
+    "items": [
+     {
+      "store": "b",
+      "id": 1
+     }
+    ]
+   }
+  },
+  {
+   "name": "單一陣列鍵 records：字串 a",
+   "filterNode": "a",
+   "data": {
+    "records": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "b",
+      "id": 1
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   },
+   "expect": {
+    "records": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   }
+  },
+  {
+   "name": "單一陣列鍵 records：陣列 [b]",
+   "filterNode": [
+    "b"
+   ],
+   "data": {
+    "records": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "b",
+      "id": 1
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   },
+   "expect": {
+    "records": [
+     {
+      "store": "b",
+      "id": 1
+     }
+    ]
+   }
+  },
+  {
+   "name": "單一陣列鍵 details：字串 a",
+   "filterNode": "a",
+   "data": {
+    "details": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "b",
+      "id": 1
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   },
+   "expect": {
+    "details": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   }
+  },
+  {
+   "name": "單一陣列鍵 details：陣列 [b]",
+   "filterNode": [
+    "b"
+   ],
+   "data": {
+    "details": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "b",
+      "id": 1
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   },
+   "expect": {
+    "details": [
+     {
+      "store": "b",
+      "id": 1
+     }
+    ]
+   }
+  },
+  {
+   "name": "單一陣列鍵 ops_records：字串 a",
+   "filterNode": "a",
+   "data": {
+    "ops_records": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "b",
+      "id": 1
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   },
+   "expect": {
+    "ops_records": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   }
+  },
+  {
+   "name": "單一陣列鍵 ops_records：陣列 [b]",
+   "filterNode": [
+    "b"
+   ],
+   "data": {
+    "ops_records": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "b",
+      "id": 1
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   },
+   "expect": {
+    "ops_records": [
+     {
+      "store": "b",
+      "id": 1
+     }
+    ]
+   }
+  },
+  {
+   "name": "單一陣列鍵 ops_details：字串 a",
+   "filterNode": "a",
+   "data": {
+    "ops_details": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "b",
+      "id": 1
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   },
+   "expect": {
+    "ops_details": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   }
+  },
+  {
+   "name": "單一陣列鍵 ops_details：陣列 [b]",
+   "filterNode": [
+    "b"
+   ],
+   "data": {
+    "ops_details": [
+     {
+      "store": "a",
+      "id": 0
+     },
+     {
+      "store": "b",
+      "id": 1
+     },
+     {
+      "store": "a",
+      "id": 2
+     }
+    ]
+   },
+   "expect": {
+    "ops_details": [
+     {
+      "store": "b",
+      "id": 1
+     }
+    ]
+   }
+  },
+  {
+   "name": "數字型 store 與字串 node 比對（String 化）",
+   "filterNode": [
+    "1"
+   ],
+   "data": {
+    "records": [
+     {
+      "store": 1,
+      "id": 0
+     },
+     {
+      "store": 2,
+      "id": 1
+     }
+    ]
+   },
+   "expect": {
+    "records": [
+     {
+      "store": 1,
+      "id": 0
+     }
+    ]
+   }
+  },
+  {
+   "name": "數字型 store 對字串 node 全等（字串 node 數字 store 以 String 比）",
+   "filterNode": "1",
+   "data": {
+    "records": [
+     {
+      "store": 1
+     },
+     {
+      "store": "1"
+     },
+     {
+      "store": 2
+     }
+    ]
+   },
+   "expect": {
+    "records": [
+     {
+      "store": 1
+     },
+     {
+      "store": "1"
+     }
+    ]
+   }
+  },
+  {
+   "name": "列沒有 store 欄或非物件＝丟掉",
+   "filterNode": "a",
+   "data": {
+    "items": [
+     {
+      "id": 1
+     },
+     null,
+     "x",
+     {
+      "store": "a"
+     },
+     {
+      "store": null
+     }
+    ]
+   },
+   "expect": {
+    "items": [
+     {
+      "store": "a"
+     }
+    ]
+   }
+  },
+  {
+   "name": "陣列鍵不是陣列＝清成空陣列",
+   "filterNode": "a",
+   "data": {
+    "items": "oops",
+    "records": null,
+    "details": {
+     "store": "a"
+    }
+   },
+   "expect": {
+    "items": [],
+    "records": [],
+    "details": []
+   }
+  },
+  {
+   "name": "未知頂層鍵一律刪除",
+   "filterNode": "a",
+   "data": {
+    "foo": 1,
+    "bar": [
+     {
+      "store": "a"
+     }
+    ],
+    "__proto__x": 2,
+    "items": [
+     {
+      "store": "a"
+     }
+    ]
+   },
+   "expect": {
+    "items": [
+     {
+      "store": "a"
+     }
+    ]
+   }
+  },
+  {
+   "name": "config 只留白名單鍵",
+   "filterNode": "a",
+   "data": {
+    "config": {
+     "reasons": [],
+     "secret": 1,
+     "token": "x",
+     "stores": [],
+     "all_stores": []
+    }
+   },
+   "expect": {
+    "config": {
+     "reasons": [],
+     "stores": [],
+     "all_stores": []
+    }
+   }
+  },
+  {
+   "name": "config.stores 依 code 裁（陣列）",
+   "filterNode": [
+    "ck",
+    "mzt-gf"
+   ],
+   "data": {
+    "config": {
+     "stores": [
+      {
+       "code": "sxl-gf"
+      },
+      {
+       "code": "ck"
+      },
+      {
+       "code": "mzt-gf"
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "sxl-gf"
+      },
+      {
+       "code": "ck"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "config": {
+     "stores": [
+      {
+       "code": "ck"
+      },
+      {
+       "code": "mzt-gf"
+      }
+     ],
+     "all_stores": [
+      {
+       "code": "ck"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "config 不是物件則整個丟掉",
+   "filterNode": "a",
+   "data": {
+    "config": "x",
+    "items": []
+   },
+   "expect": {
+    "items": []
+   }
+  },
+  {
+   "name": "config 為陣列則整個丟掉",
+   "filterNode": "a",
+   "data": {
+    "config": [
+     1,
+     2
+    ]
+   },
+   "expect": {}
+  },
+  {
+   "name": "config.stores 非陣列＝空陣列",
+   "filterNode": "a",
+   "data": {
+    "config": {
+     "stores": "x"
+    }
+   },
+   "expect": {
+    "config": {
+     "stores": []
+    }
+   }
+  },
+  {
+   "name": "dry 原樣保留（false 也保留）",
+   "filterNode": "a",
+   "data": {
+    "dry": false,
+    "items": []
+   },
+   "expect": {
+    "dry": false,
+    "items": []
+   }
+  },
+  {
+   "name": "data 為陣列→空物件",
+   "filterNode": "a",
+   "data": [
+    {
+     "store": "a"
+    }
+   ],
+   "expect": {}
+  },
+  {
+   "name": "data 為 null→空物件",
+   "filterNode": "a",
+   "data": null,
+   "expect": {}
+  },
+  {
+   "name": "data 為字串→空物件",
+   "filterNode": "a",
+   "data": "hello",
+   "expect": {}
+  },
+  {
+   "name": "data 為數字→空物件",
+   "filterNode": [
+    "a"
+   ],
+   "data": 5,
+   "expect": {}
+  },
+  {
+   "name": "空物件→空物件",
+   "filterNode": [
+    "a"
+   ],
+   "data": {},
+   "expect": {}
+  }
+ ]
+}

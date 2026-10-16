@@ -45,6 +45,7 @@ import { isDryRun, isReadAction, notifyDryRun, DRYRUN_MESSAGE } from './dryrun.j
 // 記憶體狀態
 // ============================================================
 let currentUser = null; // { id, name, role, node } | null
+let currentAuditScope = null; // 後端 login／me 回的 audit_scope：'all'｜'none'｜字串陣列；沒回＝null（退回舊的 node 判斷）
 let currentPerms = []; // string[]，可能含 '*'
 let currentToken = null; // 記憶體快取的 token（來源仍是 localStorage）
 
@@ -142,10 +143,13 @@ function applySession(data) {
   }
   currentUser = (data && data.user) || null;
   currentPerms = Array.isArray(data && data.perms) ? data.perms.slice() : [];
+  const sc = data && data.audit_scope;
+  currentAuditScope = (sc === 'all' || sc === 'none') ? sc : (Array.isArray(sc) ? sc.map(String) : null);
 }
 
 function clearSession() {
   currentUser = null;
+  currentAuditScope = null;
   currentPerms = [];
   currentToken = null;
 }
@@ -290,6 +294,11 @@ export async function flushPendingLogout() {
   if (!isLogoutSettled(res)) return false;
   clearPendingLogout(token);
   return true;
+}
+
+/** @returns {'all'|'none'|string[]|null} 後端給的稽核範圍；沒給（舊後端）回 null */
+export function getAuditScope() {
+  return Array.isArray(currentAuditScope) ? currentAuditScope.slice() : currentAuditScope;
 }
 
 /** @returns {{id:string, name:string, role:string, node:string}|null} 未登入回 null */

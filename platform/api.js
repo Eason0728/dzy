@@ -41,7 +41,7 @@
 'use strict';
 
 import { BACKENDS } from './config.js';
-import { getUser, can, getToken } from './auth.js';
+import { getUser, can, getToken, getAuditScope } from './auth.js';
 import { isDryRun, isReadAction, notifyDryRun } from './dryrun.js';
 
 // 代轉逾時 35 秒：mini 對舊後端等 30 秒，再留 5 秒餘裕（PROXY.md 第 3 節）
@@ -115,73 +115,79 @@ async function postJson_(url, body, ms) {
   }
 }
 
-// 稽核回傳裡，「一列＝一店資料」的陣列（items／records／details／ops_records／ops_details）
-// 全部都用 `store` 這個欄位存店代碼（讀 ~/mala-audit/apps-script/Code.gs 的
-// readItems_/readRecords_/readDetails_/readOpsRecords_/readOpsDetails_ 逐一確認，不是猜的）。
-// config.stores 是店代碼對照表（參考用列舉），欄位名是 `code` 不是 `store`，天生不會被這個
-// 過濾器誤裁——它不是「一列稽核資料」，是給畫面選單用的固定清單。
-function filterOwnNode_(data, node) {
-  if (!data || typeof data !== 'object') return data;
+// 稽核回傳裁切（2026-10-17 第二期：改白名單 fail closed，spec §5、§13 第 8、9 條）。
+// 稽核 getAll 的 data 頂層只認：config（物件）、items／records／details／ops_records／ops_details
+// （五個扁平陣列，每列有 `store` 欄，讀 ~/mala-audit/apps-script/Code.gs 確認）、dry。其餘一律刪除。
+// node（= 代轉層 filterNode）可以是字串（舊後端，單店）或字串陣列（新後端，可為空陣列＝全清）。
+// mini 的 apps/dzy-platform/proxy-hook.js filterResponse 是同一份語意，兩邊 fixture 逐字相同。
+const AUDIT_ROW_KEYS_ = ['items', 'records', 'details', 'ops_records', 'ops_details'];
+const AUDIT_CONFIG_KEYS_ = ['reasons', 'change_fund_std', 'petty_cash_std', 'accountant_ok', 'stores', 'all_stores'];
+
+/** node 是否允許這個店代碼：字串＝全等；陣列＝包含；其餘（含空字串、空陣列）＝一律不允許。比對前 String()。 */
+function storeAllowed_(store, node) {
+  if (store === undefined || store === null) return false;
+  const s = String(store);
+  if (typeof node === 'string') return node !== '' && s === node;
+  if (Array.isArray(node)) return node.indexOf(s) !== -1;
+  return false;
+}
+
+function filterAuditData_(data, node) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
   const out = {};
-  for (const key of Object.keys(data)) {
+  for (const key of AUDIT_ROW_KEYS_) {
+    if (!(key in data)) continue;
     const val = data[key];
-    // 沒有 store 欄位的列（含 null／非物件）一律丟掉：往關的方向失敗
-    out[key] = isStoreRowArray_(val)
-      ? val.filter((row) => row && typeof row === 'object' && row.store === node)
-      : val;
+    out[key] = Array.isArray(val)
+      ? val.filter((row) => row && typeof row === 'object' && storeAllowed_(row.store, node))
+      : [];
   }
+  const cfg = data.config;
+  if (cfg && typeof cfg === 'object' && !Array.isArray(cfg)) {
+    const c = {};
+    for (const k of AUDIT_CONFIG_KEYS_) {
+      if (!(k in cfg)) continue;
+      c[k] = (k === 'stores' || k === 'all_stores')
+        ? (Array.isArray(cfg[k]) ? cfg[k].filter((r) => r && typeof r === 'object' && storeAllowed_(r.code, node)) : [])
+        : cfg[k];
+    }
+    out.config = c;
+  }
+  if ('dry' in data) out.dry = data.dry;
   return out;
 }
 
+/** 測試用：直接驗裁切函式（test/filter-cases.test.mjs） */
+export function __filterAuditData(data, node) {
+  return filterAuditData_(data, node);
+}
+
 /**
- * 店長節點裁切（spec §7、任務指示第 4 點——這條寫錯等於權限是假的）。
- * 判斷條件：這個 ns 底下，使用者沒有 `<ns>.read`（全節點）但有 `<ns>.read.own`。
- * spec §4.1 已約束 backend 必為 ns，這裡直接拿 backendId 當 ns 用。
- * 有 `<ns>.read` 的人（會計、部門主管、admin）一律不裁切——即使同時也有 `.read.own`，
- * 全節點權限優先，不裁切。
+ * 店長／同仁節點裁切（spec §7——這條寫錯等於權限是假的）。
+ * 裁切依據優先序：
+ *  1. 後端 login／me 回的 audit_scope（auth.js getAuditScope）：'all'＝不裁；'none'＝全清；陣列＝只看這些店。
+ *  2. 沒有 audit_scope（舊後端）：沿用舊邏輯——有 `<ns>.read` 不裁；沒有 `<ns>.read.own` 也不裁（本來就進不來）；
+ *     否則依 user.node 裁，node 為空一律清空（往關的方向失敗）。
  */
 function maybeFilterOwnNode_(backendId, data) {
+  const scope = getAuditScope();
+  if (scope === 'all') return data;
+  if (scope === 'none') return filterAuditData_(data, []);
+  if (Array.isArray(scope)) return filterAuditData_(data, scope);
+
   const hasFull = can(`${backendId}.read`);
   const hasOwn = can(`${backendId}.read.own`);
   if (hasFull || !hasOwn) return data;
   const user = getUser();
   const node = user && user.node;
-
-  // 2026-08-15 對抗審查修正：原本這裡是 `if (!node) return data;`，
-  // 註解寫「理論上不會發生」——但它一旦發生，回傳的是**全部節點的資料**，
-  // 也就是這個防呆是往「開」的方向失敗的。
-  // 只要有人在人員管理建了一個「店長 + 所屬節點留空」的帳號，隔離就整個消失。
-  // 改成往「關」的方向失敗：拿不到節點就一列都不給，並在 console 留下可查的訊息。
   if (!node) {
     console.error(
       `[api] 使用者 ${user && user.id} 只有 ${backendId}.read.own 卻沒有所屬節點，` +
       '無法判斷該看哪一店，已回傳空資料。請到人員管理補上他的所屬節點。'
     );
-    return emptyRows_(data);
+    return filterAuditData_(data, []);
   }
-
-  return filterOwnNode_(data, node);
-}
-
-/** 把所有「一列一店」的陣列清空，其餘欄位（設定、對照表）保留——用於裁切失敗時的保守回傳 */
-function emptyRows_(data) {
-  if (!data || typeof data !== 'object') return data;
-  const out = {};
-  for (const key of Object.keys(data)) {
-    const val = data[key];
-    out[key] = isStoreRowArray_(val) ? [] : val;
-  }
-  return out;
-}
-
-/**
- * 判斷一個值是不是「一列一店」的資料陣列：只要有任一列帶 store 欄位就算（2026-10-12 修）。
- * 原本要求「每一列」都有 store，混入一列沒 store 就整批不裁切＝往開的方向失敗。
- * 沒有 store 的列由 filterOwnNode_ 丟掉。空陣列照舊不算。
- */
-function isStoreRowArray_(val) {
-  return Array.isArray(val) && val.length > 0
-    && val.some((row) => row && typeof row === 'object' && 'store' in row);
+  return filterAuditData_(data, node);
 }
 
 /** 轉接只在這一處做（spec §4.8）：依 backendId 決定既有回傳長怎樣、要怎麼包進 data。 */

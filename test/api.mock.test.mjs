@@ -369,12 +369,37 @@ await (async function test7() {
 
   assertEqual(
     res.data.config.stores.map((s) => s.code),
-    STORE_CODES,
-    '7i: config.stores 是店名參考清單（欄位叫 code 不叫 store），不被裁切，店長仍看得到全部店名可供選單使用'
+    ['sxl-gf'],
+    '7i: config.stores 也依 code 裁成看得到的店（第二期白名單：不再讓店長看到別店名單）'
   );
 
   armGuard();
   await quietLogout();
+})();
+
+// ============================================================
+// 7x. 後端給 audit_scope 時以它為準（第二期）：陣列／'none'／'all'；同仁帳號 node 是空字串也能裁
+// ============================================================
+await (async function test7scope() {
+  const cases = [
+    ['陣列兩店', ['ck', 'mzt-gf'], ['ck', 'mzt-gf']],
+    ['none', 'none', []],
+    ['all', 'all', STORE_CODES]
+  ];
+  for (const [label, scope, want] of cases) {
+    await loginAs({
+      token: 'tok-scope-' + label,
+      user: { id: 'u200', name: '同仁', role: 'staff', node: '' },
+      perms: ['audit.read.own'],
+      audit_scope: scope
+    });
+    const auditResp = buildAuditGetAllResponse();
+    globalThis.fetch = makeFetchMock({ getAll: () => auditResp });
+    const res = await call('audit', 'getAll', {});
+    assertEqual(res.data.records.map((r) => r.store), want, '7x: audit_scope=' + label + ' 時 records 依它裁');
+    armGuard();
+    await quietLogout();
+  }
 })();
 
 // ============================================================
@@ -548,8 +573,8 @@ await (async function test15() {
   assertEqual(res.data.items.length, 0, '15c: items 同樣清空');
   assertEqual(res.data.details.length, 0, '15d: details 同樣清空');
   assertTrue(
-    Array.isArray(res.data.config && res.data.config.stores) && res.data.config.stores.length > 0,
-    '15e: 設定與對照表（config.stores）保留，只清「一列一店」的資料'
+    Array.isArray(res.data.config && res.data.config.stores) && res.data.config.stores.length === 0,
+    '15e: 拿不到節點時 config.stores 也清空（白名單 fail closed），其餘設定鍵保留'
   );
   await quietLogout();
 })();
