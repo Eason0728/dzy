@@ -2,8 +2,8 @@
 - 開案日：2026-10-17
 - 分級：完整
 - 分級依據：排程=否 發訊息=否 外部後台=否 被看到=是 寫正式資料=是
-- 現在在：③-需求（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
-- 等 Eason：確認 requirements v1（Artifact 網頁最上面 4 件事），之後才寫 spec.md；另等 mini 改職級（區督導 3→2、總監 4→3）
+- 現在在：③-規格（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
+- 等 Eason：確認 spec v1（Artifact 最上面 2 題），之後跑 GPT 設計審
 
 ## ① 查（2026-10-17）
 - `grep -rn 第二期 ~/dzy/docs`：personnel/requirements.md:20、personnel/spec.md:48-49、org/requirements.md:41 都只寫「第二期：依職稱決定能用哪些系統（另案）」，沒有任何設計內容 → 不是已存在的東西，是既有系統排好的下一期。
@@ -21,6 +21,7 @@
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
 |---|---|---|---|---|---|
+| 2026-10-17 | 需求確認 | requirements v1 | Eason「需求 OK」 | 1 | 對話紀錄 |
 | 2026-10-17 | 問題清單 | 8 題 | Eason：全照推薦，7→B、8→B | 1 | 對話紀錄；requirements.md 第 3 節 |
 
 ## 落地清單
@@ -35,3 +36,4 @@
 
 ## 待辦備忘
 - 程式初始值 Staff.gs STF_UPGRADE_ADD／預設 org：osv rank 3→2、odir 4→3，連同 test/org-upgrade.mock.test.mjs T1 一起改（目前工作樹有別的 session 未提交的 SSO 修改，sync-gas 要求乾淨，所以先不動程式，只請 mini 改資料）。
+- 2026-10-17 01:21 mini 已改正式 org：osv rank 3→2、odir 4→3（備份 ~/dzy-platform-data/app.db.bak-rank-202610170121；停機 7 秒；orgOptions 驗過 ofs1／oam2／osv2／odir3）。org_upg_* 快照仍是舊值 → 不可再按「切換組織」，直到 spec 第 9 節修好初始值。
