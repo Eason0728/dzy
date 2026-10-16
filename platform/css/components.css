@@ -400,6 +400,57 @@ textarea.input:disabled {
   padding: 14px 10px 6px;
 }
 
+/* 部門分組（2026-10-16）：標題可點展開；功能縮排掛在底下 */
+.nav-dept-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  color: var(--side-txt);
+  font-size: 15px;
+  font-weight: var(--fw-bold);
+  padding: 9px 14px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  cursor: pointer;
+}
+.nav-dept-head:hover {
+  background: var(--sidebar-2);
+  color: var(--ink-inverse);
+}
+.nav-dept-head .arrow {
+  width: 12px;
+  font-size: 12px;
+  color: var(--side-label);
+}
+.nav-dept-head .lb {
+  flex: 1;
+}
+.nav-dept-head .cnt {
+  font-size: var(--fs-xs);
+  color: var(--side-label);
+}
+.nav-dept-items {
+  display: none;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 14px;
+}
+.nav-dept.is-open .nav-dept-items {
+  display: flex;
+}
+.nav-dept-items .nav-item {
+  font-size: 15px;
+  padding: 9px 12px;
+}
+.nav-dept-empty {
+  font-size: var(--fs-xs);
+  color: var(--side-label);
+  padding: 4px 14px 8px 26px;
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -678,8 +729,19 @@ textarea.input:disabled {
     white-space: nowrap;
   }
   .sidebar .bs,
-  .nav-label {
+  .nav-label,
+  .nav-dept-head,
+  .nav-dept-empty {
     display: none;
+  }
+  /* 手機：部門標題收起，功能攤平成下排圖示（不論展開與否） */
+  .nav-dept,
+  .nav-dept-items,
+  .nav-dept.is-open .nav-dept-items {
+    display: contents;
+  }
+  .nav-dept-items .nav-item {
+    padding: 7px 2px 6px;
   }
   .sidebar .brand-logo {
     width: 34px;

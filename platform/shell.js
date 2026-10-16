@@ -42,6 +42,7 @@ import { setDryRunNotifier } from './dryrun.js';
 import * as ui from './ui.js';
 import * as fmt from './fmt.js';
 import { loadManifests } from './registry.js';
+import { DEPARTMENTS } from './config.js';
 import { reportManifest } from './manifest-check.js';
 import { render as renderLogin } from './views/login.js';
 
@@ -423,12 +424,14 @@ async function teardownCurrent() {
 /** 角色代號 → 中文（spec §4.3 平台層的角色表；查不到就顯示原代號，不讓畫面壞掉）。 */
 /** 各模組最近一次 badge() 的數字：側邊欄每次切頁都會重畫，要靠這份補回件數。 */
 const navBadgeCache = {};
+/** 側邊欄部門的展開狀態：使用者點過的才記（true／false）；沒點過＝有功能就展開、空的收合 */
+const deptOpenState = new Map();
 
 const ROLE_ZH = { admin: '系統管理者', manager: '部門主管', accountant: '會計', storelead: '店長', staff: '員工' };
 
 /**
  * 左側深色側邊欄（外觀照門市營運系統 ~/mala-store-ops/web/js/shell.js sidebarHtml，2026-10-11）：
- * 品牌 → 首頁 →「系統」標籤 → 有權限的模組 → 底部使用者區（改密碼／登出）。
+ * 品牌 → 首頁 → 我的資料 →「部門」標籤 → 十個部門（可展開，功能依 manifest.dept 掛上）→ 底部使用者區（改密碼／登出）。
  * 手機（≤860px）由 CSS 改成「上排品牌＋使用者、下排圖示選單」，同一份 DOM，不另做第二份導覽。
  */
 function renderTopNav() {
@@ -441,14 +444,36 @@ function renderTopNav() {
     'aria-current': id === activeId ? 'page' : null
   }, [el('span', { class: 'ic', 'aria-hidden': 'true' }, [iconNode]), el('span', { class: 'lb', text: label })]);
 
+  // 圖示＝manifest.icon（資料），殼不對值做 if 判斷
+  const moduleItem = (m) => navItem(m.id, m.name, el('img', { src: `assets/icons/${m.icon}.png`, alt: '' }));
+
   clearChildren(sideNavEl);
   sideNavEl.appendChild(navItem('__home__', '首頁', el('span', { text: '🏠' })));
-  if (permittedModules.length) sideNavEl.appendChild(el('div', { class: 'nav-label', text: '系統' }));
-  for (const m of permittedModules) {
-    // 圖示＝manifest.icon（資料），殼不對值做 if 判斷
-    sideNavEl.appendChild(navItem(m.id, m.name, el('img', { src: `assets/icons/${m.icon}.png`, alt: '' })));
-    if (navBadgeCache[m.id]) setNavBadge(m.id, navBadgeCache[m.id]);
+  // 沒掛部門的模組（我的資料）排在首頁下面
+  for (const m of permittedModules) if (!m.dept) sideNavEl.appendChild(moduleItem(m));
+
+  // 部門分組（2026-10-16）：十個部門全列，有功能的預設展開、空的收合；點標題切換，空部門展開顯示「尚無功能」。
+  // 手機版由 CSS 隱藏部門標題、把功能攤平成下排圖示（同一份 DOM）。
+  if (currentModule && currentModule.dept) deptOpenState.set(currentModule.dept, true);
+  sideNavEl.appendChild(el('div', { class: 'nav-label', text: '部門' }));
+  for (const d of DEPARTMENTS) {
+    const mods = permittedModules.filter((m) => m.dept === d.id);
+    const open = deptOpenState.has(d.id) ? deptOpenState.get(d.id) : mods.length > 0;
+    const head = el('button', {
+      type: 'button',
+      class: 'nav-dept-head',
+      'data-nav-dept': d.id,
+      'aria-expanded': open ? 'true' : 'false'
+    }, [
+      el('span', { class: 'arrow', 'aria-hidden': 'true', text: open ? '▾' : '▸' }),
+      el('span', { class: 'lb', text: d.name }),
+      mods.length ? el('span', { class: 'cnt', text: String(mods.length) }) : null
+    ].filter(Boolean));
+    const items = el('div', { class: 'nav-dept-items' },
+      mods.length ? mods.map(moduleItem) : [el('div', { class: 'nav-dept-empty', text: '尚無功能' })]);
+    sideNavEl.appendChild(el('div', { class: `nav-dept${open ? ' is-open' : ''}`, 'data-dept': d.id }, [head, items]));
   }
+  for (const m of permittedModules) if (navBadgeCache[m.id]) setNavBadge(m.id, navBadgeCache[m.id]);
 
   const user = auth.getUser() || {};
   clearChildren(sideUserEl);
@@ -536,6 +561,13 @@ function renderHomeCards() {
 // ============================================================
 
 function onTopNavClick(e) {
+  const deptBtn = findAncestorWithAttr(e.target, 'data-nav-dept');
+  if (deptBtn) {
+    const d = deptBtn.getAttribute('data-nav-dept');
+    deptOpenState.set(d, deptBtn.getAttribute('aria-expanded') !== 'true');
+    renderTopNav();
+    return;
+  }
   const btn = findAncestorWithAttr(e.target, 'data-nav');
   if (!btn) return;
   const id = btn.getAttribute('data-nav');
@@ -844,6 +876,7 @@ async function doLogout(opts) {
   allManifests = [];
   permittedModules = [];
   for (const k of Object.keys(navBadgeCache)) delete navBadgeCache[k];
+  deptOpenState.clear();
   window.location.hash = '';
   showLogin();
   // 2026-10-12 安全修補：共用電腦登出後整頁重載，讓所有模組的記憶體（稽核快取、in-flight、

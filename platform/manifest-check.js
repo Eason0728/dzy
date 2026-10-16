@@ -8,6 +8,8 @@
  * 一個模組寫錯 manifest 卻安靜地不出現在首頁，是最難查的那種 bug。
  */
 
+import { DEPARTMENTS } from './config.js';
+
 /** 模組代號／命名空間／後端代號／分頁代號共用的格式 */
 export const ID_RE = /^[a-z][a-z0-9-]{1,19}$/;
 
@@ -18,7 +20,7 @@ export const PERM_RE = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*){1,2}$/;
 export const RESERVED_IDS = ['claim', 'forgot', 'home'];
 
 const REQUIRED_KEYS = ['id', 'ns', 'backend', 'name', 'desc', 'icon', 'requires', 'views', 'entry'];
-const KNOWN_KEYS = REQUIRED_KEYS.concat(['color']);
+const KNOWN_KEYS = REQUIRED_KEYS.concat(['color', 'dept']);
 
 /**
  * @param {object} m 模組 manifest
@@ -47,6 +49,9 @@ export function validateManifest(m) {
   checkId(m.ns, 'ns', errors);
   checkId(m.backend, 'backend', errors);
   checkId(m.icon, 'icon', errors);
+  if (m.dept !== undefined && !DEPARTMENTS.some((d) => d.id === m.dept)) {
+    errors.push(`${at('dept')}「${m.dept}」不是已知部門代碼（${DEPARTMENTS.map((d) => d.id).join('、')}）`);
+  }
 
   checkText(m.name, 'name', 2, 8, errors);
   checkText(m.desc, 'desc', 1, 20, errors);

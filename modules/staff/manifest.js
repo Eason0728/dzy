@@ -10,6 +10,7 @@ export default {
   name: '同仁名單',
   desc: '匯入編號、確認開通、新增、離職、打卡對照',
   icon: 'staff',
+  dept: 'hr',                    // 左側選單掛在哪個部門（platform/config.js DEPARTMENTS）
   requires: ['platform.staff'],
   views: [
     { id: 'list', name: '名單', requires: ['platform.staff'] },

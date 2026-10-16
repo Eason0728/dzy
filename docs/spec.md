@@ -163,6 +163,7 @@ export default {
 ```
 
 - `views[].id` 格式同 4.1；路由第二段就是它。
+- 選填 `dept`：左側選單掛在哪個部門（代碼見 `platform/config.js` 的 `DEPARTMENTS`，＝org 分頁 dept 代碼）；不填＝排在首頁下面、不進部門（2026-10-16）。
 - 使用者看不到 `requires` 不符的分頁；模組本身 `requires` 全不符則首頁不顯示這張卡片。
 
 **本期三個模組的 manifest 摘要：**

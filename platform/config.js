@@ -23,6 +23,24 @@
  */
 export const APP_NAME = '鼎兆元餐飲集團｜管理系統';
 
+/**
+ * 左側選單的部門分組（2026-10-16 Eason：選單改成部門、十個部門全列，沒功能的也顯示）。
+ * 代碼＝org 分頁 dept 列（apps-script/platform/Staff.gs）；順序＝選單由上到下。
+ * 模組 manifest 填 dept 掛到該部門底下；沒填 dept（例如「我的資料」）排在首頁下面、不進部門。
+ */
+export const DEPARTMENTS = [
+  { id: 'hr', name: '人資部' },
+  { id: 'eng', name: '工程部' },
+  { id: 'franchise', name: '加盟招商部' },
+  { id: 'it', name: '資訊部' },
+  { id: 'marketing', name: '行銷部' },
+  { id: 'fin', name: '財務部' },
+  { id: 'purchase', name: '採購部' },
+  { id: 'ops', name: '營運部' },
+  { id: 'training', name: '訓練部' },
+  { id: 'mgmt', name: '管理部' }
+];
+
 export const BACKENDS = {
   // 2026-10 起平台後端在公司 Mac mini（dzy-minikit apps/dzy-platform，Funnel /platform）。
   // 回退：還原這一行成舊 Apps Script /exec（git revert 合併 minikit-cutover 的 commit），見 ~/dzy-minikit/apps/dzy-platform/ROLLBACK.md

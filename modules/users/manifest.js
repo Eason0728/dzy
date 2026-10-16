@@ -18,6 +18,7 @@ export default {
   name: '人員管理',
   desc: '新增／停用帳號、重設密碼',
   icon: 'users',
+  dept: 'it',                    // 左側選單掛在哪個部門（platform/config.js DEPARTMENTS）
   requires: ['platform.users'],
   views: [
     { id: 'list', name: '人員清單', requires: ['platform.users'] }
