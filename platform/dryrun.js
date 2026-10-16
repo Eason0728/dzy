@@ -19,7 +19,9 @@ export const READ_ACTIONS = {
     // clockJobStatus 刻意不列：查 link 單會從快取取走並刪掉一次性金鑰（有副作用）；試跑時新增／取連結本來就被攔，前端不輪詢
     'staffUnitList', 'clockMapList', 'clockAlerts',
     // logout 不是資料寫入（只讓自己的登入失效），試跑模式也要真的登出（2026-10-12）
-    'logout'],
+    'logout',
+    // 公告專區換佈告欄入場券（2026-10-16）：只在快取放一張 60 秒的券，不寫任何資料；試跑時也要能自動登入佈告欄
+    'ssoTicket'],
   audit: ['getAll'],
   dorm: ['rooms', 'list', 'contract', 'handover']
 };
