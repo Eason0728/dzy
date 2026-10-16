@@ -1919,5 +1919,50 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(sb.CODE_ALLOWED_ACTIONS.indexOf('ssoTicket') !== -1 && sb.CODE_ALLOWED_ACTIONS.indexOf('svcSsoRedeem') !== -1, 'SSO 分派白名單有兩支');
 })();
 
+// ── 公告管理權限＋bulletin-admin 入場券（2026-10-17）────────────────
+(() => {
+  const app = fresh();
+  const { sb, tok, props } = app;
+  props.BULLETIN_SVC_KEY = 'fake-bulletin-key-0001';
+  const st = claimApprove(app, '公告同仁乙', 'bul-pw-0001');
+  const other = claimApprove(app, '公告同仁丙', 'bul-pw-0002');
+  const tkA = (t) => post(sb, 'ssoTicket', { aud: 'bulletin-admin' }, t);
+  const rd = (ticket, aud) => post(sb, 'svcSsoRedeem', { svc_key: 'fake-bulletin-key-0001', ticket, aud });
+  const perms = (t) => post(sb, 'me', {}, t).data.perms;
+  const listed = (emp) => post(sb, 'staffList', {}, tok).data.staff.find((p) => p.emp_no === emp);
+  ok(tkA(st.token).code === 'no_perm' && perms(st.token).indexOf('platform.bulletin') === -1, 'BUL 沒勾 → 沒有 platform.bulletin、換不到管理券');
+  ok(listed(st.emp).bulletin_admin === false, 'BUL 同仁名單回 bulletin_admin＝false');
+  // 只有人資／admin 能設；格式要布林
+  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true }, other.token).error === '沒有權限設定公告管理', 'BUL ★一般同仁不能設（自己也不行）');
+  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true }, st.token).ok === false, 'BUL ★不能幫自己開');
+  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: 'yes' }, tok).error === '公告管理權限格式錯誤', 'BUL 非布林 → 格式錯誤');
+  const e1 = post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true }, tok);
+  ok(e1.ok, 'BUL admin 勾選成功', e1);
+  ok(props.BULLETIN_ADMINS === st.emp && listed(st.emp).bulletin_admin === true && listed(other.emp).bulletin_admin === false, 'BUL ★存進 BULLETIN_ADMINS、名單顯示已勾、別人不受影響', props.BULLETIN_ADMINS);
+  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true }, tok).error === '沒有要改的欄位', 'BUL 已勾再勾 → 沒有要改的欄位');
+  ok(perms(st.token).indexOf('platform.bulletin') !== -1, 'BUL ★勾選後同一個登入就有 platform.bulletin（每次請求重算）');
+  const t1 = tkA(st.token);
+  ok(t1.ok && /^[0-9a-f]{64}$/.test(t1.data.ticket), 'BUL 有權限 → 拿到管理券');
+  ok(rd(t1.data.ticket, 'bulletin').code === 'ticket_invalid', 'BUL ★管理券不能當一般登入券用（aud 不符，且作廢）');
+  const t2 = tkA(st.token).data.ticket, r2 = rd(t2, 'bulletin-admin');
+  ok(r2.ok && r2.data.admin === true && r2.data.emp_no === st.emp && r2.data.name === '公告同仁乙', 'BUL ★兌換回 admin＋編號＋名字', r2);
+  ok(rd(t2, 'bulletin-admin').code === 'ticket_invalid', 'BUL 管理券同樣只能換一次');
+  const tb = post(sb, 'ssoTicket', { aud: 'bulletin' }, st.token).data.ticket;
+  ok(rd(tb, 'bulletin-admin').code === 'ticket_invalid', 'BUL ★一般登入券不能拿去換管理權');
+  // admin（'*'）沒有 DZY 編號也能管理
+  const ta = tkA(tok).data.ticket, ra = rd(ta, 'bulletin-admin');
+  ok(ra.ok && ra.data.emp_no === '' && ra.data.uid === 'u001' && ra.data.name === '系統管理者', 'BUL ★admin 換得到管理券（編號空、帶帳號 id 與名字）', ra);
+  // 取消勾選、停用都收回
+  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: false }, tok).ok && props.BULLETIN_ADMINS === '' && tkA(st.token).code === 'no_perm', 'BUL ★取消勾選 → 立刻換不到管理券');
+  post(sb, 'staffEdit', { emp_no: other.emp, bulletin_admin: true }, tok);
+  post(sb, 'staffSetActive', { emp_no: other.emp, active: false }, tok);
+  ok(tkA(other.token).ok === false, 'BUL ★停用後換不到管理券');
+  // 跟其他欄位一起改也可以
+  const e3 = post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true, phone: '0922333444' }, tok);
+  ok(e3.ok && listed(st.emp).bulletin_admin === true, 'BUL 與其他欄位一起改', e3);
+  // 寫進同仁紀錄
+  ok(JSON.stringify(rowsOf(app, 'staff_log')).indexOf('bulletin_admin') !== -1, 'BUL 同仁紀錄有「改了：bulletin_admin」');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

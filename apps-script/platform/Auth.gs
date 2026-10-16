@@ -703,6 +703,10 @@ function authPermsWithGate_(role, gate) {
   if (canReview && perms.indexOf('platform.review') === -1 && perms.indexOf('*') === -1) {
     perms = perms.concat(['platform.review']);
   }
+  // 公告管理權限（同仁名單勾選，Staff.gs stfBulletinAdmins_）
+  if (gate && gate.bulletin && perms.indexOf('platform.bulletin') === -1 && perms.indexOf('*') === -1) {
+    perms = perms.concat(['platform.bulletin']);
+  }
   return perms;
 }
 
