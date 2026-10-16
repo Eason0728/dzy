@@ -205,6 +205,7 @@ manifest 只改 requires：模組＝`['audit.read','audit.read.brand','audit.rea
 
 另：Fable 指出店長可核准下屬自報「店長」（同職級，`stfScopeMeets_` :879 用 `<`）。第二期起職稱＝權限，改成 `<=`（不能核准跟自己同級或更高）。
 
-### 13.1 等 Eason 決定
-- **人資主管改對照表會不會改到自己**：A（推薦）擋下「會讓操作者自己權限改變」的新增或刪除；B 人資的改動都要 Eason 核准才生效。
-- **權限異動提醒**：人資改了某人的職稱或部門、或改了對照表，造成有人多了／少了權限 → Eason 首頁出一列提醒（誰改的、誰多了什麼）。推薦：做。
+### 13.1 Eason 決定（2026-10-17）
+- **自改擋下**（A）：permMapSave 若會讓**操作者本人**的權限集合改變（重算前後比對）→ 整批拒絕 `perm_self`；admin 不受限。
+- **人資主管只有系統管理員能設**（Eason：「人資主管由系統管理員設定」）：非 admin 經 staffEdit／staffConfirm／unitApprove 等任何改同仁組織欄的路徑，若改完後**對方會拿到 `platform.permmap`**（或原本有、改完失去）→ 拒絕 `perm_admin_only`，畫面提示「人資主管要請系統管理員設定」。實作＝改組織欄前後各跑一次 permCompute_ 比對 platform.permmap。
+- **權限異動提醒**（做）：新分頁 `perm_audit`（at、by、emp_no、added、removed、cause：`staff_edit`｜`perm_map`｜`perm_ex`｜`confirm`、seen）。任何會改到別人權限的寫入，事後重算受影響同仁、有差異就記一列；`modules/perms` 的 `alerts()` 對 admin 顯示未讀數，點進「權限異動」分頁看明細、按「已看過」。perm_map 改動影響多人時，一筆規則改動記一列＋受影響人數，明細展開。
