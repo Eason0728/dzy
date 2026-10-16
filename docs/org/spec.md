@@ -179,3 +179,15 @@
 - 品牌辦公室同仁原 hq 職稱：hs 部門同仁→ofs 行政同仁、hm 部門主管→osv 區督導；ceo／gm／chair 不動、列 todo。
 - 門市同仁職稱是 am／sv／bd → **不自動搬**，列 todo（flag `title_ladder`），預覽逐人列出，由人資改派到品牌辦公室。
 - flags 只剩 `unit_inactive`、`title_ladder`（職稱停用或不屬於單位階梯）；`store_sv_bd` 取消。
+
+## 14. 追加：管理部（Eason 2026-10-15，mgmt-confirm.html 三題全照推薦）
+- 新增部門列：`['dept','mgmt','管理部','dzy-hq','','',10,'TRUE']`。總部部門＝人資、工程、加盟招商、資訊、行銷、財務、採購、營運、訓練、管理（10 個 dept 列）＋中央工廠（單位 ck）。升級（orgUpgrade2026）的目標列也要補這一列（照 G5 完整八欄 upsert）。
+- 執行長、總經理、董事長（ceo／gm／chair）應掛「鼎兆元總部 dzy-hq／管理部 mgmt」。管理部其他人用「部門同仁 hs」。
+- **審核（1A、2A）：**
+  | 被審的人 | 誰可以審 |
+  |---|---|
+  | 管理部的部門同仁（hs） | 執行長以上（不設部門主管） |
+  | 執行長以上 | 只有人資（不變） |
+  - 管理部**不產生**部門主管審核資格：dzy-hq＋主要部門 mgmt＋職稱 hm 的人，不得審管理部同仁（也不得審其他部門）。
+  - 其他部門的部門主管→執行長以上（不變）。
+- **掛錯地方的執行長以上（3A）**：職稱是 ceo／gm／chair，但單位不是 dzy-hq 或主要部門不是 mgmt → 名單 flags 加 `exec_misplaced`、升級預覽 todo 列出（flag `exec_misplaced`），**不自動搬**；畫面標「建議改到鼎兆元總部／管理部」。若同時符合 title_ladder（例：掛品牌辦公室），兩個 flag 都列。
