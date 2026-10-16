@@ -1,6 +1,6 @@
 # 規格：個人帳號第二期｜依單位＋職稱給系統權限
 
-- 版本：v1（2026-10-17）
+- 版本：v1.1（2026-10-17，第 13 節設計審修正）
 - 狀態：已確認（2026-10-17 Eason「規格 OK，二題照推薦」：改對照表只給人資部主管；上線時自動寫入預設規則）
 - 上游：`docs/permissions/requirements.md` v1（2026-10-17 確認）
 - 優先序：本檔 > `docs/personnel/spec.md` > `docs/spec.md`（只在第二期涉及的範圍）
@@ -182,3 +182,29 @@ manifest 只改 requires：模組＝`['audit.read','audit.read.brand','audit.rea
 
 ## 12. 不做
 同 requirements 第 6 節。另：系統帳號不改成吃對照表；不做權限變更通知；不做「看別人有什麼權限」的總表（之後要再加）。
+
+## 13. 設計審修正（2026-10-17，v1.1；本節優先於前文）
+來源：GPT 對抗性審查 14 條（原文含攻擊細節，不進公開 repo），高嚴重度拿不準的 A／B／C 三條由 Fable 讀碼複核。
+
+| GPT # | 判定 | 修正 |
+|---|---|---|
+| 1 人資改自己組織欄提權 | 成立（Fable：`stfAdminTarget_` :1127-1134 無「目標＝自己」檢查） | 非 admin 不能改**自己**的 brand／unit／dept／title／extra_depts（個資欄照放）；錯誤 `self_org_edit` |
+| 2 人資主管加會命中自己的規則 | 成立 | 見 13.1（等 Eason） |
+| 3 brand 併入 canRead 會回 null | 成立 | proxyAuthorize_ 分開「可讀」與「可讀全部」：filterNode 只由 permCompute_ 的 scope 決定；brand、own 永不回 null |
+| 4 回傳形狀 | 成立 | 內部統一 `{perms, auditScope}`；login／me 對外仍是 perms 陣列（另加 `audit_scope` 給畫面顯示用）；proxy 讀同一份 auditScope |
+| 5 pickSecretFor_ 不認 brand | 成立（:247） | 新增 proxy 專用取碼 `proxyPickSecret_`，brand／own 取 read 碼；不改 login／me 共用的 pickSecretFor_ |
+| 6 LEGACY_SECRETS 開著會外洩 | 前提已不存在（10/15 已關旗標並換碼） | 加保險：role staff **永遠不回 secrets**，即使旗標＝1 |
+| 7 純 write 讀全店 | 現行設計（Fable：填單本來就要 getAll） | 明文：`audit.write` ⇒ 自動視同 `audit.read`（scope all）；例外拿掉 audit.read 但保留 write 時畫面提示「填單權限仍可看全部店」 |
+| 8 裁切只看第一層 | 現況無外洩（Fable：getAll 頂層只有 config＋五個扁平陣列） | 改白名單 fail closed：`items/records/details/ops_records/ops_details` 依 store 裁；`config` 只留 reasons／change_fund_std／petty_cash_std／accountant_ok 與 stores（stores 也裁成看得到的店）；**其他未知鍵一律刪除**；前端與 mini 同一份案例 |
+| 9 部署相容 | 成立 | 加開關 Script Property `PERMS_ON`（預設關＝permCompute_ 不跑、行為同現在）；mini＋前端都上完、預設規則 admin 看過才打開。前端陣列裁切要能接受舊後端的字串、新後端的陣列 |
+| 10 extra_depts 不在 stfFindByUserId_ | 成立（只讀前 24 欄） | 用 emp_no 呼叫 `stfReadExtraMap_()` 取兼任 |
+| 11 非 active 回角色權限 | 成立 | staff 列不存在或 status≠active → session 直接拒絕（不是回角色權限） |
+| 12 until 時區 | 成立 | 寫入與讀取都正規化成台北 `YYYY-MM-DD`（Sheet Date 物件也轉），`until >= 台北今天`；測 UTC 15:59:59／16:00:00 |
+| 13 title `*` 被驗證擋 | 成立 | 明訂 `*` 是唯一合法的非 org title 值 |
+| 14 dryrun 下自動建表 | 成立 | 不自動建表；改成 admin 在權限設定按「初始化」（寫三表＋預設規則），dryrun 下只回「尚未初始化」 |
+
+另：Fable 指出店長可核准下屬自報「店長」（同職級，`stfScopeMeets_` :879 用 `<`）。第二期起職稱＝權限，改成 `<=`（不能核准跟自己同級或更高）。
+
+### 13.1 等 Eason 決定
+- **人資主管改對照表會不會改到自己**：A（推薦）擋下「會讓操作者自己權限改變」的新增或刪除；B 人資的改動都要 Eason 核准才生效。
+- **權限異動提醒**：人資改了某人的職稱或部門、或改了對照表，造成有人多了／少了權限 → Eason 首頁出一列提醒（誰改的、誰多了什麼）。推薦：做。
