@@ -416,3 +416,93 @@ function permOrgIndex_() {
   });
   return out;
 }
+
+// ============================================================
+// 7. 接線（P2a）：開關、登入／代轉用的算法
+// ============================================================
+
+// 權限碼中文名（myPerms 與畫面用；沒列到的顯示代碼本身）
+var PERM_NAMES = {
+  'audit.read.own': '稽核：我的門市', 'audit.read.brand': '稽核：自己品牌的店', 'audit.read': '稽核：全部店',
+  'audit.write': '稽核：填單與門市管理', 'dorm.read': '宿舍：查看', 'dorm.write': '宿舍：建約與點交',
+  'platform.staff': '同仁名單', 'platform.users': '人員管理', 'platform.permmap': '權限設定',
+  'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
+  'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能'
+};
+function permName_(code) { return PERM_NAMES[code] || code; }
+
+/** 開關：Script Property PERMS_ON 恰好是 '1' 才開（預設關＝行為與第一期完全相同，不讀 perm 表） */
+function permEnabled_() {
+  try {
+    var v = PropertiesService.getScriptProperties().getProperty('PERMS_ON');
+    return v !== null && v !== undefined && String(v) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function permDefaultRuleObjs_() {
+  return PERM_DEFAULT_RULES.map(function (r) { return { rule_id: '', ladder: r[0], dept: r[1], title: r[2], perm: r[3] }; });
+}
+
+/**
+ * 讀一次計算要用的全部資料。useDefaults＝perm 表未初始化時改用預設規則（防呆守門用；登入計算不用，表沒建＝沒有規則）。
+ * 回 {inited, rules, exs, storeMap, org, today}
+ */
+function permLoadCtx_(useDefaults) {
+  var t = permLoadTables_();
+  var inited = !!t.inited;
+  return {
+    inited: inited,
+    rules: inited ? t.rules : (useDefaults ? permDefaultRuleObjs_() : []),
+    exs: inited ? t.exs : [],
+    storeMap: inited ? t.storeMap : {},
+    org: permOrgIndex_(),
+    today: permTodayTaipei_()
+  };
+}
+
+/** staff 分頁一列（values）＋兼任代碼陣列 → permCompute_ 的 staff 物件 */
+function permStaffObj_(values, extraCodes) {
+  var s = function (k) { return permStr_(values[STF_COL[k]]); };
+  return { emp_no: s('emp_no'), status: s('status'), brand: s('brand'), unit: s('unit'), dept: s('dept'), title: s('title'), extra_depts: extraCodes || [] };
+}
+
+/** 對一列 staff 算權限（ctx 來自 permLoadCtx_；rules 可覆寫成假設的規則集） */
+function permComputeRow_(ctx, values, extraCodes, rulesOverride) {
+  return permCompute_({
+    staff: permStaffObj_(values, extraCodes), org: ctx.org,
+    rules: rulesOverride || ctx.rules, exs: ctx.exs, storeMap: ctx.storeMap, today: ctx.today
+  });
+}
+
+/** 角色權限 ∪ 計算結果；audit.write 存在時補 audit.read（決定 2026-10-17） */
+function permMergePerms_(base, computed) {
+  var out = base.slice();
+  computed.forEach(function (p) { if (out.indexOf(p) === -1) out.push(p); });
+  if (out.indexOf('*') === -1 && out.indexOf('audit.write') !== -1 && out.indexOf('audit.read') === -1) out.push('audit.read');
+  return out;
+}
+
+/**
+ * 登入／me／代轉用：role staff 且開關開時，算 {perms, auditScope, sources}。
+ * base＝角色權限＋既有衍生（review）。staffValues 來自 authStaffGate_（已確認存在且 active）。
+ * 同一個請求只在這裡算一次；perm 表沒初始化＝等同沒有規則。
+ */
+function permSessionCompute_(base, staffValues) {
+  var ctx = permLoadCtx_(false);
+  var emp = permStr_(staffValues[STF_COL.emp_no]).toUpperCase();
+  var extra = stfSplitCodes_(stfReadExtraMap_()[emp]);
+  var r = permComputeRow_(ctx, staffValues, extra);
+  var perms = permMergePerms_(base, r.perms);
+  var sources = [];
+  base.forEach(function (p) { sources.push({ perm: p, source: 'role' }); });
+  r.sources.forEach(function (s) { sources.push(s); });
+  if (perms.indexOf('audit.read') !== -1 && !sources.some(function (s) { return s.perm === 'audit.read'; })) {
+    sources.push({ perm: 'audit.read', source: 'implied' });
+  }
+  // 角色本身就給稽核全部（roles 分頁被改過）→ 範圍跟著放寬到全部；否則以計算結果為準
+  var scope = r.auditScope;
+  if (base.indexOf('*') !== -1 || base.indexOf('audit.read') !== -1 || base.indexOf('audit.write') !== -1) scope = 'all';
+  return { perms: perms, auditScope: scope, sources: sources };
+}

@@ -1389,8 +1389,8 @@ var STF_DEFAULT_ORG = [
   ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'FALSE'],
   ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
   ['title', 'oam', '區經理', 'office', '', 2, 2, 'TRUE'],
-  ['title', 'osv', '區督導', 'office', '', 3, 3, 'TRUE'],
-  ['title', 'odir', '總監', 'office', '', 4, 4, 'TRUE'],
+  ['title', 'osv', '區督導', 'office', '', 2, 3, 'TRUE'],
+  ['title', 'odir', '總監', 'office', '', 3, 4, 'TRUE'],
   ['title', 'hs', '部門同仁', 'hq', '', 1, 1, 'TRUE'],
   ['title', 'hm', '部門主管', 'hq', '', 2, 2, 'TRUE'],
   ['title', 'ceo', '執行長', 'hq', '', 3, 3, 'TRUE'],
@@ -1495,8 +1495,8 @@ var STF_UPGRADE_ADD = [
   ['unit', 'yiwu-hq', '一悟燒肉品牌辦公室', 'yiwu', 'office', '', 3, 'TRUE'],
   ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
   ['title', 'oam', '區經理', 'office', '', 2, 2, 'TRUE'],
-  ['title', 'osv', '區督導', 'office', '', 3, 3, 'TRUE'],
-  ['title', 'odir', '總監', 'office', '', 4, 4, 'TRUE'],
+  ['title', 'osv', '區督導', 'office', '', 2, 3, 'TRUE'],
+  ['title', 'odir', '總監', 'office', '', 3, 4, 'TRUE'],
   ['dept', 'mgmt', '管理部', 'dzy-hq', '', '', 10, 'TRUE']
 ];
 var STF_UPGRADE_ADD_FIELDS = ['name', 'parent', 'ladder', 'rank', 'order', 'active'];

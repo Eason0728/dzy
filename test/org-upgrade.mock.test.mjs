@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'StaffClock.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'StaffClock.gs', 'Perms.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 
 let passed = 0;
 let failed = 0;
@@ -195,7 +195,7 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   ok(['mzt-wx', 'mzt-rg', 'mzt-mc'].every((c) => org.unit[c] && org.unit[c].active === false), 'T1 mzt-wx／rg／mc 預設停用');
   ok(org.dept.training && org.dept.training.name === '訓練部' && org.dept.training.parent === 'dzy-hq', 'T1 訓練部保留');
   ok(['pt', 'ft', 'sm'].every((c) => org.title[c].parent === 'store' && org.title[c].active) && ['am', 'sv', 'bd'].every((c) => org.title[c] && org.title[c].active === false), 'T1 門市只剩 pt／ft／sm；am／sv／bd 停用不刪');
-  ok([['ofs', 1], ['oam', 2], ['osv', 3], ['odir', 4]].every(([c, r]) => org.title[c] && org.title[c].parent === 'office' && org.title[c].rank === r && org.title[c].active) && org.title.ofs.name === '行政同仁' && org.title.odir.name === '總監', 'T1 品牌辦公室 ofs／oam／osv／odir 四級');
+  ok([['ofs', 1], ['oam', 2], ['osv', 2], ['odir', 3]].every(([c, r]) => org.title[c] && org.title[c].parent === 'office' && org.title[c].rank === r && org.title[c].active) && org.title.ofs.name === '行政同仁' && org.title.odir.name === '總監', 'T1 品牌辦公室 ofs／oam／osv／odir 四級（職級 1／2／2／3，2026-10-17 修正）');
   ok(sb.STF_UNIT_VIEW_MIN_RANK.office === 2 && sb.STF_UNIT_VIEW_MIN_RANK.store === 3 && sb.STF_UNIT_VIEW_MIN_RANK.hq === 2, 'T1 STF_UNIT_VIEW_MIN_RANK.office＝2');
   ok(typeof sb.stfTitleLadder_ === 'undefined', 'T1 沒有 stfTitleLadder_（第 13 節取消）');
 
@@ -613,7 +613,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const org = sb.stfReadOrg_();
   ok(org.unit['mzt-hq'].ladder === 'office' && org.unit['mala-hq'].name === '小辛辣品牌辦公室' && org.unit['yiwu-hq'].ladder === 'office' && org.unit['yiwu-hq'].parent === 'yiwu' && org.brand.ck.name === '中央工廠' && org.unit.ck.name === '中央工廠（央廚）', 'T4 org 已是新樣子');
   ok(['mzt-wx', 'mzt-rg', 'mzt-mc'].every((c) => !org.unit[c].active) && ['am', 'sv', 'bd'].every((c) => !org.title[c].active) && ['pt', 'ft', 'sm'].every((c) => org.title[c].active), 'T4 三店與 am／sv／bd 停用、pt／ft／sm 啟用');
-  ok(['ofs', 'oam', 'osv', 'odir'].every((c, k) => org.title[c].parent === 'office' && org.title[c].rank === k + 1 && org.title[c].order === k + 1 && org.title[c].active) && org.dept.training, 'T4 辦公室四級職稱完整八欄、訓練部保留');
+  ok(['ofs', 'oam', 'osv', 'odir'].every((c, k) => org.title[c].parent === 'office' && org.title[c].rank === [1, 2, 2, 3][k] && org.title[c].order === k + 1 && org.title[c].active) && org.dept.training, 'T4 辦公室四級職稱完整八欄、訓練部保留');
   ok(clkHq(app)[2] === 'dzy-hq,mzt-hq,mala-hq,yiwu-hq', 'T4 clock hq 列補上 yiwu-hq');
   ok(app.sheets.staff._data[0].slice(24, 27).join() === 'hire_date,last_day,extra_depts', 'T4 staff 補 extra_depts 欄');
   ok(staffOf(app, P.offHs.emp).title === 'ofs' && staffOf(app, P.offHm.emp).title === 'osv' && staffOf(app, P.offCeo.emp).title === 'ceo' && staffOf(app, P.storeAm.emp).title === 'am', 'T4 辦公室 hs→ofs、hm→osv；ceo 與門市 am 不動');

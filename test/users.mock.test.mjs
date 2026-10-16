@@ -19,6 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PLATFORM_DIR = path.join(__dirname, '..', 'apps-script', 'platform');
 const AUTH_GS_CODE = fs.readFileSync(path.join(PLATFORM_DIR, 'Auth.gs'), 'utf8');
+const PERMS_GS_CODE = fs.readFileSync(path.join(PLATFORM_DIR, 'Perms.gs'), 'utf8');
 const USERS_GS_CODE = fs.readFileSync(path.join(PLATFORM_DIR, 'Users.gs'), 'utf8');
 const CODE_GS_CODE = fs.readFileSync(path.join(PLATFORM_DIR, 'Code.gs'), 'utf8');
 
@@ -234,6 +235,7 @@ function loadPlatform(sheetsSeed, propsSeed) {
   vm.createContext(sandbox);
   vm.runInContext(AUTH_GS_CODE, sandbox, { filename: 'Auth.gs' });
   vm.runInContext(USERS_GS_CODE, sandbox, { filename: 'Users.gs' });
+  vm.runInContext(PERMS_GS_CODE, sandbox, { filename: 'Perms.gs' });
   vm.runInContext(CODE_GS_CODE, sandbox, { filename: 'Code.gs' });
   return { sandbox, sheets: ssApp.sheets };
 }
