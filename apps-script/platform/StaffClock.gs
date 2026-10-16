@@ -2211,24 +2211,37 @@ function handleSvcDirectory_(payload) {
 // ============================================================
 var SSO_TTL_SEC = 60;
 var SSO_CACHE_PREFIX = 'sso_tkt:';
-var SSO_AUDS = { bulletin: 1 };
+var SSO_AUDS = { bulletin: 1, 'bulletin-admin': 1 };
 
-/** 已登入的同仁換一張入場券。系統帳號（admin、會計等沒有 DZY 編號的）回 no_emp，佈告欄那邊照舊選名字。 */
+/**
+ * 換一張入場券。aud：
+ *  - bulletin：同仁本人登入佈告欄。只發給 role staff＋DZY###；系統帳號回 no_emp，佈告欄照舊選名字。
+ *  - bulletin-admin（2026-10-17）：管理系統「公告管理／新增公告」分頁用，換佈告欄的管理憑證。要有 platform.bulletin（同仁名單勾選）或 admin（'*'）。
+ */
 function handleSsoTicket_(token, payload) {
   var aud = payload && typeof payload.aud === 'string' ? payload.aud : '';
   if (!SSO_AUDS.hasOwnProperty(aud)) return clkErr_('bad_aud', '不支援的系統');
   var res = authResolveSession_(token);
   if (!res.ok) return res;
   var emp = String(res.user.username || '').toUpperCase();
-  if (res.user.role !== 'staff' || !STF_EMP_RE.test(emp)) return clkErr_('no_emp', '這個帳號沒有同仁編號');
+  var rec;
+  if (aud === 'bulletin') {
+    if (res.user.role !== 'staff' || !STF_EMP_RE.test(emp)) return clkErr_('no_emp', '這個帳號沒有同仁編號');
+    rec = { emp: emp, aud: aud };
+  } else {
+    if (!hasPerm_(res.perms, 'platform.bulletin')) return clkErr_('no_perm', '沒有公告管理權限');
+    // 系統帳號沒有 DZY 編號：emp 留空，用帳號 id 與名字給佈告欄記操作紀錄
+    rec = { emp: STF_EMP_RE.test(emp) ? emp : '', aud: aud, admin: true, uid: String(res.user.id || ''), name: String(res.user.name || '') };
+  }
   // 兩個隨機 UUID 雜湊成 64 位十六進位（不依賴 getUuid 的字串格式）
   var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + ':' + Utilities.getUuid());
   var ticket = digest.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
-  CacheService.getScriptCache().put(SSO_CACHE_PREFIX + ticket, JSON.stringify({ emp: emp, aud: aud }), SSO_TTL_SEC);
+  CacheService.getScriptCache().put(SSO_CACHE_PREFIX + ticket, JSON.stringify(rec), SSO_TTL_SEC);
   return { ok: true, data: { ticket: ticket, expires_in: SSO_TTL_SEC } };
 }
 
-/** 佈告欄伺服器兌換入場券（服務金鑰同 svcDirectory）。一張券只能兌換一次；過期、換過、系統不符都回 ticket_invalid。 */
+/** 佈告欄伺服器兌換入場券（服務金鑰同 svcDirectory）。一張券只能兌換一次；過期、換過、aud 不符都回 ticket_invalid。
+ *  bulletin → {emp_no}；bulletin-admin → {admin:true, emp_no（系統帳號為空字串）, uid, name}。 */
 function handleSvcSsoRedeem_(payload) {
   var want = PropertiesService.getScriptProperties().getProperty(CLK_PROP_SVC_KEY);
   var got = payload && typeof payload.svc_key === 'string' ? payload.svc_key : '';
@@ -2241,8 +2254,13 @@ function handleSvcSsoRedeem_(payload) {
   cache.remove(key);
   var rec = null;
   try { rec = raw ? JSON.parse(raw) : null; } catch (e) { rec = null; }
-  if (!rec || rec.aud !== aud || !STF_EMP_RE.test(String(rec.emp || ''))) return clkErr_('ticket_invalid', '入場券無效或已過期');
-  return { ok: true, data: { emp_no: rec.emp } };
+  if (!rec || rec.aud !== aud) return clkErr_('ticket_invalid', '入場券無效或已過期');
+  if (aud === 'bulletin') {
+    if (!STF_EMP_RE.test(String(rec.emp || ''))) return clkErr_('ticket_invalid', '入場券無效或已過期');
+    return { ok: true, data: { emp_no: rec.emp } };
+  }
+  if (rec.admin !== true) return clkErr_('ticket_invalid', '入場券無效或已過期');
+  return { ok: true, data: { admin: true, emp_no: String(rec.emp || ''), uid: String(rec.uid || ''), name: String(rec.name || '') } };
 }
 
 /** Staff.gs stfClearClaim_ 的掛勾：有到職日（店長新增才會有）或已有 confirmed 打卡對照 → 退回認領時保留品牌、單位、部門、職稱 */

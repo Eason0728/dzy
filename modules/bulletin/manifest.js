@@ -3,6 +3,7 @@
  * 佈告欄本身是獨立系統（https://dzy-bulletin.github.io，後端在 Mac mini，自己的登入），這裡只把它嵌進來，
  * 不呼叫任何後端；ns／backend 借用 platform（spec §4.1 backend＝ns）。
  * platform.login＝每個登入者都有的前端權限（platform/auth.js can()），所以人人看得到。
+ * 公告管理／新增公告：platform.bulletin（Staff.gs stfBulletinAdmins_，同仁名單逐人勾選）。
  */
 'use strict';
 
@@ -15,7 +16,10 @@ export default {
   icon: 'bulletin',
   requires: ['platform.login'],
   views: [
-    { id: 'board', name: '電子佈告欄', requires: ['platform.login'] }
+    { id: 'board', name: '電子佈告欄', requires: ['platform.login'] },
+    // 2026-10-17：公告管理權限（同仁名單勾選＝platform.bulletin；admin 本來就有）
+    { id: 'manage', name: '公告管理', requires: ['platform.bulletin'] },
+    { id: 'new', name: '新增公告', requires: ['platform.bulletin'] }
   ],
   entry: () => import('./index.js')
 };
