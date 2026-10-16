@@ -596,9 +596,9 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(dr.data.backup === 'created' && dr.data.clock === 'updated' && dr.data.staffColumn === 'added', 'T4 預覽：backup／clock／staffColumn 狀態', [dr.data.backup, dr.data.clock, dr.data.staffColumn]);
   ok(dr.data.titles.length === 2 && dr.data.titles.some((t) => t.emp_no === P.offHs.emp && t.from === 'hs' && t.to === 'ofs' && t.name === '升甲') && dr.data.titles.some((t) => t.emp_no === P.offHm.emp && t.from === 'hm' && t.to === 'osv'), 'T4 預覽：品牌辦公室 hs→ofs、hm→osv 逐人列出（emp_no,name,from,to）', dr.data.titles);
   const todoOf = (r, emp) => r.data.todo.filter((x) => x.emp_no === emp).map((x) => x.flag).join();
-  ok(todoOf(dr, P.offCeo.emp) === 'title_ladder' && todoOf(dr, P.storeAm.emp) === 'title_ladder' && todoOf(dr, P.storeSv.emp) === 'title_ladder' && todoOf(dr, P.storeBd.emp) === 'title_ladder' && todoOf(dr, P.stopped.emp) === 'unit_inactive', 'T4 todo：ceo／am／sv／bd＝title_ladder、停用門市同仁＝unit_inactive');
+  ok(todoOf(dr, P.offCeo.emp) === 'title_ladder,exec_misplaced' && todoOf(dr, P.storeAm.emp) === 'title_ladder' && todoOf(dr, P.storeSv.emp) === 'title_ladder' && todoOf(dr, P.storeBd.emp) === 'title_ladder' && todoOf(dr, P.stopped.emp) === 'unit_inactive', 'T4 todo：品牌辦公室 ceo＝title_ladder＋exec_misplaced、am／sv／bd＝title_ladder、停用門市同仁＝unit_inactive');
   ok(todoOf(dr, P.normal.emp) === '' && todoOf(dr, P.ckPt.emp) === '' && todoOf(dr, P.hqIt.emp) === '' && todoOf(dr, P.offHs.emp) === '' && todoOf(dr, P.offHm.emp) === '', 'T4 todo：正常的人、會被自動對應的人不列');
-  ok(dr.data.todo.every((x) => ['unit_inactive', 'title_ladder'].indexOf(x.flag) !== -1 && x.name && x.unit_name !== undefined), 'T4 todo 只有 unit_inactive／title_ladder 兩種 flag，帶 name／unit_name');
+  ok(dr.data.todo.every((x) => ['unit_inactive', 'title_ladder', 'exec_misplaced'].indexOf(x.flag) !== -1 && x.name && x.unit_name !== undefined), 'T4 todo 只有 unit_inactive／title_ladder／exec_misplaced 三種 flag，帶 name／unit_name');
   ok(orgSnap(app).join() === app.legacySnap.join() && Object.keys(app.sheets).length === sheetCount0 && app.sheets.staff._data[0][26] === '' && clkHq(app)[2] === 'dzy-hq,mzt-hq,mala-hq' && staffOf(app, P.offHs.emp).title === 'hs' && !app.props.ORG_UPGRADE_STATE, 'T4 預覽不寫任何東西（org／分頁／欄位／clock／職稱／狀態都沒動）');
 
   // ── 正式升級 ──
@@ -623,7 +623,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   // 升級後同仁名單 flags 與預覽 todo 一致
   const lst = post(sb, 'staffList', {}, tok).data.staff;
   const fl = (emp) => lst.find((x) => x.emp_no === emp).flags.join();
-  ok(fl(P.offCeo.emp) === 'title_ladder' && fl(P.storeAm.emp) === 'title_ladder' && fl(P.stopped.emp) === 'unit_inactive' && fl(P.normal.emp) === '' && fl(P.offHs.emp) === '', 'T4 升級後 staffList flags 與預覽 todo 一致');
+  ok(fl(P.offCeo.emp) === 'title_ladder,exec_misplaced' && fl(P.storeAm.emp) === 'title_ladder' && fl(P.stopped.emp) === 'unit_inactive' && fl(P.normal.emp) === '' && fl(P.offHs.emp) === '', 'T4 升級後 staffList flags 與預覽 todo 一致');
 
   // ── 重跑：第二次無變更 ──
   const before = orgSnap(app).join();
@@ -944,6 +944,116 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   row()[26] = 'fin,ck';
   const e = post(sb, 'staffEdit', { emp_no: c.emp, brand: 'ck', unit: 'ck', dept: '', title: 'pt' }, tok);
   ok(e.ok && row()[26] === 'fin', 'R3 N3 後台把主要單位改成 ck → extra_depts 的 ck 被移除（保留 fin）', [e, row()[26]]);
+})();
+
+// ============================================================
+// 管理部（規格第 14 節）
+// ============================================================
+(() => {
+  const app = fresh();
+  const { sb, tok, hrTok } = app;
+  const org = sb.stfReadOrg_();
+  ok(org.dept.mgmt && org.dept.mgmt.name === '管理部' && org.dept.mgmt.parent === 'dzy-hq' && org.dept.mgmt.active && org.dept.mgmt.order === 10, 'M1 預設 org 有管理部（dzy-hq、order 10、啟用）');
+  ok(Object.keys(org.dept).length === 10, 'M1 部門共 10 個', Object.keys(org.dept));
+  ok(post(sb, 'orgOptions', {}).data.depts.some((d) => d.code === 'mgmt'), 'M1 orgOptions 兼任／部門選單自然多出管理部');
+
+  const mgHs = mk(app, '管理甲', { brand: 'dzy', unit: 'dzy-hq', dept: 'mgmt', title: 'hs' });
+  const mgHm = mk(app, '管理乙', { brand: 'dzy', unit: 'dzy-hq', dept: 'mgmt', title: 'hm' });
+  const itHm = mk(app, '管理丙', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hm' });
+  const opsHm = mk(app, '管理丁', { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hm' });
+  const ceo = mk(app, '管理戊', { brand: 'dzy', unit: 'dzy-hq', dept: 'mgmt', title: 'ceo' });
+  const pHs = submitOnly(app, '管理己', { brand: 'dzy', unit: 'dzy-hq', dept: 'mgmt', title: 'hs' });
+  const pItHs = submitOnly(app, '管理庚', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
+  const pending = (t) => { const r = post(sb, 'unitPending', {}, t); return r.ok ? r.data.people.map((x) => x.emp_no) : null; };
+  const scope = (m) => sb.stfReviewScope_(sb.stfFindByEmp_(m.emp).values, sb.stfReadOrg_());
+  ok(scope(mgHm) === null && pending(mgHm.token) === null, 'M2 管理部主管（hm）沒有審核資格');
+  ok(pending(ceo.token) !== null && pending(ceo.token).indexOf(pHs.emp) !== -1, 'M2 執行長可審管理部同仁');
+  ok(pending(itHm.token).indexOf(pHs.emp) === -1 && pending(itHm.token).indexOf(pItHs.emp) !== -1, 'M2 別部門主管不能審管理部同仁、仍可審自己部門');
+  ok(pending(opsHm.token).indexOf(pHs.emp) === -1, 'M2 營運部主管不能審管理部同仁');
+  ok(pending(hrTok).indexOf(pHs.emp) !== -1 && pending(tok).indexOf(pHs.emp) !== -1, 'M2 人資、admin 可審管理部同仁');
+  ok(post(sb, 'unitApprove', { emp_no: pHs.emp }, mgHm.token).ok === false && post(sb, 'unitApprove', { emp_no: pHs.emp }, itHm.token).ok === false, 'M2 反：管理部主管／別部門主管 unitApprove 被擋');
+  ok(staffOf(app, pHs.emp).status === 'pending', 'M2 被擋的沒改到資料');
+  const perms = (t) => post(sb, 'me', {}, t).data.perms;
+  ok(perms(mgHm.token).indexOf('platform.review') === -1, 'M2 管理部 hm 沒有衍生權限 platform.review');
+  ok(perms(login(app, itHm.emp, itHm.pw).data.token).indexOf('platform.review') !== -1 && perms(ceo.token).indexOf('platform.review') !== -1, 'M2 資訊部 hm、執行長仍有 platform.review');
+  ok(post(sb, 'unitApprove', { emp_no: pHs.emp }, ceo.token).ok && staffOf(app, pHs.emp).status === 'active', 'M2 正：執行長核准管理部同仁');
+  // 管理部同仁改部門的待審（目前身分在 mgmt）：別部門主管也不行
+  ok(post(sb, 'unitApprove', { emp_no: pItHs.emp }, itHm.token).ok, 'M2 正：資訊部主管核准資訊部同仁');
+  ok(sb.stfReviewNeed_(sb.stfReadOrg_(), 'dzy-hq', 'mgmt', 'hs').kind === 'exec' && sb.stfReviewNeed_(sb.stfReadOrg_(), 'dzy-hq', 'mgmt', 'hm').kind === 'exec', 'M2 stfReviewNeed_：管理部 hs／hm 都要執行長以上');
+})();
+
+(() => {
+  // exec_misplaced
+  const app = fresh();
+  const { sb, tok } = app;
+  const good = mk(app, '位置甲', { brand: 'dzy', unit: 'dzy-hq', dept: 'mgmt', title: 'ceo' });
+  const wrongDept = mk(app, '位置乙', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'gm' });
+  const wrongUnit = mk(app, '位置丙', { brand: 'mala', unit: 'mala-hq', title: 'ofs' });
+  const normal = mk(app, '位置丁', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
+  const pend = submitOnly(app, '位置戊', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'chair' });
+  const flags = (emp) => post(sb, 'staffList', {}, tok).data.staff.find((x) => x.emp_no === emp).flags;
+  ok(flags(good.emp).indexOf('exec_misplaced') === -1, 'E1 ceo 在 dzy-hq／mgmt → 無 exec_misplaced');
+  ok(flags(wrongDept.emp).join() === 'exec_misplaced', 'E1 gm 在 dzy-hq／hr → exec_misplaced', flags(wrongDept.emp));
+  ok(flags(normal.emp).length === 0, 'E1 一般同仁無 flag');
+  ok(flags(pend.emp).indexOf('exec_misplaced') !== -1, 'E1 送出待審 chair 在 fin → 也判斷');
+  const d = sb.stfFlagDetails_({ unit: '', title: '', dept: '', status: 'pending', p_unit: 'dzy-hq', p_title: 'chair', p_dept: 'fin' }, sb.stfReadOrg_());
+  ok(d.some((x) => x.flag === 'exec_misplaced' && x.submitted === true), 'E1 送出待審 → submitted＝true', d);
+  // 掛品牌辦公室：title_ladder 與 exec_misplaced 同時
+  const o = sb.stfReadOrg_();
+  const both = sb.stfFlagDetails_({ unit: 'mala-hq', title: 'ceo', dept: '', status: 'active' }, o).map((x) => x.flag).sort().join();
+  ok(both === 'exec_misplaced,title_ladder', 'E1 掛品牌辦公室的 ceo → 兩個 flag 都列', both);
+  const stu = sb.stfFlagDetails_({ unit: 'mala-gf', title: 'ceo', dept: '', status: 'active' }, o).map((x) => x.flag).sort().join();
+  ok(stu === 'exec_misplaced,title_ladder', 'E1 掛門市的 chair／ceo 同上', stu);
+  ok(sb.stfFlagDetails_({ unit: 'dzy-hq', title: 'ceo', dept: 'mgmt', status: 'disabled' }, o).length === 0 && sb.stfFlagDetails_({ unit: 'mala-hq', title: 'ceo', dept: '', status: 'disabled' }, o).length === 0, 'E1 已停用帳號不判斷');
+})();
+
+(() => {
+  // 升級補 mgmt 列、重跑收斂、預覽 todo
+  const app = legacyApp();
+  const { sb } = app;
+  const P = app.P;
+  const mgCeo = mk(app, '升管甲', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'ceo' });
+  ok(!orgRow(app, 'dept', 'mgmt'), 'U1 （前置）舊 org 沒有 mgmt');
+  const dr = upg(app, { dryrun: true });
+  ok(dr.data.org.some((x) => x.code === 'mgmt' && x.kind === 'dept' && x.field === 'row' && x.to === 'added'), 'U1 預覽列出新增 mgmt', dr.data.org);
+  ok(dr.data.todo.some((x) => x.emp_no === mgCeo.emp && x.flag === 'exec_misplaced') && dr.data.todo.some((x) => x.emp_no === P.offCeo.emp && x.flag === 'exec_misplaced'), 'U1 預覽 todo：掛錯的 ceo 列 exec_misplaced', dr.data.todo);
+  ok(!orgRow(app, 'dept', 'mgmt'), 'U1 預覽不寫入');
+  const r1 = upg(app, {});
+  ok(r1.ok && orgRow(app, 'dept', 'mgmt').slice(0, 8).join('|') === 'dept|mgmt|管理部|dzy-hq|||10|TRUE', 'U1 升級補上 mgmt 完整八欄', orgRow(app, 'dept', 'mgmt'));
+  const r2 = upg(app, {});
+  ok(r2.ok && r2.data.org.length === 0 && upg(app, { dryrun: true }).data.org.length === 0, 'U1 重跑收斂（無變更）');
+  // 已存在但被改壞的 mgmt 列 → 對齊
+  const row = app.sheets.org._data.find((r) => r[0] === 'dept' && r[1] === 'mgmt');
+  row[2] = '亂改'; row[7] = 'FALSE';
+  const r3 = upg(app, {});
+  ok(r3.ok && orgRow(app, 'dept', 'mgmt').slice(0, 8).join('|') === 'dept|mgmt|管理部|dzy-hq|||10|TRUE', 'U1 mgmt 列被改壞 → 升級對齊回完整八欄');
+  const lst = post(sb, 'staffList', {}, app.tok).data.staff;
+  const fl = (emp) => lst.find((x) => x.emp_no === emp).flags.join();
+  ok(fl(mgCeo.emp) === 'exec_misplaced', 'U1 升級後 staffList 與預覽一致');
+})();
+
+(() => {
+  // 管理部 hm → title_ladder；mgmt 列不存在時不判斷
+  const app = fresh();
+  const { sb } = app;
+  const o = sb.stfReadOrg_();
+  const fl = (x) => sb.stfFlagDetails_(Object.assign({ status: 'active', unit: 'dzy-hq', dept: 'mgmt', title: 'hm' }, x), o).map((d) => d.flag + (d.submitted ? '*' : '')).sort().join();
+  ok(fl({}) === 'title_ladder', 'F1 管理部 hm → title_ladder', fl({}));
+  ok(fl({ dept: 'it' }) === '' && fl({ dept: 'mgmt', title: 'hs' }) === '', 'F1 反：別部門 hm、管理部 hs 無 flag');
+  ok(fl({ unit: '', dept: '', title: '', p_unit: 'dzy-hq', p_dept: 'mgmt', p_title: 'hm' }) === 'title_ladder*', 'F1 送出待審的管理部 hm → title_ladder＋submitted');
+  const o2 = sb.stfReadOrg_(); delete o2.dept.mgmt;
+  const f2 = (x) => sb.stfFlagDetails_(Object.assign({ status: 'active', unit: 'dzy-hq', dept: 'hr', title: 'ceo' }, x), o2).map((d) => d.flag).join();
+  ok(f2({}) === '' && f2({ dept: 'mgmt', title: 'hm' }) === 'dept_inactive', 'F2 org 沒有 mgmt 列：不出 exec_misplaced／管理部 title_ladder');
+  const o3 = sb.stfReadOrg_(); o3.dept.mgmt.active = false;
+  ok(sb.stfFlagDetails_({ status: 'active', unit: 'dzy-hq', dept: 'hr', title: 'ceo' }, o3).length === 0, 'F2 mgmt 停用同樣不出 exec_misplaced');
+  // 升級預覽：升級前 org 沒 mgmt，todo 以升級後 org 判斷 → 會列
+  const lg = legacyApp();
+  const hm = mk(lg, '管理辛', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hm' });
+  setStaff(lg, hm.emp, 'dept', 'mgmt');
+  const dr = upg(lg, { dryrun: true });
+  ok(dr.data.todo.some((x) => x.emp_no === hm.emp && x.flag === 'title_ladder'), 'F1 升級預覽 todo 列出管理部 hm', dr.data.todo);
+  const lgf = lg.sb.stfFlagDetails_({ status: 'active', unit: 'dzy-hq', dept: 'mgmt', title: 'hm' }, lg.sb.stfReadOrg_()).map((d) => d.flag).join();
+  ok(lgf === 'dept_inactive', 'F2 切換前（legacy org）不出 title_ladder／exec_misplaced', lgf);
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

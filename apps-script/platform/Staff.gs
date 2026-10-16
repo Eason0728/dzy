@@ -309,7 +309,8 @@ function stfExtraDeptName_(org, code) {
 /**
  * 名單旗標明細（契約 plan.md，規格第 13 節）：回 [{flag, submitted}]。
  * 'unit_inactive'＝單位已停用（或單位代碼已不存在）、'title_ladder'＝職稱停用、不存在或不屬於該單位的職稱階梯、
- * 'dept_inactive'＝部門代碼不存在或已停用（主要部門與送出的部門都檢查）。
+ * 'dept_inactive'＝部門代碼不存在或已停用（主要部門與送出的部門都檢查）、
+ * 'exec_misplaced'＝職稱 ceo／gm／chair 但單位不是 dzy-hq 或部門不是 mgmt（第 14 節；可與 title_ladder 同時出現）。
  * submitted＝true 表示問題出在「送出待審的資料」（p_unit／p_title）而不是目前身分。
  * 目前身分沒有單位（未認領）時只檢查送出資料；已停用帳號 → 空陣列。
  */
@@ -318,7 +319,7 @@ function stfFlagDetails_(o, org) {
   if (o.status === 'disabled') return out;
   var seen = {};
   var add = function (flag, submitted) { var k = flag + '|' + (submitted ? 1 : 0); if (!seen[k]) { seen[k] = true; out.push({ flag: flag, submitted: submitted }); } };
-  var check = function (unit, title, dept, submitted) {
+  var check = function (unit, title, dept, submitted, execDept) {
     var u = org.unit[unit];
     if (!u || !u.active) add('unit_inactive', submitted);
     if (dept) { var d = org.dept[dept]; if (!d || !d.active) add('dept_inactive', submitted); }
@@ -326,14 +327,22 @@ function stfFlagDetails_(o, org) {
       var t = org.title[title];
       if (!t || !t.active || t.parent !== (u.ladder || 'store')) add('title_ladder', submitted);
     }
+    // 管理部（org 有啟用的 mgmt 列才判斷；切換組織之前不出，免得人資照建議改卻選不到管理部）
+    var mg = org.dept[STF_MGMT_DEPT];
+    if (mg && mg.active && title) {
+      // 執行長以上應掛鼎兆元總部／管理部（只標記，不自動搬）
+      if (STF_EXEC_TITLES.indexOf(title) !== -1 && (unit !== 'dzy-hq' || execDept !== STF_MGMT_DEPT)) add('exec_misplaced', submitted);
+      // 管理部不設部門主管：hm 職稱需重選
+      if (title === 'hm' && unit === 'dzy-hq' && execDept === STF_MGMT_DEPT) add('title_ladder', submitted);
+    }
   };
-  if (o.unit) check(o.unit, o.title, o.dept || '', false);
+  if (o.unit) check(o.unit, o.title, o.dept || '', false, o.dept || '');
   var pu = o.p_unit || '';
   var pt = o.p_title || '';
   var pd = o.p_dept || '';
   if (pu || pt || pd) {
     var eu = pu || o.unit;
-    if (eu) check(eu, pt, pd, true);
+    if (eu) check(eu, pt, pd, true, pd || (pu ? '' : (o.dept || '')));
   }
   return out;
 }
@@ -832,7 +841,8 @@ function stfReviewScope_(values, org) {
       kinds.push('exec');
     } else if (title.rank === 2) {
       var d = org.dept[dept];
-      if (d && d.active && d.parent === unitCode) {
+      // 管理部（第 14 節）不產生部門主管審核資格：只有執行長以上審管理部同仁
+      if (d && d.active && d.parent === unitCode && dept !== STF_MGMT_DEPT) {
         kinds.push('dept');
         if (unitCode === 'dzy-hq' && dept === 'ops') kinds.push('ops');
       }
@@ -861,6 +871,7 @@ function stfReviewNeed_(org, unitCode, dept, titleCode) {
     if (t.rank === 2) { need.kind = 'exec'; return need; }   // 部門主管：執行長以上
     var d = org.dept[dept];
     if (!d || !d.active || d.parent !== unitCode) return null;
+    if (dept === STF_MGMT_DEPT) { need.kind = 'exec'; return need; }   // 管理部同仁：執行長以上（不設部門主管）
     need.kind = 'dept'; need.dept = dept; return need;       // 部門同仁：同主要部門的部門主管
   }
   return null;
@@ -1347,7 +1358,8 @@ var STF_DEFAULT_ORG = [
   ['dept', 'purchase', '採購部', 'dzy-hq', '', '', 6, 'TRUE'],
   ['dept', 'ops', '營運部', 'dzy-hq', '', '', 7, 'TRUE'],
   ['dept', 'training', '訓練部', 'dzy-hq', '', '', 8, 'TRUE'],
-  ['dept', 'marketing', '行銷部', 'dzy-hq', '', '', 9, 'TRUE']
+  ['dept', 'marketing', '行銷部', 'dzy-hq', '', '', 9, 'TRUE'],
+  ['dept', 'mgmt', '管理部', 'dzy-hq', '', '', 10, 'TRUE']
 ];
 
 function stfEnsureSheet_(ss, name, headers, defaults) {
@@ -1402,6 +1414,9 @@ function setupStaff() {
 
 var STF_PROP_ORG_UPGRADE = 'ORG_UPGRADE_STATE';
 var STF_ORG_COL = { kind: 0, code: 1, name: 2, parent: 3, ladder: 4, rank: 5, order: 6, active: 7 };
+// 管理部：總部部門代碼；執行長／總經理／董事長應掛 dzy-hq／管理部（規格第 14 節）
+var STF_MGMT_DEPT = 'mgmt';
+var STF_EXEC_TITLES = ['ceo', 'gm', 'chair'];
 var STF_BRAND_OFFICES = ['mzt-hq', 'mala-hq', 'yiwu-hq'];
 // 品牌辦公室同仁原 hq 職稱 → office 職稱（第 13 節）；ceo／gm／chair 不動、列 todo
 var STF_OFFICE_TITLE_MAP = { hs: 'ofs', hm: 'osv' };
@@ -1434,7 +1449,8 @@ var STF_UPGRADE_ADD = [
   ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
   ['title', 'oam', '區經理', 'office', '', 2, 2, 'TRUE'],
   ['title', 'osv', '區督導', 'office', '', 3, 3, 'TRUE'],
-  ['title', 'odir', '總監', 'office', '', 4, 4, 'TRUE']
+  ['title', 'odir', '總監', 'office', '', 4, 4, 'TRUE'],
+  ['dept', 'mgmt', '管理部', 'dzy-hq', '', '', 10, 'TRUE']
 ];
 var STF_UPGRADE_ADD_FIELDS = ['name', 'parent', 'ladder', 'rank', 'order', 'active'];
 

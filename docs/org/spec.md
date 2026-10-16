@@ -191,3 +191,4 @@
   - 管理部**不產生**部門主管審核資格：dzy-hq＋主要部門 mgmt＋職稱 hm 的人，不得審管理部同仁（也不得審其他部門）。
   - 其他部門的部門主管→執行長以上（不變）。
 - **掛錯地方的執行長以上（3A）**：職稱是 ceo／gm／chair，但單位不是 dzy-hq 或主要部門不是 mgmt → 名單 flags 加 `exec_misplaced`、升級預覽 todo 列出（flag `exec_misplaced`），**不自動搬**；畫面標「建議改到鼎兆元總部／管理部」。若同時符合 title_ladder（例：掛品牌辦公室），兩個 flag 都列。
+- **管理部不設部門主管（追加）：** 單位 dzy-hq＋主要部門 mgmt＋職稱 hm（含送出待審的 p_*）→ flags 加 `title_ladder`（職稱需重選），升級預覽 todo 也列；org 裡沒有啟用的 mgmt 部門列時（切換組織之前）不產生 `exec_misplaced`，也不產生此 `title_ladder`，切換後才出現。
