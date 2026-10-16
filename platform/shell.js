@@ -448,7 +448,7 @@ function renderTopNav() {
   const moduleItem = (m) => navItem(m.id, m.name, el('img', { src: `assets/icons/${m.icon}.png`, alt: '' }));
 
   clearChildren(sideNavEl);
-  sideNavEl.appendChild(navItem('__home__', '首頁', el('span', { text: '🏠' })));
+  sideNavEl.appendChild(navItem('__home__', '首頁', el('img', { src: 'assets/icons/home.png', alt: '' })));
   // 沒掛部門的模組（我的資料）排在首頁下面
   for (const m of permittedModules) if (!m.dept) sideNavEl.appendChild(moduleItem(m));
 

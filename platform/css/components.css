@@ -477,8 +477,8 @@ textarea.input:disabled {
   box-shadow: var(--shadow-pill);
 }
 .nav-item .ic {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -487,9 +487,9 @@ textarea.input:disabled {
   line-height: 1;
 }
 .nav-item .ic img {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
 }
 .nav-item .lb {
   flex: 1;
@@ -785,7 +785,7 @@ textarea.input:disabled {
     box-shadow: none;
   }
   .side-nav .nav-item .ic {
-    height: 22px;
+    height: 28px;
     font-size: 19px;
   }
   .side-nav .nav-item .lb {
