@@ -2,7 +2,7 @@
 - 開案日：2026-10-13
 - 分級：完整
 - 分級依據：排程=是 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
-- 現在在：⑤（第 4 段寫入已開，2026-10-14）
+- 現在在：⑤（第 5 段 2026-10-16 已切換；剩第 4、6 段）（第 4 段寫入已開，2026-10-14）
 - 等 Eason：無（2026-10-14 總部已按完 13 位「設為主店」）。下一步：開新對話「員工名單統一第 4 段」／「第 5 段」
 
 ## ① 查（2026-10-13）
@@ -98,5 +98,10 @@
 **2026-10-14 進度**：附錄 D 第 1 步（管理系統 svcDirectory）早已在 dzy main；第 2 步完成——佈告欄 PR #38 合併（main b25e42d，前端 v0.7.5 上線）、GAS clasp deploy @34 回 v0.7.5（build 全綠、judge 44/44、run.py 三輪全過）。下一步：Mac mini 設鑰匙＋附錄 B 更新＋`migrate` 報告（只報告不寫）→ 拿回報告判斷 `--map`／`--allow-name-diff` → `migrate --apply` → 雙跑 7 天（最早 2026-10-21 可切）。
 照 ~/dzy-bulletin-wt-staffmaster/server/DEPLOY.md 附錄 D：mini 平台 `.env` 加 `GAS_PROP_BULLETIN_SVC_KEY`、佈告欄 server `.env` 加 `DZY_PLATFORM_URL`（127.0.0.1:8799）與 `BULLETIN_SVC_KEY`（同值）→ 合併分支、GAS v0.7.5 clasp 部署 → mini 佈告欄更新 → `migrate` 檢查（本機演練：S-045 手動新增者需 `--map` 人工指定）→ `migrate --apply` → 雙跑 7 天 → `dual-status` 可拆舊才切 `STAFF_SOURCE=dzy`。
 ⚠ 與第 4 段都會重啟 mini 平台，兩個對話不要同時動 mini。
+
+**2026-10-16 13:02 第 5 段切換完成（人工切換，跳過 7 天雙跑）**：Eason 10/15 明確選擇跳過雙跑（理由：管理系統尚未開放同仁）；10/14 搬家（23 筆 map，S-046／S-059 用 --allow-name-diff；5 位原判離職改判在職，3 位補匯入管理系統）；10/14 dual 全同，10/15、10/16 只差 S-046 LINE（舊路徑綁定掛在已刪除 S-020＝cf:CF11，DZY122 clocks 含 CF11 → 新路徑會帶回，屬好的差異）。切換前備份 before-switch-202610161257.db；人工寫入 staff_dzy_switchable（manual-by-eason）；dry-run 與正式 sync 一致：renamed 2（S-046、S-059）、srcChanged 6（S-043／S-054／S-045／S-074／S-055 改總部打卡來源＝10/14 設為主店結果；S-046 接 cf:CF11）、lineChanged 1（S-046）、added／deactivated／moved 0。mini .env STAFF_SOURCE=dzy，PID 48380→82887，health ok（v0.7.6），staff-dzy-last ok 2026-10-16T05:02:33Z。
+- 回退：一律完整回退 `node server/staff-dzy.js rollback`＋刪 STAFF_SOURCE＋重啟（打卡來源已改總部，輕回退可能與 CLOCK_PRIMARY_ 打架）；全員要重新登入。
+- 切換後新人流程：佈告欄不再從打卡自動加人；總部在管理系統「打卡對照 › 候選新人」確認並選單位後，下一輪 mirror（每小時）才加。管理系統單位空白者（未認領，約 115 筆 notes）佈告欄單位不動、不新增。
+- 待辦：拆舊（CLOCK_PRIMARY_、syncClock、resolveClockRows、按鈕）等穩定兩週後另案；組織改版要同步改 staff-dzy.js UNIT_OF_DZY（yiwu-hq 等）。
 
 ### 第 6 段：第 4 段開放後兩週，若「打卡上有、沒對照」異常為零 → 六店 mgr_add_employee 回 disabled（task H1）。
