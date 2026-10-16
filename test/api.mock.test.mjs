@@ -403,6 +403,34 @@ await (async function test7scope() {
 })();
 
 // ============================================================
+// 7y. 稽核範圍只管稽核：audit_scope='none'（或陣列）的人拿宿舍資料要完整，不被稽核裁切裁空
+// ============================================================
+await (async function test7dorm() {
+  for (const scope of ['none', ['ck']]) {
+    await loginAs({
+      token: 'tok-dorm-scope',
+      user: { id: 'u201', name: '人資', role: 'staff', node: '' },
+      perms: ['dorm.read', 'dorm.write'],
+      audit_scope: scope
+    });
+    const listResp = {
+      ok: true,
+      contracts: [{ contract_id: 'C1', name: '測試一', room: '二樓', status: '待簽' }, { contract_id: 'C2', name: '測試二', room: '三樓', status: '在住' }],
+      records: [{ store: 'other', v: 1 }],
+      extra_flag: true
+    };
+    globalThis.fetch = makeFetchMock({ list: () => listResp });
+    const res = await call('dorm', 'list', {});
+    assertTrue(res.ok === true, '7y: 宿舍 list 成功（audit_scope=' + JSON.stringify(scope) + '）');
+    assertEqual(res.data.contracts, listResp.contracts, '7y: 宿舍資料完整（contracts 沒被稽核範圍裁掉）');
+    assertEqual(res.data.records, listResp.records, '7y: 宿舍回應其他欄位也原樣不動（不套用稽核白名單）');
+    assertEqual(res.data.extra_flag, true, '7y: 宿舍回應的未知鍵不被刪');
+    armGuard();
+    await quietLogout();
+  }
+})();
+
+// ============================================================
 // 8. 會計（audit.read）拿到全部五個節點，一列都沒少
 // ============================================================
 await (async function test8() {

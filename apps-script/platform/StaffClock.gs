@@ -568,6 +568,7 @@ function clkDisableStaff_(s, by, detail, d) {
   }
   stfWriteRow_(STF_SHEET, s.row, v, STF_COL_COUNT);
   stfLog_(s.emp, 'disable', by, detail || '');
+  if (typeof permAuditDisabled_ === 'function') permAuditDisabled_(by, v);   // 離職停用收回的權限留一筆異動紀錄
   return userRow ? { ok: true } : { ok: true, warn: 'user_missing' };
 }
 function clkEnableStaff_(s, by, detail, d) {

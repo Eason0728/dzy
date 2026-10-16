@@ -434,15 +434,6 @@
        "name": "Nsxl-gf",
        "order": 0
       }
-     ],
-     "all_stores": [
-      {
-       "code": "sxl-gf",
-       "name": "Nsxl-gf",
-       "tab": "Tsxl-gf",
-       "active": true,
-       "order": 0
-      }
      ]
     },
     "dry": true
@@ -623,15 +614,6 @@
        "name": "Nck",
        "order": 1
       }
-     ],
-     "all_stores": [
-      {
-       "code": "ck",
-       "name": "Nck",
-       "tab": "Tck",
-       "active": true,
-       "order": 1
-      }
      ]
     },
     "dry": true
@@ -781,8 +763,7 @@
      "change_fund_std": 3000,
      "petty_cash_std": 5000,
      "accountant_ok": true,
-     "stores": [],
-     "all_stores": []
+     "stores": []
     },
     "dry": true
    }
@@ -931,8 +912,7 @@
      "change_fund_std": 3000,
      "petty_cash_std": 5000,
      "accountant_ok": true,
-     "stores": [],
-     "all_stores": []
+     "stores": []
     },
     "dry": true
    }
@@ -1112,15 +1092,6 @@
       {
        "code": "mzt-gf",
        "name": "Nmzt-gf",
-       "order": 2
-      }
-     ],
-     "all_stores": [
-      {
-       "code": "mzt-gf",
-       "name": "Nmzt-gf",
-       "tab": "Tmzt-gf",
-       "active": true,
        "order": 2
       }
      ]
@@ -1331,22 +1302,6 @@
        "name": "Nmzt-gf",
        "order": 2
       }
-     ],
-     "all_stores": [
-      {
-       "code": "sxl-gf",
-       "name": "Nsxl-gf",
-       "tab": "Tsxl-gf",
-       "active": true,
-       "order": 0
-      },
-      {
-       "code": "mzt-gf",
-       "name": "Nmzt-gf",
-       "tab": "Tmzt-gf",
-       "active": true,
-       "order": 2
-      }
      ]
     },
     "dry": true
@@ -1496,8 +1451,7 @@
      "change_fund_std": 3000,
      "petty_cash_std": 5000,
      "accountant_ok": true,
-     "stores": [],
-     "all_stores": []
+     "stores": []
     },
     "dry": true
    }
@@ -1678,15 +1632,6 @@
       {
        "code": "ck",
        "name": "Nck",
-       "order": 1
-      }
-     ],
-     "all_stores": [
-      {
-       "code": "ck",
-       "name": "Nck",
-       "tab": "Tck",
-       "active": true,
        "order": 1
       }
      ]
@@ -2139,8 +2084,7 @@
    "expect": {
     "config": {
      "reasons": [],
-     "stores": [],
-     "all_stores": []
+     "stores": []
     }
    }
   },
@@ -2181,11 +2125,6 @@
       },
       {
        "code": "mzt-gf"
-      }
-     ],
-     "all_stores": [
-      {
-       "code": "ck"
       }
      ]
     }
@@ -2276,6 +2215,95 @@
    ],
    "data": {},
    "expect": {}
+  },
+  {
+   "name": "信封 ok:true 保留、資料鍵照裁、all_stores 刪除",
+   "filterNode": [
+    "ck"
+   ],
+   "data": {
+    "ok": true,
+    "records": [
+     {
+      "store": "ck",
+      "v": 1
+     },
+     {
+      "store": "x",
+      "v": 2
+     }
+    ],
+    "config": {
+     "reasons": [
+      "r"
+     ],
+     "all_stores": [
+      {
+       "code": "ck"
+      },
+      {
+       "code": "x"
+      }
+     ],
+     "stores": [
+      {
+       "code": "ck"
+      },
+      {
+       "code": "x"
+      }
+     ]
+    },
+    "junk": 1
+   },
+   "expect": {
+    "ok": true,
+    "records": [
+     {
+      "store": "ck",
+      "v": 1
+     }
+    ],
+    "config": {
+     "reasons": [
+      "r"
+     ],
+     "stores": [
+      {
+       "code": "ck"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "信封 ok:false 保留 ok 與字串 error，其餘資料鍵照裁",
+   "filterNode": "ck",
+   "data": {
+    "ok": false,
+    "error": "壞了",
+    "records": [
+     {
+      "store": "x"
+     }
+    ],
+    "junk": 1
+   },
+   "expect": {
+    "ok": false,
+    "error": "壞了",
+    "records": []
+   }
+  },
+  {
+   "name": "沒有 ok 的回應不憑空加 ok",
+   "filterNode": "ck",
+   "data": {
+    "records": []
+   },
+   "expect": {
+    "records": []
+   }
   }
  ]
 }

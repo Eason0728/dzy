@@ -1252,6 +1252,7 @@ function handleStaffSetActive_(token, payload) {
     usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
     setTokenAfter_(userRow.row);
     var saved = stfSave_(t, 'disable', '');
+    if (typeof permAuditDisabled_ === 'function') permAuditDisabled_(t.auth.user.id, t.v);   // 停用收回的權限留一筆異動紀錄
     // 員工名單統一：舊「停用」按鈕只停平台帳號——同時對他每個打卡對照發停用單（StaffClock.gs）
     if (typeof clkAfterDisable_ === 'function') clkAfterDisable_(t.emp, t.auth.user.id);
     return saved;

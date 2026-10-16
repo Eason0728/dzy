@@ -194,7 +194,7 @@ function permInit_(auth) {
  *           rules:[{rule_id,ladder,dept,title,perm}], exs:[{ex_id,emp_no?,perm,mode,until}],
  *           storeMap:{unit:audit_store}, today:'YYYY-MM-DD' }
  * 回 { perms:[…], auditScope:'all'|'none'|[codes], sources:[{perm,source,rule_id?,ex_id?,until?}] }
- * rules／exs 預期已只含 active 的列；exs 若帶 emp_no 且 staff 也帶 emp_no，會再過濾一次。
+ * rules／exs 預期已只含 active 的列；exs 只採用 emp_no 非空且等於本人的列（本人無工號＝全部不採用）。
  */
 function permCompute_(input) {
   var empty = { perms: [], auditScope: 'none', sources: [] };
@@ -203,15 +203,26 @@ function permCompute_(input) {
   if (permStr_(staff.status).toLowerCase() !== 'active') return empty;
 
   var org = input.org || {};
+  // 組織一致性（fail closed）：單位要存在且啟用；職稱要存在、啟用、且屬於該單位的階梯，否則整個回空權限
   var unit = org.units && org.units[permStr_(staff.unit)];
-  var ladder = unit ? permStr_(unit.ladder) : '';
+  if (!unit || unit.active === false) return empty;
+  var ladder = permStr_(unit.ladder);
   var title = permStr_(staff.title);
-  var brand = permStr_(staff.brand);
+  var tdef = title && org.titles && org.titles[title];
+  if (!tdef || tdef.active === false || permStr_(tdef.parent) !== ladder) return empty;
+  var brand = permStr_(unit.parent);   // 品牌一律由單位推得，不信 staff.brand
   var today = permStr_(input.today);
 
+  // 部門只採 org 中存在且啟用的
   var depts = {};
-  if (permStr_(staff.dept)) depts[permStr_(staff.dept)] = true;
-  (staff.extra_depts || []).forEach(function (d) { if (permStr_(d)) depts[permStr_(d)] = true; });
+  var addDept = function (d) {
+    d = permStr_(d);
+    if (!d) return;
+    var def = org.depts && org.depts[d];
+    if (def && def.active !== false) depts[d] = true;
+  };
+  addDept(staff.dept);
+  (staff.extra_depts || []).forEach(addDept);
 
   // 3. 規則聯集
   var granted = {};   // perm -> [sources]
@@ -238,7 +249,8 @@ function permCompute_(input) {
   var empNo = permStr_(staff.emp_no).toUpperCase();
   (input.exs || []).forEach(function (x) {
     if (!x) return;
-    if (empNo && permStr_(x.emp_no) && permStr_(x.emp_no).toUpperCase() !== empNo) return;
+    // 只採用「emp_no 非空且等於本人」的例外（fail closed）：沒填工號、或本人沒有工號 → 不生效
+    if (!empNo || !permStr_(x.emp_no) || permStr_(x.emp_no).toUpperCase() !== empNo) return;
     var perm = permStr_(x.perm);
     if (!permIsGrantable_(perm)) return;
     var mode = permStr_(x.mode).toLowerCase();
@@ -285,7 +297,7 @@ function permCompute_(input) {
     var list = [];
     var units = org.units || {};
     Object.keys(units).forEach(function (code) {
-      if (permStr_(units[code].parent) !== brand) return;
+      if (!brand || units[code].active === false || permStr_(units[code].parent) !== brand) return;
       var st = permStr_(storeMap[code]);
       if (st) list.push(st);
     });
@@ -369,6 +381,14 @@ function permReadTable_(ss, name, headers) {
  * 表不存在或表頭不對 → {inited:false}（表頭不對另帶 error:'header_mismatch'）。
  * 成功 → {inited:true, rules:[…], exs:[…], storeMap:{unit:audit_store}}
  */
+/** 讀表時的到期日：合法日期正規化成 YYYY-MM-DD；空白＝''（不到期）；無效的非空值保留原字串（不正規化成空字串，否則會變成永不到期） */
+function permLoadUntil_(v) {
+  var raw = permStr_(v);
+  if (raw === '') return '';
+  var n = permNormDate_(v);
+  return n !== '' ? n : raw;
+}
+
 function permLoadTables_() {
   var ss = SpreadsheetApp.getActive();
   var m = permReadTable_(ss, PERM_SHEET_MAP, PERM_MAP_HEADERS);
@@ -384,7 +404,7 @@ function permLoadTables_() {
   var exs = [];
   x.rows.forEach(function (r) {
     if (!permIsActive_(r[6])) return;
-    exs.push({ ex_id: permStr_(r[0]), emp_no: permStr_(r[1]).toUpperCase(), perm: permStr_(r[2]), mode: permStr_(r[3]).toLowerCase(), until: permNormDate_(r[4]), note: permStr_(r[5]) });
+    exs.push({ ex_id: permStr_(r[0]), emp_no: permStr_(r[1]).toUpperCase(), perm: permStr_(r[2]), mode: permStr_(r[3]).toLowerCase(), until: permLoadUntil_(r[4]), note: permStr_(r[5]) });
   });
   var storeMap = {};
   s.rows.forEach(function (r) {
@@ -520,20 +540,48 @@ function permDiff_(before, after) {
   return (added.length || removed.length) ? { added: added, removed: removed } : null;
 }
 
+/** 複製一列 staff 值並把 status 設成 active（判斷「這個人若在職會拿到什麼」） */
+function permAsActive_(values) {
+  var c = values.slice();
+  c[STF_COL.status] = 'active';
+  return c;
+}
+
+/**
+ * 停用／離職停用成功後呼叫：對方「若在職」原本有任何權限 → 寫一列 perm_audit（removed＝那些權限，cause＝staff_edit）。
+ * values 為停用前後皆可（內部強制以 active 計算）。perm 表未初始化＝沒有規則可算，不寫。
+ */
+function permAuditDisabled_(by, values) {
+  try {
+    var ctx = permLoadCtx_(false);
+    if (!ctx.inited) return false;
+    var emp = permStr_(values[STF_COL.emp_no]).toUpperCase();
+    var extra = stfSplitCodes_(stfReadExtraMap_()[emp]);
+    var r = permComputeRow_(ctx, permAsActive_(values), extra);
+    if (!r.perms.length) return false;
+    return permAuditAppend_(by, emp, '', r.perms.join(','), 'staff_edit');
+  } catch (e) {
+    return false;
+  }
+}
+
 /**
  * 非 admin 改某位同仁的組織欄（brand／unit／dept／title／extra_depts）前後各算一次：
- * 對方的 platform.permmap 有無改變 → block（perm_admin_only）。perm 表未初始化也擋（用預設規則算），開關關時也擋。
+ * 對方的鎖碼（PERM_LOCKED 全部）有無改變 → block（perm_admin_only）。perm 表未初始化也擋（用預設規則算），開關關時也擋。
  * 另回 diff（完整權限前後差異，沒差異是 null）與 inited，給呼叫端成功後寫 perm_audit 用。
  * before／after 是 staff 分頁一列的值（after 的 status 要是改完後的狀態）。
  */
 function permStaffChangeCheck_(isAdmin, beforeValues, beforeExtra, afterValues, afterExtra) {
   var ctx = permLoadCtx_(true);
-  var b = permComputeRow_(ctx, beforeValues, beforeExtra);
-  var a = permComputeRow_(ctx, afterValues, afterExtra);
+  // 一律以「若在職」計算：停用中的人 permCompute_ 回空，會讓停用期間改組織欄 / 之後啟用繞過檢查
+  var b = permComputeRow_(ctx, permAsActive_(beforeValues), beforeExtra);
+  var a = permComputeRow_(ctx, permAsActive_(afterValues), afterExtra);
   var res = { block: null, diff: null, inited: ctx.inited };
-  var hb = b.perms.indexOf('platform.permmap') !== -1;
-  var ha = a.perms.indexOf('platform.permmap') !== -1;
-  if (!isAdmin && hb !== ha) {
+  // 鎖碼家族（PERM_LOCKED 全部碼，含 platform.users、platform.permmap）：任一有無改變且非 admin → 擋
+  var lockedChanged = PERM_LOCKED.some(function (c) {
+    return (b.perms.indexOf(c) !== -1) !== (a.perms.indexOf(c) !== -1);
+  });
+  if (!isAdmin && lockedChanged) {
     res.block = { ok: false, error: PERM_MSG_ADMIN_ONLY, code: 'perm_admin_only' };
     return res;
   }

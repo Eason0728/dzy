@@ -88,6 +88,7 @@ const ORG = {
     ck: { ladder: 'store', parent: 'ck' },
     'dzy-hq': { ladder: 'hq', parent: 'dzy' }
   },
+  depts: { ops: { parent: 'dzy-hq', active: true }, mgmt: { parent: 'dzy-hq', active: true }, fin: { parent: 'dzy-hq', active: true }, hr: { parent: 'dzy-hq', active: true }, it: { parent: 'dzy-hq', active: true } },
   titles: { sm: { parent: 'store', rank: 2 }, ft: { parent: 'store', rank: 1 }, pt: { parent: 'store', rank: 0 }, ofs: { parent: 'office', rank: 1 }, oam: { parent: 'office', rank: 2 }, osv: { parent: 'office', rank: 2 }, odir: { parent: 'office', rank: 3 }, hs: { parent: 'hq', rank: 1 }, hm: { parent: 'hq', rank: 2 }, ceo: { parent: 'hq', rank: 3 }, gm: { parent: 'hq', rank: 4 }, chair: { parent: 'hq', rank: 5 } }
 };
 const STORE_MAP = { 'mala-gf': 'sxl-gf', ck: 'ck', 'mzt-gf': 'mzt-gf', 'mzt-js': 'mzt-js', 'mzt-lzl': 'mzt-lzl' };
@@ -99,9 +100,13 @@ const r0 = dbInit.sb.permInit_({ role: 'admin', id: 'boss' });
 const tables = dbInit.sb.permLoadTables_();
 const RULES = tables.rules;
 
-function staffOf(o) { return Object.assign({ status: 'active', brand: 'mala', unit: 'mala-gf', dept: '', title: 'ft', extra_depts: [] }, o); }
+function staffOf(o) { return Object.assign({ emp_no: 'E1', status: 'active', brand: 'mala', unit: 'mala-gf', dept: '', title: 'ft', extra_depts: [] }, o); }
 function run(staff, extra) {
-  return P.permCompute_(Object.assign({ staff: staffOf(staff), org: ORG, rules: RULES, exs: [], storeMap: STORE_MAP, today: TODAY }, extra || {}));
+  const st = staffOf(staff);
+  const args = Object.assign({ staff: st, org: ORG, rules: RULES, exs: [], storeMap: STORE_MAP, today: TODAY }, extra || {});
+  // 例外要帶本人工號才生效（permCompute_ 不採用沒工號的例外）；測試沒特別指定時補上本人工號
+  args.exs = (args.exs || []).map((x) => ('emp_no' in x ? x : Object.assign({ emp_no: st.emp_no }, x)));
+  return P.permCompute_(args);
 }
 const has = (res, p) => res.perms.indexOf(p) !== -1;
 
@@ -269,13 +274,13 @@ for (const st of ['disabled', 'pending', 'inactive', '', undefined]) {
 }
 // ===== 數字型代碼 =====
 {
-  const org = { units: { 123: { ladder: 'store', parent: 77 }, 456: { ladder: 'office', parent: 77 }, 789: { ladder: 'store', parent: 77 } }, titles: { 5: { parent: 'store', rank: 2 } } };
-  const rules = [{ rule_id: 'R001', ladder: 'store', dept: '', title: 5, perm: 'audit.read.own' }, { rule_id: 'R002', ladder: 'office', dept: '', title: 5, perm: 'audit.read.brand' }];
+  const org = { units: { 123: { ladder: 'store', parent: 77 }, 456: { ladder: 'office', parent: 77 }, 789: { ladder: 'store', parent: 77 } }, titles: { 5: { parent: 'store', rank: 2 }, 6: { parent: 'office', rank: 2 } } };
+  const rules = [{ rule_id: 'R001', ladder: 'store', dept: '', title: 5, perm: 'audit.read.own' }, { rule_id: 'R002', ladder: 'office', dept: '', title: 6, perm: 'audit.read.brand' }];
   const r = P.permCompute_({ staff: { status: 'active', brand: 77, unit: 123, dept: '', title: 5, extra_depts: [] }, org, rules, exs: [], storeMap: { 123: 'S1', 789: 'S2' }, today: TODAY });
   ok(eq(r.perms, ['audit.read.own']) && eq(r.auditScope, ['S1']), '數字型 unit／title／brand 也能比對', r);
-  const b = P.permCompute_({ staff: { status: 'active', brand: 77, unit: 456, dept: '', title: 5, extra_depts: [] }, org, rules, exs: [], storeMap: { 123: 'S1', 789: 'S2' }, today: TODAY });
+  const b = P.permCompute_({ staff: { status: 'active', brand: 77, unit: 456, dept: '', title: 6, extra_depts: [] }, org, rules, exs: [], storeMap: { 123: 'S1', 789: 'S2' }, today: TODAY });
   ok(eq(b.auditScope, ['S1', 'S2']), '數字型 brand 的品牌 scope', b);
-  const d = P.permCompute_({ staff: { status: 'active', brand: 'dzy', unit: 'dzy-hq', dept: 7, title: 'hs', extra_depts: [8] }, org: ORG, rules: [{ rule_id: 'R1', ladder: 'hq', dept: 8, title: '*', perm: 'dorm.read' }], exs: [], storeMap: {}, today: TODAY });
+  const d = P.permCompute_({ staff: { status: 'active', brand: 'dzy', unit: 'dzy-hq', dept: 7, title: 'hs', extra_depts: [8] }, org: Object.assign({}, ORG, { depts: { 7: { active: true }, 8: { active: true } } }), rules: [{ rule_id: 'R1', ladder: 'hq', dept: 8, title: '*', perm: 'dorm.read' }], exs: [], storeMap: {}, today: TODAY });
   ok(eq(d.perms, ['dorm.read']), '數字型部門（含兼任）也能比對', d);
 }
 
@@ -285,6 +290,67 @@ ok(P.permNormDate_('2026/1/5') === '2026-01-05', 'permNormDate_ 斜線補零');
 ok(P.permNormDate_(new Date(Date.UTC(2026, 9, 31, 16, 0, 0))) === '2026-11-01', 'permNormDate_ Date UTC 16:00 → 台北隔天');
 ok(P.permNormDate_(new Date(Date.UTC(2026, 9, 31, 15, 59, 59))) === '2026-10-31', 'permNormDate_ Date UTC 15:59:59 → 台北當天');
 ok(P.permNormDate_('2026-02-30') === '' && P.permNormDate_('abc') === '' && P.permNormDate_(null) === '' && P.permNormDate_(46000) === '' && P.permNormDate_(new Date('x')) === '', 'permNormDate_ 無效回空字串');
+
+// ===== 審查修正：例外只採本人、讀表不吞無效日期 =====
+{
+  const raw = (st, exs, extra) => P.permCompute_(Object.assign({ staff: staffOf(st), org: ORG, rules: RULES, exs, storeMap: STORE_MAP, today: TODAY }, extra || {}));
+  ok(!has(raw({ title: 'ft' }, [{ perm: 'dorm.read', mode: 'add', until: '' }]), 'dorm.read'), '例外沒有 emp_no → 不採用（add 不生效）');
+  const hq = { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs' };
+  ok(has(raw(hq, [{ perm: 'audit.read', mode: 'remove', until: '' }]), 'audit.read'), '例外沒有 emp_no → remove 也不採用');
+  ok(!has(raw({ title: 'ft', emp_no: '' }, [{ emp_no: 'E1', perm: 'dorm.read', mode: 'add', until: '' }]), 'dorm.read'), '本人沒有工號 → 所有例外不採用');
+  const d = load({});
+  d.sb.permInit_({ role: 'admin', id: 'boss' });
+  d.sheets.perm_ex._data.push(['X001', 'e1', 'dorm.read', 'add', '2026-13-45', 'x', true, '', '', '', '']);
+  d.sheets.perm_ex._data.push(['X002', 'e1', 'dorm.write', 'remove', 'garbage', 'x', true, '', '', '', '']);
+  const t = d.sb.permLoadTables_();
+  ok(t.exs[0].until !== '' && t.exs[1].until !== '', '讀表：無效日期不被正規化成空字串（空字串＝永不到期）', t.exs);
+  const withRules = RULES.concat([{ rule_id: 'R900', ladder: 'store', dept: '', title: 'ft', perm: 'dorm.write' }]);
+  const res = P.permCompute_({ staff: staffOf({ title: 'ft', emp_no: 'E1' }), org: ORG, rules: withRules, exs: t.exs, storeMap: STORE_MAP, today: TODAY });
+  ok(!has(res, 'dorm.read'), '讀表後：無效日期的 add 例外不生效', res.perms);
+  ok(!has(res, 'dorm.write'), '讀表後：無效日期的 remove 例外照樣生效（fail closed）', res.perms);
+}
+
+// ===== 審查修正：組織一致性 =====
+{
+  const org2 = (patch) => {
+    const o = JSON.parse(JSON.stringify(ORG));
+    patch(o);
+    return o;
+  };
+  const rc = (st, org) => P.permCompute_({ staff: staffOf(st), org, rules: RULES, exs: [], storeMap: STORE_MAP, today: TODAY });
+  const base = rc({ unit: 'mala-gf', title: 'sm' }, ORG);
+  ok(has(base, 'audit.read.own'), '（對照）正常店長有 audit.read.own');
+  const stopUnit = rc({ unit: 'mala-gf', title: 'sm' }, org2((o) => { o.units['mala-gf'].active = false; }));
+  ok(eq(stopUnit.perms, []) && stopUnit.auditScope === 'none', '單位停用 → 空權限＋none', stopUnit);
+  const stopTitle = rc({ unit: 'mala-gf', title: 'sm' }, org2((o) => { o.titles.sm.active = false; }));
+  ok(eq(stopTitle.perms, []) && stopTitle.auditScope === 'none', '職稱停用 → 空權限＋none', stopTitle);
+  const noTitle = rc({ unit: 'mala-gf', title: 'ghost' }, ORG);
+  ok(eq(noTitle.perms, []) && noTitle.auditScope === 'none', '職稱不存在 → 空權限＋none');
+  const wrongLadder = rc({ unit: 'mala-gf', title: 'hm' }, ORG);
+  ok(eq(wrongLadder.perms, []) && wrongLadder.auditScope === 'none', '職稱階梯與單位階梯不符 → 空權限＋none', wrongLadder);
+  const hqWrong = rc({ brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'sm' }, ORG);
+  ok(eq(hqWrong.perms, []), '總部單位掛店面職稱 → 空權限（hr 部門規則也不給）', hqWrong);
+  // brand：以 unit.parent 為準，staff.brand 寫成別牌不影響
+  const ofs = rc({ brand: 'mzt', unit: 'mala-hq', title: 'oam' }, ORG);
+  ok(eq(ofs.auditScope, ['sxl-gf']), 'brand 一律用 unit.parent（staff.brand 寫別牌也只看 mala）', ofs.auditScope);
+  const ofs2 = rc({ brand: 'mala', unit: 'mzt-hq', title: 'oam' }, ORG);
+  ok(eq(ofs2.auditScope, ['mzt-gf', 'mzt-js']), 'staff.brand 寫成 mala 但單位是 mzt-hq → 看 mzt 的店', ofs2.auditScope);
+  // 部門：停用或不存在的部門不採用
+  const stopDept = rc({ brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hm' }, org2((o) => { o.depts.hr.active = false; }));
+  ok(!has(stopDept, 'platform.permmap') && !has(stopDept, 'platform.staff'), '主部門停用 → dept 規則不命中', stopDept.perms);
+  const stopExtra = rc({ brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs', extra_depts: ['fin'] }, org2((o) => { o.depts.fin.active = false; }));
+  ok(!has(stopExtra, 'audit.write'), '兼任部門停用 → 不命中', stopExtra.perms);
+  const ghostDept = rc({ brand: 'dzy', unit: 'dzy-hq', dept: 'zzz', title: 'hs' }, ORG);
+  ok(eq(ghostDept.perms, []), '部門不存在 → 不命中', ghostDept.perms);
+  // 品牌 scope 不含停用的單位
+  const scopeStop = rc({ unit: 'mala-hq', title: 'oam' }, org2((o) => { o.units['mala-gf'].active = false; }));
+  ok(!scopeStop.auditScope.includes('sxl-gf'), '品牌 scope 不含已停用的單位', scopeStop.auditScope);
+  // permOrgIndex_ 帶 active
+  const od = load({ org: [['kind', 'code', 'name', 'parent', 'ladder', 'rank', 'order', 'active'],
+    ['unit', 'a', 'A', 'mala', 'store', '', 1, 'FALSE'], ['title', 't', 'T', 'store', '', 1, 1, 'FALSE'], ['dept', 'd', 'D', 'dzy-hq', '', '', 1, 'FALSE']] });
+  const oi = od.sb.permOrgIndex_();
+  ok(oi.units.a.active === false && oi.titles.t.active === false && oi.depts.d.active === false, 'permOrgIndex_ 的 unit／title／dept 都帶 active 旗標', oi);
+}
 
 // ===== T1-3 驗證 =====
 const VORG = {

@@ -121,7 +121,7 @@ async function postJson_(url, body, ms) {
 // node（= 代轉層 filterNode）可以是字串（舊後端，單店）或字串陣列（新後端，可為空陣列＝全清）。
 // mini 的 apps/dzy-platform/proxy-hook.js filterResponse 是同一份語意，兩邊 fixture 逐字相同。
 const AUDIT_ROW_KEYS_ = ['items', 'records', 'details', 'ops_records', 'ops_details'];
-const AUDIT_CONFIG_KEYS_ = ['reasons', 'change_fund_std', 'petty_cash_std', 'accountant_ok', 'stores', 'all_stores'];
+const AUDIT_CONFIG_KEYS_ = ['reasons', 'change_fund_std', 'petty_cash_std', 'accountant_ok', 'stores'];   // all_stores 含全部店清單，不在白名單（受裁切時一律刪）
 
 /** node 是否允許這個店代碼：字串＝全等；陣列＝包含；其餘（含空字串、空陣列）＝一律不允許。比對前 String()。 */
 function storeAllowed_(store, node) {
@@ -135,6 +135,11 @@ function storeAllowed_(store, node) {
 function filterAuditData_(data, node) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
   const out = {};
+  // 信封欄位：作用在含 ok 的整包回應時保留 ok（ok:false 另留字串 error），只裁資料鍵
+  if ('ok' in data) {
+    out.ok = data.ok;
+    if (data.ok === false && typeof data.error === 'string') out.error = data.error;
+  }
   for (const key of AUDIT_ROW_KEYS_) {
     if (!(key in data)) continue;
     const val = data[key];
@@ -147,7 +152,7 @@ function filterAuditData_(data, node) {
     const c = {};
     for (const k of AUDIT_CONFIG_KEYS_) {
       if (!(k in cfg)) continue;
-      c[k] = (k === 'stores' || k === 'all_stores')
+      c[k] = (k === 'stores')
         ? (Array.isArray(cfg[k]) ? cfg[k].filter((r) => r && typeof r === 'object' && storeAllowed_(r.code, node)) : [])
         : cfg[k];
     }
@@ -170,6 +175,8 @@ export function __filterAuditData(data, node) {
  *     否則依 user.node 裁，node 為空一律清空（往關的方向失敗）。
  */
 function maybeFilterOwnNode_(backendId, data) {
+  // 稽核範圍只管稽核的回應；宿舍等其他後端原樣不動（否則稽核範圍＝none 的人會拿到被裁空的宿舍資料）
+  if (backendId !== 'audit') return data;
   const scope = getAuditScope();
   if (scope === 'all') return data;
   if (scope === 'none') return filterAuditData_(data, []);

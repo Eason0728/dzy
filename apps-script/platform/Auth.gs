@@ -52,6 +52,7 @@ var AUTH_LOG_DISABLED = 'disabled';
 var AUTH_MSG_LOCKED = '嘗試次數過多，請 15 分鐘後再試'; // spec §5.2 逐字
 var AUTH_MSG_BAD_PASSWORD = '帳號或密碼錯誤';
 var AUTH_MSG_DISABLED = '帳號已停用';
+var AUTH_MSG_NOT_IN_STAFF = '此帳號不在同仁名單，請聯絡人資';
 var AUTH_MSG_INVALID_TOKEN = '登入已失效，請重新登入';
 
 // ============================================================
@@ -731,7 +732,8 @@ function authStaffGate_(user) {
   // 權限開關開（PERMS_ON='1'，Perms.gs；第二期）：staff 列不存在或 status≠active → 一律拒絕（登入與 token 都擋）
   if (!gate.block && typeof permEnabled_ === 'function' && permEnabled_()) {
     var hit = typeof stfFindByUserId_ === 'function' ? stfFindByUserId_(user.id) : null;
-    if (!hit || String(hit.values[STF_COL.status]).trim() !== 'active') return { block: AUTH_MSG_DISABLED };
+    if (!hit) return { block: AUTH_MSG_NOT_IN_STAFF };
+    if (String(hit.values[STF_COL.status]).trim() !== 'active') return { block: AUTH_MSG_DISABLED };
     gate.staffValues = hit.values;
   }
   return gate;
