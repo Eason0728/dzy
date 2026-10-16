@@ -2207,6 +2207,7 @@ function handleSvcDirectory_(payload) {
 // 流程：管理系統前端（已登入）→ ssoTicket 換一張一次性入場券（60 秒）→ postMessage 給嵌在 iframe 裡的佈告欄 →
 // 佈告欄的 Mac mini 伺服器拿券＋BULLETIN_SVC_KEY 打 svcSsoRedeem → 回同仁編號（DZY###）→ 佈告欄依 staff.dzy 登入那位。
 // 登入 token 本身永遠不離開管理系統；券只能換一次、只回編號、只給有服務金鑰的佈告欄伺服器換。
+// ⚠ ssoTicket／svcSsoRedeem 永遠不可列進 minikit apps/dzy-platform/app.json 的 readActions（唯讀動作在鏡像／回退模式可能被重放＝券能用兩次；審查 dzy-bulletin#42-6）
 // ============================================================
 var SSO_TTL_SEC = 60;
 var SSO_CACHE_PREFIX = 'sso_tkt:';
