@@ -224,6 +224,25 @@ ok(L.NAME_MAX === 20 && L.addFormErrors({ ...good, name: 'x'.repeat(20) }, '2026
   }
 }
 
+// #10 總部／admin 進「我的單位」：後端回全部單位 → 標題「全部單位」＋單位篩選下拉
+{
+  const { mountTeam } = await import('../modules/staff-shared/clock-ui.js');
+  const mk = (n, u, un) => ({ emp_no: n, name: '人' + n, status: 'active', unit: u, unit_name: un, title_name: '', clocks: [], clock_total: 0, clock_stopped: 0 });
+  const el = { innerHTML: '', _l: {}, addEventListener(t, f) { this._l[t] = f; }, removeEventListener() {} };
+  const ctx = { params: {}, ui: {}, api: { call: async (m, a) => {
+    if (a === 'staffUnitList') return { ok: true, data: { people: [mk('A1', 'u-gf', '新竹光復'), mk('B1', 'u-hq', '總部')], unit: '' } };
+    if (a === 'orgOptions') return { ok: true, data: { brands: [], units: [{ code: 'u-gf', name: '新竹光復', parent: 'b' }, { code: 'u-hq', name: '總部', parent: 'b' }], depts: [], titles: [] } };
+    return { ok: true, data: { outbox_failed: [] } };
+  } } };
+  const stop = mountTeam(el, { ctx, mod: 'me', viewer: { isHq: true, isLead: false } });
+  await new Promise((r) => setTimeout(r, 20));
+  ok(el.innerHTML.includes('我的單位｜全部單位') && !el.innerHTML.includes('我的單位｜新竹光復'), '#10 總部標題顯示「全部單位」，不是第一個人的單位', el.innerHTML.slice(0, 200));
+  ok(el.innerHTML.includes('data-role="unit-filter"') && el.innerHTML.includes('value="u-gf"'), '#10 有單位篩選下拉（選項來自 orgOptions）');
+  el._l.change && el._l.change({ target: { getAttribute: (k) => (k === 'data-role' ? 'unit-filter' : null), value: 'u-hq' } });
+  ok(el.innerHTML.includes('人B1') && !el.innerHTML.includes('人A1'), '#10 選單位後只列該單位的人');
+  if (typeof stop === 'function') stop();
+}
+
 // ---- 接線：manifest／檔案存在／分層 ----
 for (const id of ['me', 'staff']) {
   const m = (await import(`../modules/${id}/manifest.js`)).default;

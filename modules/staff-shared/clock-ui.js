@@ -611,6 +611,8 @@ export function mountTeam(el, env) {
   let people = [];
   let unitName = '';
   let unit = '';
+  let isAll = false;     // 總部／admin：後端回全部單位（沒有單一所屬單位）
+  let filterUnit = '';   // 全部單位時的單位篩選
   let org = { brands: [], units: [], depts: [], titles: [] };
   let failed = [];
   el.innerHTML = '<div class="card"><p class="text-muted">讀取中…</p></div>';
@@ -620,6 +622,7 @@ export function mountTeam(el, env) {
     if (!alive) return;
     if (!r || !r.ok) { el.innerHTML = `<div class="card"><p data-role="store-lead-only">${esc(storeLeadOnlyText(r) || (r && r.error) || '讀不到單位名單')}</p></div>`; return; }
     people = r.data.people || [];
+    isAll = !r.data.unit;
     unit = r.data.unit || (people[0] && people[0].unit) || '';
     unitName = (people[0] && people[0].unit_name) || (org.units.find((u) => u.code === unit) || {}).name || '';
     if (o && o.ok) org = o.data;
@@ -629,8 +632,21 @@ export function mountTeam(el, env) {
   }
 
   function visible() {
-    if (f) return people.filter((p) => personFilter(f, p, ymd(new Date())));
-    return people;
+    let list = people;
+    if (isAll && filterUnit) list = list.filter((p) => p.unit === filterUnit);
+    if (f) list = list.filter((p) => personFilter(f, p, ymd(new Date())));
+    return list;
+  }
+
+  function titleUnitText() {
+    if (!isAll) return unitName;
+    if (!filterUnit) return '全部單位';
+    return (org.units.find((u) => u.code === filterUnit) || {}).name || filterUnit;
+  }
+
+  function unitFilterHtml() {
+    if (!isAll) return '';
+    return `<select class="input" data-role="unit-filter" aria-label="單位篩選"><option value="">全部單位</option>${org.units.map((u) => `<option value="${esc(u.code)}"${u.code === filterUnit ? ' selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
   }
 
   function cardHtml(p) {
@@ -652,8 +668,9 @@ export function mountTeam(el, env) {
         <p class="field-hint">請通知總部按「重試」；你不用重新新增。</p></div>` : '';
     el.innerHTML = `
       <div class="card stack">
-        <div class="card-row"><div class="card-title">我的單位｜${esc(unitName)}</div>
+        <div class="card-row"><div class="card-title">我的單位｜${esc(titleUnitText())}</div>
           <button type="button" class="btn btn-primary" data-act="add" data-role="add-staff">新增同仁</button></div>
+        ${unitFilterHtml()}
         <p class="text-muted">只列你單位的同仁，不含手機、生日、地址。新增同仁會當場建好打卡編號。${f ? '（已套用提醒篩選）' : ''}</p>
       </div>${failRows}
       ${list.map(cardHtml).join('') || '<div class="card"><p class="text-muted">沒有符合的同仁</p></div>'}`;
@@ -670,7 +687,15 @@ export function mountTeam(el, env) {
     if (p && isClockAct(a)) await handleClockAct(a, p, envOf());
   }
 
+  function onChange(e) {
+    const t = e.target;
+    if (!t || !t.getAttribute || t.getAttribute('data-role') !== 'unit-filter') return;
+    filterUnit = t.value || '';
+    draw();
+  }
+
   el.addEventListener('click', onClick);
+  el.addEventListener('change', onChange);
   load();
-  return () => { alive = false; el.removeEventListener('click', onClick); };
+  return () => { alive = false; el.removeEventListener('click', onClick); el.removeEventListener('change', onChange); };
 }
