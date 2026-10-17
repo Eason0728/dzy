@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import SHOTS, check, finish, login, start_server
+from common import SHOTS, USERS, check, finish, start_server
 from e2e_t9_staff_master import Mock9, UNIT_BRAND  # noqa: F401  （打卡對照的 mock 沿用 ⑨）
 
 from playwright.sync_api import sync_playwright
@@ -63,14 +63,12 @@ def main():
             def page_for(user, pw=None):
                 pg = browser.new_context(viewport={'width': W, 'height': 800}).new_page()
                 mock.install(pg)
-                if pw is None:
-                    login(pg, base, user)
-                else:
-                    pg.goto(base + '/index.html')
-                    pg.fill('#login-username', user)
-                    pg.fill('#login-password', pw)
-                    pg.click('[data-role="submit"]')
-                    pg.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
+                pg.goto(base + '/index.html')
+                pg.fill('#login-username', user)
+                pg.fill('#login-password', pw or USERS[user]['password'])
+                pg.click('[data-role="submit"]')
+                # 首頁載完才換網址，不然登入完成的導頁會蓋掉要去的分頁（同 ⑨）
+                pg.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
                 return pg
 
             # ① 會計：營運稽核填寫
