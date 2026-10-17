@@ -904,6 +904,21 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
 // ============================================================
 // 16. 審查員回報（2026-10-18）：撤回 step 一致、不相干的人探不到、檔案先 putting 再 uploaded、已開通對象不收紙本
 // ============================================================
+{ // 第 2 條：候選人被停用 → 畫面 step 是懶式重解後的值，撤回照畫面 step 要成功
+  const app = freshApp();
+  const s = sendExpense(app, 'DZY901', 800);
+  const id = s.data.id;
+  app.sheets.staff._data.forEach((r) => { if (r[app.sb.STF_COL.emp_no] === 'DZY902') r[app.sb.STF_COL.status] = 'disabled'; });
+  const mine = post(app, 'DZY901', 'apvMine', {}).data.forms.find((x) => x.id === id);
+  ok(mine.step === 1 && mine.can.withdraw === true, '（第2條）畫面上 step＝1（店長停用、往上）且可撤回', mine);
+  const wd = post(app, 'DZY901', 'apvWithdraw', { id, rev: mine.rev, step: mine.step });
+  ok(wd.ok && wd.data.status === 'withdrawn', '（第2條）照畫面的 rev／step 撤回成功', wd);
+  ok(EVENTS(app, id).some((e) => e.action === 'skip') && EVENTS(app, id).some((e) => e.action === 'withdraw'), '（第2條）skip 事件與 withdraw 事件都寫入');
+  // 舊畫面 step=0 現在是舊值 → conflict（對稱於 apvDecide）
+  const s3 = sendExpense(app, 'DZY901', 8600);
+  app.sheets.staff._data.forEach((r) => { if (r[app.sb.STF_COL.emp_no] === 'DZY903') r[app.sb.STF_COL.status] = 'disabled'; });
+  ok(post(app, 'DZY901', 'apvWithdraw', { id: s3.data.id, rev: 1, step: 0 }).error === 'conflict', '（第2條）舊畫面 step＝0 撤回 → conflict（重解後 step 已前進）');
+}
 { // 第 6 條：對象已開通 + 離職單帶紙本照 → bad_request
   const app = freshApp();
   const pb = (o) => Object.assign({ kind: 'leave', effective: '2026-11-01', from: { unit: 'mala-gf', title: 'ft', pay: 30000 }, to: {}, reason: '測試原因' }, o || {});

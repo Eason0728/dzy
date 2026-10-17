@@ -741,15 +741,12 @@ function handleApvResubmit_(token, payload) {
 }
 
 function handleApvWithdraw_(token, payload) {
-  var c = apvEnter_(token);
-  if (!c.ok) return c;
-  if (!apvReady_()) return apvNotInited_();
-  payload = payload || {};
-  var fr = apvFindForm_(apvStr_(payload.id));
-  if (!fr) return apvFail_('not_found', '找不到這張單');
-  var f = fr.f;
+  // 與 apvDecide 同一套開頭：先把懶式重解寫回，畫面看到的 step 就等於這裡比對的 step
+  var o = apvOpenForWrite_(token, payload, true);
+  if (!o.ok) return o;
+  var c = o.c, fr = o.fr, f = o.f;
   if (!c.me || f.sender !== c.me.emp) return apvForbidden_('只有送件人可以撤回');
-  if (f.status !== 'signing' || payload.rev !== f.rev || payload.step !== f.step) return apvFail_('conflict', '這張單剛被別人處理過，請重新整理');
+  if (f.status !== 'signing') return apvFail_('conflict', '這張單剛被別人處理過，請重新整理');
   if (apvHasDoneStep_(f.route)) return apvFail_('conflict', '已經有人核准，不能撤回');
   f.status = 'withdrawn';
   f.step = null;
