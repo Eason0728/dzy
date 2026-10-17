@@ -29,6 +29,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { BACKENDS } from '../platform/config.js';
 
 let passed = 0;
 let failed = 0;
@@ -535,7 +536,7 @@ await at('欄位＋簽名都合法 → 送出鈕開放，且送出 payload 的�
 
   // 送出後 GET 合約用的網址仍然是打 BACKENDS.dorm（config.js），不是頁面自己刻的網址。
   const getCall = page.calls.find((c) => !c.init || !c.init.method);
-  assert.ok(getCall.url.startsWith('https://script.google.com/macros/s/AKfycbyxyhJ35MWTjtvzKr54_9JzGfLZlclyqn2fYLWXgz0muTFzL_tu81nR1r3W332J1igm/exec'));
+  assert.ok(getCall.url.startsWith(BACKENDS.dorm), '應打 config.js 的 BACKENDS.dorm：' + getCall.url);
 });
 
 await at('清除重簽：清掉之後又變回「未簽名」，送出鈕重新停用', async () => {
