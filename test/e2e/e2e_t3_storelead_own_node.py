@@ -32,7 +32,7 @@ def main():
 
             page.wait_for_selector('[data-role="module-card"]')
             ids = [c.get_attribute('data-module') for c in page.locator('[data-role="module-card"]').all()]
-            check(ids == ['audit-stock', 'audit-ops', 'bulletin'], '店長首頁只有兩張稽核卡片＋公告專區，實際：%s' % ids)
+            check(ids == ['audit-stock', 'audit-ops', 'bulletin', 'approvals'], '店長首頁只有兩張稽核卡片＋公告專區＋表單簽核，實際：%s' % ids)
 
             page.click('[data-role="module-card"][data-module="audit-stock"] .todo-head')  # 卡片中間是提醒列（點了會進該列的分頁），進模組要點組頭
             page.wait_for_selector('[data-role="view-nav"] .nav-item')

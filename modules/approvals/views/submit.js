@@ -336,6 +336,8 @@ export function mountSubmit(el, ctx) {
         return;
       }
       if (r.dryrun) { ctx.ui.toast('試跑模式，未真的送出', 'info'); return; }
+      clearTimeout(saveTimer);
+      dirty = false;      // 送成功了：不要讓還沒到期的存草稿計時器或離開時的補存把草稿寫回去
       clearDraft(store(), userId, type);
       clientId = newClientId();
       ctx.ui.toast(`已送出${r.data && r.data.id ? `，單號 ${r.data.id}` : ''}`, 'ok');
@@ -370,6 +372,7 @@ export function mountSubmit(el, ctx) {
   }
   function onInput(e) {
     const t = e.target;
+    if (t && t.type === 'file') return;   // 選照片不是改欄位
     if (t && t.getAttribute && t.getAttribute('data-field') === 'payee') {
       const vn = el.querySelector('[data-role="vendor-name"]');
       if (vn) vn.hidden = fieldVal(formEl(), 'payee') !== 'vendor';

@@ -30,8 +30,8 @@ def main():
 
             page.wait_for_selector('[data-role="module-card"]')
             ids = [c.get_attribute('data-module') for c in page.locator('[data-role="module-card"]').all()]
-            check(ids == ['audit-stock', 'audit-ops', 'bulletin'],
-                  '會計首頁只有兩張稽核卡片＋公告專區（無宿舍、無人員管理），實際：%s' % ids)
+            check(ids == ['audit-stock', 'audit-ops', 'bulletin', 'approvals'],
+                  '會計首頁只有兩張稽核卡片＋公告專區＋表單簽核（無宿舍、無人員管理），實際：%s' % ids)
 
             nav_text = page.locator('[data-role="nav-desktop"]').inner_text()
             check('宿舍合約' not in nav_text and '人員管理' not in nav_text,
