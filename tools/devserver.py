@@ -29,7 +29,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             super().log_message(fmt, *args)
 
     def send_head(self):
-        # 瀏覽器只需要 index.html／platform／modules／assets／sign.html。
+        # 瀏覽器只需要 index.html／platform／modules／assets（簽約頁在舊站 mala-dorm，dzy 不再保留副本，2026-10-18）。
         # 其餘一律擋掉——開放到區網給手機看時，沒必要把後端原始碼、設計文件、
         # .clasp.json、.git 一起端出去。
         rel = self.path.split('?', 1)[0].split('#', 1)[0].lstrip('/')
