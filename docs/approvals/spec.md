@@ -178,3 +178,92 @@ purchase → 採購部 `pur`；expense → 財務部 `fin`；personnel → 人�
 
 ## 13. 刻意不做
 自訂表單、代理人、主管 LINE 私訊、跟損益系統自動連動、Excel 檔格式（先 CSV）、照片以外的檔案（PDF）。
+
+## 14. 設計審修正（2026-10-18 GPT 對抗審 29 條；**本節優先於前文**，衝突以本節為準）
+審查原文：scratchpad（不進 repo）；逐條處置見 `review-design.md`。
+
+### 14.1 版本與證據（審 #1、#10）
+- 新表 `apv_revisions`（只追加）：`form_id, rev, at, body_json, amount, files_json, route_json, thr_ver, sha256`；sha256＝`body_json＋amount＋files_json` 的雜湊。每次送出／再送寫一列。
+- apv_events 加欄 `sha256`：approve／reject／sign／handle 都記下當下 rev 的 sha256，證明「核准的是哪一版」。
+- 權限表加欄 `ver`（整數，每次儲存 +1，整張表同一 ver）。`apvThresholdSave` 必帶 `expected_ver`，不符回 `conflict`。route_json 記 `thr_ver`。
+
+### 14.2 並行與重送（審 #7、#8）
+- 所有寫入 action 本來就在平台全域寫入鎖內（`Code.gs:96` LockService，一次一筆）。另外每支改單的 action 必帶 `rev`＋`step`（前端畫面當下的值），後端不符回 `conflict`（「這張單剛被別人處理過，請重新整理」）。
+- `apvSubmit` 必帶 `client_id`（前端產生 UUID）；同一 sender＋client_id 已存在 → 回原單號，不另開。apv_forms 加欄 `client_id`。
+
+### 14.3 狀態與每支 action 的前置條件（審 #3、#6、#14）
+新增狀態 `exception`（路線找不到合格權限人）與 `voided`（作廢）。
+| action | 只在這個狀態 | 其他前置 | 轉移到 |
+|---|---|---|---|
+| apvDecide approve | signing | 本人在目前這關的候選人裡、rev/step 相符 | 下一關或 handling |
+| apvDecide reject | signing | 同上；原因必填 | rejected |
+| apvSign | signing 且目前這關 role=`self_sign` | 本人＝subject；簽名檔已上傳且 owner＝本人 | 下一關 |
+| apvResubmit | rejected | 本人＝sender | signing（rev+1、重算路線） |
+| apvWithdraw | signing | 本人＝sender；尚無任何 approve | withdrawn |
+| apvHandle done | handling | 本人屬承辦部門 | done |
+| apvHandle return | handling | 本人屬承辦部門；原因必填 | rejected（送件人改完再送要**重新核准**） |
+| apvReassign | signing 或 exception | platform.staff；新對象須是「該關 role 或更高 role」的合格人選、active、非 sender | signing（寫 override） |
+| apvVoid | 任何非 done／voided | platform.staff 或 role admin；原因必填 | voided |
+- **人資不能核准**：路線全空 → `exception`，人資只能「指派合格的人」（apvReassign），不能自己按核准（除非他本人剛好是合格權限人）。
+- **董事長本人送的支出單** → 沒有更高的人 → `exception`，在晨報／首頁提醒 Eason（admin）處理；人資可改派給總經理。（替 Eason 先定，待他看。）
+- override 存在 route_json.steps[i].override＝`{to, by, reason, rev, at}`；有 override 時那關只有 `to` 能簽，原候選人失權。
+
+### 14.4 人事異動路線矩陣（審 #2、#4，取代 §5.1 人事那一行）
+「直屬主管」＝用既有 `stfReviewNeed_` 對 subject 算出的那一種審核者（就是帳號認領的審核人，只往上一層）。
+| kind | 誰能送 | 路線 |
+|---|---|---|
+| leave 離職 | subject 本人；subject 的直屬主管或更高（同一條組織鏈）；人資 | 主管送／人資送：先 `self_sign`（subject 已開通→本人電子簽名；沒開通→送件時附紙本簽名照，這關免）→ 直屬主管核准 → 人資承辦 |
+| transfer 調職 | subject 的直屬主管或更高；人資 | 直屬主管核准 → 人資承辦 |
+| raise 調薪 | subject 的直屬主管或更高；人資 | 總經理核准（一關）→ 人資承辦 |
+- 直屬主管＝sender 本人 → 這關改成 sender 的直屬主管。總經理＝sender → 董事長。
+- 直屬主管找不到 → 依 §5.2 順序往上（head→brand_dir→ceo→gm→chair），全空 → exception。
+- 「同一條組織鏈更高」：同單位 sm、同品牌辦公室 oam 以上、同部門 hm、ceo／gm／chair。其他店長替別店同仁送 → 擋。
+
+### 14.5 找不到人的觸發點（審 #9）
+- 每次 apvTodo／apvGet／apvDecide 前，對 signing 單「懶式重解」目前這關：候選人全空 → 寫 skip、往上。
+- jobs 每天 09:40 呼叫 `apvReconcile_`：對所有 signing 單做同一件事（處理「權限人被停用後沒人再打開」的單）。
+
+### 14.6 金額（審 #11；唯一式子）
+- 請購每列：`qty` 數字、0 < qty ≤ 9999、最多兩位小數；`price` 整數元、0 < price ≤ 1,000,000；`subtotal = Math.round(qty × price)`；`amount = Σ subtotal`；amount ≤ 10,000,000。
+- 請款：`amount` 整數元、1 ≤ amount ≤ 10,000,000。
+- 反例：qty=1.5、price=333 → subtotal=500（499.5 四捨五入）；負數、0、字串、NaN、Infinity 一律 `bad_amount`。前後端用同一支純函式（`apvCalcAmount_`，前端複製一份，測試逐字比對）。
+
+### 14.7 誰看得到哪些欄位（審 #12、#15）
+| 誰 | apvGet | apvList／apvExport |
+|---|---|---|
+| sender | 全部（自己填的）；人事單薪資看得到 | — |
+| 路線上簽過或目前候選的人 | 他簽的那一版＋最新版；人事單薪資看得到 | — |
+| 承辦部門（fin／purchase／hr） | 自己部門承辦的單，全部欄位 | 同左 |
+| platform.staff／admin | 全部 | 全部 |
+| 其他人 | 403 | 403 |
+- 人事單**不存本機草稿**；請購／請款草稿照存，登出時清掉 `dzy.u.<id>.apv_draft_*`。
+
+### 14.8 承辦部門代碼（審 #13）
+purchase → **`purchase`**（org 正本 `Staff.gs:1450`），expense → `fin`，personnel → `hr`。setupApprovals 檢查三個代碼都在 org 且啟用，不在就停。
+
+### 14.9 照片與簽名檔生命週期（審 #16、#17、#18、#19）
+唯一流程：`put`（jobs）→ `register`（.gs，狀態 `uploaded`）→ `bind`（apvSubmit／apvResubmit／apvSign 在同一筆寫入裡做）→ `read`。
+- put：驗 token（`apvFileAuthorize_`）→ 寫 `apv-files/tmp/<檔號>` → 驗格式 → 去 EXIF（JPEG 拿掉 APP1–APP15 區段）→ 讀 SOF 寬高，任一邊 > 4000 拒絕 → `apvFileRegister_` 成功才 rename 到正式路徑；失敗刪 tmp。
+- 種類 `kind`：`receipt`（JPEG ≤180 KB）、`sign`（PNG ≤100 KB，只給離職簽名，前端把簽名板 dataURL 轉 PNG 上傳）。
+- bind 條件：owner＝本人、狀態 uploaded、檔案存在、該單照片 ≤5；改狀態 `bound`＋form_id＋rev。
+- sweep（每天 04:10）：只刪 `uploaded` 且 > 24 小時，經 runGas 在寫入鎖內先改狀態 `deleting` 再刪檔。
+- 人事單 body 加 `sign_file`（電子簽名檔號）或 `paper_files`（紙本簽名照，1～2 張）；requirements §3「人事不用照片」改為「只有離職紙本簽名例外」。
+- apv_files 加欄 `kind`、`state`、`seq`（遞增，給備份水位用）。
+
+### 14.10 照片備份（審 #20、#21、#22）
+- 探到：通用備份端只收資料表（`kit/gas/backup/Code.js`：`action:'backup'` + sheets），**收不了圖檔**。
+- 本期做：jobs 每天 04:00 依 `seq` 水位（存在 dataDir `apv-backup-state.json`，成功才推進）把新照片＋manifest（檔號、sha256、form_id、rev）打包到 `~/dzy-platform-data/apv-backup/apv-<YYYYMMDD>.tar`，留 30 份。
+- **這不是異機備份**：上線前 Eason 要選（列在晨報）：A 擴充備份端加 `action:'file'`（推薦）；B 先接受「照片只有 mini 一份＋紙本收據留存」。未選之前照片功能照做，但首頁對 admin 顯示「照片尚無異機備份」。
+- 還原演練：P4 裁判腳本含「從 tar 還原到空資料夾、逐檔核 sha256」。
+
+### 14.11 每日彙整（審 #23、#24）
+- 09:30 送（不是 09:50），失敗 5／15／45 秒重試三次，之後每 5 分鐘試到 09:55；key 固定 `apv-YYYYMMDD`，當天送成功（ok 且 added）就記在 `apv-digest-state.json`，不再送。
+- 狀態 `last_run`＝`no_stuck`／`sent`／`failed`；health 只有連兩天 `failed` 才 warn。時間一律台北 UTC+8（jobs.js 既有做法）。
+- 卡關定義擴大：signing／handling／**exception** 超過 72 小時；exception 不等 72 小時，當天就列。
+
+### 14.12 匯出（審 #27、#28）
+- 匯出依「承辦按已處理（done）的日期」所在月份，只含 done；每列帶送件日、核准日、處理日、單號、rev。
+- CSV（Eason 2026-10-18 選）：UTF-8 BOM；任何以 `= + - @` 或 Tab／CR 開頭的文字格前面加 `'`。requirements「Excel」改為「Excel 打得開的 CSV」。
+
+### 14.13 API 契約（審 #25）
+每支 action 的 request／response／錯誤碼寫在 `api.md`（正本）；P3 的假後端照 api.md 寫。sender、unit、route、handler_dept、amount（請購）一律伺服器產生，前端送了也忽略。

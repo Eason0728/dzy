@@ -12,7 +12,8 @@
 | P4 整合關 | minikit 接線、e2e、上線前雙審 | e2e 全綠；Fable＋GPT 互盲審高風險三塊，問題全結 |
 | P5 上線 | 先 mini、後前端 | BOSS 用 dryrun 走四例子；一張真的小額請款走完 |
 
-P1 與 P2 的 jobs 部分、P3 可平行（P3 先對假後端做）；P4 必須等全部完成。
+依賴（設計審 #26）：同一檔只有一個負責任務、依序做：`ApprovalRoute.gs` T1-1→T1-2；`Approvals.gs` T1-3→T1-4→T1-5→T1-6→T2-1；jobs.js T2-2→T2-3。P3 照 `api.md` 對假後端做，可與 P1/P2 平行。P4 等全部完成。
+**優先序：spec §14 > 前文；api.md 是 action 形狀正本。**
 
 ## 共用契約（平行任務都要產生的值，逐字元定義）
 | 值 | 格式 | 範例 |
@@ -21,13 +22,13 @@ P1 與 P2 的 jobs 部分、P3 可平行（P3 先對假後端做）；P4 必須�
 | 照片檔號 | `F` + `Date.now().toString(36)` 大寫 + 4 碼大寫英數亂數 | `FMGXK2P1A7Q3Z` |
 | 照片路徑 | `<dataDir>/apv-files/YYYY/MM/<檔號>.jpg` | `~/dzy-platform-data/apv-files/2026/10/FMGXK2P1A7Q3Z.jpg` |
 | 表單種類 | `purchase`／`expense`／`personnel` | — |
-| 狀態 | `signing`／`rejected`／`handling`／`done`／`withdrawn` | — |
+| 狀態 | `signing`／`rejected`／`handling`／`done`／`withdrawn`／`exception`／`voided` | — |
 | 權限人代碼 | `head`／`brand_dir`／`ceo`／`gm`／`chair`；往上順序就是這個順序 | — |
 | 權限表 form_type | 固定 `spend` | — |
-| 承辦部門 | `pur`／`fin`／`hr`（＝org 部門代碼，P1 第一步先 grep 確認實際代碼，不同就以 org 為準並回寫本表） | — |
+| 承辦部門 | `purchase`／`fin`／`hr`（已對 org 正本 Staff.gs:1445-1450 核過） | — |
 | route_json | `{"v":1,"row":{"seq":2,"max":10000,"role":"brand_dir"},"steps":[{"role":"brand_dir","scope":"mala-hq"}],"handler":"fin"}`；人事單 steps 可多格，離職本人確認格 `{"role":"self_sign","emp":"DZY014"}` | — |
 | 事件 action | `submit`／`approve`／`reject`／`skip`／`reassign`／`withdraw`／`sign`／`handle` | — |
-| 金額 | 整數元，Number；請購＝Σ round(qty×price) | — |
+| 金額 | spec §14.6 唯一式子：每列 `Math.round(qty×price)` 再加總 | qty 1.5×price 333＝500 |
 | svc 路由名 | `apv-file-put`／`apv-file-get` | `POST /platform/svc/apv-file-put` |
 | 通知匣 key | `apv-` + 台北 `YYYYMMDD` | `apv-20261019` |
 
