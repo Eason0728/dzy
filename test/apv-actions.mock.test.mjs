@@ -416,9 +416,13 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const id = s.data.id;
   ok(s.ok && s.data.route.steps[0].role === 'brand_dir', '8,600 請款 → 品牌總監一關');
   // 權限反向
-  ['DZY901', 'DZY902', 'DZY904', 'DZY914', 'DZY910', 'DZY909'].forEach((w) => {
+  ['DZY901', 'DZY910'].forEach((w) => {
     const r = post(app, w, 'apvDecide', { id, rev: 1, step: 0, decision: 'approve' });
-    ok(r.ok === false && r.error === 'forbidden', `非目前這關的人（${w}）不能核准`, r);
+    ok(r.ok === false && r.error === 'forbidden', `看得到這張單、但不是目前這關的人（${w}）不能核准 → forbidden`, r);
+  });
+  ['DZY902', 'DZY904', 'DZY914', 'DZY909'].forEach((w) => {
+    const r = post(app, w, 'apvDecide', { id, rev: 1, step: 0, decision: 'approve' });
+    ok(r.ok === false && r.error === 'not_found', `與這張單無關的人（${w}）不能核准，也看不到 → not_found`, r);
   });
   ok(post(app, 'DZY901', 'apvDecide', { id, rev: 1, step: 0, decision: 'approve' }).error === 'forbidden', '送件人不能核准自己的單');
   const gv = getForm(app, 'DZY903', id);
@@ -439,8 +443,11 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const sub = ev.find((e) => e.action === 'submit'), appr = ev.find((e) => e.action === 'approve');
   ok(appr && appr.actor === 'DZY903' && appr.sha256 === sub.sha256 && appr.note === '同意', 'approve 事件記誰、核准哪一版（sha256 與送出版本相同）');
   // 承辦：只限 fin 部門
-  ['DZY901', 'DZY903', 'DZY907', 'DZY910', 'DZY914'].forEach((w) => {
-    ok(post(app, w, 'apvHandle', { id, rev: 1, result: 'done' }).error === 'forbidden', `非財務部（${w}）不能承辦`);
+  ['DZY901', 'DZY903', 'DZY910'].forEach((w) => {
+    ok(post(app, w, 'apvHandle', { id, rev: 1, result: 'done' }).error === 'forbidden', `看得到這張單的非財務部（${w}）不能承辦 → forbidden`);
+  });
+  ['DZY907', 'DZY914'].forEach((w) => {
+    ok(post(app, w, 'apvHandle', { id, rev: 1, result: 'done' }).error === 'not_found', `與這張單無關的非財務部（${w}）不能承辦，也看不到 → not_found`);
   });
   ok(post(app, 'DZY909', 'apvHandle', { id, rev: 2, result: 'done' }).error === 'conflict', '承辦 rev 不符 → conflict');
   ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, result: 'x' }).error === 'bad_request', 'result 不合法');
@@ -518,7 +525,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const rsn = '店長請假';
   const re = (who, p) => post(app, who, 'apvReassign', Object.assign({ id, rev: 1, step: 0, reason: rsn }, p));
   ok(re('DZY902', { to: 'DZY903' }).error === 'forbidden', '非人資不能改派（店長）');
-  ok(re('DZY906', { to: 'DZY903' }).error === 'forbidden', '非人資不能改派（董事長）');
+  ok(re('DZY906', { to: 'DZY903' }).error === 'not_found', '非人資不能改派（董事長，與這張單無關 → 看不到 → not_found）');
   ok(re('DZY910', { to: 'DZY914' }).error === 'bad_request', '改派給不相干的人（資訊部同仁）被擋');
   ok(re('DZY910', { to: 'DZY901' }).error === 'bad_request', '改派給送件人自己被擋');
   ok(re('DZY910', { to: 'DZY917' }).error === 'bad_request', '改派給未開通的人被擋');
@@ -654,7 +661,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(decide(app, 'DZY916', t1.data.id, 'approve').data.status === 'handling', '區經理核准調職 → handling');
   const r1 = send('DZY902', 'raise', 'DZY901');
   ok(r1.ok && r1.data.route.steps[0].role === 'gm', '調薪：總經理一關');
-  ok(post(app, 'DZY903', 'apvDecide', { id: r1.data.id, rev: 1, step: 0, decision: 'approve' }).error === 'forbidden', '調薪：品牌總監不能簽（只有總經理）');
+  ok(post(app, 'DZY903', 'apvDecide', { id: r1.data.id, rev: 1, step: 0, decision: 'approve' }).error === 'not_found', '調薪：品牌總監不能簽（只有總經理；薪資單他也看不到 → not_found）');
   ok(decide(app, 'DZY904', r1.data.id, 'approve').data.status === 'handling', '總經理核准調薪');
   const r2 = send('DZY904', 'raise', 'DZY901');
   ok(r2.ok && r2.data.status === 'signing' && getForm(app, 'admin', r2.data.id).data.form.route.steps.map((s) => s.role + ':' + s.status).join() === 'gm:skipped,chair:pending', '總經理送調薪：總經理關 skipped → 董事長');
@@ -918,6 +925,33 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const s3 = sendExpense(app, 'DZY901', 8600);
   app.sheets.staff._data.forEach((r) => { if (r[app.sb.STF_COL.emp_no] === 'DZY903') r[app.sb.STF_COL.status] = 'disabled'; });
   ok(post(app, 'DZY901', 'apvWithdraw', { id: s3.data.id, rev: 1, step: 0 }).error === 'conflict', '（第2條）舊畫面 step＝0 撤回 → conflict（重解後 step 已前進）');
+}
+{ // 第 3 條：不相干的人探不到單號存在／rev／step
+  const app = freshApp();
+  const s = sendExpense(app, 'DZY901', 800);
+  const id = s.data.id;
+  const none = post(app, 'DZY914', 'apvDecide', { id: 'APV-000000-999', rev: 1, step: 0, decision: 'approve' });
+  ['apvDecide', 'apvSign', 'apvHandle', 'apvReassign', 'apvWithdraw', 'apvResubmit'].forEach((a) => {
+    [{ rev: 7, step: 0 }, { rev: 1, step: 0 }, { rev: 1, step: 5 }].forEach((rs) => {
+      const r = post(app, 'DZY914', a, Object.assign({ id, decision: 'approve', result: 'done', to: 'DZY904', reason: 'x', sign_file: 'F000000', body: {}, files: [] }, rs));
+      ok(r.ok === false && r.error === 'not_found' && r.message === none.message, `（第3條）不相干的人（DZY914）對 ${a} rev=${rs.rev} step=${rs.step} → not_found，跟不存在的單一樣`, r);
+    });
+  });
+  ok(post(app, 'DZY915', 'apvDecide', { id, rev: 1, step: 0, decision: 'approve' }).error === 'not_found', '（第3條）同店另一位同仁（不是候選）也看不到 → not_found');
+  ok(post(app, 'DZY901', 'apvDecide', { id, rev: 7, step: 0, decision: 'approve' }).error === 'conflict', '（第3條）送件人看得到：rev 錯 → conflict');
+  ok(post(app, 'DZY901', 'apvDecide', { id, rev: 1, step: 0, decision: 'approve' }).error === 'forbidden', '（第3條）送件人看得到：rev 對但無權 → forbidden');
+  ok(post(app, 'DZY910', 'apvDecide', { id, rev: 7, step: 0, decision: 'approve' }).error === 'conflict' && post(app, 'DZY910', 'apvDecide', { id, rev: 1, step: 0, decision: 'approve' }).error === 'forbidden', '（第3條）人資看得到：conflict／forbidden');
+  // 同時核准的第二位候選人仍拿到 conflict（單已前進、他已不是候選）
+  const two = freshApp();
+  two.sheets.staff._data.push((() => { const row = new Array(two.sb.STF_COL_COUNT).fill(''); const S = two.sb.STF_COL; row[S.emp_no] = 'DZY920'; row[S.user_id] = 'u920'; row[S.name] = '測試戌'; row[S.status] = 'active'; row[S.unit] = 'mala-gf'; row[S.title] = 'sm'; return row; })());
+  two.sheets.users._data.push(['u920', 'DZY920', '測試戌', 'staff', '', 's', 'h', 'TRUE', '', '']);
+  two.tok.DZY920 = two.sb.issueToken_({ id: 'u920', role: 'staff', node: '' });
+  const t = sendExpense(two, 'DZY901', 800);
+  ok(post(two, 'DZY902', 'apvDecide', { id: t.data.id, rev: 1, step: 0, decision: 'approve' }).ok, '（第3條）第一位店長核准');
+  ok(post(two, 'DZY920', 'apvDecide', { id: t.data.id, rev: 1, step: 0, decision: 'approve' }).error === 'conflict', '（第3條）第二位店長晚一步 → 仍是 conflict（不是 not_found）');
+  const w = sendExpense(two, 'DZY901', 800);
+  post(two, 'DZY901', 'apvWithdraw', { id: w.data.id, rev: 1, step: 0 });
+  ok(post(two, 'DZY920', 'apvDecide', { id: w.data.id, rev: 1, step: 0, decision: 'approve' }).error === 'conflict', '（第3條）撤回後另一位候選人按核准 → conflict');
 }
 { // 第 6 條：對象已開通 + 離職單帶紙本照 → bad_request
   const app = freshApp();

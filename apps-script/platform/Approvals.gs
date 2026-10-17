@@ -356,6 +356,26 @@ function apvCanView_(c, f, eff, events) {
   return apvSignedBefore_(c, f, events || []);
 }
 
+/**
+ * 寫入類 action 專用：這個人是不是這張單「走過的關」的候選人（單已前進、他晚一步按核准時要拿到 conflict 而不是 not_found）。
+ * signing 中看目前這關「之前」的關，以及目前這關被改派前的原候選人；單已不在簽核中（退回、撤回、承辦…）看路線上所有的關。
+ * 候選人一律不看改派（override）：被改派掉的人晚一步按也拿到 conflict／forbidden，不是 not_found。
+ */
+function apvWasInRoute_(c, f, eff) {
+  if (!c.me) return false;
+  var steps = (f.route && f.route.steps) || [];
+  var rc = apvRCtx_(c, f);
+  var limit = eff ? eff.index + 1 : steps.length;
+  for (var i = 0; i < steps.length && i < limit; i++) {
+    var st = steps[i];
+    if (i === limit - 1 && eff && !st.override) continue;   // 目前這關沒改派：候選人本來就看得到
+    var plain = JSON.parse(JSON.stringify(st));
+    delete plain.override;
+    if (apvCandidates_(plain, rc).some(function (p) { return p.emp === c.me.emp; })) return true;
+  }
+  return false;
+}
+
 function apvHasDoneStep_(route) {
   return (route.steps || []).some(function (s) { return s.status === 'done' && s.role !== 'self_sign'; });
 }
@@ -716,15 +736,12 @@ function handleApvSubmit_(token, payload) {
 }
 
 function handleApvResubmit_(token, payload) {
-  var c = apvEnter_(token);
-  if (!c.ok) return c;
-  if (!apvReady_()) return apvNotInited_();
+  var o = apvOpenForWrite_(token, payload, false);
+  if (!o.ok) return o;
+  var c = o.c, fr = o.fr, f = o.f;
   payload = payload || {};
-  var fr = apvFindForm_(apvStr_(payload.id));
-  if (!fr) return apvFail_('not_found', '找不到這張單');
-  var f = fr.f;
   if (!c.me || f.sender !== c.me.emp) return apvForbidden_('只有送件人可以修改再送');
-  if (f.status !== 'rejected' || payload.rev !== f.rev) return apvFail_('conflict', '這張單剛被別人處理過，請重新整理');
+  if (f.status !== 'rejected') return apvFail_('conflict', '這張單剛被別人處理過，請重新整理');
   var forms = apvReadForms_();
   var norm = apvNormalize_(c, f.type, payload.body, payload.files, f.subject, forms, f);
   if (!norm.ok) return norm;
@@ -807,9 +824,11 @@ function apvOpenForWrite_(token, payload, needStep) {
     apvPersistEff_(c, fr, eff, c.now);   // 權限人被停用等造成空缺：先寫 skip、往上
     eff = apvEffOf_(c, f);
   }
-  // 先比 rev／step 再看權限：同時按核准的第二個人（單已前進、他已不是候選人）要拿到 conflict 而不是 forbidden（spec §14.2）
+  // 順序：看不看得到（看不到＝跟不存在的單一樣 not_found，不洩漏單號、rev、step）→ rev／step（conflict）→ 動作權限（forbidden，由各 action 判斷）。
+  // 「走過這張單的關」的人（同時按核准的第二位候選人）也算看得到，才拿得到 conflict（spec §14.2）
+  var ev = apvReadEvents_(f.id);
+  if (!apvCanView_(c, f, eff, ev) && !apvWasInRoute_(c, f, eff)) return apvFail_('not_found', '找不到這張單');
   if (payload.rev !== f.rev || (needStep && payload.step !== f.step)) return apvFail_('conflict', '這張單剛被別人處理過，請重新整理');
-  if (!apvCanView_(c, f, eff, apvReadEvents_(f.id))) return apvForbidden_();
   return { ok: true, c: c, fr: fr, f: f, eff: eff };
 }
 
