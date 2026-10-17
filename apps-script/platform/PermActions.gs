@@ -95,14 +95,67 @@ function handlePermInit_(token) {
 // ============================================================
 // permMapGet／permMapSave（platform.permmap 或 admin）
 // ============================================================
+
+/**
+ * 每個「身分鍵」命中幾位 active 同仁。鍵＝ladder|dept|title（dept 空＝不分部門，title '*'＝全部職稱）。
+ * 命中規則同 permCompute_：組織一致（單位、職稱存在且啟用、職稱屬該單位階梯）、ladder 相同、
+ * title 相同或目標為 *、目標 dept 空或屬於主要＋有效兼任部門（停用部門不算）。
+ */
+function permAcCounts_(permOrg, keys) {
+  var extraMap = stfReadExtraMap_();
+  var counts = {};
+  keys.forEach(function (k) { counts[k] = 0; });
+  var parsed = keys.map(function (k) { var a = k.split('|'); return { key: k, ladder: a[0], dept: a[1] || '', title: a[2] || '' }; });
+  stfAllRows_().forEach(function (r) {
+    var st = permStaffObj_(r.values, stfSplitCodes_(extraMap[permStr_(r.values[STF_COL.emp_no]).toUpperCase()]));
+    if (permStr_(st.status).toLowerCase() !== 'active') return;
+    var unit = permOrg.units[st.unit];
+    if (!unit || unit.active === false) return;
+    var ladder = permStr_(unit.ladder);
+    var tdef = st.title && permOrg.titles[st.title];
+    if (!tdef || tdef.active === false || permStr_(tdef.parent) !== ladder) return;
+    var depts = {};
+    [st.dept].concat(st.extra_depts || []).forEach(function (d) {
+      d = permStr_(d);
+      var def = d && permOrg.depts[d];
+      if (def && def.active !== false) depts[d] = true;
+    });
+    parsed.forEach(function (k) {
+      if (k.ladder !== ladder) return;
+      if (k.title !== '*' && k.title !== st.title) return;
+      if (k.dept !== '' && !depts[k.dept]) return;
+      counts[k.key]++;
+    });
+  });
+  return counts;
+}
+
+/** permMapGet 要算人數的鍵：每個階梯的職稱、總部每個啟用部門的「全部職稱」與每個總部職稱，再加現有規則的目標 */
+function permAcCountKeys_(org, rules) {
+  var seen = {};
+  var out = [];
+  var add = function (l, d, t) { var k = l + '|' + d + '|' + t; if (!seen[k]) { seen[k] = true; out.push(k); } };
+  var titles = org.list.title.filter(function (x) { return x.active; });
+  titles.forEach(function (t) { add(t.parent, '', t.code); });
+  var depts = org.list.dept.filter(function (x) { return x.active; });
+  depts.forEach(function (d) {
+    add('hq', d.code, '*');
+    titles.forEach(function (t) { if (t.parent === 'hq') add('hq', d.code, t.code); });
+  });
+  rules.forEach(function (r) { add(r.ladder, r.dept, r.title); });
+  return out;
+}
+
 function handlePermMapGet_(token) {
   var sess = permAcMapAccess_(token);
   if (!sess.ok) return sess;
   var t = permLoadTables_();
   if (!t.inited) return { ok: true, data: { inited: false } };
   var org = stfReadOrg_();
+  var counts = permAcCounts_(permOrgIndex_(), permAcCountKeys_(org, t.rules));
   return { ok: true, data: {
     inited: true,
+    counts: counts,
     rules: t.rules.map(function (r) { return { rule_id: r.rule_id, ladder: r.ladder, dept: r.dept, title: r.title, perm: r.perm }; }),
     grantable: PERM_GRANTABLE.slice(),
     locked: PERM_LOCKED.slice(),
@@ -184,6 +237,14 @@ function handlePermMapSave_(token, payload) {
     { rules: tables.rules, exs: tables.exs, storeMap: tables.storeMap },
     { rules: rulesAfter, exs: tables.exs, storeMap: tables.storeMap });
 
+  // 4.5 預覽：驗證都過了，但不寫入，回實際會變的人
+  if (payload.preview === true) {
+    var pnames = permAcStaffNameMap_();
+    return { ok: true, data: { preview: true, affected: affected.length, people: affected.map(function (p) {
+      return { emp_no: p.emp_no, name: pnames[p.emp_no] || '', added: p.added, removed: p.removed };
+    }) } };
+  }
+
   // 5. 寫入
   var ss = SpreadsheetApp.getActive();
   var sh = ss.getSheetByName(PERM_SHEET_MAP);
@@ -208,6 +269,45 @@ function handlePermMapSave_(token, payload) {
     permAuditAppend_(by, '', detail, '', 'perm_map');
   }
   return { ok: true, data: { added: addedIds, removed: removedRules.map(function (r) { return r.rule_id; }), affected: affected.length } };
+}
+
+// ============================================================
+// permWho（platform.permmap 或 admin）：查某位同仁現在能用什麼、是哪條規則給的
+// ============================================================
+function handlePermWho_(token, payload) {
+  var sess = permAcMapAccess_(token);
+  if (!sess.ok) return sess;
+  var q = permStr_(payload && payload.q);
+  if (!q) return permAcBad_('請輸入姓名或編號');
+  if (q.length > 40) return permAcBad_();
+  var ctx = permLoadCtx_(false);
+  if (!ctx.inited) return permAcNotInited_();
+  var org = stfReadOrg_();
+  var extraMap = stfReadExtraMap_();
+  var qUp = q.toUpperCase();
+  var exact = [];
+  var fuzzy = [];
+  stfAllRows_().forEach(function (r) {
+    if (permStr_(r.values[STF_COL.status]) !== 'active') return;
+    var emp = permStr_(r.values[STF_COL.emp_no]).toUpperCase();
+    var name = permStr_(r.values[STF_COL.name]);
+    if (emp === qUp) exact.push(r);
+    else if (name.indexOf(q) !== -1) fuzzy.push(r);
+  });
+  var hits = (exact.length ? exact : fuzzy).slice(0, 10);
+  var items = hits.map(function (r) {
+    var emp = permStr_(r.values[STF_COL.emp_no]).toUpperCase();
+    var c = permComputeRow_(ctx, r.values, stfSplitCodes_(extraMap[emp]));
+    var unit = org.unit[permStr_(r.values[STF_COL.unit])];
+    var title = org.title[permStr_(r.values[STF_COL.title])];
+    var dept = org.dept[permStr_(r.values[STF_COL.dept])];
+    return {
+      emp_no: emp, name: permStr_(r.values[STF_COL.name]),
+      unit_name: unit ? unit.name : '', dept_name: dept ? dept.name : '', title_name: title ? title.name : '',
+      perms: c.perms, sources: c.sources, audit_scope: c.auditScope
+    };
+  });
+  return { ok: true, data: { items: items } };
 }
 
 // ============================================================

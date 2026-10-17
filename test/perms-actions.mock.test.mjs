@@ -765,5 +765,76 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   ok(ins2.ok, 'N4 admin 指派同一角色 → 成功', ins2);
 }
 
+// ============================================================
+// P3 對照表改版（版本 B）：permMapGet.counts、permMapSave preview、permWho
+// ============================================================
+{
+  const app = scene();
+  init(app); on(app);
+  const { sb, sheets, P } = app;
+  const A = sb.__admin;
+  const R = (ladder, dept, title, perm) => ({ ladder, dept, title, perm });
+  const counts = () => post(sb, 'permMapGet', {}, A).data.counts;
+  const c0 = counts();
+  ok(c0 && c0['store||sm'] === 2 && c0['store||pt'] === 1, 'B1: counts 店長 2 人（美村光復＋一悟）、計時 1 人', c0);
+  ok(c0['hq|hr|*'] === 2 && c0['hq|hr|hm'] === 1 && c0['hq|hr|hs'] === 1, 'B1: counts 總部人資部全部職稱 2、人資主管 1', c0);
+  ok(c0['hq||ceo'] === 1 && c0['hq|mgmt|*'] === 1 && c0['hq|mgmt|ceo'] === 1, 'B1: 執行長不分部門 1；管理部全部職稱含執行長（部門命中）', c0);
+  ok(c0['hq|ops|*'] === 0, 'B1: 沒人的部門 0', c0);
+  // 兼任：資訊同仁兼任人資部 → hq|hr|* 變 3，hq|hr|hm 不變（title 是 hs）
+  ok(post(sb, 'staffEdit', { emp_no: P.it.emp, extra_depts: ['hr'] }, A).ok, 'B1 前置：admin 讓資訊同仁兼任人資部');
+  const c1 = counts();
+  ok(c1['hq|hr|*'] === 3 && c1['hq|hr|hs'] === 2 && c1['hq|hr|hm'] === 1, 'B1: 兼任部門算進命中人數', c1);
+  // 停用不算
+  ok(post(sb, 'staffSetActive', { emp_no: P.it.emp, active: false }, A).ok, 'B1 前置：停用資訊同仁');
+  const c2 = counts();
+  ok(c2['hq|hr|*'] === 2 && c2['hq|it|*'] === 0, 'B1: 停用的同仁不算（含主要部門與兼任）', c2);
+  // 現有規則的目標鍵都在
+  const g = post(sb, 'permMapGet', {}, A).data;
+  ok(g.rules.every((r) => typeof g.counts[r.ladder + '|' + r.dept + '|' + r.title] === 'number'), 'B1: 每條現有規則的目標鍵都有人數');
+  ok(post(sb, 'permMapGet', {}, P.hrHm.token).data.counts['store||sm'] === 2, 'B1: 人資主管也拿得到 counts');
+
+  // preview：不寫入、名單正確
+  const before = sheets.perm_map._rows().length;
+  const auditBefore = sheets.perm_audit._rows().length;
+  const pv = post(sb, 'permMapSave', { add: [R('store', '', 'sm', 'dorm.read')], preview: true }, P.hrHm.token);
+  ok(pv.ok && pv.data.preview === true && pv.data.affected === 2 && pv.data.people.length === 2, 'B2: preview 回受影響人數與名單', pv);
+  ok(pv.data.people.every((x) => x.added.join() === 'dorm.read' && x.removed.length === 0 && /店長/.test(x.name) && /^DZY/.test(x.emp_no)), 'B2: preview 名單有姓名、added', pv.data.people);
+  ok(sheets.perm_map._rows().length === before && sheets.perm_audit._rows().length === auditBefore, 'B2: preview 不寫 perm_map、不寫 perm_audit');
+  ok(rowsOf(sheets, 'staff_log').filter((r) => r[2] === 'perm_map_save').length === 0, 'B2: preview 不寫 staff_log');
+  const hrDorm = g.rules.find((r) => r.ladder === 'hq' && r.dept === 'hr' && r.title === '*' && r.perm === 'dorm.write');
+  const pv2 = post(sb, 'permMapSave', { remove: [hrDorm.rule_id], preview: true }, A);
+  ok(pv2.ok && pv2.data.affected === 2 && pv2.data.people.every((x) => x.removed.join() === 'dorm.write'), 'B2: preview 刪除規則 → removed 名單（停用同仁不在內）', pv2);
+  ok(sheets.perm_map._rows().length === before, 'B2: preview 刪除也不寫入');
+  // preview 也驗證
+  const l = post(sb, 'permMapSave', { add: [R('hq', 'hr', '*', 'platform.users')], preview: true }, P.hrHm.token);
+  ok(l.ok === false && l.code === 'perm_locked', 'B2: preview 也回 perm_locked', l);
+  const sf = post(sb, 'permMapSave', { add: [R('hq', 'hr', 'hm', 'audit.read')], preview: true }, P.hrHm.token);
+  ok(sf.ok === false && sf.code === 'perm_self', 'B2: preview 也回 perm_self', sf);
+  ok(post(sb, 'permMapSave', { add: [R('store', '', 'sm', 'dorm.read')], preview: true }, P.sm.token).code === 'no_perm', 'B2: preview 沒權限仍 no_perm');
+  ok(post(sb, 'permMapSave', { add: [R('store', '', 'sm', 'dorm.read')], preview: 'yes' }, A).ok && sheets.perm_map._rows().length === before + 1, 'B2: preview 非 true（字串）不當預覽，照常寫入');
+
+  // permWho
+  const w = (q, tok) => post(sb, 'permWho', { q }, tok || A);
+  const w1 = w(P.sm.emp);
+  ok(w1.ok && w1.data.items.length === 1 && w1.data.items[0].name === '店長一' && w1.data.items[0].perms.indexOf('audit.read.own') !== -1, 'B3: permWho 編號精確（大小寫不拘）', w1);
+  ok(w(P.sm.emp.toLowerCase()).data.items.length === 1, 'B3: 編號小寫也找得到');
+  const it0 = w1.data.items[0];
+  ok(it0.sources.some((x) => x.perm === 'audit.read.own' && x.source === 'title' && x.rule_id) && it0.audit_scope && it0.unit_name && it0.title_name === '店長', 'B3: sources 格式同 myPerms、有單位職稱名、audit_scope', it0);
+  const w2 = w('店長');
+  ok(w2.ok && w2.data.items.length === 2, 'B3: 姓名部分比對（店長一、一悟店長）', w2.data.items.map((x) => x.name));
+  ok(w('資訊同仁').data.items.length === 0, 'B3: 停用的同仁找不到（只找 active）');
+  ok(w('不存在的人').data.items.length === 0, 'B3: 找不到回空陣列');
+  ok(post(sb, 'permWho', { q: '' }, A).code === 'bad_input', 'B3: 空查詢 → bad_input');
+  ok(w(P.hrHm.emp, P.hrHm.token).ok && w('店長', P.hrHs.token).code === 'no_perm' && w('店長', P.sm.token).code === 'no_perm', 'B3: 人資主管與 admin 可查、人資同仁與店長 no_perm');
+  ok(post(sb, 'permWho', { q: '店長' }, '').ok === false, 'B3: 沒 token 被擋');
+  // 最多 10 筆
+  for (let i = 0; i < 12; i++) mk(sb, '多人' + String.fromCharCode(0x4e00 + i), { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+  ok(w('多人').data.items.length === 10, 'B3: 最多 10 筆');
+  // 已拿例外的來源
+  post(sb, 'permExSave', { emp_no: P.pt.emp, perm: 'dorm.read', mode: 'add', note: '測' }, A);
+  ok(w(P.pt.emp).data.items[0].sources.some((x) => x.source === 'exception' && x.perm === 'dorm.read'), 'B3: 例外也出現在 sources');
+  ok(/permWho/.test(sb.CODE_ALLOWED_ACTIONS.join()), 'B3: permWho 在白名單');
+}
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

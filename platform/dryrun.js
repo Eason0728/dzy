@@ -23,7 +23,7 @@ export const READ_ACTIONS = {
     // 公告專區換佈告欄入場券（2026-10-16）：只在快取放一張 60 秒的券，不寫任何資料；試跑時也要能自動登入佈告欄
     'ssoTicket',
     // 個人帳號第二期（2026-10-17）：權限設定的純讀取；permInit／permMapSave／permEx*／permStoreSave／permAuditSeen 不列（寫入，試跑會攔）
-    'permMapGet', 'permExList', 'permStoreGet', 'myPerms', 'permAuditList'],
+    'permMapGet', 'permExList', 'permStoreGet', 'myPerms', 'permAuditList', 'permWho'],
   audit: ['getAll'],
   dorm: ['rooms', 'list', 'contract', 'handover']
 };

@@ -209,3 +209,200 @@ export function computeAlerts(input) {
   }
   return out;
 }
+
+// ============================================================
+// 對照表改版（版本 B：先選身分、再開關功能）
+// 身分鍵 key＝`ladder|dept|title`（dept 空＝不分部門；title '*'＝全部職稱），與後端 permMapGet.counts 同格式。
+// ============================================================
+
+/** 每個功能的一句白話說明（畫面用） */
+export const FEATURE_DESC = {
+  'audit.read.own': '看自己那家店的盤點與稽核結果',
+  'audit.read.brand': '看同品牌所有店的總覽與報告',
+  'audit.read': '看全公司每家店的總覽、報告、異常分析',
+  'audit.write': '到店填盤點與營運稽核、管理門市清單',
+  'dorm.read': '看宿舍合約清單',
+  'dorm.write': '建立合約、退宿點交、終止',
+  'platform.staff': '新增、離職、匯入同仁',
+  'platform.users': '管理系統帳號（BOSS 這類）',
+  'platform.permmap': '改這一頁'
+};
+
+/** 總部高層（不分部門）的職稱代碼 */
+const HQ_TOP_TITLES = ['ceo', 'gm', 'chair'];
+/** 部門主管的職稱代碼 */
+const HQ_HEAD_TITLE = 'hm';
+
+export function keyOf(ladder, dept, title) {
+  return `${ladder || ''}|${dept || ''}|${title || ''}`;
+}
+export function ruleKey(rule) {
+  return keyOf(rule.ladder, rule.dept, rule.title);
+}
+
+function titleList(data, ladder) {
+  return ((data && data.titles) || []).filter((t) => t.ladder === ladder).slice()
+    .sort((a, b) => (a.rank || 0) - (b.rank || 0));
+}
+
+/**
+ * 左側身分清單：[{ id, title, items:[{ key, ladder, dept, title, name }] }]
+ * 分組：門市、品牌辦公室、總部（依部門：每部門「全部職稱」＋「部門主管」）、總部（高層）、其他（現有規則的目標不在以上清單，不得隱藏）。
+ */
+export function identityGroups(data) {
+  data = data || {};
+  const groups = [];
+  const known = {};
+  const mk = (ladder, dept, title, name) => { const key = keyOf(ladder, dept, title); known[key] = true; return { key, ladder, dept, title, name }; };
+  const stores = titleList(data, 'store').map((t) => mk('store', '', t.code, t.name));
+  if (stores.length) groups.push({ id: 'store', title: '門市（含中央工廠）', items: stores });
+  const offices = titleList(data, 'office').map((t) => mk('office', '', t.code, t.name));
+  if (offices.length) groups.push({ id: 'office', title: '品牌辦公室', items: offices });
+  const hqItems = [];
+  (data.depts || []).forEach((d) => {
+    hqItems.push(mk('hq', d.code, '*', `${d.name}・全部職稱`));
+    hqItems.push(mk('hq', d.code, HQ_HEAD_TITLE, `${d.name}・部門主管`));
+  });
+  if (hqItems.length) groups.push({ id: 'hq-dept', title: '總部（依部門）', items: hqItems });
+  const tops = titleList(data, 'hq').filter((t) => HQ_TOP_TITLES.indexOf(t.code) !== -1).map((t) => mk('hq', '', t.code, t.name));
+  if (tops.length) groups.push({ id: 'hq-top', title: '總部（高層，不分部門）', items: tops });
+  const others = [];
+  const seen = {};
+  (data.rules || []).forEach((r) => {
+    const key = ruleKey(r);
+    if (known[key] || seen[key]) return;
+    seen[key] = true;
+    others.push({ key, ladder: r.ladder, dept: r.dept, title: r.title, name: ruleTargetText(r, data) });
+  });
+  if (others.length) groups.push({ id: 'other', title: '其他', items: others });
+  return groups;
+}
+
+export function identityName(data, key) {
+  const g = identityGroups(data);
+  for (const grp of g) for (const it of grp.items) if (it.key === key) return it.name;
+  const [ladder, dept, title] = String(key).split('|');
+  return ruleTargetText({ ladder, dept, title }, data);
+}
+
+/** 某身分在「畫面上的暫存狀態」下，有沒有某功能。pending＝{ 'key|perm': true|false }（只放有改的） */
+export function isOn(data, pending, key, perm) {
+  const pk = `${key}|${perm}`;
+  if (pending && Object.prototype.hasOwnProperty.call(pending, pk)) return !!pending[pk];
+  return (data.rules || []).some((r) => ruleKey(r) === key && r.perm === perm);
+}
+
+function savedOn(data, key, perm) {
+  return isOn(data, null, key, perm);
+}
+
+/** 目前未儲存的變更：[{ key, perm, on }]（跟已存的狀態相同的不算） */
+export function pendingChanges(data, pending) {
+  const out = [];
+  Object.keys(pending || {}).forEach((pk) => {
+    const i = pk.lastIndexOf('|');
+    const key = pk.slice(0, i);
+    const perm = pk.slice(i + 1);
+    const on = !!pending[pk];
+    if (on !== savedOn(data, key, perm)) out.push({ key, perm, on });
+  });
+  return out;
+}
+
+/** 變更 → permMapSave 的 payload：開＝add 一條；關＝remove 該目標＋功能的所有規則 */
+export function buildPayload(data, changes) {
+  const add = [];
+  const remove = [];
+  (changes || []).forEach((c) => {
+    const [ladder, dept, title] = c.key.split('|');
+    if (c.on) add.push({ ladder, dept, title, perm: c.perm });
+    else (data.rules || []).forEach((r) => { if (ruleKey(r) === c.key && r.perm === c.perm && remove.indexOf(r.rule_id) === -1) remove.push(r.rule_id); });
+  });
+  return { add, remove };
+}
+
+/** 其他規則有沒有「一定會命中」這個身分（含畫面暫存狀態）：回那些規則的白話名稱 */
+export function alsoFrom(data, pending, key, perm) {
+  const [ladder, dept, title] = key.split('|');
+  const keys = {};
+  (data.rules || []).forEach((r) => { keys[ruleKey(r)] = true; });
+  Object.keys(pending || {}).forEach((pk) => { keys[pk.slice(0, pk.lastIndexOf('|'))] = true; });
+  const out = [];
+  Object.keys(keys).forEach((k) => {
+    if (k === key) return;
+    const [l, d, t] = k.split('|');
+    if (l !== ladder) return;
+    if (t !== '*' && t !== title) return;          // 目標職稱要是全部，或剛好就是這個身分的職稱
+    if (title === '*' && t !== '*') return;        // 這個身分是「全部職稱」，只有同為全部職稱的規則才一定命中所有人
+    if (d !== '' && d !== dept) return;            // 目標有部門就要同部門
+    if (isOn(data, pending, k, perm)) out.push(identityName(data, k));
+  });
+  return out.sort();
+}
+
+/** 未儲存變更摘要：「店長 多了『看宿舍清單』」；多筆「…、… 等 N 項」 */
+export function changeSummary(data, changes) {
+  const parts = (changes || []).map((c) => `${identityName(data, c.key)} ${c.on ? '多了' : '少了'}『${featureName(c.perm)}』`);
+  if (!parts.length) return '';
+  if (parts.length <= 2) return parts.join('、');
+  return `${parts.slice(0, 2).join('、')} 等 ${parts.length} 項`;
+}
+
+/** preview 名單：最多顯示 cap 人，其餘算「其餘 N 人」。回 { lines:[{who, text}], rest, total } */
+export function previewView(people, cap) {
+  const limit = cap || 30;
+  const list = people || [];
+  const lines = list.slice(0, limit).map((p) => {
+    const bits = [];
+    if ((p.added || []).length) bits.push(`多了 ${p.added.map(featureName).join('、')}`);
+    if ((p.removed || []).length) bits.push(`少了 ${p.removed.map(featureName).join('、')}`);
+    return { who: p.name ? `${p.name}（${p.emp_no}）` : p.emp_no, text: bits.join('；') };
+  });
+  return { lines, rest: Math.max(0, list.length - limit), total: list.length };
+}
+
+// ---- 搜尋同仁（permWho）的來源白話：與 modules/me/perm-block.js 的 sourceText／permLines 同義（test/perms-front.test.mjs 比對） ----
+const HIDDEN_PERMS = { 'platform.login': true, 'platform.self': true };
+function shortDate(d) {
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(String(d || ''));
+  return m ? `${Number(m[1])}/${Number(m[2])}` : String(d || '');
+}
+export function sourceText(src, profile) {
+  profile = profile || {};
+  switch (src.source) {
+    case 'title': return `因為職稱：${profile.title_name || '你的職稱'}`;
+    case 'dept': return `因為部門：${profile.dept_name || '你的部門'}`;
+    case 'exception': return src.until ? `個別例外，到 ${shortDate(src.until)}` : '個別例外';
+    case 'implied': return '因為能填稽核單';
+    case 'role': return '系統角色';
+    default: return String(src.source || '');
+  }
+}
+/** permWho 一個人的結果 → [{perm, name, texts}]（一個功能一列） */
+export function whoLines(item) {
+  const order = [];
+  const by = {};
+  (item.sources || []).forEach((s) => {
+    if (HIDDEN_PERMS[s.perm]) return;
+    if (!by[s.perm]) { by[s.perm] = { perm: s.perm, name: featureName(s.perm), texts: [] }; order.push(s.perm); }
+    const t = sourceText(s, item);
+    if (by[s.perm].texts.indexOf(t) === -1) by[s.perm].texts.push(t);
+  });
+  return order.map((p) => by[p]);
+}
+
+/** 儲存失敗的中文（preview 與正式送出共用） */
+export function saveErrorText(res) {
+  return errorText(res);
+}
+
+/** 稽核範圍白話（同 modules/me/perm-block.js 的 scopeText） */
+export function scopeLabel(scope, perms) {
+  if (scope === 'all') return '全部店';
+  if (Array.isArray(scope)) {
+    const has = (p) => (perms || []).indexOf(p) !== -1;
+    if (has('audit.read.brand')) return `自己品牌 ${scope.length} 家`;
+    return scope.length ? '自己店' : '自己店（還沒對照稽核店）';
+  }
+  return '';
+}

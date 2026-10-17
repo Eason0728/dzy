@@ -1277,3 +1277,194 @@ textarea.input:disabled {
   border-radius: 12px;
   background: #fff;
 }
+
+/* ---------------------------------------------------------- */
+/* 權限設定「對照表」分頁（版本 B：先選身分、再開關功能）          */
+/* ---------------------------------------------------------- */
+.pm-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.pm-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  background: var(--card);
+}
+.pm-who-item {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+.pm-who-list,
+.pm-preview-list {
+  margin: var(--space-1) 0 0;
+  padding-left: 1.2em;
+}
+.pm-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+.pm-roles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: var(--space-2);
+  max-height: 560px;
+  overflow-y: auto;
+}
+.pm-group-title {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  padding: var(--space-2) var(--space-2) var(--space-1);
+}
+.pm-role {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--space-2);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.pm-role small {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pm-role:hover {
+  background: var(--bg);
+}
+.pm-role.is-active {
+  background: var(--brand-light);
+  color: var(--brand);
+  font-weight: var(--fw-bold);
+}
+.pm-dirty {
+  color: var(--brand);
+  font-size: var(--fs-xs);
+}
+.pm-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: var(--space-4);
+  min-width: 0;
+}
+.pm-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding-bottom: var(--space-2);
+}
+.pm-who b {
+  font-size: var(--fs-lg);
+}
+.pm-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+.pm-row-title {
+  font-weight: var(--fw-bold);
+}
+.pm-row-desc {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.pm-also {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.pm-locktag {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--warn);
+  background: var(--warn-light);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-2);
+  margin-left: var(--space-2);
+}
+.pm-switch {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+  cursor: pointer;
+  padding: 0;
+}
+.pm-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--card);
+  transition: left .15s;
+}
+.pm-switch.is-on {
+  background: var(--ok);
+}
+.pm-switch.is-on::after {
+  left: 23px;
+}
+.pm-switch.is-changed {
+  box-shadow: 0 0 0 3px var(--brand-light);
+}
+.pm-switch:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.pm-switch:focus-visible,
+.pm-role:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.pm-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 15;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.pm-bar-msg b {
+  color: var(--brand);
+}
+@media (max-width: 760px) {
+  .pm-grid { grid-template-columns: minmax(0, 1fr); }
+  .pm-roles { max-height: 240px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-switch::after { transition: none; }
+}
