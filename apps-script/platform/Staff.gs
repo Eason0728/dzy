@@ -1098,12 +1098,9 @@ function stfSheetsReady_() {
 function handleStaffList_(token) {
   var auth = stfRequire_(token, 'platform.staff');
   if (!auth.ok) return auth;
-  // 上線第一次由後台打開名單時自動建分頁（只補不覆蓋，見 setupStaff），不必進 Apps Script 編輯器手動跑
-  if (!stfSheetsReady_()) {
-    var lock = LockService.getScriptLock();
-    if (!lock.tryLock(20000)) return { ok: false, error: '系統忙碌中，請稍後再試' };
-    try { setupStaff(); } finally { lock.releaseLock(); }
-  }
+  // 讀取不建表（READONLY／MIRROR 模式下也不該寫分頁）：表還沒建回空清單；
+  // 第一次「匯入」（handleStaffImport_）或手動執行 setupStaff 才會建。
+  if (!stfSheetsReady_()) return { ok: true, data: { staff: [] } };
   var org = stfReadOrg_();
   var extraMap = stfReadExtraMap_();
   var list = stfAllRows_().map(function (r) { return stfDecorate_(stfToObj_(r.values, org, true), extraMap, org, true); });

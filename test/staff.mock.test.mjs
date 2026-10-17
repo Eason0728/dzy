@@ -439,14 +439,16 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   ok(threw && sheets.staff._data[0][2] === '姓名被人改過', 'A9-9 表頭被改過 → setupStaff 停下、不覆寫');
 })();
 
-// A10 上線第一次：後台打開名單自動建分頁、upsert roles.staff
+// A10 上線第一次：後台打開名單不自動建表（回空清單）；第一次「匯入」才建分頁、upsert roles.staff
 (() => {
   const { sb, sheets } = load(freshSeed(HASHER));
   const tok = adminToken(sb);
   ok(!sheets.staff, 'A10 開始時沒有 staff 分頁');
   const r = post(sb, 'staffList', {}, tok);
-  ok(r.ok && r.data.staff.length === 0 && sheets.staff && sheets.org && sheets.staff_log, 'A10 後台第一次打開名單自動建三個分頁');
-  ok(sheets.roles._rows().find((x) => x[0] === 'staff')[2] === 'platform.self', 'A10 roles.staff 同時 upsert');
+  ok(r.ok && r.data.staff.length === 0 && !sheets.staff && !sheets.org && !sheets.staff_log, 'A10 讀取名單：表還沒建 → 回空清單、不建任何分頁', r);
+  const im = post(sb, 'staffImport', { names: ['測試甲'] }, tok);
+  ok(im.ok && sheets.staff && sheets.org && sheets.staff_log, 'A10 第一次匯入才建三個分頁', im);
+  ok(sheets.roles._rows().find((x) => x[0] === 'staff')[2] === 'platform.self', 'A10 roles.staff 在建表時 upsert');
   const acc = post(sb, 'login', { username: 'acc1', password: 'fake-acc-pw-01' }).data.token;
   const { sb: sb2, sheets: sh2 } = load(freshSeed(HASHER));
   const acc2 = post(sb2, 'login', { username: 'acc1', password: 'fake-acc-pw-01' }).data.token;
