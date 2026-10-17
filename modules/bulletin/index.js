@@ -13,24 +13,47 @@
  */
 'use strict';
 
-const BULLETIN_ORIGIN = 'https://dzy-bulletin.github.io';
+import { BACKENDS } from '../../platform/config.js';
+
+const BULLETIN_ORIGIN = BACKENDS.bulletin;
+const LOAD_TIMEOUT_MS = 15000;
 const VIEWS = {
   board: { src: '/?embed=dzy', aud: 'bulletin', tip: '同仁帳號會自動登入佈告欄；系統帳號或還沒對上同仁編號的，請選名字登入' },
   manage: { src: '/?embed=dzy&view=posts', aud: 'bulletin-admin', tip: '管理公告：上下架、置頂、看誰還沒簽名' },
   new: { src: '/?embed=dzy&view=new', aud: 'bulletin-admin', tip: '新增公告：可附 Word／PDF／Excel，同仁只能線上看' }
 };
 
-let state = null;   // { el, ctx, frame, tip, view, busy }
+let state = null;   // { el, ctx, frame, tip, view, busy, down, timer }
+
+function clearDown() {
+  if (!state) return;
+  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+  if (state.down && state.down.parentNode) state.down.parentNode.removeChild(state.down);
+  state.down = null;
+}
+
+function showDown() {
+  if (!state || state.down) return;
+  const n = document.createElement('div');
+  n.className = 'card';
+  n.setAttribute('data-role', 'bulletin-down');
+  n.textContent = '佈告欄暫時連不上，可按「在新分頁開啟」。';
+  state.el.insertBefore(n, state.frame);
+  state.down = n;
+}
 
 function render(viewId) {
   const v = VIEWS[viewId] || VIEWS.board;
   state.view = VIEWS[viewId] ? viewId : 'board';
   state.tip.textContent = v.tip;
+  clearDown();
+  state.timer = setTimeout(showDown, LOAD_TIMEOUT_MS); // 佈告欄頁載好會送 dzyb-sso-ready；逾時沒收到就提示
   state.frame.src = BULLETIN_ORIGIN + v.src;
 }
 
 async function onMessage(e) {
   if (!state || e.origin !== BULLETIN_ORIGIN || e.source !== state.frame.contentWindow) return;
+  if (e.data && e.data.type === 'dzyb-sso-ready') clearDown(); // 佈告欄有回應＝連得上
   if (!e.data || e.data.type !== 'dzyb-sso-ready' || state.busy) return;
   const frame = state.frame, aud = VIEWS[state.view].aud;
   state.busy = true;
@@ -64,14 +87,16 @@ export default {
     frame.title = '電子佈告欄';
     frame.className = 'bulletin-frame';
     frame.setAttribute('data-role', 'bulletin-frame');
+    frame.addEventListener('error', () => showDown());
 
-    state = { el, ctx, frame, tip, view: 'board', busy: false };
+    state = { el, ctx, frame, tip, view: 'board', busy: false, down: null, timer: null };
     window.addEventListener('message', onMessage);
     el.appendChild(bar);
     el.appendChild(frame);
     render(ctx.viewId);
     return function unmount() {
       window.removeEventListener('message', onMessage);
+      clearDown();
       state = null;
       while (el.firstChild) el.removeChild(el.firstChild);
     };
