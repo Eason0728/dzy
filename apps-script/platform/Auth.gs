@@ -299,6 +299,15 @@ var PROXY_READ_ACTIONS = {
 };
 
 /**
+ * 寫入類 action 白名單——**必須與前端 platform/dryrun.js 的 WRITE_ACTIONS 一致**（test/proxy-authorize.test.mjs 有比對）。
+ * 寫入 action 不在表內一律 FORBIDDEN：舊後端還有 delete／cleanupTest／setSetting 等後台管理動作，不在 *.write 的語意內。
+ */
+var PROXY_WRITE_ACTIONS = {
+  audit: ['submitAudit', 'markRest', 'submitOpsAudit', 'addStore', 'setStoreStatus', 'renameStore'],
+  dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign']
+};
+
+/**
  * proxyAuthorize_(token, ns, action) — 只給 minikit 執行器在佇列內直接呼叫（kit/runner/proxy.js）。
  * ⚠ 不准加進 Code.gs 的 CODE_ALLOWED_ACTIONS／dispatchAction_（加了＝任何持 token 的人打 /api 就能拿回通行碼）。
  * ⚠ 純讀：不寫任何分頁（不更新 last_login、不寫 login_log）。
@@ -323,6 +332,10 @@ function proxyAuthorize_(token, ns, action) {
   // 3. 讀／寫判斷：拿不準當寫入
   var readList = Object.prototype.hasOwnProperty.call(PROXY_READ_ACTIONS, ns) ? PROXY_READ_ACTIONS[ns] : [];
   var isWrite = !(typeof action === 'string' && readList.indexOf(action) !== -1);
+  if (isWrite) {
+    var writeList = Object.prototype.hasOwnProperty.call(PROXY_WRITE_ACTIONS, ns) ? PROXY_WRITE_ACTIONS[ns] : [];
+    if (typeof action !== 'string' || writeList.indexOf(action) === -1) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+  }
 
   // 2／4. 授權
   var perms = sess.perms;

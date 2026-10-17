@@ -28,6 +28,15 @@ export const READ_ACTIONS = {
   dorm: ['rooms', 'list', 'contract', 'handover']
 };
 
+/**
+ * audit／dorm 代轉的「寫入」action 白名單（必須與 apps-script/platform/Auth.gs PROXY_WRITE_ACTIONS 一致，
+ * test/proxy-authorize.test.mjs 有比對）。新增前端寫入 action 時兩邊都要補，否則後端會拒絕。
+ */
+export const WRITE_ACTIONS = {
+  audit: ['submitAudit', 'markRest', 'submitOpsAudit', 'addStore', 'setStoreStatus', 'renameStore'],
+  dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign']
+};
+
 export const DRYRUN_MESSAGE = '試跑模式，未寫入';
 
 /** 網址帶 ?dryrun=1 就進入試跑模式。非瀏覽器環境（node 測試）預設不啟用，可用 __setDryRun 覆寫。 */
