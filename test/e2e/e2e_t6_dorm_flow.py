@@ -6,7 +6,7 @@
 （common.py MockBackend），一筆資料都不會寫進正式試算表：
 
 1. 建單：宿舍合約 → 建立合約 → 填四人房＋床位＋起日 → 送出 → 拿到簽署連結
-2. 簽約：開 sign.html?t=…（殼外頁）→ 填證號/電話 → 簽名 → 送出 → 簽署完成
+2. 簽約：只驗簽署連結格式（sign.html 在舊站，dzy 不開）；mock 後端直接把合約設成已簽
 3. 點交：回合約清單（狀態變「在住」）→ 開點交單 → 七項設備逐項點選
    （一項標異常未歸還 500 元＋勾清潔費 800）→ 簽名 → 送出 → 點交完成 1,300 元
 4. 收尾：清單重載，狀態變「已退宿」
@@ -69,22 +69,13 @@ def main():
             check(mock.contracts and list(mock.contracts.values())[0]['status'] == '待簽',
                   'mock 後端收到建單，狀態＝待簽')
 
-            # ---- 2. 簽約（殼外頁 sign.html）----
-            page.goto(sign_url)
-            page.wait_for_selector('text=宿舍租賃契約書', timeout=8000)
-            check(page.locator('text=ｅ２ｅ測試員').count() > 0, '簽約頁帶出承租人姓名（合約資料吃到 token）')
-
-            page.fill('#f_id_no', 'A123456789')
-            page.fill('#f_phone', '0912345678')
-            page.fill('#f_mail_addr', '新竹市測試路 1 號')
-            # 簽名前送出鈕必須是鎖住的
-            check(page.locator('#submit').is_disabled(), '未簽名前送出鈕鎖住')
-            draw_signature(page, '#pad')
-            page.wait_for_function("() => !document.getElementById('submit').disabled", timeout=5000)
-            page.click('#submit')
-            page.wait_for_selector('text=簽署完成', timeout=8000)
-            check(True, '簽署完成畫面出現')
-            check(list(mock.contracts.values())[0]['status'] == '在住', 'mock 後端合約狀態變「在住」')
+            # ---- 2. 簽約（2026-10-18：dzy 不再保留 sign.html 副本，簽約頁在舊站 mala-dorm）----
+            # 只驗簽署連結格式；「已簽署」狀態由 mock 後端直接設定，後續點交照常測。
+            check(sign_url.startswith('http') and '/sign.html?t=e2e-sign-' in sign_url,
+                  '簽署連結格式為 …/sign.html?t=<token>：%r' % sign_url)
+            c0 = list(mock.contracts.values())[0]
+            c0['status'] = '在住'
+            c0['signed_at'] = '2026-08-17 10:00'
 
             # ---- 3. 點交（回殼內）----
             page.goto(base + '/index.html#/dorm/list')

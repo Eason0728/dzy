@@ -655,6 +655,7 @@ await (async function test16() {
 // ============================================================
 await (async function test17() {
   assertEqual(proxyUrl(), BACKENDS.platform.replace(/\/api$/, '/proxy'), '17a: proxyUrl() 從平台後端網址推（…/api → …/proxy）');
+  assertTrue(/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(BACKENDS.dorm), '17a2: config.js 的 BACKENDS.dorm 是 Apps Script exec 網址格式（原 sign-page 測試搬來）');
   await loginAs({
     token: 'tok-mgr-17',
     user: { id: 'u170', name: '部門主管', role: 'manager', node: '' },

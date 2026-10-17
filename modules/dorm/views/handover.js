@@ -27,8 +27,8 @@
  * 舊版是兩步：admin.html 的「開點交單」按鈕呼叫 handoverCreate(contract_id) 拿到
  * token/url，另開分頁載入 handover.html?t=token，那支頁面才用 token 呼叫 handover
  * action 取設備清單（見上）。manifest.js 把 handover 定義成平台內、需要 dorm.write
- * 的分頁（不是像 sign.html 那樣殼外、免登入的 token 頁——spec §4.5／§11 T2 只把
- * sign.html 定為殼外，handover 分頁沒有這條），代表這個分頁是操作人員（例如宿舍長）
+ * 的分頁（不是殼外、免登入的 token 頁——簽約頁在舊站 mala-dorm（dzy 不再保留副本，2026-10-18），
+ * handover 分頁沒有這條），代表這個分頁是操作人員（例如宿舍長）
  * 在同仁面前、用自己的登入身分現場操作，不是給同仁自己開的公開連結。本頁因此支援
  * 兩種進入方式（哪一種由平行任務 list.js／index.js 的路由決定，本頁不假設只有一種）：
  *   1. `ctx.params.contract_id`：比照舊版 admin.html「開點交單」按鈕，本頁自己呼叫
