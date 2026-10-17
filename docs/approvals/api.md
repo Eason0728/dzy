@@ -44,6 +44,7 @@ ThrRow = { seq, max:number|null, store_role, hq_role }
 | apvHandle | `{id, rev, result:'done'|'return', note?}` | `{status}` |
 | apvReassign | `{id, rev, step, to, reason}` | `{status, step}` |
 | apvVoid | `{id, reason}` | `{status:'voided'}` |
+| apvSetup | `{}`（只有 role admin；建表＋預設權限表，重按無害） | `{inited:true}` |
 | apvThresholdSave | `{expected_ver, rows:[ThrRow]}` | `{ver, diff:[{seq, before, after}]}` |
 
 ## body 形狀（伺服器驗；spec §4＋§14.6、§14.9）
@@ -53,6 +54,7 @@ expense:   {spend_date, category:'repair'|'food'|'misc'|'transport'|'supplies'|'
             payee:'self'|'vendor', vendor_name?, purchase_id?}
 personnel: {kind:'leave'|'transfer'|'raise', effective, from:{unit,title,pay?}, to:{unit?,title?,pay?}, reason,
             sign_file?, paper_files?:[id]}
+            // 離職：對象已開通 → 只能本人線上簽名，帶 paper_files 回 bad_request「對象已開通帳號，請改用線上簽名」；對象未開通 → 附 1～2 張紙本簽名照
 ```
 category 中文：repair 設備維修、food 食材臨時採購、misc 雜支、transport 交通、supplies 文具耗材、other 其他。
 
@@ -63,6 +65,6 @@ category 中文：repair 設備維修、food 食材臨時採購、misc 雜支、
 | `POST /platform/svc/apv-file-get` | `{token, id}` | `{ok:true, data:{mime, b64}}`；看不到 → `forbidden` |
 
 ## jobs 專用全域函式（不進 Code.gs 分派表）
-`apvFileAuthorize_(token)→{emp}`、`apvFileRegister_(emp, meta)→{id}`、`apvFileCanRead_(token, id)→{ok,path,mime}`、
-`apvFileSweepList_()／apvFileSweepDone_(ids)`、`apvBackupList_(afterSeq)→[{seq,id,path,sha256,form_id,rev}]`、
+`apvFileAuthorize_(token)→{emp}`、`apvFileRegister_(emp, meta)→{id,path}`（登記成 state `putting`，此時不能綁、不能讀、不進備份）、`apvFileCommit_(id)`（jobs 把檔 rename 到位後呼叫：`putting`→`uploaded`，重複呼叫無害）、`apvFileAbort_(id)`（rename 失敗後呼叫：`putting`→`deleted`，只動 putting）、`apvFileCanRead_(token, id)→{ok,path,mime}`、
+`apvFileSweepList_()（uploaded 超過 24 小時、putting 超過 1 小時）／apvFileSweepDone_(ids)`、`apvBackupList_(afterSeq)→[{seq,id,path,sha256,form_id,rev}]`、
 `apvDigest_()→{count, title, text}`、`apvReconcile_()→{skipped}`。
