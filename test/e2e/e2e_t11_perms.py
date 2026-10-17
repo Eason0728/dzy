@@ -4,7 +4,7 @@
 
 mock 形狀照 apps-script/platform/PermActions.gs（permInit／permMapGet／permMapSave／permExList／permExSave／permExRevoke／
 permStoreGet／permStoreSave／myPerms／permAuditList／permAuditSeen）；錯誤 {ok:false, error, code}。
-① admin 未初始化 → 初始化 → 對照表 19 條、新增對象三段選、刪除確認、權限異動產生
+① admin 未初始化 → 初始化 → 對照表（版本 B：選身分→開關→儲存→preview 名單→確認、搜尋同仁、也從…拿到）、權限異動產生
 ② 人資主管：鎖列灰掉、只有「對照表」分頁、送出自己會被改到的規則 → perm_self 中文、鎖碼 → perm_locked 中文
 ③ 個別例外：新增（提示填單權限）、過期灰掉、撤銷　④ 店別對照　⑤ 權限異動：未讀 → 逐列／全部已看過、首頁提醒
 ⑥ 店長只看到「我的門市」、我的資料「我能用的功能」　⑦ 區督導看到總覽不見填寫　⑧ enabled:false 不顯示　⑨ 試跑模式只讀不寫　⑩ 手機寬無橫向捲動
@@ -105,6 +105,10 @@ class Mock11(MockBackend):
             self.inited = True
             self.rules = [{'rule_id': 'R%03d' % (i + 1), 'ladder': a, 'dept': b, 'title': c, 'perm': d} for i, (a, b, c, d) in enumerate(DEFAULT_RULES)]
             return {'ok': True, 'data': {'created': ['perm_map', 'perm_ex', 'perm_store_map', 'perm_audit'], 'rules_seeded': len(self.rules), 'stores_seeded': 2}}
+        if action == 'permWho':
+            if not has_map:
+                return no_perm
+            return {'ok': True, 'data': {'items': self.perm_who(p.get('q'))}}
         if action in ('permMapGet', 'permStoreGet') and not has_map:
             return no_perm
         if action in ('permMapSave',) and not has_map:
@@ -118,6 +122,7 @@ class Mock11(MockBackend):
                 'inited': True, 'rules': list(self.rules),
                 'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap'],
                 'locked': LOCKED, 'names': {},
+                'counts': self.counts(),
                 'ladders': [{'code': 'store', 'name': '門市'}, {'code': 'office', 'name': '品牌辦公室'}, {'code': 'hq', 'name': '總部'}],
                 'titles': [
                     {'code': 'sm', 'name': '店長', 'ladder': 'store', 'rank': 3}, {'code': 'pt', 'name': '計時同仁', 'ladder': 'store', 'rank': 1},
@@ -143,6 +148,10 @@ class Mock11(MockBackend):
             # 自改擋下（13.1）：人資主管 hrm 是「總部・人資部・人資主管」，加到他自己命中的規則且會多出權限 → perm_self
             if not is_admin and who == 'hrm' and any(a['ladder'] == 'hq' and a['dept'] in ('hr', '') and a['title'] in ('*', 'hm') and a['perm'] not in HRM_PERMS for a in add):
                 return self._err('perm_self', '這次修改會改變你自己的權限，請找系統管理員處理')
+            if p.get('preview') is True:
+                ppl = [{'emp_no': 'DZY901', 'name': '店長甲', 'added': ['dorm.read'] if add else [], 'removed': ['audit.read.own'] if rem else []},
+                       {'emp_no': 'DZY903', 'name': '店長丙', 'added': ['dorm.read'] if add else [], 'removed': ['audit.read.own'] if rem else []}]
+                return {'ok': True, 'data': {'preview': True, 'affected': len(ppl), 'people': ppl}}
             nid = max([int(r['rule_id'][1:]) for r in self.rules] + [0])
             added = []
             for a in add:
@@ -200,6 +209,24 @@ class Mock11(MockBackend):
             return {'ok': True, 'data': {'marked': marked}}
         return self._err('bad_input', '未知的 perm action：' + action)
 
+    def counts(self):
+        base = {'store||sm': 3, 'store||pt': 1, 'office||osv': 2, 'hq|hr|*': 2, 'hq|hr|hm': 1, 'hq||ceo': 1}
+        for r in self.rules:
+            base.setdefault('%s|%s|%s' % (r['ladder'], r['dept'], r['title']), 0)
+        return base
+
+    def perm_who(self, q):
+        q = (q or '').strip()
+        hits = [s for s in self.staff if s['status'] == 'active' and (s['emp_no'].upper() == q.upper() or q in s['name'])][:10]
+        out = []
+        for h in hits:
+            mine = self.my.get(h['emp_no'], {})
+            items = mine.get('items', []) if mine.get('enabled') else []
+            out.append({'emp_no': h['emp_no'], 'name': h['name'], 'unit_name': '光復店', 'dept_name': '', 'title_name': '店長' if h['title'] == 'sm' else '部門同仁',
+                        'perms': [i['perm'] for i in items], 'sources': [{k: v for k, v in i.items() if k != 'name_zh'} for i in items],
+                        'audit_scope': mine.get('audit_scope', 'none')})
+        return out
+
     def unseen(self):
         return sum(1 for x in self.audit if not x['seen'])
 
@@ -252,48 +279,91 @@ def main():
             check(mock.inited is False, '取消不會初始化')
             ad.click('[data-act="init"]')
             dlg(ad, '確定')
-            ad.wait_for_selector('[data-role="feature-row"]')
+            ad.wait_for_selector('[data-role="perm-map"] [data-role="feature-row"]')
             check(mock.inited is True and 'permInit' in mock.perm_calls, '按確定後呼叫 permInit')
+            groups = [g.get_attribute('data-group') for g in ad.locator('[data-role="role-list"] .pm-group').all()]
+            check(groups == ['store', 'office', 'hq-dept', 'hq-top'], '★左側身分分組（19 條預設規則都對得到身分，沒有「其他」）：%s' % groups)
+            gtitles = ad.locator('.pm-group-title').all_inner_texts()
+            check(gtitles == ['門市（含中央工廠）', '品牌辦公室', '總部（依部門）', '總部（高層，不分部門）'], '分組標題：%s' % gtitles)
+            check(ad.locator('.pm-role').count() == 16, '身分共 16 列（門市 2、辦公室 3、總部 8、高層 3），實際 %d' % ad.locator('.pm-role').count())
+            hq_names = ad.locator('[data-group="hq-dept"] .pm-role span').all_inner_texts()
+            check('人資部・全部職稱' in hq_names and '人資部・部門主管' in hq_names, '總部依部門兩列：%s' % hq_names)
+            role = lambda name: ad.locator('.pm-role', has=ad.locator('span', has_text=name)).first
+            check('3 人' in role('店長').inner_text(), '身分顯示人數（店長 3 人）：%s' % role('店長').inner_text().replace('\n', ' '))
+            role('店長').click()
             perms_order = [r.get_attribute('data-perm') for r in ad.locator('[data-role="feature-row"]').all()]
             check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap'],
-                  '★對照表 9 列、順序正確：%s' % perms_order)
-            check(ad.locator('[data-role="chip"]').count() == 19, '★對照表共 19 個 chip，實際 %d' % ad.locator('[data-role="chip"]').count())
-            names = [t.split('\n')[0].replace('鎖定', '').strip() for t in ad.locator('[data-role="feature-row"] .card-title').all_inner_texts()]
-            check(names[0] == '看自己店稽核' and names[3] == '填稽核單與門市管理' and names[8] == '改權限對照表', '功能中文名：%s' % names)
-            row = lambda perm: ad.locator('[data-role="feature-row"][data-perm="%s"]' % perm)
-            check('門市・店長' in row('audit.read.own').inner_text(), 'chip「門市・店長」')
-            check('品牌辦公室・區督導' in row('audit.read.brand').inner_text(), 'chip「品牌辦公室・區督導」')
-            check('總部・人資部・全部職稱' in row('platform.staff').inner_text(), 'chip「總部・人資部・全部職稱」')
-            check('總部・全部部門・執行長' in row('audit.read').inner_text(), 'chip「總部・全部部門・執行長」')
-            check(ad.locator('[data-role="feature-row"][data-locked="1"]').count() == 4, '鎖住的四列有標記')
-            check(ad.locator('[data-role="feature-row"][data-locked="1"] [data-act="add"]:not([disabled])').count() == 4, 'admin 鎖住的四列仍可新增（不灰掉）')
-            ad.screenshot(path=os.path.join(SHOTS, 'perms-map.png'), full_page=True)
+                  '★右側 9 個功能列、順序正確：%s' % perms_order)
+            sw = lambda pg, perm: pg.locator('[data-role="feature-row"][data-perm="%s"] [data-act="toggle"]' % perm)
+            on = lambda pg, perm: sw(pg, perm).get_attribute('aria-checked') == 'true'
+            check(on(ad, 'audit.read.own') and not on(ad, 'dorm.read') and not on(ad, 'audit.read'), '店長：看自己店稽核＝開，其餘關')
+            check('看自己那家店的盤點與稽核結果' in ad.inner_text('[data-perm="audit.read.own"]'), '每個功能有一句白話說明')
+            check(ad.locator('[data-role="feature-row"][data-locked="1"]').count() == 4 and ad.locator('[data-role="feature-row"][data-locked="1"] [data-act="toggle"]:not([disabled])').count() == 4,
+                  '鎖碼四列標記；admin 的開關不灰掉')
+            check(ad.inner_text('[data-role="bar-msg"]').strip() == '沒有未儲存的變更' and ad.locator('[data-act="save"][disabled]').count() == 1, '沒有變更：儲存鈕 disabled')
+            # 「也從…拿到」：人資主管同時命中「人資部・全部職稱」
+            role('人資部・部門主管').click()
+            check('也從『人資部・全部職稱』拿到' in ad.inner_text('[data-perm="dorm.read"]'), '★人資部・部門主管：看宿舍清單「也從『人資部・全部職稱』拿到」')
+            check(ad.locator('[data-perm="platform.permmap"] [data-role="also"]').count() == 0, '自己的規則（改權限對照表）不顯示「也從」')
+            n_perm_calls = len(mock.perm_calls)
 
-            # 新增對象：階梯→（總部才有）部門→職稱
-            row('dorm.write').locator('[data-act="add"]').click()
-            ad.wait_for_selector('#pm-ladder')
-            check(ad.locator('#pm-dept-wrap, [data-role="pm-dept-wrap"]').first.is_hidden(), '階梯＝門市時不出現部門')
-            ad.select_option('#pm-ladder', 'hq')
-            check(ad.locator('[data-role="pm-dept-wrap"]').is_visible(), '階梯＝總部才出現部門')
-            dept_opts = ad.locator('#pm-dept option').all_inner_texts()
-            check(dept_opts[0] == '全部部門' and '營運部' in dept_opts, '部門選項含「全部部門」：%s' % dept_opts)
-            check(ad.locator('#pm-title option').first.inner_text() == '全部職稱', '職稱選項含「全部職稱」')
-            check('區督導' not in ad.locator('#pm-title option').all_inner_texts() and '執行長' in ad.locator('#pm-title option').all_inner_texts(), '職稱依所選階梯過濾（總部只有總部職稱）')
-            ad.select_option('#pm-dept', 'ops')
-            dlg(ad, '新增')
-            ad.wait_for_selector('[data-role="feature-row"][data-perm="dorm.write"] [data-role="chip"]:has-text("總部・營運部・全部職稱")')
-            check(ad.locator('[data-role="chip"]').count() == 20, '新增對象後 chip 變 20')
-            check(any(r['perm'] == 'dorm.write' and r['dept'] == 'ops' and r['title'] == '*' and r['ladder'] == 'hq' for r in mock.rules), '送出的規則 ladder/dept/title/perm 正確')
-            # 刪除要確認
-            chip = row('dorm.write').locator('[data-role="chip"]:has-text("總部・營運部・全部職稱")')
-            chip.locator('[data-act="del"]').click()
-            check('總部・營運部・全部職稱' in ad.inner_text('.dialog-body'), '刪除前跳確認框')
+            # 開關 → 底部摘要 → 還原 → 再開 → 儲存（preview 名單 → 取消 → 儲存 → 確認）
+            role('店長').click()
+            sw(ad, 'dorm.read').click()
+            check(on(ad, 'dorm.read') and ad.inner_text('[data-role="bar-msg"]').strip() == '未儲存：店長 多了『看宿舍清單』', '★未儲存摘要「店長 多了『看宿舍清單』」：%s' % ad.inner_text('[data-role="bar-msg"]'))
+            check(len(mock.perm_calls) == n_perm_calls, '開關只改畫面，不打後端')
+            ad.screenshot(path=os.path.join(SHOTS, 'perms-b-desktop.png'), full_page=False)
+            ad.click('[data-act="revert"]')
+            check(not on(ad, 'dorm.read') and '沒有未儲存' in ad.inner_text('[data-role="bar-msg"]'), '還原回原狀')
+            sw(ad, 'dorm.read').click()
+            sw(ad, 'dorm.write').click()
+            sw(ad, 'dorm.write').click()
+            check(ad.inner_text('[data-role="bar-msg"]').strip() == '未儲存：店長 多了『看宿舍清單』', '開了又關回去的不算變更')
+            ad.click('[data-act="save"]')
+            ad.wait_for_selector('[data-role="preview-body"]')
+            ptxt = ad.inner_text('.dialog-body')
+            check('店長甲（DZY901）' in ptxt and '多了 看宿舍清單' in ptxt and '2' in ptxt, '★preview 對話框列出實際名單：%s' % ptxt.replace('\n', ' '))
+            n_rules = len(mock.rules)
+            check(len(mock.rules) == n_rules and mock.perm_calls[-1] == 'permMapSave', 'preview 還沒寫入')
             dlg(ad, '取消')
-            check(ad.locator('[data-role="chip"]').count() == 20, '取消不刪')
-            chip.locator('[data-act="del"]').click()
-            dlg(ad, '確定')
-            ad.wait_for_function("() => document.querySelectorAll('[data-role=\"chip\"]').length === 19")
-            check(True, '確認後刪除，chip 回 19')
+            check(len(mock.rules) == n_rules and on(ad, 'dorm.read'), '取消：不寫入、畫面變更保留')
+            ad.click('[data-act="save"]')
+            ad.wait_for_selector('[data-role="preview-body"]')
+            dlg(ad, '確認儲存')
+            ad.wait_for_function("() => document.querySelector('[data-role=\"bar-msg\"]').innerText.includes('沒有未儲存')")
+            check(has_toast(ad, '已儲存'), '確認後正式送出並顯示已儲存')
+            check(any(r['perm'] == 'dorm.read' and r['ladder'] == 'store' and r['dept'] == '' and r['title'] == 'sm' for r in mock.rules), '送出的規則 ladder/dept/title/perm 正確')
+            check(len(mock.rules) == n_rules + 1, '只多一條規則')
+            check(on(ad, 'dorm.read'), '儲存後重讀，開關維持開')
+            # 關掉＝移除規則
+            sw(ad, 'dorm.read').click()
+            check('少了『看宿舍清單』' in ad.inner_text('[data-role="bar-msg"]'), '關掉：摘要「少了」')
+            ad.click('[data-act="save"]')
+            ad.wait_for_selector('[data-role="preview-body"]')
+            dlg(ad, '確認儲存')
+            ad.wait_for_function("() => !document.querySelector('.dialog')")
+            ad.wait_for_function("() => document.querySelector('[data-role=\"bar-msg\"]').innerText.includes('沒有未儲存')")
+            check(len(mock.rules) == n_rules and not on(ad, 'dorm.read'), '移除規則後回原狀')
+            # 多筆摘要
+            sw(ad, 'dorm.read').click()
+            sw(ad, 'dorm.write').click()
+            sw(ad, 'audit.read.brand').click()
+            check('等 3 項' in ad.inner_text('[data-role="bar-msg"]'), '多筆摘要「等 3 項」：%s' % ad.inner_text('[data-role="bar-msg"]'))
+            ad.click('[data-act="revert"]')
+
+            # 搜尋同仁（permWho）
+            ad.fill('[data-role="who-input"]', 'DZY901')
+            ad.wait_for_selector('[data-role="who-item"]')
+            wtxt = ad.inner_text('[data-role="who-result"]')
+            check('permWho' in mock.perm_calls and '店長甲' in wtxt and '看自己店稽核' in wtxt and '因為職稱：店長' in wtxt and '個別例外，到 10/31' in wtxt,
+                  '★搜尋同仁：功能＋來源白話：%s' % wtxt.replace('\n', ' '))
+            check('稽核範圍：自己店' in wtxt, '搜尋結果顯示稽核範圍')
+            ad.fill('[data-role="who-input"]', '不存在')
+            ad.press('[data-role="who-input"]', 'Enter')
+            ad.wait_for_selector('[data-role="who-msg"]')
+            check('找不到' in ad.inner_text('[data-role="who-msg"]'), '找不到同仁有提示')
+            ad.fill('[data-role="who-input"]', '')
+            ad.wait_for_function("() => document.querySelector('[data-role=\"who-result\"]').innerText.trim() === ''")
 
             # ============ ⑤ 權限異動 ============
             ad.evaluate("() => { window.location.hash = '#/perms/audit'; }")
@@ -400,19 +470,30 @@ def main():
                 check(sw[0] <= sw[1], '手機 375 寬 %s 無橫向捲動（scrollWidth %d ≤ %d）' % (r, sw[0], sw[1]))
             mob.evaluate("() => { window.location.hash = '#/perms/map'; }")
             mob.wait_for_selector('[data-role="feature-row"]')
-            mob.screenshot(path=os.path.join(SHOTS, 'perms-map-375.png'), full_page=True)
+            mob.locator('.pm-role', has=mob.locator('span', has_text='店長')).first.click()
+            mob.locator('[data-perm="dorm.read"] [data-act="toggle"]').click()
+            mob.wait_for_selector('[data-act="save"]:not([disabled])')
+            sw = mob.evaluate("() => [document.documentElement.scrollWidth, window.innerWidth]")
+            check(sw[0] <= 375, '★手機 375 寬 對照表（選身分＋有未儲存變更）scrollWidth %d ≤ 375' % sw[0])
+            rl = mob.evaluate("() => { const l = document.querySelector('[data-role=\"role-list\"]').getBoundingClientRect(); const p = document.querySelector('[data-role=\"role-panel\"]').getBoundingClientRect(); return [l.top, p.top, document.querySelector('[data-role=\"role-list\"]').scrollHeight > document.querySelector('[data-role=\"role-list\"]').clientHeight]; }")
+            check(rl[0] < rl[1] and rl[2], '手機：身分清單在上、可捲動（清單 top %d < 功能 top %d）' % (rl[0], rl[1]))
+            mob.screenshot(path=os.path.join(SHOTS, 'perms-b-375.png'), full_page=True)
 
             # ============ ② 人資主管（非 admin） ============
             hr = open_as('hrm', '/perms/map')
             hr.wait_for_selector('[data-role="feature-row"]')
             check(tabs(hr) == ['對照表'], '★人資主管只有「對照表」分頁，實際：%s' % tabs(hr))
+            hr.locator('.pm-role', has=hr.locator('span', has_text='店長')).first.click()
             lk = hr.locator('[data-role="feature-row"][data-locked="1"]')
             check(lk.count() == 4, '鎖住的四列仍顯示')
-            check(lk.locator('[data-act="add"][disabled]').count() == 4 and lk.locator('[data-act="del"]').count() == 0, '★鎖住的四列對非 admin：新增鈕 disabled、chip 沒有刪除鈕')
-            check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 4, '鎖列有說明「只有系統管理員能改」')
-            check('opacity' in (lk.first.get_attribute('style') or ''), '鎖列灰掉')
-            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="add"]:not([disabled])').count() == 5, '其餘 5 列可編輯')
-            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="del"]').count() > 0, '未鎖的 chip 有刪除鈕')
+            check(lk.locator('[data-act="toggle"][disabled]').count() == 4, '★鎖碼四列對非 admin：開關 disabled')
+            check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 4, '鎖列標示「只有系統管理員能改」')
+            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 5, '其餘 5 列可開關')
+            hr.locator('[data-perm="platform.users"] [data-act="toggle"]').click(force=True)
+            check('沒有未儲存' in hr.inner_text('[data-role="bar-msg"]'), '點 disabled 的鎖碼開關沒有任何變更')
+            hr.fill('[data-role="who-input"]', '店長')
+            hr.wait_for_selector('[data-role="who-item"]')
+            check(hr.locator('[data-role="who-item"]').count() >= 2, '人資主管也能搜尋同仁')
             # 首頁：非 admin 沒有權限異動／店別提醒
             hr.evaluate("() => { window.location.hash = '#/home'; }")
             hr.wait_for_selector('[data-role="module-card"][data-module="perms"] .todo-row, [data-role="module-card"][data-module="perms"] .todo-empty')
@@ -420,10 +501,9 @@ def main():
             # 自改 → perm_self 中文
             hr.evaluate("() => { window.location.hash = '#/perms/map'; }")
             hr.wait_for_selector('[data-role="feature-row"]')
-            hr.locator('[data-role="feature-row"][data-perm="audit.read"] [data-act="add"]').click()
-            hr.select_option('#pm-ladder', 'hq')
-            hr.select_option('#pm-dept', 'hr')
-            dlg(hr, '新增')
+            hr.locator('.pm-role', has=hr.locator('span', has_text='人資部・部門主管')).first.click()
+            hr.locator('[data-perm="audit.read"] [data-act="toggle"]').click()
+            hr.click('[data-act="save"]')
             check(has_toast(hr, '這個改動會改到你自己的權限，請系統管理員處理'), '★改到自己 → perm_self 中文提示')
             check(not any(r['perm'] == 'audit.read' and r['dept'] == 'hr' for r in mock.rules), 'perm_self 被擋下，規則沒寫進去')
             # 送出鎖碼 → perm_locked 中文（繞過畫面直接打 API，驗畫面用的錯誤轉換）
@@ -480,12 +560,14 @@ def main():
             dr = open_as('admin', None, query='?dryrun=1')
             dr.evaluate("() => { window.location.hash = '#/perms/map'; }")
             dr.wait_for_selector('[data-role="feature-row"]')
-            check(dr.locator('[data-role="chip"]').count() == 19, '試跑模式：permMapGet 讀得到（19 chip）')
-            dr.locator('[data-role="feature-row"][data-perm="dorm.write"] [data-act="add"]').click()
-            dlg(dr, '新增')
-            dr.wait_for_selector('.toast:has-text("試跑模式")')
+            check(dr.locator('.pm-role').count() == 16, '試跑模式：permMapGet 讀得到（16 個身分）')
+            dr.locator('.pm-role', has=dr.locator('span', has_text='店長')).first.click()
+            dr.locator('[data-perm="dorm.write"] [data-act="toggle"]').click()
+            dr.click('[data-act="save"]')
+            dr.wait_for_selector('.toast:has-text("試跑模式不會寫入")')
             n_after = len([a for a in mock.perm_calls if a in ('permMapSave', 'permInit')])
-            check(n_after == n_before and dr.locator('[data-role="chip"]').count() == 19, '★試跑模式：新增對象被攔下，後端沒收到 permMapSave')
+            check(n_after == n_before and dr.locator('.dialog').count() == 0, '★試跑模式：preview 被攔下直接說明，後端沒收到 permMapSave')
+            check(dr.locator('[data-act="save"]:not([disabled])').count() == 1, '試跑模式：畫面變更保留')
             dr.evaluate("() => { window.location.hash = '#/perms/audit'; }")
             dr.wait_for_selector('[data-role="audit-item"]')
             check(True, '試跑模式：permAuditList 讀得到')

@@ -13,7 +13,7 @@ export default {
   name: '權限設定',
   desc: '依職稱給權限、個別例外',
   icon: 'users',
-  dept: 'it',
+  dept: 'hr',
   requires: ['platform.permmap'],
   views: [
     { id: 'map', name: '對照表', requires: ['platform.permmap'] },

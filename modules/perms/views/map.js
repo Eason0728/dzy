@@ -1,18 +1,27 @@
 /**
- * modules/perms/views/map.js — 對照表分頁（spec §7.1-1、§13.1）
- * 列＝9 個功能，chip＝目前給了哪些對象；chip 可刪、「新增對象」三段選（階梯→總部才有部門→職稱）。
- * 鎖住的功能（platform.users／platform.permmap）對非 admin 灰掉。
+ * modules/perms/views/map.js — 對照表分頁（版本 B：先選身分、再開關功能；spec §7.1-1、§13.1、§13.2）
+ * 左：身分清單（含人數）；右：選中身分的 9 個功能開關；底：未儲存摘要＋還原＋儲存（先 preview 名單、確認才正式送出）；
+ * 上：搜尋同仁（permWho）。鎖碼功能（permMapGet.locked）對非 admin 顯示「只有系統管理員能改」並 disabled。
  */
 'use strict';
 
-import { featureRows, errorText } from '../lib.js';
+import {
+  featureRows, errorText, identityGroups, identityName, isOn, pendingChanges, buildPayload,
+  alsoFrom, changeSummary, previewView, whoLines, scopeLabel, FEATURE_DESC
+} from '../lib.js';
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 export function mountMap(el, ctx) {
   const esc = ctx.fmt.esc;
   const isAdmin = !!(ctx.user && ctx.user.role === 'admin');
   let alive = true;
   let data = null;
+  let sel = '';
+  let pending = {};
   let openDialog = null;
+  let searchTimer = null;
+  let searchSeq = 0;
 
   el.innerHTML = '<div class="card"><p class="text-muted">讀取中…</p></div>';
 
@@ -21,6 +30,7 @@ export function mountMap(el, ctx) {
     if (!alive) return;
     if (!r.ok) { el.innerHTML = `<div class="card"><p>${esc(r.error || '讀不到對照表')}</p></div>`; return; }
     data = r.data || {};
+    pending = {};
     draw();
   }
 
@@ -34,90 +44,150 @@ export function mountMap(el, ctx) {
       : `<div class="card" data-role="not-inited"><div class="card-title">權限設定還沒初始化</div><p class="text-muted">請系統管理員初始化。</p></div>`;
   }
 
+  // ---------- 畫面骨架 ----------
   function draw() {
     if (data.inited === false) { drawNotInited(); return; }
-    const canEdit = (row) => isAdmin || !row.locked;
+    const groups = identityGroups(data);
+    if (!sel || !groups.some((g) => g.items.some((i) => i.key === sel))) {
+      sel = groups.length && groups[0].items.length ? groups[0].items[0].key : '';
+    }
+    el.innerHTML = `<div class="pm-wrap" data-role="perm-map">
+      <div class="card stack"><div class="card-title">權限對照表</div>
+        <p class="text-muted">先選左邊的身分，再開關右邊的功能。改完先不生效，按底下的「儲存」確認名單後才生效；同仁下次登入或重新整理後看到。</p></div>
+      <div class="pm-search" data-role="who-box">
+        <label class="field-label" for="pm-q">查同仁</label>
+        <input class="input" id="pm-q" data-role="who-input" type="search" placeholder="輸入姓名或編號（例：DZY012）" autocomplete="off">
+        <div class="pm-who-result" data-role="who-result" aria-live="polite"></div>
+      </div>
+      <div class="pm-grid">
+        <div class="pm-roles" data-role="role-list" role="listbox" aria-label="身分"></div>
+        <div class="pm-panel" data-role="role-panel"></div>
+      </div>
+      <div class="pm-bar" data-role="save-bar"></div>
+    </div>`;
+    drawList();
+    drawPanel();
+    drawBar();
+  }
+
+  function drawList() {
+    const host = el.querySelector('[data-role="role-list"]');
+    if (!host) return;
+    const top = host.scrollTop;
+    const counts = data.counts || {};
+    const dirtyKeys = {};
+    pendingChanges(data, pending).forEach((c) => { dirtyKeys[c.key] = true; });
+    host.innerHTML = identityGroups(data).map((g) => `<div class="pm-group" data-group="${esc(g.id)}">
+      <div class="pm-group-title">${esc(g.title)}</div>
+      ${g.items.map((it) => {
+        const n = counts[it.key];
+        return `<button type="button" class="pm-role${it.key === sel ? ' is-active' : ''}" role="option" aria-selected="${it.key === sel}" data-act="pick" data-key="${esc(it.key)}">
+          <span>${esc(it.name)}${dirtyKeys[it.key] ? ' <span class="pm-dirty" aria-label="有未儲存變更">●</span>' : ''}</span>
+          <small data-role="role-count">${typeof n === 'number' ? `${n} 人` : ''}</small></button>`;
+      }).join('')}
+    </div>`).join('');
+    host.scrollTop = top;
+  }
+
+  function drawPanel() {
+    const host = el.querySelector('[data-role="role-panel"]');
+    if (!host) return;
+    if (!sel) { host.innerHTML = '<p class="text-muted">沒有可選的身分</p>'; return; }
+    const counts = data.counts || {};
+    const n = counts[sel];
     const rows = featureRows(data).map((row) => {
-      const editable = canEdit(row);
-      const chips = row.rules.length
-        ? row.rules.map((ru) => `<span class="tag" data-role="chip" data-rule="${esc(ru.rule_id)}" style="gap:var(--space-2)">${esc(ru.text)}${editable ? `<button type="button" data-act="del" data-rule="${esc(ru.rule_id)}" data-text="${esc(ru.text)}" data-perm="${esc(row.perm)}" aria-label="移除 ${esc(ru.text)}" style="background:none;border:0;cursor:pointer;color:inherit;padding:0 2px;font-size:var(--fs-base)">×</button>` : ''}</span>`).join(' ')
-        : '<span class="text-muted">還沒有人</span>';
-      return `<div class="card stack" data-role="feature-row" data-perm="${esc(row.perm)}"${row.locked ? ' data-locked="1"' : ''}${editable ? '' : ' style="opacity:.6"'}>
-        <div class="card-row"><div class="card-title">${esc(row.name)}${row.locked ? ' <span class="tag tag-warn">鎖定</span>' : ''}</div>
-          <button type="button" class="btn btn-secondary" data-act="add" data-perm="${esc(row.perm)}"${editable ? '' : ' disabled'}>新增對象</button></div>
-        <div data-role="chips" style="display:flex;flex-wrap:wrap;gap:var(--space-2)">${chips}</div>
-        ${editable ? '' : '<p class="field-hint" data-role="lock-note">只有系統管理員能改</p>'}
+      const editable = isAdmin || !row.locked;
+      const on = isOn(data, pending, sel, row.perm);
+      const changed = on !== isOn(data, null, sel, row.perm);
+      const also = alsoFrom(data, pending, sel, row.perm);
+      return `<div class="pm-row" data-role="feature-row" data-perm="${esc(row.perm)}"${row.locked ? ' data-locked="1"' : ''}>
+        <div>
+          <div class="pm-row-title">${esc(row.name)}${row.locked ? ' <span class="pm-locktag" data-role="lock-note">只有系統管理員能改</span>' : ''}</div>
+          <div class="pm-row-desc">${esc(FEATURE_DESC[row.perm] || '')}</div>
+          ${also.length ? `<div class="pm-also" data-role="also">也從『${esc(also.join('』『'))}』拿到</div>` : ''}
+        </div>
+        <button type="button" class="pm-switch${on ? ' is-on' : ''}${changed ? ' is-changed' : ''}" role="switch" aria-checked="${on}" aria-label="${esc(row.name)}"
+          data-act="toggle" data-perm="${esc(row.perm)}"${editable ? '' : ' disabled'}></button>
       </div>`;
     }).join('');
-    el.innerHTML = `<div class="card stack"><div class="card-title">權限對照表</div>
-      <p class="text-muted">每個功能給哪些單位・職稱的同仁用。改完馬上生效，同仁下次登入或重新整理後看到。</p></div>${rows}`;
+    host.innerHTML = `<div class="pm-who"><b data-role="role-name">${esc(identityName(data, sel))}</b>
+      <span class="text-muted">${typeof n === 'number' ? `目前 ${n} 人・` : ''}每個人都另外有「我的資料、公告專區」</span></div>${rows}`;
   }
 
-  async function doSave(payload, okText) {
-    ctx.ui.loading(true);
-    let r;
-    try { r = await ctx.api.call('perms', 'permMapSave', payload); } finally { ctx.ui.loading(false); }
-    if (!alive) return;
-    if (r.dryrun) return;
-    if (!r.ok) { ctx.ui.toast(errorText(r), 'danger'); return; }
-    const n = r.data && typeof r.data.affected === 'number' ? r.data.affected : 0;
-    ctx.ui.toast(`${okText}${n ? `，影響 ${n} 位同仁` : ''}`, 'ok');
-    await load();
+  function drawBar() {
+    const host = el.querySelector('[data-role="save-bar"]');
+    if (!host) return;
+    const changes = pendingChanges(data, pending);
+    host.innerHTML = `<div class="pm-bar-msg" data-role="bar-msg">${changes.length
+      ? `未儲存：<b>${esc(changeSummary(data, changes))}</b>`
+      : '<span class="text-muted">沒有未儲存的變更</span>'}</div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" data-act="revert"${changes.length ? '' : ' disabled'}>還原</button>
+        <button type="button" class="btn btn-primary" data-act="save"${changes.length ? '' : ' disabled'}>儲存</button>
+      </div>`;
   }
 
-  function addDialogBody(perm) {
-    const ladders = data.ladders || [];
+  // ---------- 動作 ----------
+  function onToggle(perm) {
+    if (!sel) return;
+    const row = featureRows(data).find((r) => r.perm === perm);
+    if (!row || (!isAdmin && row.locked)) return;
+    const next = !isOn(data, pending, sel, perm);
+    const pk = `${sel}|${perm}`;
+    if (next === isOn(data, null, sel, perm)) delete pending[pk]; else pending[pk] = next;
+    drawList();
+    drawPanel();
+    drawBar();
+  }
+
+  function onRevert() {
+    pending = {};
+    drawList();
+    drawPanel();
+    drawBar();
+  }
+
+  function previewBody(view) {
     const body = document.createElement('div');
     body.className = 'stack';
-    const opt = (v, t) => `<option value="${esc(v)}">${esc(t)}</option>`;
-    body.innerHTML = `
-      <div class="field"><label class="field-label" for="pm-ladder">單位階梯</label>
-        <select class="input" id="pm-ladder" data-role="pm-ladder">${ladders.map((l) => opt(l.code, l.name)).join('')}</select></div>
-      <div class="field" data-role="pm-dept-wrap" hidden><label class="field-label" for="pm-dept">部門</label>
-        <select class="input" id="pm-dept" data-role="pm-dept">${opt('', '全部部門')}${(data.depts || []).map((d) => opt(d.code, d.name)).join('')}</select></div>
-      <div class="field"><label class="field-label" for="pm-title">職稱</label>
-        <select class="input" id="pm-title" data-role="pm-title"></select></div>`;
-    const ladderEl = body.querySelector('#pm-ladder');
-    const deptWrap = body.querySelector('[data-role="pm-dept-wrap"]');
-    const titleEl = body.querySelector('#pm-title');
-    const sync = () => {
-      const lad = ladderEl.value;
-      deptWrap.hidden = lad !== 'hq';
-      const titles = (data.titles || []).filter((t) => t.ladder === lad).sort((a, b) => (a.rank || 0) - (b.rank || 0));
-      titleEl.innerHTML = opt('*', '全部職稱') + titles.map((t) => opt(t.code, t.name)).join('');
-    };
-    ladderEl.addEventListener('change', sync);
-    sync();
-    body.read = () => ({
-      ladder: ladderEl.value,
-      dept: ladderEl.value === 'hq' ? body.querySelector('#pm-dept').value : '',
-      title: titleEl.value,
-      perm
-    });
+    body.setAttribute('data-role', 'preview-body');
+    body.innerHTML = view.total
+      ? `<p>這次會讓 <b>${view.total}</b> 位同仁的權限改變：</p>
+         <ul class="pm-preview-list">${view.lines.map((l) => `<li data-role="preview-person"><b>${esc(l.who)}</b>　${esc(l.text)}</li>`).join('')}</ul>
+         ${view.rest ? `<p class="text-muted" data-role="preview-rest">其餘 ${view.rest} 人</p>` : ''}`
+      : '<p>這次修改不會改到任何同仁的權限。</p>';
     return body;
   }
 
-  async function onAdd(perm) {
-    const body = addDialogBody(perm);
-    const name = featureRows(data).find((r) => r.perm === perm).name;
+  async function onSave() {
+    const changes = pendingChanges(data, pending);
+    if (!changes.length) return;
+    const payload = buildPayload(data, changes);
+    ctx.ui.loading(true);
+    let pv;
+    try { pv = await ctx.api.call('perms', 'permMapSave', Object.assign({ preview: true }, payload)); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (pv.dryrun) { ctx.ui.toast('試跑模式不會寫入', 'warn'); return; }
+    if (!pv.ok) { ctx.ui.toast(errorText(pv), 'danger'); return; }
+    const view = previewView(pv.data && pv.data.people, 30);
     const p = ctx.ui.dialog({
-      title: `「${name}」新增對象`,
-      body,
-      actions: [{ label: '取消', value: false, variant: 'secondary' }, { label: '新增', value: true, variant: 'primary' }]
+      title: '確認儲存',
+      body: previewBody(view),
+      actions: [{ label: '取消', value: false, variant: 'secondary' }, { label: '確認儲存', value: true, variant: 'primary' }]
     });
     openDialog = p;
     const v = await p;
     openDialog = null;
     if (v !== true || !alive) return;
-    await doSave({ add: [body.read()] }, '已新增對象');
-  }
-
-  async function onDel(btn) {
-    const text = btn.getAttribute('data-text');
-    const name = featureRows(data).find((r) => r.perm === btn.getAttribute('data-perm')).name;
-    const yes = await ctx.ui.confirm(`要把「${text}」從「${name}」拿掉嗎？這些人會馬上失去這個功能。`);
-    if (!yes || !alive) return;
-    await doSave({ remove: [btn.getAttribute('data-rule')] }, '已移除');
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('perms', 'permMapSave', payload); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (r.dryrun) { ctx.ui.toast('試跑模式不會寫入', 'warn'); return; }
+    if (!r.ok) { ctx.ui.toast(errorText(r), 'danger'); return; }
+    const n = r.data && typeof r.data.affected === 'number' ? r.data.affected : 0;
+    ctx.ui.toast(`已儲存${n ? `，影響 ${n} 位同仁` : ''}`, 'ok');
+    await load();
   }
 
   async function onInit() {
@@ -132,19 +202,71 @@ export function mountMap(el, ctx) {
     await load();
   }
 
+  // ---------- 搜尋同仁 ----------
+  function drawWho(items, msg) {
+    const host = el.querySelector('[data-role="who-result"]');
+    if (!host) return;
+    if (msg !== undefined) { host.innerHTML = msg ? `<p class="text-muted" data-role="who-msg">${esc(msg)}</p>` : ''; return; }
+    host.innerHTML = items.map((it) => {
+      const lines = whoLines(it);
+      const scope = scopeLabel(it.audit_scope, it.perms);
+      return `<div class="pm-who-item" data-role="who-item" data-emp="${esc(it.emp_no)}">
+        <div><b>${esc(it.name)}</b>（${esc(it.emp_no)}）<span class="text-muted">${esc([it.unit_name, it.dept_name, it.title_name].filter(Boolean).join('・'))}</span></div>
+        ${lines.length
+          ? `<ul class="pm-who-list">${lines.map((l) => `<li data-perm="${esc(l.perm)}"><b>${esc(l.name)}</b>　<span class="text-muted">${esc(l.texts.join('、'))}</span></li>`).join('')}</ul>`
+          : '<div class="text-muted">目前沒有額外的功能（每個人都有「我的資料、公告專區」）</div>'}
+        ${scope ? `<div class="text-muted">稽核範圍：${esc(scope)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  async function runSearch() {
+    const input = el.querySelector('[data-role="who-input"]');
+    if (!input) return;
+    const q = input.value.trim();
+    const seq = ++searchSeq;
+    if (!q) { drawWho([], ''); return; }
+    const r = await ctx.api.call('perms', 'permWho', { q });
+    if (!alive || seq !== searchSeq) return;
+    if (r.dryrun) { drawWho([], '試跑模式查不到同仁'); return; }
+    if (!r.ok) { drawWho([], errorText(r)); return; }
+    const items = (r.data && r.data.items) || [];
+    if (!items.length) { drawWho([], '找不到這位同仁（只找在職的）'); return; }
+    drawWho(items);
+  }
+
+  const onInput = (ev) => {
+    if (!ev.target.matches || !ev.target.matches('[data-role="who-input"]')) return;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, SEARCH_DEBOUNCE_MS);
+  };
+  const onKeydown = (ev) => {
+    if (ev.key !== 'Enter' || !ev.target.matches || !ev.target.matches('[data-role="who-input"]')) return;
+    ev.preventDefault();
+    clearTimeout(searchTimer);
+    runSearch();
+  };
+
   const onClick = (ev) => {
     const btn = ev.target.closest('[data-act]');
     if (!btn || !el.contains(btn) || btn.disabled) return;
     const act = btn.getAttribute('data-act');
-    if (act === 'add') onAdd(btn.getAttribute('data-perm'));
-    else if (act === 'del') onDel(btn);
+    if (act === 'pick') { sel = btn.getAttribute('data-key'); drawList(); drawPanel(); }
+    else if (act === 'toggle') onToggle(btn.getAttribute('data-perm'));
+    else if (act === 'revert') onRevert();
+    else if (act === 'save') onSave();
     else if (act === 'init') onInit();
   };
   el.addEventListener('click', onClick);
+  el.addEventListener('input', onInput);
+  el.addEventListener('keydown', onKeydown);
   load();
   return () => {
     alive = false;
+    clearTimeout(searchTimer);
     el.removeEventListener('click', onClick);
+    el.removeEventListener('input', onInput);
+    el.removeEventListener('keydown', onKeydown);
     if (openDialog && typeof openDialog.close === 'function') openDialog.close(false);
   };
 }

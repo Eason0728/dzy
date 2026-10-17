@@ -152,10 +152,10 @@ t('enabled:false 不顯示這塊', () => {
 });
 
 // ---- manifest ----
-t('perms manifest 合法、dept=it、四個分頁', () => {
+t('perms manifest 合法、dept=hr、四個分頁', () => {
   const r = validateManifest(permsManifest);
   assert.ok(r.ok, JSON.stringify(r.errors));
-  assert.equal(permsManifest.dept, 'it');
+  assert.equal(permsManifest.dept, 'hr');
   assert.deepEqual(permsManifest.requires, ['platform.permmap']);
   assert.deepEqual(permsManifest.views.map((v) => v.id), ['map', 'ex', 'stores', 'audit']);
   assert.deepEqual(permsManifest.views.slice(1).map((v) => v.requires[0]), ['platform.permex', 'platform.permex', 'platform.permex']);
@@ -175,9 +175,100 @@ t('稽核兩模組 requires', () => {
   assert.deepEqual(s.find((x) => x.id === 'stores').requires, ['audit.write']);
 });
 t('試跑模式放行五個讀取 action、不放行寫入', () => {
-  for (const a of ['permMapGet', 'permExList', 'permStoreGet', 'myPerms', 'permAuditList']) assert.ok(READ_ACTIONS.platform.includes(a), a);
+  for (const a of ['permMapGet', 'permExList', 'permStoreGet', 'myPerms', 'permAuditList', 'permWho']) assert.ok(READ_ACTIONS.platform.includes(a), a);
   for (const a of ['permInit', 'permMapSave', 'permExSave', 'permExRevoke', 'permStoreSave', 'permAuditSeen']) assert.ok(!READ_ACTIONS.platform.includes(a), a);
 });
+
+// ---------- 對照表改版（版本 B） ----------
+const ORG_B = Object.assign({}, ORG, {
+  titles: ORG.titles.concat([{ code: 'pt', name: '計時同仁', ladder: 'store', rank: 1 }, { code: 'gm', name: '總經理', ladder: 'hq', rank: 8 }, { code: 'hs', name: '部門同仁', ladder: 'hq', rank: 1 }])
+});
+const DATA_B = Object.assign({ rules: RULES.concat([
+  { rule_id: 'R020', ladder: 'hq', dept: 'hr', title: '*', perm: 'platform.permmap' },
+  { rule_id: 'R021', ladder: 'hq', dept: '', title: '*', perm: 'dorm.read' },     // 不在清單上的目標 → 其他
+  { rule_id: 'R022', ladder: 'store', dept: '', title: '*', perm: 'dorm.read' }   // 門市全部職稱 → 其他
+]), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff'], counts: { 'store||sm': 9 } }, ORG_B);
+
+t('身分清單：分組與順序', () => {
+  const g = L.identityGroups(DATA_B);
+  assert.deepEqual(g.map((x) => x.id), ['store', 'office', 'hq-dept', 'hq-top', 'other']);
+  assert.deepEqual(g[0].items.map((x) => x.name), ['計時同仁', '店長']);   // 依職級
+  assert.deepEqual(g[2].items.map((x) => x.key), ['hq|hr|*', 'hq|hr|hm', 'hq|ops|*', 'hq|ops|hm']);
+  assert.deepEqual(g[2].items.map((x) => x.name), ['人資部・全部職稱', '人資部・部門主管', '營運部・全部職稱', '營運部・部門主管']);
+  assert.deepEqual(g[3].items.map((x) => x.key), ['hq||gm', 'hq||ceo']);
+});
+t('身分清單：現有規則目標不在清單 → 放「其他」不得隱藏', () => {
+  const other = L.identityGroups(DATA_B).find((x) => x.id === 'other');
+  assert.deepEqual(other.items.map((x) => x.key).sort(), ['hq||*', 'store||*']);
+  assert.equal(other.items.find((x) => x.key === 'store||*').name, '門市・全部職稱');
+  // 每條規則的目標都能在清單裡找到
+  const all = L.identityGroups(DATA_B).flatMap((x) => x.items.map((i) => i.key));
+  RULES.concat(DATA_B.rules).forEach((r) => assert.ok(all.includes(L.ruleKey(r)), L.ruleKey(r)));
+});
+t('身分清單：沒有多餘規則就沒有「其他」', () => assert.ok(!L.identityGroups(Object.assign({}, DATA_B, { rules: RULES })).some((x) => x.id === 'other')));
+
+t('開關狀態：已存＋暫存', () => {
+  assert.equal(L.isOn(DATA_B, {}, 'store||sm', 'audit.read.own'), true);
+  assert.equal(L.isOn(DATA_B, {}, 'store||sm', 'dorm.read'), false);
+  assert.equal(L.isOn(DATA_B, { 'store||sm|dorm.read': true }, 'store||sm', 'dorm.read'), true);
+  assert.equal(L.isOn(DATA_B, { 'store||sm|audit.read.own': false }, 'store||sm', 'audit.read.own'), false);
+});
+t('未儲存變更：跟已存相同的不算', () => {
+  const ch = L.pendingChanges(DATA_B, { 'store||sm|dorm.read': true, 'store||sm|audit.read.own': true });
+  assert.deepEqual(ch, [{ key: 'store||sm', perm: 'dorm.read', on: true }]);
+});
+t('payload：開＝add、關＝remove 規則 id', () => {
+  const p = L.buildPayload(DATA_B, [{ key: 'store||sm', perm: 'dorm.read', on: true }, { key: 'store||sm', perm: 'audit.read.own', on: false }, { key: 'hq|hr|hm', perm: 'platform.permmap', on: false }]);
+  assert.deepEqual(p.add, [{ ladder: 'store', dept: '', title: 'sm', perm: 'dorm.read' }]);
+  assert.deepEqual(p.remove, ['R001', 'R019']);
+});
+t('「也從…拿到」：人資主管同時命中人資部全部職稱', () => {
+  assert.deepEqual(L.alsoFrom(DATA_B, {}, 'hq|hr|hm', 'platform.permmap'), ['人資部・全部職稱']);
+  assert.deepEqual(L.alsoFrom(DATA_B, {}, 'hq|hr|*', 'platform.permmap'), []);          // 自己不算、且「全部職稱」不被單一職稱規則涵蓋
+  assert.deepEqual(L.alsoFrom(DATA_B, {}, 'hq|ops|hm', 'platform.permmap'), []);        // 別的部門不算
+  assert.deepEqual(L.alsoFrom(DATA_B, {}, 'store||sm', 'dorm.read'), ['門市・全部職稱']); // 其他分組的規則也算
+  assert.deepEqual(L.alsoFrom(DATA_B, {}, 'store||sm', 'audit.read.own'), []);
+});
+t('「也從…拿到」：跟著暫存狀態變', () => {
+  assert.deepEqual(L.alsoFrom(DATA_B, { 'hq|hr|*|platform.permmap': false }, 'hq|hr|hm', 'platform.permmap'), []);
+  assert.deepEqual(L.alsoFrom(DATA_B, { 'hq|ops|*|dorm.write': true }, 'hq|ops|hm', 'dorm.write'), ['營運部・全部職稱']);
+});
+t('變更摘要文字', () => {
+  const one = [{ key: 'store||sm', perm: 'dorm.read', on: true }];
+  assert.equal(L.changeSummary(DATA_B, one), '店長 多了『看宿舍清單』');
+  assert.equal(L.changeSummary(DATA_B, [{ key: 'store||sm', perm: 'audit.read.own', on: false }]), '店長 少了『看自己店稽核』');
+  const two = one.concat([{ key: 'hq|hr|hm', perm: 'dorm.write', on: true }]);
+  assert.equal(L.changeSummary(DATA_B, two), '店長 多了『看宿舍清單』、人資部・部門主管 多了『宿舍建約點交』');
+  const many = two.concat([{ key: 'hq||ceo', perm: 'dorm.read', on: true }]);
+  assert.equal(L.changeSummary(DATA_B, many), '店長 多了『看宿舍清單』、人資部・部門主管 多了『宿舍建約點交』 等 3 項');
+  assert.equal(L.changeSummary(DATA_B, []), '');
+});
+t('preview 名單：文字與截斷', () => {
+  const mk = (i, added, removed) => ({ emp_no: 'DZY' + String(i).padStart(3, '0'), name: '同仁' + i, added: added || [], removed: removed || [] });
+  const v1 = L.previewView([mk(1, ['dorm.read'], ['audit.read.own'])], 30);
+  assert.equal(v1.total, 1);
+  assert.equal(v1.rest, 0);
+  assert.deepEqual(v1.lines[0], { who: '同仁1（DZY001）', text: '多了 看宿舍清單；少了 看自己店稽核' });
+  const people = Array.from({ length: 45 }, (_, i) => mk(i + 1, ['dorm.read']));
+  const v2 = L.previewView(people, 30);
+  assert.equal(v2.lines.length, 30);
+  assert.equal(v2.rest, 15);
+  assert.equal(v2.total, 45);
+  assert.equal(L.previewView(people.slice(0, 30), 30).rest, 0);
+  assert.equal(L.previewView(null).total, 0);
+});
+t('搜尋結果的來源白話與「我能用的功能」一致', () => {
+  const profile = { title_name: '店長', dept_name: '人資部' };
+  [{ source: 'title' }, { source: 'dept' }, { source: 'exception', until: '2026-10-31' }, { source: 'exception' }, { source: 'implied' }, { source: 'role' }, { source: 'x' }]
+    .forEach((src) => assert.equal(L.sourceText(src, profile), B.sourceText(src, profile), src.source));
+  const items = [{ perm: 'audit.read.own', source: 'title', name_zh: '稽核：我的門市' }, { perm: 'platform.login', source: 'role' }, { perm: 'dorm.read', source: 'exception', until: '2026-10-31' }, { perm: 'dorm.read', source: 'title' }];
+  const mine = B.permLines(items, profile).map((x) => [x.perm, x.name, x.texts]);
+  const who = L.whoLines(Object.assign({ sources: items }, profile)).map((x) => [x.perm, x.name, x.texts]);
+  assert.deepEqual(who, mine);
+  for (const [s, perms] of [['all', []], ['none', []], [[], []], [['a'], []], [['a', 'b'], ['audit.read.brand']]]) assert.equal(L.scopeLabel(s, perms), B.scopeText(s, perms));
+});
+t('每個功能都有白話說明', () => L.FEATURE_ORDER.forEach((p) => assert.ok(L.FEATURE_DESC[p], p)));
+
 
 if (fails.length) {
   console.log(`FAIL ${fails.length} 項：`);
