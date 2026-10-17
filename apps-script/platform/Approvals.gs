@@ -563,7 +563,8 @@ function apvNormalize_(c, type, rawBody, rawFiles, rawSubject, forms, existing) 
   if (type === 'personnel') {
     var kind = b.kind;
     if (['leave', 'transfer', 'raise'].indexOf(kind) === -1) return bad('kind');
-    var subj = apvFindPerson_(c, existing ? existing.subject : rawSubject);
+    // 前端「本人送離職」不帶 subject（前端不知道自己的 DZY 編號）→ 空的視為送件人本人
+    var subj = apvFindPerson_(c, existing ? existing.subject : (apvStr_(rawSubject) ? rawSubject : c.me.emp));
     if (!subj || ['unclaimed', 'pending', 'active'].indexOf(subj.status) === -1) return apvFail_('bad_request', '找不到這位對象同仁');
     if (typeof b.effective !== 'string' || !apvDateOk_(b.effective)) return bad('effective');
     var reason = apvText_(b.reason, 1, 200);
@@ -763,7 +764,7 @@ function handleApvRoutePreview_(token, payload) {
     amount = calc.amount;
   } else {
     kind = payload.kind;
-    subject = apvFindPerson_(c, payload.subject);
+    subject = apvFindPerson_(c, apvStr_(payload.subject) ? payload.subject : c.me.emp);
     if (['leave', 'transfer', 'raise'].indexOf(kind) === -1 || !subject) return apvFail_('bad_request', '缺少 kind 或 subject');
     f.subject = subject.emp;
     if (!apvCanSendPersonnel_(kind, c.me, subject, apvRCtx_(c, f), c.isStaffPerm)) return apvForbidden_('你不能送這位同仁的這種人事異動單');

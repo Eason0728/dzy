@@ -399,6 +399,8 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const lv = pv('DZY902', { type: 'personnel', kind: 'leave', subject: 'DZY901' });
   ok(lv.ok && lv.data.steps[0].role === 'self_sign' && lv.data.steps[0].candidates[0].emp === 'DZY901' && lv.data.steps[1].role === 'direct', '預覽主管送離職：本人簽名＋直屬主管', lv);
   ok(pv('DZY915', { type: 'personnel', kind: 'transfer', subject: 'DZY901' }).error === 'forbidden', '預覽：一般同仁不能送別人的調職');
+  const selfLv = pv('DZY901', { type: 'personnel', kind: 'leave' });
+  ok(selfLv.ok && selfLv.data.steps[0].role === 'self_sign' && selfLv.data.steps[0].emp === 'DZY901' && selfLv.data.steps[1].role === 'direct', '預覽本人送離職、不帶 subject → 視為本人（本人簽名當場完成＋直屬主管）', selfLv);
   ok(FORMS(app).length === 0, '預覽不寫任何單');
 }
 
@@ -592,6 +594,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   // 一般同仁：只能送自己的離職
   ok(send('DZY915', 'transfer', 'DZY901').error === 'forbidden', '一般同仁不能送別人的調職');
   ok(send('DZY915', 'leave', 'DZY901').error === 'forbidden', '一般同仁不能送別人的離職');
+  { const r = send('DZY915', 'leave', undefined, pb('leave', { sign_file: upload(app, 'DZY915', 'sign') })); ok(r.ok && FORMS(app).some((f) => f.id === r.data.id && f.subject === 'DZY915'), '本人送離職不帶 subject → subject＝本人', r); }
   ok(send('DZY901', 'raise', 'DZY901', pb('raise')).error === 'forbidden', '一般同仁不能送自己的調薪');
   ok(send('DZY913', 'transfer', 'DZY901').error === 'forbidden', '跨店店長（墨竹亭）替小辛辣同仁送調職 → 擋');
   ok(send('DZY902', 'transfer', 'DZY999').error === 'bad_request', '對象不存在 → bad_request');
