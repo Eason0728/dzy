@@ -436,7 +436,7 @@ export function mountClockMap(el, env) {
           <div class="card-row"><div class="card-title">打卡對照</div><span class="text-muted">已生效 ${esc(data.confirmed_count)} 筆${data.built_at ? `｜上次建立 ${esc(data.built_at)}` : ''}</span></div>
           <p class="text-muted">把打卡系統裡的人，一對一對到管理系統的同仁。同一個人同一家店只能有一個生效編號。</p>
           <div class="card-row"><button type="button" class="btn btn-primary" data-act="build" data-role="build">建立打卡對照</button></div>
-          <div class="card-row" data-role="cm-tabs">${HQ_TABS.map(([k, n]) => `<button type="button" class="btn ${k === tab ? 'btn-primary' : 'btn-secondary'}" data-act="tab" data-t="${k}" data-role="cm-tab">${n}${counts[k] ? `（${counts[k]}）` : ''}</button>`).join(' ')}</div>
+          <div class="card-row row-wrap" data-role="cm-tabs">${HQ_TABS.map(([k, n]) => `<button type="button" class="btn ${k === tab ? 'btn-primary' : 'btn-secondary'}" data-act="tab" data-t="${k}" data-role="cm-tab">${n}${counts[k] ? `（${counts[k]}）` : ''}</button>`).join(' ')}</div>
         </div>`
       : `<div class="card"><div class="card-title">打卡對照</div>
           <p class="text-muted">打卡系統裡的人，系統猜他是你單位的哪位同仁。請核對：是本人按「對」，不是按「不對」（會轉給總部處理）。</p></div>`;

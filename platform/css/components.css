@@ -41,6 +41,11 @@
   gap: var(--space-3);
 }
 
+/* 一排按鈕／標籤放不下就換行（手機 375px 不撐出橫向捲軸）；疊在 .card-row 上用 */
+.card-row.row-wrap {
+  flex-wrap: wrap;
+}
+
 /* 可點擊的入口卡片（例如首頁的模組卡片） */
 .card-link {
   display: block;

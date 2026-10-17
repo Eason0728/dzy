@@ -733,6 +733,71 @@ await at('異常分析：資料全空時三張表都不崩潰，顯示「此區�
 });
 
 // ============================================================
+// G. 盤點抽查・我的門市（views/my.js）：多店切換、單店不出現下拉（2026-10-17 全面審視補驗）
+// ============================================================
+
+const { mountMy } = await import('../modules/audit-stock/views/my.js');
+
+function myRecords() {
+  return [
+    { record_key: 'sxl-gf_2026-07', store: 'sxl-gf', month: '2026-07', status: '已稽核', correct_rate: 90 },
+    { record_key: 'ck_2026-06', store: 'ck', month: '2026-06', status: '已稽核', correct_rate: 70 },
+    { record_key: 'ck_2026-07', store: 'ck', month: '2026-07', status: '輪休' }
+  ];
+}
+function myDetails() {
+  return [
+    { record_key: 'sxl-gf_2026-07', item: '光復的鴨血', verdict: '異常', reason: '損耗未記' },
+    { record_key: 'ck_2026-06', item: '央廚的豆干', verdict: '異常', reason: '單位混淆' }
+  ];
+}
+
+await at('盤點抽查・我的門市：auditScope 多店 → 有店別下拉，預設第一家，切換後歷史／被抓到的問題／標籤都跟著換', async () => {
+  resetAll();
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx({ user: { id: 'u010', name: '督導', role: 'staff', node: '' }, auditScope: ['sxl-gf', 'ck'], viewId: 'my' });
+  state.apiHandlers.getAll = () => okGetAll({ config: makeConfig(), records: myRecords(), details: myDetails() });
+  const unmount = mountMy(root, ctx);
+  await flush();
+  const rows = () => findAllDescendants(root, (n) => n.getAttribute && n.getAttribute('data-role') === 'history-row');
+  const sel = byId(root, 'my-store-select');
+  assert.ok(sel, '多店要有店別下拉');
+  assert.equal(sel.children.length, 2, '下拉兩家店');
+  assert.equal(rows().length, 1, '預設第一家（光復）只有 1 筆歷史');
+  assert.ok(deepText(byId(root, 'my-store-label')).includes('小辛辣光復'), '標籤顯示光復：' + deepText(byId(root, 'my-store-label')));
+  assert.ok(deepText(byId(root, 'my-issues-list')).includes('光復的鴨血'), '被抓到的問題是光復的');
+  assert.ok(!deepText(root).includes('央廚的豆干'), '光復畫面看不到央廚的問題');
+  fireChange(sel, 'ck');
+  await flush();
+  assert.equal(rows().length, 2, '切到央廚後 2 筆歷史');
+  assert.ok(deepText(byId(root, 'my-store-label')).includes('央廚'), '標籤換成央廚');
+  assert.ok(deepText(byId(root, 'my-rate')).includes('輪休'), '央廚最新一個月是輪休：' + deepText(byId(root, 'my-rate')));
+  assert.ok(!deepText(root).includes('光復的鴨血'), '切到央廚後看不到光復的問題');
+  fireChange(sel, 'sxl-gf');
+  await flush();
+  assert.equal(rows().length, 1, '切回光復 1 筆');
+  assert.ok(deepText(byId(root, 'my-issues-list')).includes('光復的鴨血'), '切回光復，問題回來');
+  unmount();
+});
+
+await at('盤點抽查・我的門市：單店（auditScope 一家）不出現下拉；node 單店同樣不出現', async () => {
+  resetAll();
+  for (const over of [{ user: { id: 'u011', name: '店長', role: 'staff', node: '' }, auditScope: ['ck'] }, { user: { id: 'u012', name: '店長', role: 'storelead', node: 'ck' } }]) {
+    resetAll();
+    const root = new FakeElement('div');
+    const { ctx, state } = makeFakeCtx(Object.assign({ viewId: 'my' }, over));
+    // 單店時資料已由平台層／mini 裁成只剩自己店，這裡照實餵裁好的資料
+    state.apiHandlers.getAll = () => okGetAll({ config: makeConfig(), records: myRecords().filter((r) => r.store === 'ck'), details: myDetails().filter((d) => d.record_key.startsWith('ck')) });
+    const unmount = mountMy(root, ctx);
+    await flush();
+    assert.equal(byId(root, 'my-store-select'), null, '單店不出現店別下拉');
+    assert.equal(findAllDescendants(root, (n) => n.getAttribute && n.getAttribute('data-role') === 'history-row').length, 2, '只看到央廚 2 筆');
+    assert.ok(!deepText(root).includes('光復的鴨血'), '看不到別店的問題');
+    unmount();
+  }
+});
+
+// ============================================================
 // F. 變異測試用的目標函式，直接匯出驗證（見任務回報「變異測試」段落，
 //    這裡只是把已經測過的行為再摘要驗一次，方便和回報對照）
 // ============================================================
