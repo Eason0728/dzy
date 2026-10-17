@@ -1,11 +1,11 @@
 /**
- * modules/perms/views/ex.js — 個別例外分頁（admin；spec §7.1-2）
+ * modules/perms/views/ex.js — 個別例外分頁（admin；人資主管只看得到、只能設 store.void／att.extra；spec §7.1-2、docs/approver/spec.md §13.1）
  * 清單：同仁、功能、多給／拿掉、到期、原因、建立者；過期與已撤銷灰掉；可撤銷。
  * 新增：同仁（編號或姓名，名單取自 staffList）、功能、模式、到期日（可空）、原因（必填 ≤50 字）。
  */
 'use strict';
 
-import { FEATURE_ORDER, featureName, errorText, exStatus, untilText, sortExItems, resolvePerson, removeAuditReadHint } from '../lib.js';
+import { FEATURE_ORDER, HR_EX_FEATURES, featureName, errorText, exStatus, untilText, sortExItems, resolvePerson, removeAuditReadHint } from '../lib.js';
 
 export function mountEx(el, ctx) {
   const esc = ctx.fmt.esc;
@@ -45,7 +45,9 @@ export function mountEx(el, ctx) {
       el.innerHTML = '<div class="card"><div class="card-title">權限設定還沒初始化</div><p class="text-muted">請先到「對照表」分頁按「初始化」。</p></div>';
       return;
     }
-    const featOpts = FEATURE_ORDER.map((p) => `<option value="${esc(p)}">${esc(featureName(p))}</option>`).join('');
+    // 人資主管（沒有 platform.permex）只能選兩碼；admin 全部。後端 permExList 也只回他看得到的那兩碼的例外
+    const featList = ctx.can('platform.permex') ? FEATURE_ORDER : HR_EX_FEATURES;
+    const featOpts = featList.map((p) => `<option value="${esc(p)}">${esc(featureName(p))}</option>`).join('');
     const staffOpts = staff.map((p) => `<option value="${esc(p.emp_no)} ${esc(p.name)}"></option>`).join('');
     el.innerHTML = `
       <form class="card stack" data-role="ex-form" novalidate>

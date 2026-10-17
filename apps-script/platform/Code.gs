@@ -36,7 +36,9 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'permStoreGet', 'permStoreSave', 'myPerms', 'permAuditList', 'permAuditSeen', 'permWho',
   // 2026-10-18：第三期表單簽核（Approvals.gs；契約 docs/approvals/api.md）。jobs 專用的全域函式（apvFile*_／apvDigest_ 等）刻意不在這裡
   'apvSetup', 'apvThresholdGet', 'apvThresholdSave', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta',
-  'apvSubmit', 'apvResubmit', 'apvWithdraw', 'apvDecide', 'apvSign', 'apvHandle', 'apvReassign', 'apvVoid'];
+  'apvSubmit', 'apvResubmit', 'apvWithdraw', 'apvDecide', 'apvSign', 'apvHandle', 'apvReassign', 'apvVoid',
+  // 2026-10-18：門市營運系統（StoreOps.gs）；永遠不可列進 minikit readActions 與 dryrun READ_ACTIONS
+  'svcStoreRedeem', 'svcStoreWho', 'svcStoreRoster'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -217,6 +219,9 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'apvHandle': return handleApvHandle_(token, payload);
     case 'apvReassign': return handleApvReassign_(token, payload);
     case 'apvVoid': return handleApvVoid_(token, payload);
+    case 'svcStoreRedeem': return handleSvcStoreRedeem_(payload);
+    case 'svcStoreWho': return handleSvcStoreWho_(payload);
+    case 'svcStoreRoster': return handleSvcStoreRoster_(payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };

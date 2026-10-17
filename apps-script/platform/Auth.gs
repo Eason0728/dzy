@@ -819,6 +819,10 @@ function authPermsWithGate_(role, gate) {
   if (gate && gate.bulletin && perms.indexOf('platform.bulletin') === -1 && perms.indexOf('*') === -1) {
     perms = perms.concat(['platform.bulletin']);
   }
+  // 考勤管理選單（StoreOps.gs storeAttGate_）：衍生權限，不寫進 roles
+  if (gate && gate.att && perms.indexOf('platform.att') === -1 && perms.indexOf('*') === -1) {
+    perms = perms.concat(['platform.att']);
+  }
   return perms;
 }
 

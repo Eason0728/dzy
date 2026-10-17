@@ -204,7 +204,7 @@ export function alertRows(d, viewer) {
   if (v.isHq) add('transfer_failed', 'error', n(d.transfer_failed), '{n} 位調店同仁的新店打卡沒開成功', 'clockmap', { t: 'all' });
   const pc = d.pending_confirm && Number(d.pending_confirm.count) ? Number(d.pending_confirm.count) : 0;
   add('pending_confirm', 'warn', pc, '{n} 筆打卡對照等你確認', go('clockmap', 'clock'), { t: 'suggested' });
-  add('no_home_map', 'warn', n(d.no_home_map), '{n} 位同仁還沒有主店打卡編號', go('list', 'team'), { f: 'nohome' });
+  add('no_home_map', 'warn', n(d.no_home_map), '{n} 位同仁還沒有主店打卡編號（沒有打卡對照的人無法考勤）', go('list', 'team'), { f: 'nohome' });
   add('name_diff', 'warn', n(d.name_diff), '{n} 筆打卡姓名和管理系統不同，請到打卡端改成一致', go('list', 'team'), { f: 'namediff' });
   if (v.isHq) {
     add('payroll_diff', 'warn', n(d.payroll_diff), '{n} 筆薪資主檔姓名和打卡名冊不同，請會計改成一致', 'clockmap', { t: 'needs' });

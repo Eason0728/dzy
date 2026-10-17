@@ -280,5 +280,8 @@ ok(/const unitOf = \(x\) => x\.unit_name \|\| x\.unit \|\| '單位未填（未�
   ok(!isReadAction('platform', 'clockSetHome', { emp_no: 'DZY001', store_code: 'hq' }), 'dryrun 不放行 clockSetHome（是寫入）');
 }
 
+ok(L.alertRows({ no_home_map: [1] }, hq).some((r) => r.text.includes('沒有打卡對照的人無法考勤')), 'no_home_map 提醒文字說明後果（無法考勤）');
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
+

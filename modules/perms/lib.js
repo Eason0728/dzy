@@ -4,8 +4,11 @@
  */
 'use strict';
 
-/** 可給的 9 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
-export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap'];
+/** 可給的 11 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
+export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra'];
+
+/** 人資主管（platform.permmap 但不是 admin）在個別例外只能動的兩碼；對照後端 STORE_HR_GRANTABLE，真正擋的是後端，前端只是不顯示選不了的 */
+export const HR_EX_FEATURES = ['store.void', 'att.extra'];
 
 export const FEATURE_NAMES = {
   'audit.read.own': '看自己店稽核',
@@ -16,7 +19,9 @@ export const FEATURE_NAMES = {
   'dorm.write': '宿舍建約點交',
   'platform.staff': '同仁名單',
   'platform.users': '人員管理',
-  'platform.permmap': '改權限對照表'
+  'platform.permmap': '改權限對照表',
+  'store.void': '收支作廢',
+  'att.extra': '額外考勤核定'
 };
 
 /** 其他會出現在 myPerms／異動裡的碼 */
@@ -225,7 +230,9 @@ export const FEATURE_DESC = {
   'dorm.write': '建立合約、退宿點交、終止',
   'platform.staff': '新增、離職、匯入同仁',
   'platform.users': '管理系統帳號（BOSS 這類）',
-  'platform.permmap': '改這一頁'
+  'platform.permmap': '改這一頁',
+  'store.void': '門市現金收支可以作廢（店長預設有；其他人要在個別例外給）',
+  'att.extra': '額外核定本單位所有要考勤的人（只能在個別例外給，可設到期日）'
 };
 
 /** 總部高層（不分部門）的職稱代碼 */

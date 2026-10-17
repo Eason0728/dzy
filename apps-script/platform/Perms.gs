@@ -9,7 +9,8 @@
 // ============================================================
 
 // 可給的權限碼白名單（順序即畫面順序）
-var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap'];
+var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap',
+  'store.void', 'att.extra'];   // 2026-10-18 營運系統：收支作廢、額外考勤核定（人資主管也能設這兩碼的個別例外，PermActions.gs）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
 var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff'];
@@ -40,6 +41,7 @@ var PERM_DEFAULT_RULES = (function () {
   ['ceo', 'gm', 'chair'].forEach(function (t) { add('hq', '', t, ['audit.read', 'dorm.read']); });
   add('hq', 'hr', '*', ['platform.staff', 'dorm.read', 'dorm.write']);
   add('hq', 'hr', 'hm', ['platform.permmap']);
+  add('store', '', 'sm', ['store.void']);   // 2026-10-18：店長預設可作廢收支（第 20 條；已初始化的環境不會自動補，見 StoreOps.gs storeopsPermSeed_）
   return out;
 })();
 
@@ -448,7 +450,8 @@ var PERM_NAMES = {
   'audit.write': '稽核：填單與門市管理', 'dorm.read': '宿舍：查看', 'dorm.write': '宿舍：建約與點交',
   'platform.staff': '同仁名單', 'platform.users': '人員管理', 'platform.permmap': '權限設定',
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
-  'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能'
+  'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
+  'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理'
 };
 function permName_(code) { return PERM_NAMES[code] || code; }
 

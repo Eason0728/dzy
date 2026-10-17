@@ -850,7 +850,9 @@ function stfLoginGate_(userId) {
   // 衍生權限 platform.review 的「審核者資格」部分：改用新規則（stfReviewScope_）。人資／admin 由 Auth.gs 另外補
   // bulletin＝公告管理權限（BULLETIN_ADMINS 有勾、且在職）→ Auth.gs 補 platform.bulletin
   var bulletin = status === 'active' && stfBulletinAdmins_().indexOf(stfNormEmp_(hit.values[STF_COL.emp_no])) !== -1;
-  return { review: !!stfReviewScope_(hit.values, stfReadOrg_()), bulletin: bulletin };
+  // att＝衍生權限 platform.att（StoreOps.gs storeAttGate_；Auth.gs authPermsWithGate_ 補上）
+  var att = typeof storeAttGate_ === 'function' ? storeAttGate_(hit.values) : false;
+  return { review: !!stfReviewScope_(hit.values, stfReadOrg_()), bulletin: bulletin, att: att };
 }
 
 /**
