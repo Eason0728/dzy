@@ -901,5 +901,21 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(post(app, 'DZY901', 'apvSubmit', { client_id: newCid(), type: 'expense', body: null, files: [f] }).error === 'bad_request', 'body 不是物件 → bad_request');
 }
 
+// ============================================================
+// 16. 審查員回報（2026-10-18）：撤回 step 一致、不相干的人探不到、檔案先 putting 再 uploaded、已開通對象不收紙本
+// ============================================================
+{ // 第 6 條：對象已開通 + 離職單帶紙本照 → bad_request
+  const app = freshApp();
+  const pb = (o) => Object.assign({ kind: 'leave', effective: '2026-11-01', from: { unit: 'mala-gf', title: 'ft', pay: 30000 }, to: {}, reason: '測試原因' }, o || {});
+  const paper = upload(app, 'DZY910');
+  const r = post(app, 'DZY910', 'apvSubmit', { client_id: newCid(), type: 'personnel', subject: 'DZY901', body: pb({ paper_files: [paper] }), files: [paper] });
+  ok(r.ok === false && r.error === 'bad_request' && /已開通/.test(r.message) && /線上簽名/.test(r.message), '（第6條）對象已開通、帶紙本簽名照 → bad_request「對象已開通帳號，請改用線上簽名」', r);
+  ok(FORMS(app).length === 0 && FILEROWS(app).find((x) => x.id === paper).state === 'uploaded', '（第6條）沒開單、照片原狀');
+  const ok1 = post(app, 'DZY910', 'apvSubmit', { client_id: newCid(), type: 'personnel', subject: 'DZY901', body: pb(), files: [] });
+  ok(ok1.ok, '（第6條）不帶紙本照 → 照常開單（走本人線上簽名）', ok1);
+  const unc = post(app, 'DZY910', 'apvSubmit', { client_id: newCid(), type: 'personnel', subject: 'DZY917', body: pb({ paper_files: [paper] }), files: [paper] });
+  ok(unc.ok, '（第6條）未開通對象帶紙本照 → 仍照規格收', unc);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

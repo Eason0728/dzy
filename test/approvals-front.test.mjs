@@ -187,6 +187,7 @@ const fmt = { datetime, esc };
   ok(lib.isConflict({ ok: false, error: 'conflict' }) && !lib.isConflict({ ok: false, error: 'forbidden' }), 'isConflict');
   eq(lib.errText({ ok: false, error: 'bad_request', data: { message: '需求日沒填' } }), '需求日沒填', 'bad_request 帶後端 message');
   ok(lib.errText({ ok: false, error: 'no_files' }).includes('收據'), 'no_files');
+  eq(lib.errText({ ok: false, error: 'bad_request', data: { message: '對象已開通帳號，請改用線上簽名' } }), '對象已開通帳號，請改用線上簽名', '已開通對象帶紙本簽名 → 顯示後端 message（submit.js 送出失敗時 msg＋toast 都用 errText）');
   const ids = new Set(Array.from({ length: 50 }, () => lib.newClientId()));
   ok(ids.size === 50 && [...ids].every((x) => /^[0-9a-f-]{36}$/.test(x)), 'client_id 是 UUID 且不重複');
   eq(lib.buildAlerts({ sign: [{ stuck: false }, {}], handle: [], exception: [] }), [{ level: 'warn', text: '待我簽 2 張', view: 'sign' }], '待我簽 2 張（黃）');

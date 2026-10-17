@@ -64,6 +64,6 @@ category 中文：repair 設備維修、food 食材臨時採購、misc 雜支、
 | `POST /platform/svc/apv-file-get` | `{token, id}` | `{ok:true, data:{mime, b64}}`；看不到 → `forbidden` |
 
 ## jobs 專用全域函式（不進 Code.gs 分派表）
-`apvFileAuthorize_(token)→{emp}`、`apvFileRegister_(emp, meta)→{id}`、`apvFileCanRead_(token, id)→{ok,path,mime}`、
-`apvFileSweepList_()／apvFileSweepDone_(ids)`、`apvBackupList_(afterSeq)→[{seq,id,path,sha256,form_id,rev}]`、
+`apvFileAuthorize_(token)→{emp}`、`apvFileRegister_(emp, meta)→{id,path}`（登記成 state `putting`，此時不能綁、不能讀、不進備份）、`apvFileCommit_(id)`（jobs 把檔 rename 到位後呼叫：`putting`→`uploaded`，重複呼叫無害）、`apvFileAbort_(id)`（rename 失敗後呼叫：`putting`→`deleted`，只動 putting）、`apvFileCanRead_(token, id)→{ok,path,mime}`、
+`apvFileSweepList_()（uploaded 超過 24 小時、putting 超過 1 小時）／apvFileSweepDone_(ids)`、`apvBackupList_(afterSeq)→[{seq,id,path,sha256,form_id,rev}]`、
 `apvDigest_()→{count, title, text}`、`apvReconcile_()→{skipped}`。

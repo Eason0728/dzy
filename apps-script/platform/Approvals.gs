@@ -609,7 +609,10 @@ function apvNormalize_(c, type, rawBody, rawFiles, rawSubject, forms, existing) 
         if (typeof b.sign_file !== 'string' || !APV_FILE_ID_RE.test(b.sign_file)) return apvFail_('file_invalid', '離職單本人要簽名');
         pb.sign_file = b.sign_file;
         groups.push({ ids: [b.sign_file], kind: 'sign' });
-      } else if (!subj.opened) {
+      } else if (subj.opened) {
+        // 已開通的對象要本人線上簽名；帶了紙本照不默默忽略（照片會變孤兒、使用者以為已附）
+        if (Array.isArray(b.paper_files) ? b.paper_files.length > 0 : (b.paper_files !== undefined && b.paper_files !== null)) return apvFail_('bad_request', '對象已開通帳號，請改用線上簽名');
+      } else {
         var paper = apvFileIds_(b.paper_files, 2);
         if (paper === null || paper.length < 1) return apvFail_('file_invalid', '對象沒有開通帳號，請附 1～2 張紙本簽名照');
         pb.paper_files = paper;
