@@ -75,7 +75,22 @@ let notifier = null;
 /** shell 啟動時註冊（ui.toast）；沒註冊就只寫 console。 */
 export function setDryRunNotifier(fn) { notifier = (typeof fn === 'function') ? fn : null; }
 
-export function notifyDryRun(backendId, action, payload) {
-  try { console.warn(`[${DRYRUN_MESSAGE}] ${backendId}/${action}`, payload); } catch { /* ignore */ }
+const SENSITIVE_KEY = /pass|secret|token|birthday|phone|addr|id_no/i;
+
+/** 遞迴遮罩：鍵名含密碼、金鑰、憑證、生日、電話、地址、身分證者一律換成 '***'。回傳新物件，不改原值。 */
+export function maskPayload(value, depth = 0) {
+  if (value === null || typeof value !== 'object') return value;
+  if (depth > 8) return '***';
+  if (Array.isArray(value)) return value.map((v) => maskPayload(v, depth + 1));
+  const out = {};
+  for (const k of Object.keys(value)) {
+    out[k] = SENSITIVE_KEY.test(k) ? '***' : maskPayload(value[k], depth + 1);
+  }
+  return out;
+}
+
+/** 只印 backendId 與 action；payload 不進主控台（參數保留是為了相容舊呼叫）。 */
+export function notifyDryRun(backendId, action, _payload) {
+  try { console.warn(`[${DRYRUN_MESSAGE}] ${backendId}/${action}`); } catch { /* ignore */ }
   if (notifier) { try { notifier(DRYRUN_MESSAGE); } catch { /* ignore */ } }
 }

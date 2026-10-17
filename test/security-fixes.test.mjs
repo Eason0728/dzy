@@ -110,6 +110,36 @@ await t('2a dryrun：寫入 action 不送出、回 ok+dryrun，並通知', async
   } finally { __setDryRun(null); setDryRunNotifier(null); }
 });
 
+await t('2a2 dryrun：主控台輸出與回傳都不帶明文 payload（密碼、電話等）', async () => {
+  await loginAs(storeLead);
+  mockFetch(() => ({ ok: true }));
+  const logs = [];
+  const orig = { warn: console.warn, log: console.log, info: console.info };
+  const grab = (...a) => logs.push(a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' '));
+  console.warn = grab; console.log = grab; console.info = grab;
+  __setDryRun(true);
+  const cases = [
+    ['saveUser', { id: 'U1', password: 'SECRET-PW-1' }, 'SECRET-PW-1'],
+    ['resetPassword', { id: 'U1', newPassword: 'SECRET-PW-2' }, 'SECRET-PW-2'],
+    ['staffEdit', { emp_no: 'E1', phone: '0900000111', address: 'ADDR-XYZ', birthday: '1990-01-01' }, '0900000111'],
+  ];
+  const results = [];
+  try {
+    for (const [a, p] of cases) results.push(await call('platform', a, p));
+  } finally { console.warn = orig.warn; console.log = orig.log; console.info = orig.info; __setDryRun(null); }
+  const all = logs.join('\n') + '\n' + JSON.stringify(results);
+  for (const [, , secret] of cases) assert.ok(!all.includes(secret), '不該出現明文：' + secret);
+  assert.ok(!all.includes('ADDR-XYZ') && !all.includes('1990-01-01'));
+  assert.ok(logs.some((l) => l.includes('platform') && l.includes('saveUser')), '仍要印出 backendId 與 action');
+  for (const r of results) { assert.equal(r.ok, true); assert.equal(r.dryrun, true); assert.equal(r.data.dryRun, true); }
+});
+
+await t('2a3 maskPayload：遞迴遮罩敏感鍵名', async () => {
+  const { maskPayload } = await import('../platform/dryrun.js');
+  const m = maskPayload({ a: 1, Password: 'x', nested: { token: 't', list: [{ phone: '09', ok: 1 }], id_no: 'A1' }, secret_key: 's' });
+  assert.deepEqual(m, { a: 1, Password: '***', nested: { token: '***', list: [{ phone: '***', ok: 1 }], id_no: '***' }, secret_key: '***' });
+});
+
 await t('2b dryrun：讀取白名單照常送出（含 staffImport preview:true）', async () => {
   await loginAs(storeLead);
   const calls = mockFetch((b) => ({ ok: true, data: {}, contracts: [], rooms: [] }));
