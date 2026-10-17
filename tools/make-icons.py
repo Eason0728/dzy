@@ -15,6 +15,7 @@ ICONS = {
     'dorm': ('#2f9a8a', f'<path {S} d="M38 84 L90 46 L142 84"/><path {S} d="M50 76 V134 H130 V76"/><path {S} d="M64 124 V100 H116 V124"/><path {S} d="M64 112 H116"/>'),
     'audit-stock': ('#24467a', f'<path {S} d="M50 70 L90 50 L130 70 L90 90 Z"/><path {S} d="M50 70 V112 L90 132 V90"/><path {S} d="M130 70 V96"/><path {S} d="M108 120 L118 130 L138 108"/>'),
     'audit-ops': ('#4a86b8', f'<rect {S} x="52" y="48" width="76" height="92" rx="10"/><path {S} d="M74 44 H106 V58 H74 Z"/><path {S} d="M66 84 L72 90 L82 78 M92 84 H114"/><path {S} d="M66 112 L72 118 L82 106 M92 112 H114"/>'),
+    'approvals': ('#8a5a2b', f'<path {S} d="M56 44 H104 L128 68 V136 H56 Z"/><path {S} d="M104 44 V68 H128"/><path {S} d="M70 100 L82 112 L106 88"/><path {S} d="M70 126 H114"/>'),
 }
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'icons')

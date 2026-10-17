@@ -142,6 +142,9 @@ class MockBackend:
 
     # ---- 依網址判斷是哪支後端 ----
     def backend_of(self, url):
+        # 第三期照片路由：<平台主機>/platform/svc/apv-file-put|get（platform/config.js 的 /api 換成 /svc/…）
+        if url.startswith(self.urls['platform'][:-len('/api')] + '/svc/apv-file-'):
+            return 'svc'
         for b, u in self.urls.items():
             if url.startswith(u):
                 return b
@@ -177,6 +180,7 @@ class MockBackend:
                 q = parse_qs(urlparse(req.url).query)
                 body = {k: v[0] for k, v in q.items()}
             status = 200
+            self.last_url = req.url
             if backend == 'proxy':
                 status, resp = self.proxy(body)
             else:
@@ -235,6 +239,12 @@ class MockBackend:
         self.calls.append((backend, action))
         if backend == 'platform':
             return self.platform_action(action, body)
+        if backend == 'svc':
+            import apv_mock
+            if not hasattr(self, 'apv_state'):
+                self.apv_state = apv_mock.new_state()
+            self.apv_state.setdefault('svc_calls', []).append(body.get('kind') or body.get('id'))
+            return apv_mock.file_dispatch(self.apv_state, self.last_url, body)
         if backend == 'audit':
             if body.get('code') != AUDIT_SECRET:
                 return {'ok': False, 'error': '通行碼錯誤（mock）'}
@@ -273,7 +283,20 @@ class MockBackend:
         staff_res = self.staff_action(action, body)
         if staff_res is not None:
             return staff_res
+        apv_res = self.apv_action(action, payload, body.get('token'))
+        if apv_res is not None:
+            return apv_res
         return {'ok': False, 'error': '未知的 platform action（mock）：' + action}
+
+    # ---- 第三期表單簽核（2026-10-18）：有狀態的假後端在 apv_mock.py，形狀照 docs/approvals/api.md ----
+    def apv_action(self, action, payload, token=''):
+        if not action.startswith('apv'):
+            return None
+        import apv_mock
+        if not hasattr(self, 'apv_state'):
+            self.apv_state = apv_mock.new_state()
+        who = (token or '').replace('e2e-token-', '')
+        return apv_mock.dispatch(self.apv_state, action, payload, who)
 
     # ---- 個人帳號管理（2026-10-11）：有狀態的極簡模擬，只為了驗前端接線 ----
     # 規則正本與完整邏輯在 apps-script/platform/Staff.gs（node 測試 test/staff.mock.test.mjs 驗 106 項）；

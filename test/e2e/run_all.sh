@@ -1,5 +1,5 @@
 #!/bin/bash
-# e2e 十二支總跑（task.md T4-1）：一次跑一支、間隔 20 秒——port 進 TIME_WAIT 會衝突，
+# e2e 十三支總跑（task.md T4-1）：一次跑一支、間隔 20 秒——port 進 TIME_WAIT 會衝突，
 # 不要圖快改成平行。任何一支失敗立刻停（set -e），Errno 48 是 port 沒釋放不是測試失敗。
 set -e
 cd "$(dirname "$0")"
@@ -17,6 +17,7 @@ TESTS=(
   e2e_t10_org.py
   e2e_t11_perms.py
   e2e_t12_mobile_width.py
+  e2e_t13_approvals.py
 )
 
 for i in "${!TESTS[@]}"; do
@@ -29,4 +30,4 @@ for i in "${!TESTS[@]}"; do
 done
 
 echo
-echo "e2e 十二支全部通過"
+echo "e2e 十三支全部通過"

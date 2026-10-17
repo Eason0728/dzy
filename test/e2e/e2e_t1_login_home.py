@@ -31,14 +31,14 @@ def main():
 
             page.wait_for_selector('[data-role="module-card"]')
             cards = page.locator('[data-role="module-card"]')
-            check(cards.count() == 8, 'admin 首頁有八組模組（2026-10-11 加同仁名單、我的資料；10-16 加公告專區；10-17 加權限設定）')
+            check(cards.count() == 9, 'admin 首頁有九組模組（2026-10-11 加同仁名單、我的資料；10-16 加公告專區；10-17 加權限設定；10-18 加表單簽核）')
 
             ids = [cards.nth(i).get_attribute('data-module') for i in range(cards.count())]
-            check(ids == ['users', 'perms', 'audit-stock', 'audit-ops', 'dorm', 'staff', 'me', 'bulletin'],
+            check(ids == ['users', 'perms', 'audit-stock', 'audit-ops', 'dorm', 'staff', 'me', 'bulletin', 'approvals'],
                   '卡片順序＝registry 順序，實際：%s' % ids)
 
             titles = page.locator('[data-role="module-card"] .card-title').all_inner_texts()
-            check(titles == ['人員管理', '權限設定', '盤點抽查', '營運稽核', '宿舍合約', '同仁名單', '我的資料', '公告專區'],
+            check(titles == ['人員管理', '權限設定', '盤點抽查', '營運稽核', '宿舍合約', '同仁名單', '我的資料', '公告專區', '表單簽核'],
                   '卡片標題顯示 manifest.name，實際：%s' % titles)
 
             # 圖示真的載入（不是 404 的裂圖）
@@ -46,7 +46,7 @@ def main():
                 """() => [...document.querySelectorAll('.module-icon')]
                        .map(img => img.complete && img.naturalWidth > 0)"""
             )
-            check(len(icons_ok) == 8 and all(icons_ok), '八顆模組圖示全部載入成功（naturalWidth > 0）：%s' % icons_ok)
+            check(len(icons_ok) == 9 and all(icons_ok), '九顆模組圖示全部載入成功（naturalWidth > 0）：%s' % icons_ok)
 
             # 待辦數字：fixture 只到 2026-07，本月（依系統日期）五店皆未稽核 → 盤點 badge = 5
             page.wait_for_function(
