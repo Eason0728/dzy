@@ -230,6 +230,7 @@ setDryRunNotifier((msg) => ui.toast(msg, 'warn'));
 function buildCtx(manifest, viewId, params) {
   return {
     user: auth.getUser(),
+    auditScope: auth.getAuditScope(), // 後端 audit_scope：'all'｜'none'｜店別代碼陣列｜null（舊後端）
     can: auth.can,
     api: sharedApi,
     ui,

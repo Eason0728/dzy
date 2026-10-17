@@ -103,9 +103,9 @@ async function trackByStore(ctx) {
 
     let scopedRecords = opsRecords;
     if (isStoreLead) {
-      const node = ctx.user && ctx.user.node;
-      if (!node) return null; // 店長沒有所屬節點＝資料算不出來（同 platform/api.js 的保守失敗方向）
-      scopedRecords = opsRecords.filter((r) => r.store === node);
+      const myStores = sharedApi.resolveMyStores(ctx, stores);
+      if (!myStores.length) return null; // 店長沒有所屬節點／範圍＝資料算不出來（同 platform/api.js 的保守失敗方向）
+      scopedRecords = opsRecords.filter((r) => myStores.indexOf(r.store) !== -1);
     }
 
     const latestByStore = {};

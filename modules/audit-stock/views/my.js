@@ -80,7 +80,10 @@ function pickLatestRecord(records) {
  */
 export function mountMy(root, ctx) {
   let destroyed = false;
-  const node = ctx.user && ctx.user.node;
+  let node = ctx.user && ctx.user.node;
+  let selectedStore = null; // 多店時使用者選的店
+  let storeSelectEl = null; // 多店才會建出來；單店維持零控制項
+  let lastData = null;
 
   const storeLabelEl = el('p', { id: 'my-store-label', class: 'field-hint' });
   const headerCard = el('div', { class: 'card' }, [
@@ -204,7 +207,40 @@ export function mountMy(root, ctx) {
     ]);
   }
 
-  function render(config, records, details) {
+  /** 多店（ctx.auditScope 是長度>1 的陣列）時，加店別下拉並只留所選那家的資料。 */
+  function applyStoreScope(config, records, details) {
+    const stores = config.stores || [];
+    const myStores = sharedApi.resolveMyStores(ctx, stores);
+    node = myStores.length ? (myStores.indexOf(selectedStore) !== -1 ? selectedStore : myStores[0]) : '';
+    if (myStores.length <= 1) {
+      if (storeSelectEl && storeSelectEl.parentNode) storeSelectEl.parentNode.removeChild(storeSelectEl);
+      storeSelectEl = null;
+      return { records, details };
+    }
+    if (!storeSelectEl) {
+      storeSelectEl = el('select', { id: 'my-store-select', class: 'input', 'aria-label': '選擇門市' });
+      storeSelectEl.addEventListener('change', () => {
+        selectedStore = storeSelectEl.value;
+        if (lastData) render(lastData.config, lastData.records, lastData.details);
+      });
+      headerCard.appendChild(storeSelectEl);
+    }
+    while (storeSelectEl.firstChild) storeSelectEl.removeChild(storeSelectEl.firstChild);
+    myStores.forEach((code) => {
+      const info = stores.find((x) => x.code === code);
+      storeSelectEl.appendChild(el('option', { value: code, text: info ? info.name : code }));
+    });
+    storeSelectEl.value = node;
+    const mine = (records || []).filter((r) => r.store === node);
+    const keys = new Set(mine.map((r) => r.record_key));
+    return { records: mine, details: (details || []).filter((d) => keys.has(d.record_key)) };
+  }
+
+  function render(config, allRecords, allDetails) {
+    lastData = { config, records: allRecords, details: allDetails };
+    const scoped = applyStoreScope(config, allRecords, allDetails);
+    const records = scoped.records;
+    const details = scoped.details;
     const stores = config.stores || [];
     const storeInfo = stores.find((s) => s.code === node);
     storeLabelEl.textContent = storeInfo
@@ -218,6 +254,7 @@ export function mountMy(root, ctx) {
 
     renderHistory(records, details);
 
+    while (rateEl.firstChild) rateEl.removeChild(rateEl.firstChild);
     const record = pickLatestRecord(records);
     while (issuesListEl.firstChild) issuesListEl.removeChild(issuesListEl.firstChild);
     while (trackListEl.firstChild) trackListEl.removeChild(trackListEl.firstChild);

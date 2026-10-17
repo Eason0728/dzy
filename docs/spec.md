@@ -215,6 +215,7 @@ export default {
 ```js
 ctx = {
   user:   { id: 'u001', name: '王小明', role: 'storelead', node: 'sxl-gf' },
+  auditScope: ['sxl-gf'],                       // 後端 audit_scope：'all'｜'none'｜店別代碼陣列｜null（舊後端）；稽核店清單用它，沒有才退回 user.node
   can:    (perm) => boolean,                    // 例 ctx.can('audit.write')
   api:    { call(moduleId, action, payload) },  // 見 4.8
   ui:     { toast, loading, confirm, dialog, signaturePad },
