@@ -20,7 +20,7 @@ from playwright.sync_api import sync_playwright
 
 PORT = 8802
 
-LOCKED = ['platform.users', 'platform.permmap']
+LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff']
 # 預設規則（Perms.gs PERM_DEFAULT_RULES，19 條）
 DEFAULT_RULES = (
     [('store', '', 'sm', 'audit.read.own')]
@@ -265,8 +265,8 @@ def main():
             check('品牌辦公室・區督導' in row('audit.read.brand').inner_text(), 'chip「品牌辦公室・區督導」')
             check('總部・人資部・全部職稱' in row('platform.staff').inner_text(), 'chip「總部・人資部・全部職稱」')
             check('總部・全部部門・執行長' in row('audit.read').inner_text(), 'chip「總部・全部部門・執行長」')
-            check(ad.locator('[data-role="feature-row"][data-locked="1"]').count() == 2, '鎖住的兩列有標記')
-            check(ad.locator('[data-role="feature-row"][data-locked="1"] [data-act="add"]:not([disabled])').count() == 2, 'admin 鎖住的兩列仍可新增（不灰掉）')
+            check(ad.locator('[data-role="feature-row"][data-locked="1"]').count() == 4, '鎖住的四列有標記')
+            check(ad.locator('[data-role="feature-row"][data-locked="1"] [data-act="add"]:not([disabled])').count() == 4, 'admin 鎖住的四列仍可新增（不灰掉）')
             ad.screenshot(path=os.path.join(SHOTS, 'perms-map.png'), full_page=True)
 
             # 新增對象：階梯→（總部才有）部門→職稱
@@ -407,11 +407,11 @@ def main():
             hr.wait_for_selector('[data-role="feature-row"]')
             check(tabs(hr) == ['對照表'], '★人資主管只有「對照表」分頁，實際：%s' % tabs(hr))
             lk = hr.locator('[data-role="feature-row"][data-locked="1"]')
-            check(lk.count() == 2, '鎖住的兩列仍顯示')
-            check(lk.locator('[data-act="add"][disabled]').count() == 2 and lk.locator('[data-act="del"]').count() == 0, '★鎖住的兩列對非 admin：新增鈕 disabled、chip 沒有刪除鈕')
-            check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 2, '鎖列有說明「只有系統管理員能改」')
+            check(lk.count() == 4, '鎖住的四列仍顯示')
+            check(lk.locator('[data-act="add"][disabled]').count() == 4 and lk.locator('[data-act="del"]').count() == 0, '★鎖住的四列對非 admin：新增鈕 disabled、chip 沒有刪除鈕')
+            check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 4, '鎖列有說明「只有系統管理員能改」')
             check('opacity' in (lk.first.get_attribute('style') or ''), '鎖列灰掉')
-            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="add"]:not([disabled])').count() == 7, '其餘 7 列可編輯')
+            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="add"]:not([disabled])').count() == 5, '其餘 5 列可編輯')
             check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="del"]').count() > 0, '未鎖的 chip 有刪除鈕')
             # 首頁：非 admin 沒有權限異動／店別提醒
             hr.evaluate("() => { window.location.hash = '#/home'; }")

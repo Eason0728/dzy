@@ -40,6 +40,9 @@ var USR_MSG_PASSWORD_SAME = '新密碼不能與目前密碼相同';
 var USR_MSG_STAFF_ELSEWHERE = '同仁帳號請到同仁名單操作';
 var USR_MSG_ADMIN_ONLY = '只有系統管理員能建立、修改或停用管理員帳號';
 var USR_MSG_SELF_ROLE = '不能修改自己的角色';
+var USR_MSG_SELF_DEACTIVATE = '不能停用自己的帳號';
+var USR_MSG_LAST_ADMIN = '至少要保留一位啟用中的系統管理員';
+var USR_MSG_SELF_USERNAME = '不能修改自己的帳號名稱';
 var USR_MSG_USERNAME_TOO_LONG = '帳號最多 64 個字';
 var USR_MSG_USERNAME_BAD_START = '帳號不能用 = + - @ 開頭';
 // minikit 假試算表會把純數字字串轉成數字，存一次就登不進去（GPT 複審第 5 條，2026-10-12）
@@ -67,14 +70,14 @@ function requirePlatformUsers_(token) {
   return { ok: true, user: me.data.user, perms: me.data.perms };
 }
 
-/** 超級角色：role 為 admin，或 roles 分頁該角色的 perms 含 '*'（全部功能） */
+/** 高權限角色：role 為 admin，或 perms 含 '*'，或與 PERM_LOCKED 有交集 */
 function usrRoleIsSuper_(role) {
   role = String(role === undefined || role === null ? '' : role).trim();
   if (!role) return false;
   if (role === 'admin') return true;
   var perms = getRolePerms_(role);
   if (perms.indexOf('*') !== -1) return true;
-  // 角色含任一鎖碼（platform.users／platform.permmap）也視為高權限：只有 admin 能指派、能動該帳號
+  // 高權限＝角色權限與 PERM_LOCKED（鎖碼，唯一一份清單）有交集：只有 admin 能指派、能動該帳號
   if (typeof PERM_LOCKED !== 'undefined') {
     return PERM_LOCKED.some(function (c) { return perms.indexOf(c) !== -1; });
   }
@@ -82,6 +85,17 @@ function usrRoleIsSuper_(role) {
 }
 
 /** 操作者是不是 role admin（有 platform.users 的非 admin 不能動管理員／全權角色的帳號） */
+// 「排除某帳號後」是否還有啟用中的 admin（停用或降級前檢查，避免鎖死整個系統）
+function usrOtherActiveAdminExists_(excludeId) {
+  var rows = readUsersRawRows_();
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][USR_COL.id]) === String(excludeId)) continue;
+    if (String(rows[i][USR_COL.role]) !== 'admin') continue;
+    if (String(rows[i][USR_COL.active]).toUpperCase() === 'TRUE') return true;
+  }
+  return false;
+}
+
 function usrActorIsAdmin_(auth) {
   return !!(auth && auth.user && String(auth.user.role) === 'admin');
 }
@@ -298,6 +312,12 @@ function handleSaveUser_(token, payload) {
     existingById = findUsrRowById_(id);
     if (!existingById) return { ok: false, error: USR_MSG_NOT_FOUND };
     if (String(existingById.values[USR_COL.role]) === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
+    var isSelfTarget = String(existingById.values[USR_COL.id]) === String(auth.user.id);
+    // 任何人（含 admin）都不能改自己的角色；改自己帳號名稱也只有 admin 可以
+    if (isSelfTarget && String(existingById.values[USR_COL.role]) !== role) return { ok: false, error: USR_MSG_SELF_ROLE };
+    if (isSelfTarget && !actorIsAdmin && normalizeUsername_(existingById.values[USR_COL.username]) !== normalizeUsername_(username)) return { ok: false, error: USR_MSG_SELF_USERNAME };
+    // 把最後一位啟用中的 admin 降級 → 拒絕
+    if (String(existingById.values[USR_COL.role]) === 'admin' && role !== 'admin' && !usrOtherActiveAdminExists_(existingById.values[USR_COL.id])) return { ok: false, error: USR_MSG_LAST_ADMIN };
     if (!actorIsAdmin) {
       // 非 admin 不能改管理員／全權角色的帳號，也不能改自己的角色
       var isSelfRow = String(existingById.values[USR_COL.id]) === String(auth.user.id);
@@ -362,6 +382,11 @@ function handleSetActive_(token, payload) {
   if (String(found.values[USR_COL.role]) === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
   if (!usrActorIsAdmin_(auth) && usrRoleIsSuper_(found.values[USR_COL.role])) return { ok: false, error: USR_MSG_ADMIN_ONLY };
 
+  if (!payload.active) {
+    if (String(found.values[USR_COL.id]) === String(auth.user.id)) return { ok: false, error: USR_MSG_SELF_DEACTIVATE };
+    if (String(found.values[USR_COL.role]) === 'admin' && !usrOtherActiveAdminExists_(found.values[USR_COL.id])) return { ok: false, error: USR_MSG_LAST_ADMIN };
+  }
+
   var sheet = SpreadsheetApp.getActive().getSheetByName(USR_SHEET_USERS);
   sheet.getRange(found.row, USR_COL.active + 1).setValue(payload.active ? 'TRUE' : 'FALSE');
   // 停用再啟用後，停用前簽的舊 token 不得復活（Fable 上線前審第 5 條）
@@ -399,6 +424,8 @@ function handleResetPassword_(token, payload) {
   sheet.getRange(found.row, USR_COL.salt + 1, 1, 2).setValues([[newSalt, newHash]]);
   // admin 幫人重設密碼後，對方所有舊登入失效（Fable 上線前審第 5 條）
   setTokenAfter_(found.row);
+  // 密碼已換：清掉該帳號所有來源與跨來源總計數的登入鎖（2026-10-17 複驗）
+  if (typeof clearLoginState_ === 'function') clearLoginState_(String(found.values[USR_COL.username]));
 
   return { ok: true, data: {} };
 }

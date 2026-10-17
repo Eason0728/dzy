@@ -27,11 +27,23 @@
   margin: 0 0 var(--space-2);
 }
 
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .card-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+}
+
+/* 一排按鈕／標籤放不下就換行（手機 375px 不撐出橫向捲軸）；疊在 .card-row 上用 */
+.card-row.row-wrap {
+  flex-wrap: wrap;
 }
 
 /* 可點擊的入口卡片（例如首頁的模組卡片） */
@@ -301,7 +313,8 @@ textarea.input:disabled {
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
   line-height: 1.8;
-  white-space: nowrap;
+  white-space: normal; /* 長文字換行，避免手機 375 寬撐出橫向捲動 */
+  max-width: 100%;
 }
 
 .tag-ok {

@@ -293,16 +293,16 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
 
   // 主要部門變動 → 自動從兼任移除（後台改）
   post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['it', 'training'] }, hrTok);
-  const mv = post(sb, 'staffEdit', { emp_no: crew.emp, brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' }, hrTok);
+  const mv = post(sb, 'staffEdit', { emp_no: crew.emp, brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' }, tok);
   ok(mv.ok && staffOf(app, crew.emp).extra_depts === 'training' && mv.data.staff.extra_depts.join() === 'training', 'T2 後台改主要部門 → 新主要部門自動從兼任移除', mv);
   // 同一次改主要部門又帶新的兼任：用新主要部門驗
-  ok(post(sb, 'staffEdit', { emp_no: crew.emp, dept: 'fin', extra_depts: ['it'] }, hrTok).ok && staffOf(app, crew.emp).dept === 'fin' && staffOf(app, crew.emp).extra_depts === 'it', 'T2 同次改主要部門＋兼任：以新主要部門驗證');
+  ok(post(sb, 'staffEdit', { emp_no: crew.emp, dept: 'fin', extra_depts: ['it'] }, tok).ok && staffOf(app, crew.emp).dept === 'fin' && staffOf(app, crew.emp).extra_depts === 'it', 'T2 同次改主要部門＋兼任：以新主要部門驗證');
   ok(post(sb, 'staffEdit', { emp_no: crew.emp, dept: 'it', extra_depts: ['it'] }, hrTok).ok === false, 'T2 反：同次把主要部門改成兼任中的部門 → 擋');
   // 核准（staffConfirm）搬 p_dept → 自動移除
   post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['it', 'training'] }, hrTok);
   const sp = post(sb, 'saveMyProfile', { brand: 'dzy', unit: 'dzy-hq', dept: 'training', title: 'hs', phone: '0933444555', address: '新竹市測試路二段2號' }, crew.token);
   ok(sp.ok, 'T2 （前置）同仁送出改部門', sp);
-  ok(post(sb, 'staffConfirm', { emp_no: crew.emp }, hrTok).ok && staffOf(app, crew.emp).dept === 'training' && staffOf(app, crew.emp).extra_depts === 'it', 'T2 核准改部門 → 新主要部門自動從兼任移除');
+  ok(post(sb, 'staffConfirm', { emp_no: crew.emp }, tok).ok && staffOf(app, crew.emp).dept === 'training' && staffOf(app, crew.emp).extra_depts === 'it', 'T2 核准改部門 → 新主要部門自動從兼任移除');
 
   // 欄位不存在 → 自動補；表頭不符 → 停
   const a2 = fresh();
@@ -419,7 +419,8 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   ok(appr('ceo', P.ckSm).ok && appr('ceo', P.deptHm).ok, 'T3 正：執行長核准 ck 店長與部門主管');
   ok(appr('opsHm', P.offOfs).ok && appr('opsHm', P.offOdir).ok, 'T3 正：營運部主管核准品牌辦公室同仁／總監');
   ok(appr('itHm', P.deptHs).ok, 'T3 正：資訊部主管核准資訊部同仁');
-  ok(post(sb, 'unitApprove', { emp_no: P.ceoP.emp }, hrTok).ok, 'T3 正：人資核准執行長');
+  ok(post(sb, 'unitApprove', { emp_no: P.ceoP.emp }, hrTok).code === 'perm_admin_only', 'T3 人資核准人資部執行長 → 改變 platform.staff，鎖碼擴大後只有 admin（2026-10-17）');
+  ok(post(sb, 'unitApprove', { emp_no: P.ceoP.emp }, tok).ok, 'T3 正：admin 核准人資部執行長');
   ok(post(sb, 'unitApprove', { emp_no: P.opsHsP.emp }, tok).ok, 'T3 正：admin 核准');
 
   // 衍生權限 platform.review 與新資格一致
@@ -978,7 +979,8 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const perms = (t) => post(sb, 'me', {}, t).data.perms;
   ok(perms(mgHm.token).indexOf('platform.review') === -1, 'M2 管理部 hm 沒有衍生權限 platform.review');
   ok(perms(login(app, itHm.emp, itHm.pw).data.token).indexOf('platform.review') !== -1 && perms(ceo.token).indexOf('platform.review') !== -1, 'M2 資訊部 hm、執行長仍有 platform.review');
-  ok(post(sb, 'unitApprove', { emp_no: pHs.emp }, ceo.token).ok && staffOf(app, pHs.emp).status === 'active', 'M2 正：執行長核准管理部同仁');
+  ok(post(sb, 'unitApprove', { emp_no: pHs.emp }, ceo.token).code === 'perm_admin_only', 'M2 執行長核准管理部同仁 → 會拿到 audit.write，鎖碼擴大後只有 admin');
+  ok(post(sb, 'unitApprove', { emp_no: pHs.emp }, tok).ok && staffOf(app, pHs.emp).status === 'active', 'M2 正：admin 核准管理部同仁');
   // 管理部同仁改部門的待審（目前身分在 mgmt）：別部門主管也不行
   ok(post(sb, 'unitApprove', { emp_no: pItHs.emp }, itHm.token).ok, 'M2 正：資訊部主管核准資訊部同仁');
   ok(sb.stfReviewNeed_(sb.stfReadOrg_(), 'dzy-hq', 'mgmt', 'hs').kind === 'exec' && sb.stfReviewNeed_(sb.stfReadOrg_(), 'dzy-hq', 'mgmt', 'hm').kind === 'exec', 'M2 stfReviewNeed_：管理部 hs／hm 都要執行長以上');

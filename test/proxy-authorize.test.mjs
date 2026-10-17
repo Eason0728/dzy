@@ -10,7 +10,9 @@ import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { READ_ACTIONS } from '../platform/dryrun.js';
+import { READ_ACTIONS, WRITE_ACTIONS } from '../platform/dryrun.js';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
@@ -446,6 +448,46 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   ok(post(sb, 'me', {}, sm.token).ok === true, '11m: 開關關 → staff 列不存在仍照舊放行（不改行為）');
   sb.PropertiesService.getScriptProperties().setProperty('PERMS_ON', 'true');
   ok(post(sb, 'me', {}, sm.token).ok === true, '11m2: PERMS_ON 不是恰好 \'1\'（\'true\'）→ 視為關');
+}
+
+// ============================================================
+// 12. 寫入白名單：寫入 action 不在表內一律 FORBIDDEN（即使有 <ns>.write）；前端用到的寫入 action 都在表內
+// ============================================================
+{
+  const { sb } = fresh();
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  const acc = tokenOf(sb, 'acc1', PW.acc);
+  const mgr = tokenOf(sb, 'mgr1', PW.mgr);
+  for (const act of ['delete', 'cleanupTest', 'setSetting']) {
+    const a = sb.proxyAuthorize_(boss, 'dorm', act);
+    ok(a.ok === false && a.code === 'FORBIDDEN' && !hasAnySecret(a), '12a: admin 打 dorm.' + act + '（不在寫入白名單）→ FORBIDDEN', a);
+    const m = sb.proxyAuthorize_(mgr, 'dorm', act);
+    ok(m.ok === false && m.code === 'FORBIDDEN', '12b: 有 dorm.write 的主管打 dorm.' + act + ' → FORBIDDEN', m);
+  }
+  const x = sb.proxyAuthorize_(acc, 'audit', 'dropEverything');
+  ok(x.ok === false && x.code === 'FORBIDDEN', '12c: 有 audit.write 打不在表內的 audit action → FORBIDDEN', x);
+
+  // 前端實際用到的寫入 action（掃原始碼字面值）都必須在 Auth.gs 白名單內
+  const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const walk = (d) => fs.readdirSync(path.join(ROOT, d), { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(path.join(d, e.name)) : (e.name.endsWith('.js') ? [path.join(d, e.name)] : []));
+  const used = { audit: new Set(), dorm: new Set() };
+  for (const f of walk('modules')) {
+    const src = read(f);
+    const ns = f.startsWith('modules/dorm') ? 'dorm' : (f.startsWith('modules/audit') ? 'audit' : null);
+    if (!ns) continue;
+    for (const m of src.matchAll(/(?:submit\(ctx,\s*|write\(|call\((?:BACKEND_ID|'dorm'|'audit'),\s*)'(\w+)'/g)) used[ns].add(m[1]);
+  }
+  for (const ns of ['audit', 'dorm']) {
+    ok(used[ns].size > 0, '12d: 掃到 ' + ns + ' 前端呼叫的 action（' + [...used[ns]].join(',') + '）');
+    for (const act of used[ns]) {
+      const inRead = sb.PROXY_READ_ACTIONS[ns].includes(act);
+      const inWrite = (sb.PROXY_WRITE_ACTIONS && sb.PROXY_WRITE_ACTIONS[ns] || []).includes(act);
+      ok(inRead || inWrite, '12e: 前端用到 ' + ns + '.' + act + ' 在白名單內', { inRead, inWrite });
+    }
+  }
+  ok(JSON.stringify(sb.PROXY_WRITE_ACTIONS && sb.PROXY_WRITE_ACTIONS.audit) === JSON.stringify(WRITE_ACTIONS.audit), '12f: audit 寫入清單兩邊（Auth.gs／dryrun.js）一致');
+  ok(JSON.stringify(sb.PROXY_WRITE_ACTIONS && sb.PROXY_WRITE_ACTIONS.dorm) === JSON.stringify(WRITE_ACTIONS.dorm), '12g: dorm 寫入清單兩邊一致');
 }
 
 if (failed > 0) {

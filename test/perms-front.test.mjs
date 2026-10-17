@@ -41,7 +41,7 @@ const RULES = [
   { rule_id: 'R007', ladder: 'hq', dept: '', title: 'ceo', perm: 'audit.read' },
   { rule_id: 'R002', ladder: 'office', dept: '', title: 'osv', perm: 'audit.read.brand' }
 ];
-const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap'] }, ORG);
+const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff'] }, ORG);
 
 t('對照表 9 列、順序固定（不跟後端 grantable 順序）', () => {
   const rows = L.featureRows(DATA);
@@ -52,7 +52,7 @@ t('對照表 9 列、順序固定（不跟後端 grantable 順序）', () => {
 });
 t('鎖住的兩列', () => {
   const locked = L.featureRows(DATA).filter((r) => r.locked).map((r) => r.perm);
-  assert.deepEqual(locked, ['platform.users', 'platform.permmap']);
+  assert.deepEqual(locked.slice().sort(), ['audit.write', 'platform.permmap', 'platform.staff', 'platform.users']);
 });
 t('同一列的 chip 依階梯→部門排', () => {
   const r = L.featureRows(DATA).find((x) => x.perm === 'audit.read');

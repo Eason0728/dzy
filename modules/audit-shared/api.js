@@ -184,3 +184,22 @@ export function isDryRun() {
     return false;
   }
 }
+
+/**
+ * 「我的門市」要看哪幾家店：
+ *  - ctx.auditScope 是陣列 → 用陣列（可能多店）
+ *  - 'all' → config.stores 全部代碼
+ *  - 否則退回 ctx.user.node（有值才 [node]）
+ * 純函式，不打後端。
+ *
+ * @param {object} ctx
+ * @param {Array<{code:string}>} stores config.stores
+ * @returns {string[]}
+ */
+export function resolveMyStores(ctx, stores) {
+  const sc = ctx && ctx.auditScope;
+  if (Array.isArray(sc)) return sc.map(String);
+  if (sc === 'all') return (stores || []).map((x) => x.code);
+  const node = ctx && ctx.user && ctx.user.node;
+  return node ? [node] : [];
+}

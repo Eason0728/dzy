@@ -439,14 +439,16 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   ok(threw && sheets.staff._data[0][2] === '姓名被人改過', 'A9-9 表頭被改過 → setupStaff 停下、不覆寫');
 })();
 
-// A10 上線第一次：後台打開名單自動建分頁、upsert roles.staff
+// A10 上線第一次：後台打開名單不自動建表（回空清單）；第一次「匯入」才建分頁、upsert roles.staff
 (() => {
   const { sb, sheets } = load(freshSeed(HASHER));
   const tok = adminToken(sb);
   ok(!sheets.staff, 'A10 開始時沒有 staff 分頁');
   const r = post(sb, 'staffList', {}, tok);
-  ok(r.ok && r.data.staff.length === 0 && sheets.staff && sheets.org && sheets.staff_log, 'A10 後台第一次打開名單自動建三個分頁');
-  ok(sheets.roles._rows().find((x) => x[0] === 'staff')[2] === 'platform.self', 'A10 roles.staff 同時 upsert');
+  ok(r.ok && r.data.staff.length === 0 && !sheets.staff && !sheets.org && !sheets.staff_log, 'A10 讀取名單：表還沒建 → 回空清單、不建任何分頁', r);
+  const im = post(sb, 'staffImport', { names: ['測試甲'] }, tok);
+  ok(im.ok && sheets.staff && sheets.org && sheets.staff_log, 'A10 第一次匯入才建三個分頁', im);
+  ok(sheets.roles._rows().find((x) => x[0] === 'staff')[2] === 'platform.self', 'A10 roles.staff 在建表時 upsert');
   const acc = post(sb, 'login', { username: 'acc1', password: 'fake-acc-pw-01' }).data.token;
   const { sb: sb2, sheets: sh2 } = load(freshSeed(HASHER));
   const acc2 = post(sb2, 'login', { username: 'acc1', password: 'fake-acc-pw-01' }).data.token;
@@ -555,7 +557,8 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   const tokHr = post(sb, 'login', { username: 'hr1', password: 'fake-hr-pw-01' }).data.token;
   const pHr = post(sb, 'unitPending', {}, tokHr);
   ok(pHr.ok && pHr.data.all_units === true && pHr.data.people.map((x) => x.name).sort().join() === '審庚,審辛', 'A12 人資看得到全部單位的待審', pHr);
-  ok(post(sb, 'unitApprove', { emp_no: emp('審庚') }, tokHr).ok, 'A12 ★人資可審（財務部沒有主管也能開通）');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審庚') }, tokHr).code === 'perm_admin_only', 'A12 人資審財務部同仁 → 會拿到 audit.write，鎖碼擴大後擋下（2026-10-17）');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審庚') }, tok).ok, 'A12 ★admin 可審（財務部沒有主管也能開通）');
   ok(post(sb, 'unitApprove', { emp_no: emp('審辛') }, tok).ok, 'A12 admin（*）也可審');
 
   // 紀錄只寫事件不寫個資
@@ -766,6 +769,24 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   const l4 = post(sb, 'login', { username: sm.emp, password: 'fake-sm-pw-001' });
   ok(l4.ok && !('secrets' in l4.data), 'P2a LEGACY_SECRETS=1 開關關：role staff 仍不回 secrets');
   ok(post(sb, 'me', {}, adminToken(sb)).data.secrets !== undefined, 'P2a LEGACY_SECRETS=1：系統帳號照舊回 secrets');
+})();
+
+// ============================================================
+// A15 非 admin 不能停用自己的 staff 列（2026-10-17 複驗）
+// ============================================================
+(() => {
+  const { sb, sheets } = fresh();
+  const tok = adminToken(sb);
+  const { emp } = seedAndClaim(sb, tok);
+  sheets.roles._data.push(['hr', '人資', 'platform.staff']);
+  const u = sheets.users._data.find((r) => r[1] === emp);
+  u[3] = 'hr'; // 這位同仁帳號改持 platform.staff（非 admin）
+  const tokSelf = post(sb, 'login', { username: emp, password: 'fake-staff-pw-1' });
+  ok(tokSelf.ok, 'A15 前置：持 platform.staff 的同仁可登入', tokSelf);
+  const r = post(sb, 'staffSetActive', { emp_no: emp, active: false }, tokSelf.data.token);
+  ok(r.ok === false && r.error === '不能停用自己', 'A15 ★非 admin 不能停用自己的 staff 列', r);
+  ok(staffRow(sheets, emp)[COL('status')] === 'active' && u[7] === 'TRUE', 'A15 停用被擋後狀態與帳號都沒動');
+  ok(post(sb, 'staffSetActive', { emp_no: emp, active: false }, tok).ok, 'A15 admin 仍可停用該同仁');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

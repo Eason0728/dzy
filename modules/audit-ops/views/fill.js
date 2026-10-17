@@ -173,7 +173,7 @@ export function mountFill(root, ctx, moduleState) {
   const statTrack = el('b', { text: '0' });
   const statPending = el('b', { id: 'ops-s-pending', text: '0' });
   const statRate = el('b', { text: '0%' });
-  const statsEl = el('div', { class: 'ops-stats card-row' }, [
+  const statsEl = el('div', { class: 'ops-stats card-row row-wrap' }, [
     el('span', { class: 'tag' }, [el('span', { text: '細項 ' }), statTotal]),
     el('span', { class: 'tag tag-ok' }, [el('span', { text: '合格 ' }), statPass]),
     el('span', { class: 'tag tag-danger' }, [el('span', { text: '未完成 ' }), statFail]),
@@ -182,7 +182,7 @@ export function mountFill(root, ctx, moduleState) {
     el('span', { class: 'tag' }, [el('span', { text: '合格率 ' }), statRate])
   ]);
 
-  const filtersEl = el('div', { class: 'ops-filters card-row' });
+  const filtersEl = el('div', { class: 'ops-filters card-row row-wrap' });
   const listEl = el('div', { class: 'ops-list', id: 'ops-list' });
 
   const messageEl = el('p', { id: 'ops-message', class: 'field-hint', hidden: 'true' });

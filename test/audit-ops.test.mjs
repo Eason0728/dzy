@@ -972,6 +972,59 @@ await at("index.js：ctx.viewId='my' 掛載店長視角，且完全沒有可寫�
 });
 
 // ============================================================
+// 我的門市・依職稱給權限的店長（node 空、auditScope 陣列）：不再顯示「未設定所屬節點」
+// ============================================================
+
+await at('我的門市・auditScope 單店：node 空也能顯示該店資料', async () => {
+  resetAll();
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  ctx.viewId = 'my';
+  ctx.user = { id: 'u010', name: '店長', role: 'staff', node: '' };
+  ctx.auditScope = ['sxl-gf'];
+  state.apiHandlers.getAll = () => okGetAll({
+    config: makeConfig(),
+    ops_records: [{ record_key: 'sxl-gf_2026-07', store: 'sxl-gf', month: '2026-07', status: '已稽核', pass_rate: 95 }],
+    ops_details: []
+  });
+  const unmount = auditOpsIndex.mount(root, ctx);
+  await flush();
+  const rows = findAllDescendants(root, (n) => n.getAttribute && n.getAttribute('data-role') === 'history-row');
+  assert.equal(rows.length, 1);
+  assert.equal(byId(root, 'my-store-label').textContent.includes('未設定'), false);
+  assert.equal(byId(root, 'my-store-select'), null, '單店不出現店別下拉');
+  unmount();
+});
+
+await at('我的門市・auditScope 多店：預設第一家，可用下拉切換', async () => {
+  resetAll();
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  ctx.viewId = 'my';
+  ctx.user = { id: 'u010', name: '督導', role: 'staff', node: '' };
+  ctx.auditScope = ['sxl-gf', 'ck'];
+  state.apiHandlers.getAll = () => okGetAll({
+    config: makeConfig(),
+    ops_records: [
+      { record_key: 'sxl-gf_2026-07', store: 'sxl-gf', month: '2026-07', status: '已稽核', pass_rate: 95 },
+      { record_key: 'ck_2026-06', store: 'ck', month: '2026-06', status: '已稽核', pass_rate: 80 },
+      { record_key: 'ck_2026-07', store: 'ck', month: '2026-07', status: '已稽核', pass_rate: 85 }
+    ],
+    ops_details: []
+  });
+  const unmount = auditOpsIndex.mount(root, ctx);
+  await flush();
+  const histRows = () => findAllDescendants(root, (n) => n.getAttribute && n.getAttribute('data-role') === 'history-row');
+  assert.equal(histRows().length, 1, '預設第一家（光復）只有 1 筆');
+  const sel = byId(root, 'my-store-select');
+  assert.ok(sel, '多店要有店別下拉');
+  fireChange(sel, 'ck');
+  await flush();
+  assert.equal(histRows().length, 2, '切到央廚後 2 筆');
+  unmount();
+});
+
+// ============================================================
 // 歷史紀錄（2026-08-17 新增，Eason 指示「盤點抽查和稽核表要有查詢歷史紀錄」）
 //
 // 店長原本只看得到「最新一筆」，過往月份完全查不到。歷史表刻意做成純表格、零控制項，

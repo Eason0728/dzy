@@ -112,7 +112,7 @@ const has = (res, p) => res.perms.indexOf(p) !== -1;
 
 // ===== T1-1 =====
 ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap']), 'PERM_GRANTABLE 與契約一致');
-ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap']), 'PERM_LOCKED 與契約一致');
+ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff']), 'PERM_LOCKED 與契約一致（四碼）');
 ok(r0.ok === true && r0.rules_seeded === 19 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋19 條規則＋5 筆對照', r0);
 ok(eq(r0.created, ['perm_map', 'perm_ex', 'perm_store_map', 'perm_audit']), '四張分頁都建出來', r0.created);
 ok(RULES.length === 19 && RULES[0].rule_id === 'R001' && RULES[18].rule_id === 'R019', '規則編號 R001..R019', [RULES[0], RULES[18]]);
@@ -367,6 +367,9 @@ ok(code(vr({ ladder: 'store', dept: '', title: 'sm', perm: 'platform.permex' }))
 ok(code(vr({ ladder: 'store', dept: '', title: 'sm', perm: '*' })) === 'bad_perm', 'bad_perm：*');
 ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'platform.permmap' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 permmap');
 ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'platform.users' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 users');
+ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'audit.write' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 audit.write');
+ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'platform.staff' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 platform.staff');
+ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'audit.write' }, true)) === null, 'admin 可碰 audit.write');
 ok(vr({ ladder: 'hq', dept: 'hr', title: 'hm', perm: 'platform.permmap' }, true) === null, 'admin 碰鎖碼合法');
 ok(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'dorm.read' }, false) === null, '非 admin 碰非鎖碼合法');
 ok(code(vr({ ladder: 'galaxy', dept: '', title: '*', perm: 'dorm.read' })) === 'bad_target', 'bad_target：ladder 非法');

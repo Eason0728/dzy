@@ -255,20 +255,22 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   const { sb, sheets, P, counters } = app;
   const A = sb.__admin;
   const g = post(sb, 'permMapGet', {}, A);
-  ok(g.ok && g.data.inited && g.data.rules.length === 19 && g.data.grantable.length === 9 && g.data.locked.join() === 'platform.users,platform.permmap', '3: permMapGet 回 19 條規則、9 個可給功能、2 個鎖碼', g.data && Object.keys(g.data));
+  ok(g.ok && g.data.inited && g.data.rules.length === 19 && g.data.grantable.length === 9 && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff', '3: permMapGet 回 19 條規則、9 個可給功能、4 個鎖碼', g.data && Object.keys(g.data));
   ok(g.data.titles.some((t) => t.code === 'osv' && t.rank === 2 && t.ladder === 'office') && g.data.depts.some((d) => d.code === 'hr') && g.data.names['audit.read'], '3: permMapGet 的 titles／depts／names 有內容（osv 職級 2）');
   const sav = (tok, add, remove) => post(sb, 'permMapSave', { add: add || [], remove: remove || [] }, tok);
   const R = (ladder, dept, title, perm) => ({ ladder, dept, title, perm });
   const before = sheets.perm_map._rows().length;
 
   // 鎖碼
-  for (const perm of ['platform.permmap', 'platform.users']) {
+  for (const perm of ['platform.permmap', 'platform.users', 'audit.write', 'platform.staff']) {
     const r = sav(P.hrHm.token, [R('hq', 'hr', '*', perm)]);
     ok(r.ok === false && r.code === 'perm_locked', '3: 非 admin 新增含 ' + perm + ' 的規則 → perm_locked', r);
   }
-  const lockedRule = g.data.rules.find((r) => r.perm === 'platform.permmap');
-  const rmLocked = sav(P.hrHm.token, [], [lockedRule.rule_id]);
-  ok(rmLocked.ok === false && rmLocked.code === 'perm_locked', '3: 非 admin 刪鎖碼規則 → perm_locked', rmLocked);
+  for (const lp of ['platform.permmap', 'audit.write', 'platform.staff']) {
+    const lockedRule = g.data.rules.find((r) => r.perm === lp);
+    const rmLocked = sav(P.hrHm.token, [], [lockedRule.rule_id]);
+    ok(rmLocked.ok === false && rmLocked.code === 'perm_locked', '3: 非 admin 刪 ' + lp + ' 規則 → perm_locked', rmLocked);
+  }
   ok(sheets.perm_map._rows().length === before, '3: 被拒絕的請求沒有寫入任何列');
   // bad_perm／bad_target
   ok(sav(A, [R('hq', '', '*', 'platform.permex')]).code === 'bad_perm', '3: platform.permex 不能進對照表 → bad_perm');
@@ -313,7 +315,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   const rm = sav(P.hrHm.token, [], [newId]);
   ok(rm.ok && rm.data.removed[0] === newId && rm.data.affected === 2, '3: 人資主管刪掉剛加的規則 → 成功、影響 2 人', rm);
   ok(String(sheets.perm_map._rows().find((r) => r[0] === newId)[5]).toUpperCase() === 'FALSE', '3: 刪除＝active 改 FALSE（留歷史）');
-  const rmLockedAdmin = sav(A, [], [lockedRule.rule_id]);
+  const rmLockedAdmin = sav(A, [], [g.data.rules.find((r) => r.perm === 'platform.permmap').rule_id]);
   ok(rmLockedAdmin.ok, '3: admin 刪鎖碼規則可以', rmLockedAdmin);
   ok(post(sb, 'me', {}, P.hrHm.token).data.perms.indexOf('platform.permmap') === -1, '3: 刪掉後人資主管下次 me 沒有 platform.permmap');
   const addLockedAdmin = sav(A, [R('hq', 'hr', 'hm', 'platform.permmap')]);
@@ -574,8 +576,8 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   const A = sb.__admin;
   const n0 = sheets.perm_audit._rows().length;
   // 資訊同仁 → 財務部（得到 audit.read／audit.write）
-  const e = post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'fin' }, P.hrHs.token);
-  ok(e.ok, '10: 人資把資訊同仁調去財務部', e);
+  const e = post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'fin' }, A);
+  ok(e.ok, '10: admin 把資訊同仁調去財務部（非 admin 會被鎖碼擋）', e);
   let au = sheets.perm_audit._rows();
   let last = au[au.length - 1];
   ok(au.length === n0 + 1 && last[5] === 'staff_edit' && last[2] === P.it.emp && last[3] === 'audit.read,audit.write' && last[4] === '' && last[6] === 'FALSE', '10: 權限有差異 → perm_audit 一列 cause=staff_edit、added=audit.read,audit.write', last);
@@ -584,7 +586,7 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   post(sb, 'staffEdit', { emp_no: P.it.emp, phone: '0911000123' }, P.hrHs.token);
   ok(sheets.perm_audit._rows().length === n0 + 1, '10: 沒改到權限（只改手機）→ 不寫 perm_audit');
   // 調成另一個沒規則的部門：removed
-  post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'it' }, P.hrHs.token);
+  post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'it' }, A);
   au = sheets.perm_audit._rows(); last = au[au.length - 1];
   ok(last[5] === 'staff_edit' && last[3] === '' && last[4] === 'audit.read,audit.write', '10: 調回資訊部 → removed=audit.read,audit.write', last);
   // confirm：新認領的店長，admin 確認 → 從無到有
@@ -647,8 +649,10 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   // (b) 停用中改成一般會拿到稽核權限的部門（非鎖碼）→ 照放，並寫 perm_audit（以「若在職」計算）
   ok(post(sb, 'staffSetActive', { emp_no: P.it.emp, active: false }, A).ok, '13b: 再停用');
   const nAudit1 = sheets.perm_audit._rows().length;
-  const okEdit = post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'fin' }, hr);
-  ok(okEdit.ok, '13b: 停用中改去財務部（非鎖碼）照放', okEdit);
+  const okEdit = post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'fin' }, A);
+  ok(okEdit.ok, '13b: 停用中 admin 改去財務部', okEdit);
+  ok(post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'ops' }, hr).ok === false, '13b: 停用中非 admin 改組織欄也以「若在職」算鎖碼 → 擋（財務→營運失去 audit.write）');
+  ok(post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'fin' }, A).ok, '13b: 還原');
   const au = sheets.perm_audit._rows();
   const last = au[au.length - 1];
   ok(au.length === nAudit1 + 1 && last[5] === 'staff_edit' && last[2] === P.it.emp && last[3] === 'audit.read,audit.write', '13b: 停用中改組織欄也寫 perm_audit（added）', last);
@@ -700,6 +704,23 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   const blk2 = post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'ops' }, hr);
   ok(blk2.ok === false && blk2.code === 'perm_admin_only', '13f: 非 admin 把原本有 platform.users 的人調走 → perm_admin_only', blk2);
   ok(post(sb, 'staffEdit', { emp_no: P.fin.emp, dept: 'it' }, A).ok, '13f: admin 做同一件事 → 成功');
+}
+
+{
+  // 4b 擴大鎖碼（2026-10-17）：人資把人調進／調出財務部（audit.write）要擋，訊息依碼組中文
+  const app = scene();
+  init(app); on(app);
+  const { sb, sheets, P } = app;
+  const A = sb.__admin;
+  const hr = P.hrHs.token;
+  const into = post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'fin' }, hr);
+  ok(into.ok === false && into.code === 'perm_admin_only' && /稽核填單/.test(into.error) && /請系統管理員處理/.test(into.error), '4b: 人資把人調進財務部 → perm_admin_only 且訊息含稽核填單', into);
+  ok(sheets_row(app, P.it.emp)[sb.STF_COL.dept] !== 'fin', '4b: 被擋之後組織欄沒變');
+  const out = post(sb, 'staffEdit', { emp_no: P.fin.emp, dept: 'ops' }, hr);
+  ok(out.ok === false && out.code === 'perm_admin_only', '4b: 人資把財務同仁調去營運部（失去 audit.write）→ perm_admin_only', out);
+  const toHr = post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'hr', title: 'hs' }, hr);
+  ok(toHr.ok === false && toHr.code === 'perm_admin_only' && /同仁名單/.test(toHr.error), '4b: 人資把人調進人資部（拿到 platform.staff）→ 擋且訊息含同仁名單', toHr);
+  ok(post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'fin' }, A).ok, '4b: admin 同一件事 → 成功');
 }
 
 // ============================================================

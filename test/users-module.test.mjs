@@ -257,7 +257,7 @@ function makeFakeCtx() {
   };
 
   const ctx = {
-    user: { id: 'u001', name: '管理員', role: 'admin', node: '' },
+    user: { id: 'u900', name: '管理員', role: 'admin', node: '' },
     can: () => true,
     api: {
       call: async (moduleId, action, payload) => {
@@ -973,6 +973,93 @@ await at('角色清單失敗但重抓成功：表單照常開啟，下拉有選�
 
   fireClick(byRole(overlay, 'cancel'));
   await flush();
+  unmount();
+});
+
+await at('自己那列不顯示停用鈕，其他列照常', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [makeUser({ id: 'u900', username: 'me1' }), makeUser({ id: 'u002', username: 'other' })] } });
+  const unmount = mountList(root, ctx);
+  await flush();
+  const toggles = allByAction(root, 'toggle-active');
+  assert.equal(toggles.length, 1, '只有別人那列有停用鈕');
+  assert.equal(toggles[0].getAttribute('data-id'), 'u002');
+  unmount();
+});
+
+await at('試跑模式（dryRun）新增：不顯示「已新增」', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [] } });
+  state.apiHandlers.saveUser = () => ({ ok: true, data: { dryRun: true } });
+  const unmount = mountList(root, ctx);
+  await flush();
+  fireClick(byRole(root, 'add-user'));
+  await flush();
+  const overlay = byRole(fakeDocument.body, 'user-form-overlay');
+  byField(overlay, 'username').value = 'dryuser';
+  byField(overlay, 'name').value = '試跑';
+  byField(overlay, 'password').value = 'longenoughpw1';
+  fireClick(byRole(overlay, 'submit'));
+  await flush();
+  assert.equal(state.toasts.some((x) => x.message === '已新增' || x.message === '已儲存'), false);
+  unmount();
+});
+
+const SUCCESS_TOASTS = ['已新增', '已儲存', '已更新', '密碼已重設'];
+
+await at('試跑模式（dryRun）編輯：不顯示「已儲存」、不重抓名單', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [makeUser({ id: 'u001', username: 'acc1', name: '王會計' })] } });
+  state.apiHandlers.saveUser = () => ({ ok: true, data: { dryRun: true } });
+  const unmount = mountList(root, ctx);
+  await flush();
+  fireClick(byAction(root, 'edit-user'));
+  await flush();
+  const overlay = byRole(fakeDocument.body, 'user-form-overlay');
+  byField(overlay, 'name').value = '王會計（試跑改名）';
+  fireClick(byRole(overlay, 'submit'));
+  await flush();
+  assert.ok(state.apiCalls.some((c) => c.action === 'saveUser'), '有送出 saveUser');
+  assert.equal(state.toasts.some((x) => SUCCESS_TOASTS.includes(x.message)), false, '不得顯示成功訊息：' + JSON.stringify(state.toasts));
+  assert.equal(state.apiCalls.filter((c) => c.action === 'listUsers').length, 1, 'dryRun 沒寫入，不重抓名單');
+  unmount();
+});
+
+await at('試跑模式（dryRun）停用：不顯示「已更新」、不重抓名單', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [makeUser({ id: 'u001', active: true })] } });
+  state.apiHandlers.setActive = () => ({ ok: true, data: { dryRun: true } });
+  state.nextConfirm = true;
+  const unmount = mountList(root, ctx);
+  await flush();
+  fireClick(byAction(root, 'toggle-active'));
+  await flush();
+  assert.ok(state.apiCalls.some((c) => c.action === 'setActive'), '有送出 setActive');
+  assert.equal(state.toasts.some((x) => SUCCESS_TOASTS.includes(x.message)), false, '不得顯示成功訊息：' + JSON.stringify(state.toasts));
+  assert.equal(state.apiCalls.filter((c) => c.action === 'listUsers').length, 1, 'dryRun 沒寫入，不重抓名單');
+  unmount();
+});
+
+await at('試跑模式（dryRun）重設密碼：不顯示「密碼已重設」', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [makeUser({ id: 'u001', name: '王會計' })] } });
+  state.apiHandlers.resetPassword = () => ({ ok: true, data: { dryRun: true } });
+  state.nextConfirm = true;
+  const unmount = mountList(root, ctx);
+  await flush();
+  fireClick(byAction(root, 'reset-password'));
+  await flush();
+  const overlay = byRole(fakeDocument.body, 'password-form-overlay');
+  byField(overlay, 'newPassword').value = 'longenoughpw1';
+  fireClick(byRole(overlay, 'submit'));
+  await flush();
+  assert.ok(state.apiCalls.some((c) => c.action === 'resetPassword'), '有送出 resetPassword');
+  assert.equal(state.toasts.some((x) => SUCCESS_TOASTS.includes(x.message)), false, '不得顯示成功訊息：' + JSON.stringify(state.toasts));
   unmount();
 });
 

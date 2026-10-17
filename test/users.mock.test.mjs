@@ -709,13 +709,14 @@ function loginToken(sandbox, username, password) {
   // 建立
   assertEqual(call('saveUser', { username: 'newadm', name: '新管理員', role: 'admin', node: '', password: 'test-pw-new-0001' }, um), { ok: false, error: NO }, 'M1: 非 admin 不能建立 admin 帳號');
   assertEqual(call('saveUser', { username: 'newroot', name: '新全權', role: 'root', node: '', password: 'test-pw-new-0001' }, um), { ok: false, error: NO }, 'M2: 非 admin 不能建立含 * 角色的帳號');
-  assertTrue(call('saveUser', { username: 'newacc', name: '新會計', role: 'accountant', node: '', password: 'test-pw-new-0001' }, um).ok === true, 'M3: 非 admin 仍可建立一般角色帳號');
+  assertEqual(call('saveUser', { username: 'newacc', name: '新會計', role: 'accountant', node: '', password: 'test-pw-new-0001' }, um), { ok: false, error: NO }, 'M3: 非 admin 不能建立含 audit.write（鎖碼）角色的帳號');
+  assertTrue(call('saveUser', { username: 'newlead', name: '新店長', role: 'storelead', node: '', password: 'test-pw-new-0001' }, um).ok === true, 'M3b: 非 admin 仍可建立一般角色帳號');
   // 修改
   assertEqual(call('saveUser', { id: 'u001', username: 'acc1', name: '王會計', role: 'admin', node: '' }, um), { ok: false, error: NO }, 'M4: 非 admin 不能把帳號改成 admin');
   assertEqual(roleOf('u001'), 'accountant', 'M4b: 被擋之後角色沒變');
   assertEqual(call('saveUser', { id: 'u003', username: 'admin1', name: '改名', role: 'admin', node: '' }, um), { ok: false, error: NO }, 'M5: 非 admin 不能修改 admin 帳號');
   assertEqual(call('saveUser', { id: 'u005', username: 'root1', name: '改名', role: 'accountant', node: '' }, um), { ok: false, error: NO }, 'M6: 非 admin 不能修改含 * 角色的帳號');
-  assertEqual(call('saveUser', { id: 'u004', username: 'um1', name: '帳號管理員', role: 'accountant', node: '' }, um), { ok: false, error: '不能修改自己的角色' }, 'M7: 非 admin 不能改自己的角色');
+  assertEqual(call('saveUser', { id: 'u004', username: 'um1', name: '帳號管理員', role: 'storelead', node: '' }, um), { ok: false, error: '不能修改自己的角色' }, 'M7: 非 admin 不能改自己的角色');
   assertTrue(call('saveUser', { id: 'u004', username: 'um1', name: '改自己的名字', role: 'usermgr', node: '' }, um).ok === true, 'M8: 非 admin 改自己的姓名（角色不變）照放');
   // 停用／重設密碼
   assertEqual(call('setActive', { id: 'u003', active: false }, um), { ok: false, error: NO }, 'M9: 非 admin 不能停用 admin');
@@ -725,13 +726,66 @@ function loginToken(sandbox, username, password) {
   assertEqual(call('resetPassword', { id: 'u003', newPassword: 'test-pw-hijack-01' }, um), { ok: false, error: NO }, 'M11: 非 admin 不能重設 admin 密碼');
   assertEqual(hashOf('u003'), h0, 'M11b: admin 密碼沒變');
   assertEqual(call('resetPassword', { id: 'u005', newPassword: 'test-pw-hijack-01' }, um), { ok: false, error: NO }, 'M12: 非 admin 不能重設含 * 角色帳號密碼');
-  assertTrue(call('setActive', { id: 'u001', active: false }, um).ok === true, 'M13: 非 admin 停用一般帳號照放');
-  assertTrue(call('resetPassword', { id: 'u001', newPassword: 'test-pw-reset-0001' }, um).ok === true, 'M14: 非 admin 重設一般帳號密碼照放');
+  assertTrue(call('setActive', { id: 'u002', active: false }, um).ok === true, 'M13: 非 admin 停用一般帳號照放');
+  assertTrue(call('resetPassword', { id: 'u002', newPassword: 'test-pw-reset-0001' }, um).ok === true, 'M14: 非 admin 重設一般帳號密碼照放');
+  // 2026-10-17 複驗：高權限＝含 * 或與 PERM_LOCKED 四碼有交集（accountant 有 audit.write）
+  assertEqual(call('saveUser', { id: 'u001', username: 'acc1', name: '王會計改', role: 'accountant', node: '' }, um), { ok: false, error: NO }, 'M13a: 非 admin 不能修改 accountant（audit.write）帳號');
+  assertEqual(call('setActive', { id: 'u001', active: false }, um), { ok: false, error: NO }, 'M13b: 非 admin 不能停用 accountant 帳號');
+  assertEqual(call('resetPassword', { id: 'u001', newPassword: 'test-pw-reset-0009' }, um), { ok: false, error: NO }, 'M13c: 非 admin 不能重設 accountant 密碼');
+  assertEqual(activeOf('u001'), 'TRUE', 'M13d: accountant 仍啟用');
+  assertTrue(call('saveUser', { id: 'u001', username: 'acc1', name: '王會計改', role: 'accountant', node: '' }, adm).ok === true, 'M13e: admin 可修改 accountant 帳號');
+  assertTrue(call('saveUser', { username: 'newacc2', name: '新會計二', role: 'accountant', node: '', password: 'test-pw-new-0003' }, adm).ok === true, 'M13f: admin 可建立 accountant 帳號');
   // admin 本人不受影響
   assertTrue(call('saveUser', { username: 'newadm2', name: '新管理員二', role: 'admin', node: '', password: 'test-pw-new-0002' }, adm).ok === true, 'M15: admin 可建立 admin 帳號');
   assertTrue(call('saveUser', { id: 'u005', username: 'root1', name: '全權改名', role: 'root', node: '' }, adm).ok === true, 'M16: admin 可修改含 * 角色帳號');
   assertTrue(call('setActive', { id: 'u005', active: false }, adm).ok === true && call('resetPassword', { id: 'u005', newPassword: 'test-pw-reset-0002' }, adm).ok === true, 'M17: admin 可停用／重設含 * 角色帳號');
   assertTrue(call('saveUser', { id: 'u003', username: 'admin1', name: '系統管理者帳號', role: 'admin', node: '' }, adm).ok === true, 'M18: admin 改自己（角色不變）照放');
+})();
+
+// ============================================================
+// N. 自己不能停用自己／改自己的角色（admin 也一樣）；非 admin 改自己不能換帳號名稱
+// ============================================================
+(() => {
+  const sheets = freshSheets();
+  sheets.roles = ROLES_SEED.concat([['usermgr', '帳號管理員', 'platform.users']]);
+  sheets.users = freshUsersSeed().concat([
+    ['u004', 'um1', '帳號管理員', 'usermgr', '', 'salt-um1', hashFor('test-pw-usermgr-01', 'salt-um1'), 'TRUE', '2026-01-01 09:00:00', ''],
+    ['u006', 'admin2', '第二管理員', 'admin', '', 'salt-admin2', hashFor('test-pw-admin-02', 'salt-admin2'), 'TRUE', '2026-01-01 09:00:00', '']
+  ]);
+  const { sandbox, sheets: sh } = loadPlatform(sheets, { HMAC_SECRET: 'fake-hmac-secret-for-tests-only' });
+  const adm = loginToken(sandbox, 'admin1', PW.admin1);
+  const um = loginToken(sandbox, 'um1', 'test-pw-usermgr-01');
+  const call = (action, payload, tok) => callDoPost(sandbox, { action, token: tok, payload });
+  const row = (id) => sh.users._rows().find((r) => r[0] === id);
+
+  assertEqual(call('setActive', { id: 'u003', active: false }, adm).ok, false, 'N1: admin 不能停用自己');
+  assertEqual(row('u003')[7], 'TRUE', 'N1b: 自己仍啟用');
+  assertEqual(call('saveUser', { id: 'u003', username: 'admin1', name: '系統管理者帳號', role: 'accountant', node: '' }, adm).ok, false, 'N2: admin 不能改自己的角色');
+  assertEqual(row('u003')[3], 'admin', 'N2b: 角色沒變');
+  assertTrue(call('saveUser', { id: 'u006', username: 'admin2', name: '第二管理員', role: 'accountant', node: '' }, adm).ok === true, 'N3: 還有其他 active admin 時，可降級另一位 admin');
+  assertTrue(call('setActive', { id: 'u006', active: false }, adm).ok === true, 'N3b: 可停用非 admin 角色帳號');
+  assertEqual(call('saveUser', { id: 'u004', username: 'um1-renamed', name: '帳號管理員', role: 'usermgr', node: '' }, um).ok, false, 'N4: 非 admin 改自己不能換帳號名稱');
+  assertEqual(row('u004')[1], 'um1', 'N4b: 帳號名稱沒變');
+  assertTrue(call('saveUser', { id: 'u004', username: 'um1', name: '改顯示名', role: 'usermgr', node: '' }, um).ok === true, 'N5: 非 admin 改自己顯示名稱照放');
+})();
+
+// ============================================================
+// O. 重設密碼成功後清掉該帳號所有來源與總計數的登入鎖（2026-10-17 複驗）
+// ============================================================
+(() => {
+  const sheets = freshSheets();
+  sheets.roles = ROLES_SEED.concat([['usermgr', '帳號管理員', 'platform.users']]);
+  sheets.users = freshUsersSeed().concat([
+    ['u004', 'um1', '帳號管理員', 'usermgr', '', 'salt-um1', hashFor('test-pw-usermgr-01', 'salt-um1'), 'TRUE', '2026-01-01 09:00:00', '']
+  ]);
+  const { sandbox } = loadPlatform(sheets, { HMAC_SECRET: 'fake-hmac-secret-for-tests-only' });
+  const um = loginToken(sandbox, 'um1', 'test-pw-usermgr-01');
+  const call = (action, payload, tok) => callDoPost(sandbox, { action, token: tok, payload });
+  const LOCKED = '嘗試次數過多，請 15 分鐘後再試';
+  for (let i = 0; i < 3; i++) sandbox.handleLogin_({ username: 'lead1', password: 'wrong-password' }, 'srcaaaaaaaaa');
+  assertEqual(sandbox.handleLogin_({ username: 'lead1', password: PW.lead1 }, 'srcaaaaaaaaa').error, LOCKED, 'O1: 前置：來源 A 對 lead1 已鎖');
+  assertTrue(call('resetPassword', { id: 'u002', newPassword: 'test-pw-reset-0777' }, um).ok === true, 'O2: 重設密碼成功');
+  assertTrue(sandbox.handleLogin_({ username: 'lead1', password: 'test-pw-reset-0777' }, 'srcaaaaaaaaa').ok === true, 'O3: 重設後原本被鎖的來源可用新密碼登入');
 })();
 
 // ============================================================

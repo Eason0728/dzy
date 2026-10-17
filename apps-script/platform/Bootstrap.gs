@@ -55,3 +55,53 @@ function bootstrapAdmin() {
   Logger.log('　 指令碼屬性裡的帳號與密碼已刪除。');
   Logger.log('　 之後要加人請登入系統走「人員管理」，不要再用這支。');
 }
+
+/**
+ * 救回管理員：忘了管理員密碼、或管理員帳號被停用／降級而進不去時，從編輯器（或 mini 的 run-fn）執行。
+ *
+ * 使用方式（Eason 操作，Claude 全程看不到密碼）：
+ *   1. 指令碼屬性新增 BOOTSTRAP_USERNAME（users 分頁裡已存在的帳號）與 BOOTSTRAP_PASSWORD（至少 8 個字元）
+ *   2. 執行 rescueAdmin
+ *   3. 執行完自動刪掉那兩個屬性
+ *
+ * 只救既有帳號，找不到就停（不會新建，所以不是新增管理員的後門）。
+ * 會做的事：啟用、role 改 admin、換新密碼（新 salt／hash）、token_after 設現在（舊 token 全部失效）、
+ * 清掉該帳號各來源的登入失敗鎖定與「本人改密碼」的失敗計數。只寫該列需要的格，其餘欄位不動。
+ * 刻意不進 Code.gs 分派表：網頁 API 叫不到，只能從編輯器或 run-fn 白名單執行。
+ */
+function rescueAdmin() {
+  var props = PropertiesService.getScriptProperties();
+  var username = String(props.getProperty('BOOTSTRAP_USERNAME') || '').trim();
+  var password = String(props.getProperty('BOOTSTRAP_PASSWORD') || '');
+
+  if (!username || !password) {
+    Logger.log('❌ 請先到「專案設定 → 指令碼屬性」設好 BOOTSTRAP_USERNAME 與 BOOTSTRAP_PASSWORD');
+    return;
+  }
+  if (password.length < 8) {
+    Logger.log('❌ 密碼至少要 8 個字元，目前 ' + password.length + ' 個。請改掉指令碼屬性再執行一次');
+    return;
+  }
+  var found = findUserRow_(username);
+  if (!found) {
+    Logger.log('❌ users 分頁找不到帳號「' + username + '」。這支只救既有帳號，不會新建；請確認帳號拼法（不分大小寫）');
+    return;
+  }
+
+  var sheet = SpreadsheetApp.getActive().getSheetByName(AUTH_SHEET_USERS);
+  var salt = Utilities.getUuid();
+  var hash = hashPassword_(password, salt);
+  sheet.getRange(found.row, AUTH_USERS_COL.role + 1).setValue('admin');
+  sheet.getRange(found.row, AUTH_USERS_COL.salt + 1, 1, 2).setValues([[salt, hash]]);
+  sheet.getRange(found.row, AUTH_USERS_COL.active + 1).setValue('TRUE');
+  setTokenAfter_(found.row);
+
+  clearLoginState_(String(found.values[AUTH_USERS_COL.username]));
+  CacheService.getScriptCache().remove('usr_selfpw:' + String(found.values[AUTH_USERS_COL.id]));
+
+  props.deleteProperty('BOOTSTRAP_USERNAME');
+  props.deleteProperty('BOOTSTRAP_PASSWORD');
+
+  Logger.log('✅ 已救回帳號：' + String(found.values[AUTH_USERS_COL.username]) + '（角色 admin、已啟用、新密碼已生效、舊登入已失效）');
+  Logger.log('　 指令碼屬性裡的帳號與密碼已刪除。');
+}

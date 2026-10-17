@@ -365,7 +365,7 @@ export function mountClockMap(el, env) {
           <span class="tag ${confirmed ? 'tag-ok' : x.state === 'rejected' ? 'tag-danger' : 'tag-warn'}">${confirmed ? '已確認' : x.state === 'rejected' ? '已退回' : '等確認'}</span></div>
         <div class="text-muted">${esc(unitOf(x))}｜打卡：${esc(x.store_name || x.store_code)} 編號 ${esc(x.emp_id)}（${esc(ROLE_TEXT[x.role] || x.role)}）${x.last_punch ? `｜最近打卡 ${esc(x.last_punch)}` : ''}</div>
         ${confirmed ? '' : `<p class="field-hint">這個人在打卡系統的 ${esc(x.emp_id)}，就是 ${esc(x.name)} 本人嗎？</p>`}
-        <div class="card-row">
+        <div class="btn-row">
           ${confirmed ? '' : `<button type="button" class="btn" style="background:var(--ok);border-color:var(--ok);color:var(--ink-inverse)" data-act="cm-yes" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">對</button>
           <button type="button" class="btn btn-danger" data-act="cm-no" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">不對</button>`}
           ${homeAction(x, { isHq }) === 'btn' ? `<button type="button" class="btn btn-secondary" data-act="cm-home" data-emp="${esc(x.emp_no)}" data-store="${esc(x.store_code)}">設為主店</button>` : ''}
@@ -436,7 +436,7 @@ export function mountClockMap(el, env) {
           <div class="card-row"><div class="card-title">打卡對照</div><span class="text-muted">已生效 ${esc(data.confirmed_count)} 筆${data.built_at ? `｜上次建立 ${esc(data.built_at)}` : ''}</span></div>
           <p class="text-muted">把打卡系統裡的人，一對一對到管理系統的同仁。同一個人同一家店只能有一個生效編號。</p>
           <div class="card-row"><button type="button" class="btn btn-primary" data-act="build" data-role="build">建立打卡對照</button></div>
-          <div class="card-row" data-role="cm-tabs">${HQ_TABS.map(([k, n]) => `<button type="button" class="btn ${k === tab ? 'btn-primary' : 'btn-secondary'}" data-act="tab" data-t="${k}" data-role="cm-tab">${n}${counts[k] ? `（${counts[k]}）` : ''}</button>`).join(' ')}</div>
+          <div class="card-row row-wrap" data-role="cm-tabs">${HQ_TABS.map(([k, n]) => `<button type="button" class="btn ${k === tab ? 'btn-primary' : 'btn-secondary'}" data-act="tab" data-t="${k}" data-role="cm-tab">${n}${counts[k] ? `（${counts[k]}）` : ''}</button>`).join(' ')}</div>
         </div>`
       : `<div class="card"><div class="card-title">打卡對照</div>
           <p class="text-muted">打卡系統裡的人，系統猜他是你單位的哪位同仁。請核對：是本人按「對」，不是按「不對」（會轉給總部處理）。</p></div>`;
@@ -611,6 +611,8 @@ export function mountTeam(el, env) {
   let people = [];
   let unitName = '';
   let unit = '';
+  let isAll = false;     // 總部／admin：後端回全部單位（沒有單一所屬單位）
+  let filterUnit = '';   // 全部單位時的單位篩選
   let org = { brands: [], units: [], depts: [], titles: [] };
   let failed = [];
   el.innerHTML = '<div class="card"><p class="text-muted">讀取中…</p></div>';
@@ -620,6 +622,7 @@ export function mountTeam(el, env) {
     if (!alive) return;
     if (!r || !r.ok) { el.innerHTML = `<div class="card"><p data-role="store-lead-only">${esc(storeLeadOnlyText(r) || (r && r.error) || '讀不到單位名單')}</p></div>`; return; }
     people = r.data.people || [];
+    isAll = !r.data.unit;
     unit = r.data.unit || (people[0] && people[0].unit) || '';
     unitName = (people[0] && people[0].unit_name) || (org.units.find((u) => u.code === unit) || {}).name || '';
     if (o && o.ok) org = o.data;
@@ -629,8 +632,21 @@ export function mountTeam(el, env) {
   }
 
   function visible() {
-    if (f) return people.filter((p) => personFilter(f, p, ymd(new Date())));
-    return people;
+    let list = people;
+    if (isAll && filterUnit) list = list.filter((p) => p.unit === filterUnit);
+    if (f) list = list.filter((p) => personFilter(f, p, ymd(new Date())));
+    return list;
+  }
+
+  function titleUnitText() {
+    if (!isAll) return unitName;
+    if (!filterUnit) return '全部單位';
+    return (org.units.find((u) => u.code === filterUnit) || {}).name || filterUnit;
+  }
+
+  function unitFilterHtml() {
+    if (!isAll) return '';
+    return `<select class="input" data-role="unit-filter" aria-label="單位篩選"><option value="">全部單位</option>${org.units.map((u) => `<option value="${esc(u.code)}"${u.code === filterUnit ? ' selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
   }
 
   function cardHtml(p) {
@@ -640,8 +656,8 @@ export function mountTeam(el, env) {
         <span class="tag ${p.status === 'disabled' ? '' : 'tag-ok'}">${p.status === 'disabled' ? '已離職' : (p.status === 'active' ? '在職' : '未開通')}</span></div>
       <div class="text-muted">${esc(p.title_name || '—')}｜到職 ${esc(p.hire_date || '—')}</div>
       ${(p.clocks || []).length ? `<div class="text-muted">打卡：${p.clocks.map((c) => `${esc(c.store_name || c.store_code)} ${esc(c.emp_id)}${c.role === 'home' ? '（主店）' : ''}`).join('、')}</div>` : ''}
-      ${tags ? `<div class="card-row">${tags}</div>` : ''}
-      <div class="card-row">${clockButtonsHtml(p, viewer)}</div></div>`;
+      ${tags ? `<div class="btn-row">${tags}</div>` : ''}
+      <div class="btn-row">${clockButtonsHtml(p, viewer)}</div></div>`;
   }
 
   function draw() {
@@ -652,8 +668,9 @@ export function mountTeam(el, env) {
         <p class="field-hint">請通知總部按「重試」；你不用重新新增。</p></div>` : '';
     el.innerHTML = `
       <div class="card stack">
-        <div class="card-row"><div class="card-title">我的單位｜${esc(unitName)}</div>
+        <div class="card-row"><div class="card-title">我的單位｜${esc(titleUnitText())}</div>
           <button type="button" class="btn btn-primary" data-act="add" data-role="add-staff">新增同仁</button></div>
+        ${unitFilterHtml()}
         <p class="text-muted">只列你單位的同仁，不含手機、生日、地址。新增同仁會當場建好打卡編號。${f ? '（已套用提醒篩選）' : ''}</p>
       </div>${failRows}
       ${list.map(cardHtml).join('') || '<div class="card"><p class="text-muted">沒有符合的同仁</p></div>'}`;
@@ -670,7 +687,15 @@ export function mountTeam(el, env) {
     if (p && isClockAct(a)) await handleClockAct(a, p, envOf());
   }
 
+  function onChange(e) {
+    const t = e.target;
+    if (!t || !t.getAttribute || t.getAttribute('data-role') !== 'unit-filter') return;
+    filterUnit = t.value || '';
+    draw();
+  }
+
   el.addEventListener('click', onClick);
+  el.addEventListener('change', onChange);
   load();
-  return () => { alive = false; el.removeEventListener('click', onClick); };
+  return () => { alive = false; el.removeEventListener('click', onClick); el.removeEventListener('change', onChange); };
 }

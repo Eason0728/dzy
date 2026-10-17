@@ -47,5 +47,7 @@ export const BACKENDS = {
   // 回退：還原這一行成舊 Apps Script /exec（git revert 合併 minikit-cutover 的 commit），見 ~/dzy-minikit/apps/dzy-platform/ROLLBACK.md
   platform: 'https://dingzhaoyuandemac-mini.tailc27c34.ts.net/platform/api',
   audit: 'https://script.google.com/macros/s/AKfycbz5l_aH_qypN6HK6UDT__5NLZDk4A2clyqeqvJzx5JrL9SBVeH5GyDYBCW3gv-CDy7fFQ/exec',
-  dorm: 'https://script.google.com/macros/s/AKfycbyxyhJ35MWTjtvzKr54_9JzGfLZlclyqn2fYLWXgz0muTFzL_tu81nR1r3W332J1igm/exec'
+  dorm: 'https://script.google.com/macros/s/AKfycbyxyhJ35MWTjtvzKr54_9JzGfLZlclyqn2fYLWXgz0muTFzL_tu81nR1r3W332J1igm/exec',
+  // 電子佈告欄前端網址（公告專區 iframe 來源與 postMessage 核對用；不是 API 後端，shell 不會對它發請求）
+  bulletin: 'https://dzy-bulletin.github.io'
 };

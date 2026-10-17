@@ -168,7 +168,7 @@ export function mountReport(root, ctx, moduleState) {
     bodyEl.appendChild(escEl(ctx, 'div', { class: 'report-rate tag tag-ok' }, '合格率 ' + record.pass_rate + '%'));
 
     // 統計用橫排 chip 不用表格：手機 390px 塞十格表格會把「細項總數」擠成一行一個字（同舊版註解）。
-    bodyEl.appendChild(el('div', { class: 'ops-stats card-row' }, [
+    bodyEl.appendChild(el('div', { class: 'ops-stats card-row row-wrap' }, [
       el('span', { class: 'tag' }, [el('span', { text: '細項 ' }), escEl(ctx, 'b', {}, String(record.total_count))]),
       el('span', { class: 'tag tag-ok' }, [el('span', { text: '合格 ' }), escEl(ctx, 'b', {}, String(record.pass_count))]),
       el('span', { class: 'tag tag-danger' }, [el('span', { text: '未完成 ' }), escEl(ctx, 'b', {}, String(record.fail_count))]),

@@ -125,8 +125,7 @@ async function pendingNodes(ctx) {
     const nameOf = (code) => (stores.find((x) => x.code === code) || {}).name || code;
     let nodeCodes;
     if (isStoreLead) {
-      const node = ctx.user && ctx.user.node;
-      nodeCodes = node ? [node] : [];
+      nodeCodes = sharedApi.resolveMyStores(ctx, stores);
     } else {
       nodeCodes = stores.map((x) => x.code);
     }
