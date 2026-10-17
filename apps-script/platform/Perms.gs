@@ -11,8 +11,7 @@
 // 可給的權限碼白名單（順序即畫面順序）
 var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap'];
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
-// 角色（roles 分頁）含這兩碼＝高權限角色，只有 admin 能指派（Users.gs）；不跟 PERM_LOCKED 擴大而變
-var PERM_ROLE_SUPER = ['platform.users', 'platform.permmap'];
+// 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
 var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff'];
 
 var PERM_SHEET_MAP = 'perm_map';

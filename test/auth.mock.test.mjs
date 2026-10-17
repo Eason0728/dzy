@@ -413,6 +413,38 @@ function flipChar(str, index) {
 })();
 
 // ============================================================
+// E3. 帳號跨來源總計數（2026-10-17 複驗）：同帳號 15 分鐘內各來源合計失敗 ≥30 次 → 所有來源一起鎖
+// ============================================================
+(() => {
+  const { sandbox } = freshApp();
+  const LOCKED = { ok: false, error: '嘗試次數過多，請 15 分鐘後再試' };
+  for (let s = 0; s < 10; s++) {
+    for (let i = 0; i < 3; i++) sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, 'src' + String(s).padStart(9, '0'));
+  }
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, 'brandnewsrc1'), LOCKED, 'E3a: 30 次失敗後新來源正確密碼也被擋');
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, 'brandnewsrc2'), LOCKED, 'E3b: 新來源錯密碼也是鎖定訊息');
+  assertEqual(sandbox.handleLogin_({ username: 'LOCKUSER', password: PW.lockuser }, 'brandnewsrc3'), LOCKED, 'E3c: 帳號大小寫不同同一把鎖');
+  assertTrue(sandbox.handleLogin_({ username: 'acc1', password: PW.acc1 }, 'brandnewsrc1').ok === true, 'E3d: 其他帳號不受影響');
+  sandbox.clearLoginState_('lockuser');
+  assertTrue(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, 'brandnewsrc1').ok === true, 'E3e: clearLoginState_ 清掉總計數後恢復');
+})();
+(() => {
+  // 29 次失敗尚未鎖；成功登入不清總計數
+  const { sandbox } = freshApp();
+  const LOCKED = { ok: false, error: '嘗試次數過多，請 15 分鐘後再試' };
+  for (let s = 0; s < 14; s++) {
+    sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, 'src' + String(s).padStart(9, '0'));
+    sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, 'src' + String(s).padStart(9, '0'));
+    assertTrue(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, 'src' + String(s).padStart(9, '0')).ok === true, 'E3f' + s + ': 中間成功登入（每來源 2 錯 1 對）');
+  }
+  // 已累計 28 次失敗；再 2 次 → 30，鎖
+  sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, 'zzzzzzzzzz01');
+  assertTrue(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, 'zzzzzzzzzz02').ok === true, 'E3g: 29 次失敗還沒鎖');
+  sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, 'zzzzzzzzzz03');
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, 'zzzzzzzzzz04'), LOCKED, 'E3h: 成功登入不清總計數，第 30 次失敗後全鎖');
+})();
+
+// ============================================================
 // F. 停用帳號：login 擋下、me 每次重查 active
 // ============================================================
 (() => {

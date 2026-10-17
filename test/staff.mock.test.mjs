@@ -771,5 +771,23 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   ok(post(sb, 'me', {}, adminToken(sb)).data.secrets !== undefined, 'P2a LEGACY_SECRETS=1：系統帳號照舊回 secrets');
 })();
 
+// ============================================================
+// A15 非 admin 不能停用自己的 staff 列（2026-10-17 複驗）
+// ============================================================
+(() => {
+  const { sb, sheets } = fresh();
+  const tok = adminToken(sb);
+  const { emp } = seedAndClaim(sb, tok);
+  sheets.roles._data.push(['hr', '人資', 'platform.staff']);
+  const u = sheets.users._data.find((r) => r[1] === emp);
+  u[3] = 'hr'; // 這位同仁帳號改持 platform.staff（非 admin）
+  const tokSelf = post(sb, 'login', { username: emp, password: 'fake-staff-pw-1' });
+  ok(tokSelf.ok, 'A15 前置：持 platform.staff 的同仁可登入', tokSelf);
+  const r = post(sb, 'staffSetActive', { emp_no: emp, active: false }, tokSelf.data.token);
+  ok(r.ok === false && r.error === '不能停用自己', 'A15 ★非 admin 不能停用自己的 staff 列', r);
+  ok(staffRow(sheets, emp)[COL('status')] === 'active' && u[7] === 'TRUE', 'A15 停用被擋後狀態與帳號都沒動');
+  ok(post(sb, 'staffSetActive', { emp_no: emp, active: false }, tok).ok, 'A15 admin 仍可停用該同仁');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

@@ -32,6 +32,7 @@ var AUTH_MSG_NOT_CLAIMED = '這個編號還沒開通，請按「第一次使用�
 var AUTH_HASH_ITERATIONS = 10000;           // spec §5.6：SHA-256 迭代 10,000 次
 var AUTH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // spec §5.3：token 有效期 7 天
 var AUTH_LOGIN_FAIL_LIMIT = 3;              // spec §5.2：連續失敗 3 次鎖定（Eason 2026-08-14 由 5 改為 3）
+var AUTH_LOGIN_TOTAL_LIMIT = 30;            // 2026-10-17 複驗：同帳號跨所有來源 15 分鐘內失敗 30 次 → 所有來源一起鎖
 var AUTH_LOGIN_LOCK_SECONDS = 15 * 60;      // spec §5.2：鎖 15 分鐘
 // 2026-10-12 安全修補
 var AUTH_USERNAME_MAX = 64;                 // 帳號 trim 後 1–64 字，超過直接回通用錯誤、不碰 cache／表
@@ -413,6 +414,32 @@ function setLoginState_(username, state, ttlSeconds, ipHash) {
   CacheService.getScriptCache().put(authLoginStateKey_(username, ipHash), JSON.stringify(state), ttlSeconds);
 }
 
+// 帳號跨來源總計數（固定窗：第一次失敗起算 15 分鐘）。成功登入不清；clearLoginState_ 不帶 ipHash 時清（世代 +1）。
+function authTotalKey_(username) { return 'auth_login_total:' + String(username).toLowerCase(); }
+function getLoginTotal_(username) {
+  var raw = CacheService.getScriptCache().get(authTotalKey_(username));
+  if (!raw) return { count: 0, until: 0 };
+  try {
+    var p = JSON.parse(raw);
+    if ((Number(p.ep) || 0) !== authLoginEpoch_(username)) return { count: 0, until: 0 };
+    return { count: Number(p.count) || 0, until: Number(p.until) || 0 };
+  } catch (e) {
+    return { count: 0, until: 0 };
+  }
+}
+function authTotalLocked_(username) {
+  var t = getLoginTotal_(username);
+  return t.count >= AUTH_LOGIN_TOTAL_LIMIT && t.until > Math.floor(Date.now() / 1000);
+}
+function recordLoginTotalFailure_(username) {
+  var nowSec = Math.floor(Date.now() / 1000);
+  var t = getLoginTotal_(username);
+  if (t.until <= nowSec) t = { count: 0, until: nowSec + AUTH_LOGIN_LOCK_SECONDS };
+  t.count += 1;
+  CacheService.getScriptCache().put(authTotalKey_(username),
+    JSON.stringify({ count: t.count, until: t.until, ep: authLoginEpoch_(username) }), Math.max(1, t.until - nowSec));
+}
+
 /**
  * 清鎖：帶 ipHash＝只清該來源（登入成功）；不帶＝清該帳號所有來源（重設密碼、救回管理員）。
  * 不帶 ipHash 時除了世代 +1，也移除只以帳號為鍵的舊式狀態。
@@ -472,6 +499,7 @@ function recordSourceFailure_(ipHash) {
 /** 失敗共用收尾：帳號計數＋來源計數＋login_log，回前端錯誤物件 */
 function authFail_(username, state, ipHash, msg) {
   recordLoginFailure_(username, state, ipHash);
+  recordLoginTotalFailure_(username);
   var slow = recordSourceFailure_(ipHash);
   writeLoginLog_(username, ipHash, AUTH_LOG_BAD_PASSWORD);
   return { ok: false, error: slow ? msg + AUTH_MSG_SLOW_DOWN_SUFFIX : msg };
@@ -603,6 +631,12 @@ function handleLogin_(payload, ipHash) {
 
   // 來源被鎖：直接擋（連正確密碼也一樣），不再寫 login_log，避免鎖住的來源繼續灌 log
   if (authIpLocked_(ipHash)) {
+    return { ok: false, error: AUTH_MSG_LOCKED };
+  }
+
+  // 帳號跨來源總計數已達門檻：所有來源一起擋（連正確密碼也一樣）
+  if (authTotalLocked_(username)) {
+    writeLoginLog_(username, ipHash, AUTH_LOG_LOCKED);
     return { ok: false, error: AUTH_MSG_LOCKED };
   }
 

@@ -211,6 +211,6 @@ manifest 只改 requires：模組＝`['audit.read','audit.read.brand','audit.rea
 - **權限異動提醒**（做）：新分頁 `perm_audit`（at、by、emp_no、added、removed、cause：`staff_edit`｜`perm_map`｜`perm_ex`｜`confirm`、seen）。任何會改到別人權限的寫入，事後重算受影響同仁、有差異就記一列；`modules/perms` 的 `alerts()` 對 admin 顯示未讀數，點進「權限異動」分頁看明細、按「已看過」。perm_map 改動影響多人時，一筆規則改動記一列＋受影響人數，明細展開。
 
 ### 13.2 全面審視決定（2026-10-17）
-- **擴大鎖碼**：`PERM_LOCKED` 由兩碼擴為四碼 `platform.users`、`platform.permmap`、`audit.write`、`platform.staff`。非 admin 在對照表新增／刪除含這四碼的規則 → `perm_locked`；非 admin 改同仁組織欄（含 staffConfirm／unitApprove／新建列）造成對方這四碼任一有無改變 → `perm_admin_only`，訊息依實際變動的碼組出（稽核填單／同仁名單／系統管理；涉及 `platform.permmap` 沿用「人資主管要請系統管理員設定」）。例：人資把人調進或調出財務部、管理部、人資部會被擋。`permMapGet` 回傳的 `locked` 即前端鎖列依據（前端不寫死）。預設 19 條規則不變。`roles` 分頁「含高權限碼的角色只有 admin 能指派」仍只看 `platform.users`／`platform.permmap`（`PERM_ROLE_SUPER`），不隨鎖碼擴大。
+- **擴大鎖碼**：`PERM_LOCKED` 由兩碼擴為四碼 `platform.users`、`platform.permmap`、`audit.write`、`platform.staff`。非 admin 在對照表新增／刪除含這四碼的規則 → `perm_locked`；非 admin 改同仁組織欄（含 staffConfirm／unitApprove／新建列）造成對方這四碼任一有無改變 → `perm_admin_only`，訊息依實際變動的碼組出（稽核填單／同仁名單／系統管理；涉及 `platform.permmap` 沿用「人資主管要請系統管理員設定」）。例：人資把人調進或調出財務部、管理部、人資部會被擋。`permMapGet` 回傳的 `locked` 即前端鎖列依據（前端不寫死）。預設 19 條規則不變。`roles` 分頁「含高權限碼的角色只有 admin 能指派」與鎖碼同一份清單（2026-10-17 複驗）：含 `*` 或與 `PERM_LOCKED` 四碼有交集的角色都算。
 - **登入鎖依裝置**：失敗計數與鎖定以「帳號＋來源（ipHash）」為鍵，鎖定只擋該來源；次數與時間（3 次、15 分鐘）不變。ipHash 取不到（空字串）時退回以帳號為鍵；來源全域桶照舊。
 - **救回管理員**：Apps Script 全域函式 `rescueAdmin()`（讀暫時屬性 `BOOTSTRAP_USERNAME`／`BOOTSTRAP_PASSWORD`，只重設既有帳號、不新建；啟用、role admin、換密碼、舊 token 失效、清登入鎖定），**不進** Code.gs 分派表，只能由 mini 的 run-fn 白名單或編輯器執行。

@@ -70,16 +70,16 @@ function requirePlatformUsers_(token) {
   return { ok: true, user: me.data.user, perms: me.data.perms };
 }
 
-/** 超級角色：role 為 admin，或 roles 分頁該角色的 perms 含 '*'（全部功能） */
+/** 高權限角色：role 為 admin，或 perms 含 '*'，或與 PERM_LOCKED 有交集 */
 function usrRoleIsSuper_(role) {
   role = String(role === undefined || role === null ? '' : role).trim();
   if (!role) return false;
   if (role === 'admin') return true;
   var perms = getRolePerms_(role);
   if (perms.indexOf('*') !== -1) return true;
-  // 角色含 platform.users／platform.permmap（PERM_ROLE_SUPER）也視為高權限：只有 admin 能指派、能動該帳號
-  if (typeof PERM_ROLE_SUPER !== 'undefined') {
-    return PERM_ROLE_SUPER.some(function (c) { return perms.indexOf(c) !== -1; });
+  // 高權限＝角色權限與 PERM_LOCKED（鎖碼，唯一一份清單）有交集：只有 admin 能指派、能動該帳號
+  if (typeof PERM_LOCKED !== 'undefined') {
+    return PERM_LOCKED.some(function (c) { return perms.indexOf(c) !== -1; });
   }
   return false;
 }
@@ -424,6 +424,8 @@ function handleResetPassword_(token, payload) {
   sheet.getRange(found.row, USR_COL.salt + 1, 1, 2).setValues([[newSalt, newHash]]);
   // admin 幫人重設密碼後，對方所有舊登入失效（Fable 上線前審第 5 條）
   setTokenAfter_(found.row);
+  // 密碼已換：清掉該帳號所有來源與跨來源總計數的登入鎖（2026-10-17 複驗）
+  if (typeof clearLoginState_ === 'function') clearLoginState_(String(found.values[USR_COL.username]));
 
   return { ok: true, data: {} };
 }

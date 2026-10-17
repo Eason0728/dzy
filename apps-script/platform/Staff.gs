@@ -1233,6 +1233,8 @@ function handleStaffSetActive_(token, payload) {
   var t = stfAdminTarget_(token, payload);
   if (!t.ok) return t;
   if (typeof (payload && payload.active) !== 'boolean') return { ok: false, error: 'active 格式錯誤' };
+  // 2026-10-17 複驗：非 admin 不能停用自己的 staff 列（admin 照舊）
+  if (payload.active === false && !stfActorIsAdmin_(t.auth.user) && stfTargetIsSelf_(t.v, t.auth.user)) return { ok: false, error: '不能停用自己' };
   var userRow = findUsrRowById_(stfStr_(t.v[STF_COL.user_id]));
   if (!userRow) return { ok: false, error: STF_MSG.NOT_FOUND };
   var usersSheet = stfSheet_(USR_SHEET_USERS);
