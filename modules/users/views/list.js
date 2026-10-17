@@ -117,6 +117,10 @@ function el(tag, attrs, children) {
   return node;
 }
 
+function isDryRun(res) {
+  return !!(res && res.data && res.data.dryRun);
+}
+
 function findAncestorWithAttr(startEl, attrName) {
   let node = startEl;
   while (node && typeof node.getAttribute === 'function') {
@@ -406,11 +410,13 @@ export function mountList(root, ctx) {
       tr.appendChild(textCell(displayDatetime(ctx, u.created_at)));
       tr.appendChild(textCell(displayDatetime(ctx, u.last_login_at)));
 
+      // 自己那列不給停用鈕（後端也會擋；這裡只是不讓人點到）
+      const isSelf = !!(ctx.user && String(ctx.user.id) === String(u.id));
       const actionsTd = el('td', {}, [
         actionButton('編輯', 'btn-secondary', 'edit-user', u.id),
-        actionButton(isActive ? '停用' : '啟用', 'btn-danger', 'toggle-active', u.id),
+        isSelf ? null : actionButton(isActive ? '停用' : '啟用', 'btn-danger', 'toggle-active', u.id),
         actionButton('重設密碼', 'btn-secondary', 'reset-password', u.id)
-      ]);
+      ].filter(Boolean));
       tr.appendChild(actionsTd);
 
       tbody.appendChild(tr);
@@ -483,6 +489,7 @@ export function mountList(root, ctx) {
     try {
       const res = await callBackend('saveUser', payload);
       if (!res) return;
+      if (isDryRun(res)) return; // 平台層已提示「試跑模式，未寫入」
       ctx.ui.toast('已新增', 'ok');
       await loadUsers();
     } finally {
@@ -503,6 +510,7 @@ export function mountList(root, ctx) {
     try {
       const res = await callBackend('saveUser', { id: user.id, ...payload });
       if (!res) return;
+      if (isDryRun(res)) return; // 平台層已提示「試跑模式，未寫入」
       ctx.ui.toast('已儲存', 'ok');
       await loadUsers();
     } finally {
@@ -519,6 +527,7 @@ export function mountList(root, ctx) {
     try {
       const res = await callBackend('setActive', { id: user.id, active: !active });
       if (!res) return;
+      if (isDryRun(res)) return; // 平台層已提示「試跑模式，未寫入」
       ctx.ui.toast('已更新', 'ok');
       await loadUsers();
     } finally {
@@ -535,6 +544,7 @@ export function mountList(root, ctx) {
     try {
       const res = await callBackend('resetPassword', { id: user.id, newPassword });
       if (!res) return;
+      if (isDryRun(res)) return; // 平台層已提示「試跑模式，未寫入」
       ctx.ui.toast('密碼已重設', 'ok');
     } finally {
       ctx.ui.loading(false);

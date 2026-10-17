@@ -257,7 +257,7 @@ function makeFakeCtx() {
   };
 
   const ctx = {
-    user: { id: 'u001', name: '管理員', role: 'admin', node: '' },
+    user: { id: 'u900', name: '管理員', role: 'admin', node: '' },
     can: () => true,
     api: {
       call: async (moduleId, action, payload) => {
@@ -973,6 +973,37 @@ await at('角色清單失敗但重抓成功：表單照常開啟，下拉有選�
 
   fireClick(byRole(overlay, 'cancel'));
   await flush();
+  unmount();
+});
+
+await at('自己那列不顯示停用鈕，其他列照常', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [makeUser({ id: 'u900', username: 'me1' }), makeUser({ id: 'u002', username: 'other' })] } });
+  const unmount = mountList(root, ctx);
+  await flush();
+  const toggles = allByAction(root, 'toggle-active');
+  assert.equal(toggles.length, 1, '只有別人那列有停用鈕');
+  assert.equal(toggles[0].getAttribute('data-id'), 'u002');
+  unmount();
+});
+
+await at('試跑模式（dryRun）新增：不顯示「已新增」', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [] } });
+  state.apiHandlers.saveUser = () => ({ ok: true, data: { dryRun: true } });
+  const unmount = mountList(root, ctx);
+  await flush();
+  fireClick(byRole(root, 'add-user'));
+  await flush();
+  const overlay = byRole(fakeDocument.body, 'user-form-overlay');
+  byField(overlay, 'username').value = 'dryuser';
+  byField(overlay, 'name').value = '試跑';
+  byField(overlay, 'password').value = 'longenoughpw1';
+  fireClick(byRole(overlay, 'submit'));
+  await flush();
+  assert.equal(state.toasts.some((x) => x.message === '已新增' || x.message === '已儲存'), false);
   unmount();
 });
 

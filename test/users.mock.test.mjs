@@ -735,6 +735,33 @@ function loginToken(sandbox, username, password) {
 })();
 
 // ============================================================
+// N. 自己不能停用自己／改自己的角色（admin 也一樣）；非 admin 改自己不能換帳號名稱
+// ============================================================
+(() => {
+  const sheets = freshSheets();
+  sheets.roles = ROLES_SEED.concat([['usermgr', '帳號管理員', 'platform.users']]);
+  sheets.users = freshUsersSeed().concat([
+    ['u004', 'um1', '帳號管理員', 'usermgr', '', 'salt-um1', hashFor('test-pw-usermgr-01', 'salt-um1'), 'TRUE', '2026-01-01 09:00:00', ''],
+    ['u006', 'admin2', '第二管理員', 'admin', '', 'salt-admin2', hashFor('test-pw-admin-02', 'salt-admin2'), 'TRUE', '2026-01-01 09:00:00', '']
+  ]);
+  const { sandbox, sheets: sh } = loadPlatform(sheets, { HMAC_SECRET: 'fake-hmac-secret-for-tests-only' });
+  const adm = loginToken(sandbox, 'admin1', PW.admin1);
+  const um = loginToken(sandbox, 'um1', 'test-pw-usermgr-01');
+  const call = (action, payload, tok) => callDoPost(sandbox, { action, token: tok, payload });
+  const row = (id) => sh.users._rows().find((r) => r[0] === id);
+
+  assertEqual(call('setActive', { id: 'u003', active: false }, adm).ok, false, 'N1: admin 不能停用自己');
+  assertEqual(row('u003')[7], 'TRUE', 'N1b: 自己仍啟用');
+  assertEqual(call('saveUser', { id: 'u003', username: 'admin1', name: '系統管理者帳號', role: 'accountant', node: '' }, adm).ok, false, 'N2: admin 不能改自己的角色');
+  assertEqual(row('u003')[3], 'admin', 'N2b: 角色沒變');
+  assertTrue(call('saveUser', { id: 'u006', username: 'admin2', name: '第二管理員', role: 'accountant', node: '' }, adm).ok === true, 'N3: 還有其他 active admin 時，可降級另一位 admin');
+  assertTrue(call('setActive', { id: 'u006', active: false }, adm).ok === true, 'N3b: 可停用非 admin 角色帳號');
+  assertEqual(call('saveUser', { id: 'u004', username: 'um1-renamed', name: '帳號管理員', role: 'usermgr', node: '' }, um).ok, false, 'N4: 非 admin 改自己不能換帳號名稱');
+  assertEqual(row('u004')[1], 'um1', 'N4b: 帳號名稱沒變');
+  assertTrue(call('saveUser', { id: 'u004', username: 'um1', name: '改顯示名', role: 'usermgr', node: '' }, um).ok === true, 'N5: 非 admin 改自己顯示名稱照放');
+})();
+
+// ============================================================
 if (failed > 0) {
   console.error('\n' + failed + ' 項測試失敗（共 ' + (passed + failed) + ' 項）');
   process.exit(1);
