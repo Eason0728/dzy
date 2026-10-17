@@ -1,6 +1,6 @@
 /**
  * modules/perms/views/map.js — 對照表分頁（版本 B：先選身分、再開關功能；spec §7.1-1、§13.1、§13.2）
- * 左：身分清單（含人數）；右：選中身分的 9 個功能開關；底：未儲存摘要＋還原＋儲存（先 preview 名單、確認才正式送出）；
+ * 左：身分清單（含人數）；右：選中身分的 11 個功能開關；底：未儲存摘要＋還原＋儲存（先 preview 名單、確認才正式送出）；
  * 上：搜尋同仁（permWho）。鎖碼功能（permMapGet.locked）對非 admin 顯示「只有系統管理員能改」並 disabled。
  */
 'use strict';
@@ -191,7 +191,7 @@ export function mountMap(el, ctx) {
   }
 
   async function onInit() {
-    const yes = await ctx.ui.confirm('初始化會建立四張權限分頁（對照表、個別例外、店別對照、權限異動），並放入 19 條預設規則。確定要初始化嗎？');
+    const yes = await ctx.ui.confirm('初始化會建立四張權限分頁（對照表、個別例外、店別對照、權限異動），並放入 20 條預設規則。確定要初始化嗎？');
     if (!yes || !alive) return;
     ctx.ui.loading(true);
     let r;

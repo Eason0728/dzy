@@ -33,7 +33,9 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'ssoTicket', 'svcSsoRedeem',
   // 2026-10-17：個人帳號第二期，依單位＋職稱給權限（PermActions.gs）
   'permInit', 'permMapGet', 'permMapSave', 'permExList', 'permExSave', 'permExRevoke',
-  'permStoreGet', 'permStoreSave', 'myPerms', 'permAuditList', 'permAuditSeen', 'permWho'];
+  'permStoreGet', 'permStoreSave', 'myPerms', 'permAuditList', 'permAuditSeen', 'permWho',
+  // 2026-10-18：門市營運系統（StoreOps.gs）；永遠不可列進 minikit readActions 與 dryrun READ_ACTIONS
+  'svcStoreRedeem', 'svcStoreWho', 'svcStoreRoster'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -195,6 +197,9 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'permAuditList': return handlePermAuditList_(token, payload);
     case 'permAuditSeen': return handlePermAuditSeen_(token, payload);
     case 'permWho': return handlePermWho_(token, payload);
+    case 'svcStoreRedeem': return handleSvcStoreRedeem_(payload);
+    case 'svcStoreWho': return handleSvcStoreWho_(payload);
+    case 'svcStoreRoster': return handleSvcStoreRoster_(payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };

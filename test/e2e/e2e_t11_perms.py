@@ -21,7 +21,7 @@ from playwright.sync_api import sync_playwright
 PORT = 8802
 
 LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff']
-# 預設規則（Perms.gs PERM_DEFAULT_RULES，19 條）
+# 預設規則（Perms.gs PERM_DEFAULT_RULES，20 條）
 DEFAULT_RULES = (
     [('store', '', 'sm', 'audit.read.own')]
     + [('office', '', t, 'audit.read.brand') for t in ('oam', 'osv', 'odir')]
@@ -30,6 +30,7 @@ DEFAULT_RULES = (
     + [('hq', '', t, p) for t in ('ceo', 'gm', 'chair') for p in ('audit.read', 'dorm.read')]
     + [('hq', 'hr', '*', p) for p in ('platform.staff', 'dorm.read', 'dorm.write')]
     + [('hq', 'hr', 'hm', 'platform.permmap')]
+    + [('store', '', 'sm', 'store.void')]
 )
 HRM_PERMS = ['platform.staff', 'dorm.read', 'dorm.write', 'platform.permmap']
 
@@ -113,14 +114,20 @@ class Mock11(MockBackend):
             return no_perm
         if action in ('permMapSave',) and not has_map:
             return no_perm
-        if action in ('permExList', 'permExSave', 'permExRevoke', 'permStoreSave', 'permAuditList', 'permAuditSeen') and not is_admin:
+        if action in ('permExList', 'permExSave', 'permExRevoke'):
+            # 2026-10-18：人資主管（有 platform.permmap）也能用個別例外，但只限 store.void／att.extra（PermActions.gs permAcExAuth_）
+            if not (is_admin or has_map):
+                return no_perm
+            if not is_admin and action == 'permExSave' and p.get('perm') not in ('store.void', 'att.extra'):
+                return no_perm
+        elif action in ('permStoreSave', 'permAuditList', 'permAuditSeen') and not is_admin:
             return no_perm
         if action == 'permMapGet':
             if not self.inited:
                 return {'ok': True, 'data': {'inited': False}}
             return {'ok': True, 'data': {
                 'inited': True, 'rules': list(self.rules),
-                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap'],
+                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra'],
                 'locked': LOCKED, 'names': {},
                 'counts': self.counts(),
                 'ladders': [{'code': 'store', 'name': '門市'}, {'code': 'office', 'name': '品牌辦公室'}, {'code': 'hq', 'name': '總部'}],
@@ -164,7 +171,7 @@ class Mock11(MockBackend):
                                'detail': {'rules_added': added, 'rules_removed': list(rem), 'affected': 3, 'people': [{'emp_no': 'DZY002', 'name': '李大華', 'added': ['dorm.write'], 'removed': []}]}})
             return {'ok': True, 'data': {'added': added, 'removed': list(rem), 'affected': 3}}
         if action == 'permExList':
-            return {'ok': True, 'data': {'inited': True, 'items': [dict(x) for x in self.exs]}}
+            return {'ok': True, 'data': {'inited': True, 'items': [dict(x) for x in self.exs if is_admin or x['perm'] in ('store.void', 'att.extra')]}}
         if action == 'permExSave':
             if not (p.get('note') or '').strip():
                 return self._err('bad_note', '原因必填，1 到 50 個字')
@@ -274,7 +281,7 @@ def main():
             check(ad.locator('[data-act="init"]').count() == 1, '★未初始化：admin 看到「初始化」按鈕')
             check(tabs(ad) == ['對照表', '個別例外', '店別對照', '權限異動'], 'admin 四個分頁：%s' % tabs(ad))
             ad.click('[data-act="init"]')
-            check('19 條預設規則' in ad.inner_text('.dialog-body') and '四張' in ad.inner_text('.dialog-body'), '初始化確認框說明會建四張表＋19 條預設規則')
+            check('20 條預設規則' in ad.inner_text('.dialog-body') and '四張' in ad.inner_text('.dialog-body'), '初始化確認框說明會建四張表＋20 條預設規則')
             dlg(ad, '取消')
             check(mock.inited is False, '取消不會初始化')
             ad.click('[data-act="init"]')
@@ -282,7 +289,7 @@ def main():
             ad.wait_for_selector('[data-role="perm-map"] [data-role="feature-row"]')
             check(mock.inited is True and 'permInit' in mock.perm_calls, '按確定後呼叫 permInit')
             groups = [g.get_attribute('data-group') for g in ad.locator('[data-role="role-list"] .pm-group').all()]
-            check(groups == ['store', 'office', 'hq-dept', 'hq-top'], '★左側身分分組（19 條預設規則都對得到身分，沒有「其他」）：%s' % groups)
+            check(groups == ['store', 'office', 'hq-dept', 'hq-top'], '★左側身分分組（20 條預設規則都對得到身分，沒有「其他」）：%s' % groups)
             gtitles = ad.locator('.pm-group-title').all_inner_texts()
             check(gtitles == ['門市（含中央工廠）', '品牌辦公室', '總部（依部門）', '總部（高層，不分部門）'], '分組標題：%s' % gtitles)
             check(ad.locator('.pm-role').count() == 16, '身分共 16 列（門市 2、辦公室 3、總部 8、高層 3），實際 %d' % ad.locator('.pm-role').count())
@@ -292,8 +299,8 @@ def main():
             check('3 人' in role('店長').inner_text(), '身分顯示人數（店長 3 人）：%s' % role('店長').inner_text().replace('\n', ' '))
             role('店長').click()
             perms_order = [r.get_attribute('data-perm') for r in ad.locator('[data-role="feature-row"]').all()]
-            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap'],
-                  '★右側 9 個功能列、順序正確：%s' % perms_order)
+            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra'],
+                  '★右側 11 個功能列、順序正確：%s' % perms_order)
             sw = lambda pg, perm: pg.locator('[data-role="feature-row"][data-perm="%s"] [data-act="toggle"]' % perm)
             on = lambda pg, perm: sw(pg, perm).get_attribute('aria-checked') == 'true'
             check(on(ad, 'audit.read.own') and not on(ad, 'dorm.read') and not on(ad, 'audit.read'), '店長：看自己店稽核＝開，其餘關')
@@ -482,13 +489,13 @@ def main():
             # ============ ② 人資主管（非 admin） ============
             hr = open_as('hrm', '/perms/map')
             hr.wait_for_selector('[data-role="feature-row"]')
-            check(tabs(hr) == ['對照表'], '★人資主管只有「對照表」分頁，實際：%s' % tabs(hr))
+            check(tabs(hr) == ['對照表', '個別例外'], '★人資主管有「對照表」「個別例外」兩個分頁（沒有店別對照、權限異動），實際：%s' % tabs(hr))
             hr.locator('.pm-role', has=hr.locator('span', has_text='店長')).first.click()
             lk = hr.locator('[data-role="feature-row"][data-locked="1"]')
             check(lk.count() == 4, '鎖住的四列仍顯示')
             check(lk.locator('[data-act="toggle"][disabled]').count() == 4, '★鎖碼四列對非 admin：開關 disabled')
             check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 4, '鎖列標示「只有系統管理員能改」')
-            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 5, '其餘 5 列可開關')
+            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 7, '其餘 7 列可開關（含新增的收支作廢、額外考勤核定，後端沒鎖）')
             hr.locator('[data-perm="platform.users"] [data-act="toggle"]').click(force=True)
             check('沒有未儲存' in hr.inner_text('[data-role="bar-msg"]'), '點 disabled 的鎖碼開關沒有任何變更')
             hr.fill('[data-role="who-input"]', '店長')
@@ -515,7 +522,13 @@ def main():
             }""")
             check(res['ok'] is False and res['code'] == 'perm_locked' and res['text'] == '只有系統管理員能改這個功能的對象', '★送出鎖碼 → perm_locked，中文：%s' % res)
             # 直接打網址進 admin 分頁 → 彈回首頁
+            # 人資主管的個別例外：功能下拉只有兩碼；清單只有後端回的那兩碼的例外（這裡沒有）
             hr.evaluate("() => { window.location.hash = '#/perms/ex'; }")
+            hr.wait_for_selector('[data-role="ex-perm"]')
+            opts = hr.locator('[data-role="ex-perm"] option').all_inner_texts()
+            check(opts == ['收支作廢', '額外考勤核定'], '★人資主管個別例外只能選兩碼：%s' % opts)
+            check(hr.locator('[data-role="ex-item"]').count() == 0 and hr.locator('[data-role="ex-empty"]').count() == 1, '人資主管看不到別的碼的例外（照後端回傳顯示）')
+            hr.evaluate("() => { window.location.hash = '#/perms/stores'; }")
             hr.wait_for_function("() => window.location.hash === '#/home'", timeout=5000)
             check(True, '人資主管改網址進「個別例外」被彈回首頁')
 

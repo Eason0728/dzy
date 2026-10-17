@@ -111,11 +111,11 @@ function run(staff, extra) {
 const has = (res, p) => res.perms.indexOf(p) !== -1;
 
 // ===== T1-1 =====
-ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap']), 'PERM_GRANTABLE 與契約一致');
+ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra']), 'PERM_GRANTABLE 與契約一致（含營運系統新增的 store.void、att.extra）');
 ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff']), 'PERM_LOCKED 與契約一致（四碼）');
-ok(r0.ok === true && r0.rules_seeded === 19 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋19 條規則＋5 筆對照', r0);
+ok(r0.ok === true && r0.rules_seeded === 20 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋20 條規則＋5 筆對照', r0);
 ok(eq(r0.created, ['perm_map', 'perm_ex', 'perm_store_map', 'perm_audit']), '四張分頁都建出來', r0.created);
-ok(RULES.length === 19 && RULES[0].rule_id === 'R001' && RULES[18].rule_id === 'R019', '規則編號 R001..R019', [RULES[0], RULES[18]]);
+ok(RULES.length === 20 && RULES[0].rule_id === 'R001' && RULES[19].rule_id === 'R020' && RULES[19].perm === 'store.void', '規則編號 R001..R020（R020＝店長 store.void）', [RULES[0], RULES[19]]);
 ok(eq(tables.storeMap, STORE_MAP), '店別對照 5 筆讀回一致', tables.storeMap);
 ok(tables.inited === true && tables.exs.length === 0, 'permLoadTables_ inited，例外為空');
 ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|cause|seen', 'perm_audit 表頭正確');
@@ -126,7 +126,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
 {
   const again = dbInit.sb.permInit_({ role: 'admin', id: 'boss' });
   ok(again.ok && again.rules_seeded === 0 && again.stores_seeded === 0 && again.created.length === 0, '重跑不重複建、不重複寫', again);
-  ok(dbInit.sheets.perm_map._data.length === 20 && dbInit.sheets.perm_store_map._data.length === 6, '重跑後列數不變（19+表頭、5+表頭）');
+  ok(dbInit.sheets.perm_map._data.length === 21 && dbInit.sheets.perm_store_map._data.length === 6, '重跑後列數不變（20+表頭、5+表頭）');
 }
 {
   const d = load({});
@@ -148,7 +148,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
   d.sheets.perm_map._data.push(['R020', 'store', '', 'ft', 'dorm.read', 'FALSE', '', '']);
   d.sheets.perm_ex._data.push(['X001', 'dzy001', 'dorm.read', 'ADD', new Date(Date.UTC(2026, 9, 31, 15, 59, 59)), 'x', true, '', '', '', '']);
   const t = d.sb.permLoadTables_();
-  ok(t.rules.length === 19, 'permLoadTables_ 只取 active=TRUE 的規則', t.rules.length);
+  ok(t.rules.length === 20, 'permLoadTables_ 只取 active=TRUE 的規則', t.rules.length);
   ok(t.exs.length === 1 && t.exs[0].emp_no === 'DZY001' && t.exs[0].mode === 'add' && t.exs[0].until === '2026-10-31', '例外：布林 TRUE、Date 物件正規化、大小寫', t.exs[0]);
 }
 {
@@ -167,12 +167,12 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
   const pt = run({ title: 'pt' }); const ft = run({ title: 'ft' }); const sm = run({ title: 'sm' });
   ok(eq(pt.perms, []) && pt.auditScope === 'none', '門市計時 pt：無權限、scope none', pt);
   ok(eq(ft.perms, []) && ft.auditScope === 'none', '門市正職 ft：無權限', ft);
-  ok(eq(sm.perms, ['audit.read.own']) && eq(sm.auditScope, ['sxl-gf']), '店長 sm：audit.read.own、scope [sxl-gf]', sm);
-  ok(eq(sm.sources, [{ perm: 'audit.read.own', source: 'title', rule_id: 'R001' }]), '店長 sources 來源是職稱＋rule_id', sm.sources);
+  ok(eq(sm.perms, ['audit.read.own', 'store.void']) && eq(sm.auditScope, ['sxl-gf']), '店長 sm：audit.read.own＋store.void、scope [sxl-gf]', sm);
+  ok(eq(sm.sources, [{ perm: 'audit.read.own', source: 'title', rule_id: 'R001' }, { perm: 'store.void', source: 'title', rule_id: 'R020' }]), '店長 sources 來源是職稱＋rule_id', sm.sources);
   const ck = run({ brand: 'ck', unit: 'ck', title: 'sm' });
   ok(eq(ck.auditScope, ['ck']), '央廚店長 ck（ladder store）：scope [ck]', ck);
   const nomap = run({ unit: 'mala-mc', title: 'sm' });
-  ok(eq(nomap.perms, ['audit.read.own']) && eq(nomap.auditScope, []), '店長所在單位沒有店別對照：scope []', nomap);
+  ok(eq(nomap.perms, ['audit.read.own', 'store.void']) && eq(nomap.auditScope, []), '店長所在單位沒有店別對照：scope []', nomap);
 }
 // ===== 品牌辦公室 =====
 {
@@ -251,13 +251,13 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
   const wl = run({ title: 'ft' }, { exs: [{ perm: 'platform.permex', mode: 'add', until: '' }, { perm: '*', mode: 'add', until: '' }, { perm: 'platform.review', mode: 'add', until: '' }, { perm: 'dorm.write', mode: 'add', until: '' }] });
   ok(eq(wl.perms, ['dorm.write']), '白名單外（permex／*／review）被丟掉', wl.perms);
   const wl2 = run({ title: 'sm' }, { rules: RULES.concat([{ rule_id: 'R099', ladder: 'store', dept: '', title: '*', perm: '*' }, { rule_id: 'R098', ladder: 'store', dept: '', title: '*', perm: 'platform.self' }]) });
-  ok(eq(wl2.perms, ['audit.read.own']), '規則裡白名單外的碼也被丟掉', wl2.perms);
+  ok(eq(wl2.perms, ['audit.read.own', 'store.void']), '規則裡白名單外的碼也被丟掉', wl2.perms);
   const write = run({ title: 'ft' }, { exs: [{ perm: 'audit.write', mode: 'add', until: '' }] });
   ok(write.auditScope === 'all', 'audit.write ⇒ scope all（spec 13 #7）', write);
   const wrNoRead = run({ brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' }, { exs: [{ perm: 'audit.read', mode: 'remove', until: '' }] });
   ok(has(wrNoRead, 'audit.write') && !has(wrNoRead, 'audit.read') && wrNoRead.auditScope === 'all', '拿掉 audit.read 但留 audit.write：scope 仍 all');
   const ownRm = run({ title: 'sm' }, { exs: [{ perm: 'audit.read.own', mode: 'remove', until: '' }] });
-  ok(eq(ownRm.perms, []) && ownRm.auditScope === 'none', '店長被拿掉 audit.read.own → none');
+  ok(eq(ownRm.perms, ['store.void']) && ownRm.auditScope === 'none', '店長被拿掉 audit.read.own → 只剩 store.void、scope none');
 }
 // ===== 非 active、輸出形狀 =====
 for (const st of ['disabled', 'pending', 'inactive', '', undefined]) {

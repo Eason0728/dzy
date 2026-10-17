@@ -28,6 +28,26 @@ function permAcAdmin_(token) {
   if (!permAcIsAdmin_(sess)) return permAcNoPerm_();
   return sess;
 }
+/**
+ * 個別例外專用：admin 放行所有碼；人資主管（stfIsHrHead_）只能動 STORE_HR_GRANTABLE 兩碼（store.void、att.extra），
+ * 且不能對自己設。其他碼、其他人一律 no_perm。perm＝這次要動的權限碼（列表時傳空字串＝只驗身分）。
+ * 回 session（附 hrOnly:true 表示非 admin）或錯誤物件。
+ */
+function permAcExAuth_(token, perm, targetEmp) {
+  var sess = authResolveSession_(token);
+  if (!sess.ok) return { ok: false, error: sess.error };
+  if (permAcIsAdmin_(sess)) return sess;
+  if (String(sess.user.role) !== 'staff' || typeof stfIsHrHead_ !== 'function') return permAcNoPerm_();
+  var hit = stfFindByUserId_(sess.user.id);
+  if (!hit || !stfIsHrHead_({ status: permStr_(hit.values[STF_COL.status]), dept: permStr_(hit.values[STF_COL.dept]), title: permStr_(hit.values[STF_COL.title]) })) return permAcNoPerm_();
+  if (perm !== '' && STORE_HR_GRANTABLE.indexOf(perm) === -1) return permAcNoPerm_();
+  if (targetEmp && permStr_(hit.values[STF_COL.emp_no]).toUpperCase() === permStr_(targetEmp).toUpperCase()) {
+    return permAcFail_('perm_self', '不能對自己設定例外');
+  }
+  sess.hrOnly = true;
+  return sess;
+}
+
 /** 驗 token；platform.permmap 或 admin 放行 */
 function permAcMapAccess_(token) {
   var sess = authResolveSession_(token);
@@ -314,7 +334,7 @@ function handlePermWho_(token, payload) {
 // permExList／permExSave／permExRevoke（admin）
 // ============================================================
 function handlePermExList_(token, payload) {
-  var sess = permAcAdmin_(token);
+  var sess = permAcExAuth_(token, '', '');
   if (!sess.ok) return sess;
   var ss = SpreadsheetApp.getActive();
   var t = permLoadTables_();
@@ -326,6 +346,7 @@ function handlePermExList_(token, payload) {
   permReadTable_(ss, PERM_SHEET_EX, PERM_EX_HEADERS).rows.forEach(function (r) {
     var emp = permStr_(r[1]).toUpperCase();
     if (want && emp !== want) return;
+    if (sess.hrOnly && STORE_HR_GRANTABLE.indexOf(permStr_(r[2])) === -1) return;   // 人資主管只看得到自己能管的兩碼
     var active = permIsActive_(r[6]);
     var until = permNormDate_(r[4]);
     items.push({
@@ -339,9 +360,9 @@ function handlePermExList_(token, payload) {
 }
 
 function handlePermExSave_(token, payload) {
-  var sess = permAcAdmin_(token);
-  if (!sess.ok) return sess;
   payload = payload || {};
+  var sess = permAcExAuth_(token, permStr_(payload.perm), permStr_(payload.emp_no));
+  if (!sess.ok) return sess;
   var tables = permLoadTables_();
   if (!tables.inited) return permAcNotInited_();
   var emp = permStr_(payload.emp_no).toUpperCase();
@@ -376,8 +397,8 @@ function handlePermExSave_(token, payload) {
 }
 
 function handlePermExRevoke_(token, payload) {
-  var sess = permAcAdmin_(token);
-  if (!sess.ok) return sess;
+  var sess0 = permAcExAuth_(token, '', '');   // 先驗身分；碼與對象要讀到那筆例外才知道，下面再驗
+  if (!sess0.ok) return sess0;
   var tables = permLoadTables_();
   if (!tables.inited) return permAcNotInited_();
   var id = permStr_(payload && payload.ex_id);
@@ -388,6 +409,8 @@ function handlePermExRevoke_(token, payload) {
   exT.rows.forEach(function (r, i) { if (permStr_(r[0]) === id) idx = i; });
   if (idx === -1) return permAcFail_('no_ex', '找不到這筆例外');
   var r = exT.rows[idx];
+  var sess = sess0.hrOnly ? permAcExAuth_(token, permStr_(r[2]), permStr_(r[1])) : sess0;
+  if (!sess.ok) return sess;
   if (!permIsActive_(r[6])) return permAcFail_('bad_state', '這筆例外已經撤銷了');
   var emp = permStr_(r[1]).toUpperCase();
   var today = permTodayTaipei_();

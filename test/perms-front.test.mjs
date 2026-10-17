@@ -43,12 +43,14 @@ const RULES = [
 ];
 const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff'] }, ORG);
 
-t('對照表 9 列、順序固定（不跟後端 grantable 順序）', () => {
+t('對照表 11 列、順序固定（不跟後端 grantable 順序）', () => {
   const rows = L.featureRows(DATA);
-  assert.equal(rows.length, 9);
+  assert.equal(rows.length, 11);
   assert.deepEqual(rows.map((r) => r.perm), L.FEATURE_ORDER);
   assert.equal(rows[0].name, '看自己店稽核');
   assert.equal(rows[8].name, '改權限對照表');
+  assert.equal(rows[9].name, '收支作廢');
+  assert.equal(rows[10].name, '額外考勤核定');
 });
 t('鎖住的兩列', () => {
   const locked = L.featureRows(DATA).filter((r) => r.locked).map((r) => r.perm);
@@ -158,7 +160,7 @@ t('perms manifest 合法、dept=hr、四個分頁', () => {
   assert.equal(permsManifest.dept, 'hr');
   assert.deepEqual(permsManifest.requires, ['platform.permmap']);
   assert.deepEqual(permsManifest.views.map((v) => v.id), ['map', 'ex', 'stores', 'audit']);
-  assert.deepEqual(permsManifest.views.slice(1).map((v) => v.requires[0]), ['platform.permex', 'platform.permex', 'platform.permex']);
+  assert.deepEqual(permsManifest.views.slice(1).map((v) => v.requires[0]), ['platform.permmap', 'platform.permex', 'platform.permex']);
 });
 t('稽核兩模組 requires', () => {
   for (const m of [stockManifest, opsManifest]) {
@@ -266,6 +268,10 @@ t('搜尋結果的來源白話與「我能用的功能」一致', () => {
   const who = L.whoLines(Object.assign({ sources: items }, profile)).map((x) => [x.perm, x.name, x.texts]);
   assert.deepEqual(who, mine);
   for (const [s, perms] of [['all', []], ['none', []], [[], []], [['a'], []], [['a', 'b'], ['audit.read.brand']]]) assert.equal(L.scopeLabel(s, perms), B.scopeText(s, perms));
+});
+t('人資主管在個別例外只能選的兩碼，都在可給清單裡', () => {
+  assert.deepEqual(L.HR_EX_FEATURES, ['store.void', 'att.extra']);
+  L.HR_EX_FEATURES.forEach((p) => assert.ok(L.FEATURE_ORDER.includes(p), p));
 });
 t('每個功能都有白話說明', () => L.FEATURE_ORDER.forEach((p) => assert.ok(L.FEATURE_DESC[p], p)));
 

@@ -1,0 +1,200 @@
+{
+  "version": 2,
+  "doc": "營運系統 ↔ 管理系統 共用契約唯一正本（docs/approver/spec.md §10–§13）。兩個 repo 各放一份、逐字相同，兩邊測試都讀它。",
+  "transport": {
+    "url": "營運系統 .env DZY_PLATFORM_URL（mini 內部 http://127.0.0.1:8799/platform/api）",
+    "method": "POST，Content-Type text/plain，body 為 JSON 字串",
+    "envelope_ok": {
+      "ok": true,
+      "data": {}
+    },
+    "envelope_err": {
+      "ok": false,
+      "code": "<代碼>",
+      "error": "<中文訊息>"
+    },
+    "http": "成功與業務錯誤一律 HTTP 200；HTTP 非 200、逾時、連線失敗＝unreachable"
+  },
+  "errors": {
+    "unauthorized": "svc_key 錯或未設",
+    "ticket_invalid": "券格式錯、過期、用過、aud 不符",
+    "bad_aud": "aud 不支援",
+    "no_emp": "帳號不是同仁也不是 admin",
+    "bad_input": "sub／unit 格式錯",
+    "busy": "暫時性（兌換搶不到鎖）：營運系統當 unreachable 處理，不重送 redeem"
+  },
+  "sub": {
+    "staff": "^DZY\\d{3,}$（大寫）",
+    "admin_without_emp": "^U:[A-Za-z0-9_-]{1,64}$",
+    "example": [
+      "DZY023",
+      "U:u_admin01"
+    ]
+  },
+  "requests": {
+    "ssoTicket": {
+      "action": "ssoTicket",
+      "token": "<管理系統登入 token>",
+      "payload": {
+        "aud": "store"
+      }
+    },
+    "svcStoreRedeem": {
+      "action": "svcStoreRedeem",
+      "payload": {
+        "svc_key": "<STORE_SVC_KEY>",
+        "ticket": "<64 位小寫十六進位>",
+        "aud": "store"
+      }
+    },
+    "svcStoreWho": {
+      "action": "svcStoreWho",
+      "payload": {
+        "svc_key": "<STORE_SVC_KEY>",
+        "sub": "DZY023"
+      }
+    },
+    "svcStoreRoster": {
+      "action": "svcStoreRoster",
+      "payload": {
+        "svc_key": "<STORE_SVC_KEY>",
+        "unit": "mzt-gf"
+      }
+    }
+  },
+  "responses": {
+    "ssoTicket": {
+      "ok": true,
+      "data": {
+        "ticket": "3f9a0c7e1b2d4f6a8c0e2a4c6e8f0a1b3d5f7a9c1e3a5c7e9b1d3f5a7c9e1b3d",
+        "expires_in": 60
+      }
+    },
+    "ident_active": {
+      "ok": true,
+      "data": {
+        "sub": "DZY023",
+        "active": true,
+        "emp_no": "DZY023",
+        "name": "陳小明",
+        "admin": false,
+        "hr_head": false,
+        "unit": "mzt-gf",
+        "title": "sm",
+        "epoch": "2026-03-01",
+        "pilot_units": [
+          "mala-gf"
+        ],
+        "units_managed": [
+          "mzt-gf"
+        ],
+        "void_units": [
+          "mzt-gf"
+        ],
+        "att": {
+          "people": [
+            {
+              "clock": "mztgf",
+              "emp_id": "MZTGF03",
+              "sub": "DZY023",
+              "name": "陳小明"
+            },
+            {
+              "clock": "mztgf",
+              "emp_id": "MZTGF07",
+              "sub": "DZY031",
+              "name": "李計時"
+            }
+          ]
+        }
+      }
+    },
+    "ident_admin_no_emp": {
+      "ok": true,
+      "data": {
+        "sub": "U:u_admin01",
+        "active": true,
+        "emp_no": "",
+        "name": "系統管理員",
+        "admin": true,
+        "hr_head": false,
+        "unit": "",
+        "title": "",
+        "epoch": "",
+        "pilot_units": [
+          "mala-gf"
+        ],
+        "units_managed": [
+          "mala-gf"
+        ],
+        "void_units": [
+          "mala-gf"
+        ],
+        "att": {
+          "people": []
+        }
+      }
+    },
+    "ident_inactive": {
+      "ok": true,
+      "data": {
+        "sub": "DZY023",
+        "active": false
+      }
+    },
+    "roster": {
+      "ok": true,
+      "data": {
+        "staff": [
+          {
+            "sub": "DZY023",
+            "emp_no": "DZY023",
+            "name": "陳小明",
+            "title": "sm"
+          },
+          {
+            "sub": "DZY031",
+            "emp_no": "DZY031",
+            "name": "李計時",
+            "title": "pt"
+          }
+        ]
+      }
+    },
+    "error_example": {
+      "ok": false,
+      "code": "ticket_invalid",
+      "error": "入場券無效或已過期"
+    }
+  },
+  "rules": {
+    "arrays": "units_managed、void_units、pilot_units 一律排序去重；att.people 依 clock、emp_id 排序去重",
+    "pilot": "STORE_SSO_UNITS（逗號單位碼，空＝全關）。ident 一律照發；units_managed、void_units 只留試點內單位；att.people 只留『被核的人』單位在試點內的",
+    "admin": "admin=true 時 units_managed、void_units＝試點內全部 store 階梯單位（含 ck）；att.people＝試點內所有要考勤的人（不含自己）",
+    "epoch": "同仁最近一次在職起日（到職或復職）YYYY-MM-DD；admin 無同仁編號為空字串",
+    "att": "spec §12：門市與央廚店長核自己與同店；品牌辦公室行政／督導／區經理→同辦公室總監；總部部門同仁→同部門主管；管理部同仁→執行長以上；odir hm ceo gm chair 不列；人資主管＝dept hr 且 title hm 看全部要考勤的人（不含自己）；att.extra 個別例外＝本人單位內要考勤的人（不含自己）；只取 staff_clock state=confirmed 且 roster_active 不是 FALSE 的對照"
+  },
+  "postMessage": {
+    "embed_origin": "https://dzy.mozhuting.com",
+    "store_origin": "https://dzy-bulletin.github.io",
+    "ready": {
+      "type": "dzy-store-ready",
+      "v": 1
+    },
+    "sso": {
+      "type": "dzy-store-sso",
+      "v": 1,
+      "ticket": "<64 hex>"
+    },
+    "logout": {
+      "type": "dzy-store-logout",
+      "v": 1
+    }
+  },
+  "clock_acting_name": {
+    "field": "acting_name",
+    "format": "<姓名>（<sub>）全形括號、≤40 字",
+    "example": "陳小明（DZY023）",
+    "accepted_only_when": "打卡 managers 列 allow_acting=TRUE（營運系統專用鑰匙）"
+  }
+}

@@ -2216,7 +2216,7 @@ function handleSvcDirectory_(payload) {
 // ============================================================
 var SSO_TTL_SEC = 60;
 var SSO_CACHE_PREFIX = 'sso_tkt:';
-var SSO_AUDS = { bulletin: 1, 'bulletin-admin': 1 };
+var SSO_AUDS = { bulletin: 1, 'bulletin-admin': 1, store: 1 };
 
 /**
  * 換一張入場券。aud：
@@ -2230,7 +2230,12 @@ function handleSsoTicket_(token, payload) {
   if (!res.ok) return res;
   var emp = String(res.user.username || '').toUpperCase();
   var rec;
-  if (aud === 'bulletin') {
+  if (aud === 'store') {
+    // 門市營運系統（StoreOps.gs）：sub＝DZY 編號；沒有同仁編號的 admin＝'U:'+users.id；其他回 no_emp
+    var storeSub = storeSubForUser_(res.user);
+    if (!storeSub) return clkErr_('no_emp', '這個帳號沒有同仁編號');
+    rec = { sub: storeSub, aud: aud };
+  } else if (aud === 'bulletin') {
     if (res.user.role !== 'staff' || !STF_EMP_RE.test(emp)) return clkErr_('no_emp', '這個帳號沒有同仁編號');
     rec = { emp: emp, aud: aud };
   } else {
