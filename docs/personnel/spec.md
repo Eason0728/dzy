@@ -169,7 +169,7 @@ pending／rejected／active --unclaim（後台，冒用時用）--> unclaimed（
 ### 6.3 後台（需 token＋`platform.staff`）
 | action | payload | 說明 |
 |---|---|---|
-| `staffList` | — | 全部 staff 列（含個資，不含 hash）。三個分頁有任一不存在時，先在寫入鎖內跑一次 setupStaff（上線第一次由後台打開名單時自動初始化） |
+| `staffList` | — | 全部 staff 列（含個資，不含 hash）。讀取不建表，匯入（staffImport 或 setupStaff）才建 |
 | `staffImport` | `{names:[...], preview:true/false }` | 依陣列順序從下一號起建 users＋staff 列（status unclaimed）。只擋「與現有 **unclaimed** 列同名」或「陣列內重複」（同名者無法用姓名認領）→ 整批拒絕、一筆不寫；與已認領／停用的人同名允許（日後新人可能同名）。`preview:true` 只回將建立的編號對照、不寫入。回 `{created:[{emp_no,name}]}` |
 | `staffAdd` | `{name}` | 單筆新增＝staffImport 一筆 |
 | `staffConfirm` | `{emp_no}` | p_* 搬進正式欄並清空；status pending→active；log `confirm`。前端確認鈕旁固定提示「確認前請打電話給本人核對」（防冒用的人工核對點，Fable 第 14 條） |

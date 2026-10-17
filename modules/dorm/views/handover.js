@@ -75,6 +75,31 @@ function escEl(ctx, tag, attrs, value) {
   return node;
 }
 
+/**
+ * PDF 連結白名單：只接受 https 的 Google Drive／Docs 主機，其餘回空字串。
+ * 與舊站 handover.html／sign.html 的 pdfLink() 規則一致。
+ */
+export function safePdfUrl(u) {
+  try {
+    const url = new URL(String(u || ''));
+    if (url.protocol !== 'https:') return '';
+    if (url.hostname !== 'drive.google.com' && url.hostname !== 'docs.google.com') return '';
+    return url.href;
+  } catch {
+    return '';
+  }
+}
+
+/** 依白名單畫下載連結；網址不合格就改顯示提示文字。 */
+function appendPdfLink(ctx, container, rawUrl) {
+  const safe = safePdfUrl(rawUrl);
+  if (!safe) {
+    container.appendChild(el('p', { class: 'field-hint', text: '連結格式不正確，請找管理員' }));
+    return;
+  }
+  container.appendChild(escEl(ctx, 'a', { href: safe, target: '_blank', rel: 'noopener noreferrer', class: 'btn btn-secondary' }, '下載點交單 PDF'));
+}
+
 // ============================================================
 // 純函式：賠償金額預覽、送出前驗證（不碰 DOM，可直接單元測試）
 // ============================================================
@@ -181,10 +206,7 @@ export function mountHandover(root, ctx) {
     container.appendChild(el('p', {}, [
       document.createTextNode('賠償合計 ' + ctx.fmt.money(h.compensation_total || 0) + ' 元')
     ]));
-    if (h.pdf_url) {
-      const link = escEl(ctx, 'a', { href: h.pdf_url, target: '_blank', class: 'btn btn-secondary' }, '下載點交單 PDF');
-      container.appendChild(link);
-    }
+    if (h.pdf_url) appendPdfLink(ctx, container, h.pdf_url);
   }
 
   // ------------------------------------------------------------
@@ -369,9 +391,7 @@ export function mountHandover(root, ctx) {
       container.appendChild(el('p', {}, [
         document.createTextNode('應賠償金額合計 ' + ctx.fmt.money(data.compensation_total || 0) + ' 元')
       ]));
-      if (data.pdf_url) {
-        container.appendChild(escEl(ctx, 'a', { href: data.pdf_url, target: '_blank', class: 'btn btn-secondary' }, '下載點交單 PDF'));
-      }
+      if (data.pdf_url) appendPdfLink(ctx, container, data.pdf_url);
       ctx.ui.toast('點交已送出', 'ok');
     }
     submitBtn.addEventListener('click', () => { onSubmit(); });

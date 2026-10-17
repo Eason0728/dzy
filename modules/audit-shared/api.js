@@ -164,8 +164,8 @@ export async function submit(ctx, action, payload) {
   // 要請人實際點過一輪給意見時，不能讓「試按一下送出」變成一筆假資料寫進正式資料。
   // 這不是測試替身，是給真人試用時的安全閥——所以它留在正式程式碼裡，只靠網址開關。
   if (isDryRun()) {
-    console.warn('[試跑模式] 攔下一次寫入，未送出到後端：', action, payload);
-    return { ok: true, data: { dryRun: true, action, payload } };
+    console.warn('[試跑模式] 攔下一次寫入，未送出到後端：', action);
+    return { ok: true, data: { dryRun: true, action } };
   }
 
   const res = await ctx.api.call(BACKEND_ID, action, payload);

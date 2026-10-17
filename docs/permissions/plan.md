@@ -20,7 +20,7 @@
 - `until`：`YYYY-MM-DD`（例 `2026-10-31`）或 `''`；有效＝`今天台北日期 <= until`（字串比較）。
 - 權限碼白名單 `PERM_GRANTABLE`（順序即畫面順序）：
   `['audit.read.own','audit.read.brand','audit.read','audit.write','dorm.read','dorm.write','platform.staff','platform.users','platform.permmap']`
-- 鎖碼 `PERM_LOCKED`：`['platform.users','platform.permmap']`。
+- 鎖碼 `PERM_LOCKED`：`['platform.users','platform.permmap','audit.write','platform.staff']`（四碼，已由 spec 13.2 擴大取代原兩碼）。
 - scope 形狀：`{ audit: 'all' | 'none' | ['sxl-gf', ...] }`（陣列已去重、依代碼排序）。
 - `filterNode`（proxyAuthorize_ 回傳）：`null` | `'sxl-gf'` | `['sxl-gf','mzt-gf']`；`[]`＝全部裁空。
 - 裁切函式語意（前端與 mini 逐字一致）：列物件有 `store` 欄且 `filterNode` 為字串 → 保留 `row.store === filterNode`；為陣列 → 保留 `filterNode.indexOf(row.store) !== -1`。

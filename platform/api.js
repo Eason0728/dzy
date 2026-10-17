@@ -269,7 +269,7 @@ export async function call(backendId, action, payload = {}) {
   // 拿不準的當寫入擋（往關的方向失敗）。回 ok:true 讓畫面流程走完，data.dryRun 供模組辨識。
   if (isDryRun() && !isReadAction(backendId, action, payload)) {
     notifyDryRun(backendId, action, payload);
-    return { ok: true, dryrun: true, data: { dryRun: true, action, payload } };
+    return { ok: true, dryrun: true, data: { dryRun: true, action } };
   }
 
   const body = buildRequestBody_(backendId, action, payload);

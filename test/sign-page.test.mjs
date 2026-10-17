@@ -29,6 +29,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { BACKENDS } from '../platform/config.js';
 
 let passed = 0;
 let failed = 0;
@@ -377,7 +378,7 @@ const CONTRACT_FIXTURE = {
   }
 };
 
-function makeFakeFetch(calls, { contractResponse = CONTRACT_FIXTURE, signResponse = { ok: true, pdf_url: 'https://example.test/fake.pdf' } } = {}) {
+function makeFakeFetch(calls, { contractResponse = CONTRACT_FIXTURE, signResponse = { ok: true, pdf_url: 'https://example.test/fake.pdf' }, postBehavior = null } = {}) {
   return async (url, init) => {
     const record = { url: String(url), init };
     calls.push(record);
@@ -385,6 +386,8 @@ function makeFakeFetch(calls, { contractResponse = CONTRACT_FIXTURE, signRespons
       return { ok: true, json: async () => contractResponse };
     }
     if (init.method === 'POST') {
+      if (postBehavior === 'network-error') throw new TypeError('Failed to fetch');
+      if (postBehavior === 'not-json') return { ok: true, json: async () => { throw new SyntaxError('Unexpected token <'); } };
       try {
         record.parsedBody = JSON.parse(init.body);
       } catch (e) {
@@ -533,7 +536,7 @@ await at('欄位＋簽名都合法 → 送出鈕開放，且送出 payload 的�
 
   // 送出後 GET 合約用的網址仍然是打 BACKENDS.dorm（config.js），不是頁面自己刻的網址。
   const getCall = page.calls.find((c) => !c.init || !c.init.method);
-  assert.ok(getCall.url.startsWith('https://script.google.com/macros/s/AKfycbyxyhJ35MWTjtvzKr54_9JzGfLZlclyqn2fYLWXgz0muTFzL_tu81nR1r3W332J1igm/exec'));
+  assert.ok(getCall.url.startsWith(BACKENDS.dorm), '應打 config.js 的 BACKENDS.dorm：' + getCall.url);
 });
 
 await at('清除重簽：清掉之後又變回「未簽名」，送出鈕重新停用', async () => {
@@ -609,6 +612,25 @@ await at('2026-10-12 pdf_url 白名單：簽署完成後只有 https 的 drive�
     await page.submit.onclick();
     assert.equal(page.doc.querySelectorAll('.done').length > 0, true, '應顯示完成畫面');
     assert.equal(page.doc.querySelectorAll('.done a').length, n, 'pdf_url=' + JSON.stringify(u));
+  }
+});
+
+await at('送出失敗（網路錯誤／回應不是 JSON）→ 顯示連線失敗提示，按鈕恢復可再按，再按一次可成功', async () => {
+  for (const behavior of ['network-error', 'not-json']) {
+    const page = await openSignPage({ fetchOptions: { postBehavior: behavior } });
+    fillField(page.idInput, 'a123456789');
+    fillField(page.phoneInput, '0912345678');
+    fillField(page.mailInput, '新竹市某路1號');
+    drawSignature(page.canvas, page.win);
+    await page.submit.onclick();
+    assert.ok(page.alerts.includes('連線失敗，請檢查網路後再按一次送出'), behavior + '：應提示連線失敗：' + JSON.stringify(page.alerts));
+    assert.equal(page.submit.disabled, false, behavior + '：按鈕應恢復可按');
+    assert.equal(page.submit.textContent, '確認送出', behavior + '：按鈕文字應還原');
+    assert.equal(page.doc.querySelectorAll('.done').length, 0, behavior + '：不該顯示完成畫面');
+    // 網路恢復後再按一次可成功
+    globalThis.fetch = makeFakeFetch(page.calls);
+    await page.submit.onclick();
+    assert.ok(page.doc.querySelectorAll('.done').length > 0, behavior + '：重按後應成功');
   }
 });
 
