@@ -1154,7 +1154,7 @@ function apvFileRegister_(emp, meta) {
     files.forEach(function (x) {
       ids[x.o.id] = 1;
       if (x.o.seq > maxSeq) maxSeq = x.o.seq;
-      if (x.o.owner === e && apvYmd8_(x.o.created_at) === today) count++;
+      if (x.o.owner === e && apvYmd8_(x.o.created_at) === today && x.o.state !== 'deleted') count++;   // 登記後 rename 失敗被作廢的不吃額度
     });
     if (count >= APV_FILE_DAILY_QUOTA) return apvFail_('quota', '今天上傳的張數已達上限');
     var id = apvFileNewId_(ids);
@@ -1164,8 +1164,42 @@ function apvFileRegister_(emp, meta) {
     if ((meta.kind === 'sign') !== (ext === 'png')) return apvFail_('file_invalid', '副檔名與種類不符');
     var path = t.y + '/' + t.m + '/' + id + '.' + ext;   // 相對 apv-files 目錄（jobs 把 tmp 檔 rename 到這裡）
     apvAppendObj_(APV_SHEET_FILES, APV_FILE_HEADERS, { id: id, owner: e, form_id: '', path: path, bytes: meta.bytes, sha256: meta.sha256, created_at: now,
-      kind: meta.kind, state: 'uploaded', seq: maxSeq + 1, rev: '' });
+      kind: meta.kind, state: 'putting', seq: maxSeq + 1, rev: '' });   // putting＝登記了、檔還沒落地；jobs rename 成功後 apvFileCommit_ 才變 uploaded
     return { ok: true, id: id, path: path };
+  });
+}
+
+/** 檔案已落地（jobs rename 成功後呼叫）：putting → uploaded。已是 uploaded 回 ok（重送無害）；其他狀態失敗 */
+function apvFileCommit_(id) {
+  return apvWithLock_(function () {
+    if (!apvReady_()) return apvNotInited_();
+    var fid = apvStr_(id);
+    if (!APV_FILE_ID_RE.test(fid)) return apvFail_('file_invalid', '檔號格式錯誤');
+    var hit = null;
+    apvReadFiles_().forEach(function (x) { if (x.o.id === fid) hit = x; });
+    if (!hit) return apvFail_('not_found', '找不到檔案');
+    if (hit.o.state === 'uploaded') return { ok: true, id: fid };
+    if (hit.o.state !== 'putting') return apvFail_('conflict', '檔案已失效');
+    hit.o.state = 'uploaded';
+    apvSaveFile_(hit);
+    return { ok: true, id: fid };
+  });
+}
+
+/** 檔案沒能落地（jobs rename 失敗後呼叫）：putting → deleted。只動 putting 的 */
+function apvFileAbort_(id) {
+  return apvWithLock_(function () {
+    if (!apvReady_()) return apvNotInited_();
+    var fid = apvStr_(id);
+    if (!APV_FILE_ID_RE.test(fid)) return apvFail_('file_invalid', '檔號格式錯誤');
+    var hit = null;
+    apvReadFiles_().forEach(function (x) { if (x.o.id === fid) hit = x; });
+    if (!hit) return apvFail_('not_found', '找不到檔案');
+    if (hit.o.state === 'deleted') return { ok: true, id: fid };
+    if (hit.o.state !== 'putting') return apvFail_('conflict', '檔案已落地或已使用，不能作廢');
+    hit.o.state = 'deleted';
+    apvSaveFile_(hit);
+    return { ok: true, id: fid };
   });
 }
 
@@ -1181,14 +1215,14 @@ function apvFileCanRead_(token, id) {
   return { ok: true, path: hit.o.path, mime: hit.o.kind === 'sign' ? 'image/png' : 'image/jpeg' };
 }
 
-/** 孤兒清除第一步：只列 uploaded 且超過 24 小時的檔，並在鎖內先改成 deleting。回 [{id, path}] */
+/** 孤兒清除第一步：列 uploaded 超過 24 小時、putting 超過 1 小時（put 中途當機）的檔，並在鎖內先改成 deleting。回 [{id, path}] */
 function apvFileSweepList_() {
   var r = apvWithLock_(function () {
     if (!apvReady_()) return { ok: true, list: [] };
     var now = apvNow_();
     var list = [];
     apvReadFiles_().forEach(function (x) {
-      if (x.o.state === 'uploaded' && now - x.o.created_at > 24 * 60 * 60 * 1000) {
+      if ((x.o.state === 'uploaded' && now - x.o.created_at > 24 * 60 * 60 * 1000) || (x.o.state === 'putting' && now - x.o.created_at > 60 * 60 * 1000)) {
         x.o.state = 'deleting';
         apvSaveFile_(x);
         list.push({ id: x.o.id, path: x.o.path });

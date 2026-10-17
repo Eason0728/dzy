@@ -54,6 +54,7 @@ expense:   {spend_date, category:'repair'|'food'|'misc'|'transport'|'supplies'|'
             payee:'self'|'vendor', vendor_name?, purchase_id?}
 personnel: {kind:'leave'|'transfer'|'raise', effective, from:{unit,title,pay?}, to:{unit?,title?,pay?}, reason,
             sign_file?, paper_files?:[id]}
+            // 離職：對象已開通 → 只能本人線上簽名，帶 paper_files 回 bad_request「對象已開通帳號，請改用線上簽名」；對象未開通 → 附 1～2 張紙本簽名照
 ```
 category 中文：repair 設備維修、food 食材臨時採購、misc 雜支、transport 交通、supplies 文具耗材、other 其他。
 

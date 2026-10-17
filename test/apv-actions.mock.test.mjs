@@ -186,6 +186,7 @@ const newCid = () => 'client-' + (++cid) + '-' + crypto.randomBytes(4).toString(
 function upload(app, emp, kind) {
   const r = app.sb.apvFileRegister_(emp, { kind: kind || 'receipt', bytes: 1000, sha256: SHA });
   if (!r.ok) throw new Error('upload 失敗 ' + J(r));
+  if (!app.sb.apvFileCommit_(r.id).ok) throw new Error('commit 失敗');   // jobs 在 rename 成功後呼叫
   return r.id;
 }
 const expenseBody = (o) => Object.assign({ spend_date: '2026-10-17', category: 'repair', amount: 800, desc: '測試維修', payee: 'self' }, o || {});
@@ -793,7 +794,8 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const rs = sb.apvFileRegister_('DZY901', { kind: 'sign', bytes: 5000, sha256: SHA });
   ok(rs.path.endsWith('.png'), '簽名檔副檔名 .png');
   const row = FILEROWS(app).find((x) => x.id === r.id);
-  ok(row.state === 'uploaded' && row.owner === 'DZY901' && row.seq === 1 && row.form_id === '' && row.kind === 'receipt', '登記後 uploaded、未綁單、seq 遞增');
+  ok(row.state === 'putting' && row.owner === 'DZY901' && row.seq === 1 && row.form_id === '' && row.kind === 'receipt', '登記後 putting（檔還沒落地）、未綁單、seq 遞增');
+  ok(sb.apvFileCommit_(r.id).ok && sb.apvFileCommit_(rs.id).ok && FILEROWS(app).find((x) => x.id === r.id).state === 'uploaded', 'commit 後 uploaded');
   ok(sb.apvFileRegister_('DZY901', { kind: 'receipt', bytes: 180 * 1024 + 1, sha256: SHA }).error === 'file_too_large', '收據超過 180 KB → file_too_large');
   ok(sb.apvFileRegister_('DZY901', { kind: 'receipt', bytes: 180 * 1024, sha256: SHA }).ok, '剛好 180 KB 可以');
   ok(sb.apvFileRegister_('DZY901', { kind: 'sign', bytes: 100 * 1024 + 1, sha256: SHA }).error === 'file_too_large', '簽名檔超過 100 KB → file_too_large');
@@ -816,9 +818,10 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(can('DZY901', r.id).ok && can('DZY902', r.id).ok === false && can('DZY910', r.id).ok, 'canRead：未綁單的檔只有擁有者（與人資）能讀');
   ok(can('DZY901', rs.id).mime === 'image/png', 'canRead：簽名檔 mime＝image/png');
   // sweep：只刪 uploaded 且 > 24 小時
-  const old1 = sb.apvFileRegister_('DZY902', { kind: 'receipt', bytes: 10, sha256: SHA }).id;
-  const old2 = sb.apvFileRegister_('DZY902', { kind: 'receipt', bytes: 10, sha256: SHA }).id;
-  const fresh1 = sb.apvFileRegister_('DZY902', { kind: 'receipt', bytes: 10, sha256: SHA }).id;
+  const reg2 = () => { const x = sb.apvFileRegister_('DZY902', { kind: 'receipt', bytes: 10, sha256: SHA }).id; sb.apvFileCommit_(x); return x; };
+  const old1 = reg2();
+  const old2 = reg2();
+  const fresh1 = reg2();
   const FH = FILE_H;
   setCell(app, 'apv_files', FH, old1, 'created_at', Date.now() - 25 * HOUR);
   setCell(app, 'apv_files', FH, old2, 'created_at', Date.now() - 48 * HOUR);
@@ -952,6 +955,33 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const w = sendExpense(two, 'DZY901', 800);
   post(two, 'DZY901', 'apvWithdraw', { id: w.data.id, rev: 1, step: 0 });
   ok(post(two, 'DZY920', 'apvDecide', { id: w.data.id, rev: 1, step: 0, decision: 'approve' }).error === 'conflict', '（第3條）撤回後另一位候選人按核准 → conflict');
+}
+{ // 第 5 條：登記先是 putting，commit 後才能綁；abort 標 deleted；sweep 清超過 1 小時的 putting
+  const app = freshApp();
+  const sb = app.sb;
+  const r = sb.apvFileRegister_('DZY901', { kind: 'receipt', bytes: 1000, sha256: SHA });
+  ok(r.ok && FILEROWS(app).find((x) => x.id === r.id).state === 'putting', '（第5條）登記後 state＝putting');
+  const sub = (id) => post(app, 'DZY901', 'apvSubmit', { client_id: newCid(), type: 'expense', body: expenseBody(), files: [id] });
+  ok(sub(r.id).error === 'file_invalid', '（第5條）putting 的檔不能綁進單');
+  ok(post(app, 'DZY901', 'apvFileMeta', { id: r.id }).error === 'not_found' && sb.apvFileCanRead_(app.tok.DZY901, r.id).ok === false, '（第5條）putting 的檔讀不到');
+  ok(!sb.apvBackupList_(0).some((x) => x.id === r.id), '（第5條）putting 的檔不進備份清單');
+  ok(typeof sb.apvFileCommit_ === 'function' && typeof sb.apvFileAbort_ === 'function', '（第5條）apvFileCommit_／apvFileAbort_ 存在');
+  ok(sb.apvFileCommit_(r.id).ok && FILEROWS(app).find((x) => x.id === r.id).state === 'uploaded', '（第5條）commit → uploaded');
+  ok(sb.apvFileCommit_(r.id).ok, '（第5條）重複 commit 無害');
+  ok(sub(r.id).ok, '（第5條）uploaded 的檔可以綁');
+  const r2 = sb.apvFileRegister_('DZY901', { kind: 'receipt', bytes: 1000, sha256: SHA });
+  ok(sb.apvFileAbort_(r2.id).ok && FILEROWS(app).find((x) => x.id === r2.id).state === 'deleted', '（第5條）abort → deleted');
+  ok(sb.apvFileCommit_(r2.id).ok === false && FILEROWS(app).find((x) => x.id === r2.id).state === 'deleted', '（第5條）已 abort 的不能再 commit');
+  const bound = FILEROWS(app).find((x) => x.state === 'bound');
+  ok(sb.apvFileAbort_(bound.id).ok === false && FILEROWS(app).find((x) => x.id === bound.id).state === 'bound', '（第5條）已綁單的檔 abort 無效');
+  ok(sb.apvFileCommit_('F999999999').ok === false && sb.apvFileAbort_('bad').ok === false, '（第5條）不存在／格式錯的檔號 → 失敗');
+  ok(app.sb.CODE_ALLOWED_ACTIONS.indexOf('apvFileCommit_') === -1 && post(app, 'admin', 'apvFileCommit_', {}).ok === false && post(app, 'admin', 'apvFileAbort_', {}).ok === false, '（第5條）新函式不在 Code.gs 分派表');
+  const p1 = sb.apvFileRegister_('DZY901', { kind: 'receipt', bytes: 1000, sha256: SHA });
+  const p2 = sb.apvFileRegister_('DZY901', { kind: 'receipt', bytes: 1000, sha256: SHA });
+  setCell(app, 'apv_files', FILE_H, p2.id, 'created_at', Date.now() - 2 * HOUR);
+  const sw = sb.apvFileSweepList_();
+  ok(sw.some((x) => x.id === p2.id) && !sw.some((x) => x.id === p1.id), '（第5條）sweep 列出超過 1 小時的 putting、不動剛登記的');
+  ok(FILEROWS(app).find((x) => x.id === p2.id).state === 'deleting' && FILEROWS(app).find((x) => x.id === p1.id).state === 'putting', '（第5條）超時的 putting → deleting');
 }
 { // 第 6 條：對象已開通 + 離職單帶紙本照 → bad_request
   const app = freshApp();
