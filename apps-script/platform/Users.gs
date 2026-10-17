@@ -77,9 +77,9 @@ function usrRoleIsSuper_(role) {
   if (role === 'admin') return true;
   var perms = getRolePerms_(role);
   if (perms.indexOf('*') !== -1) return true;
-  // 角色含任一鎖碼（platform.users／platform.permmap）也視為高權限：只有 admin 能指派、能動該帳號
-  if (typeof PERM_LOCKED !== 'undefined') {
-    return PERM_LOCKED.some(function (c) { return perms.indexOf(c) !== -1; });
+  // 角色含 platform.users／platform.permmap（PERM_ROLE_SUPER）也視為高權限：只有 admin 能指派、能動該帳號
+  if (typeof PERM_ROLE_SUPER !== 'undefined') {
+    return PERM_ROLE_SUPER.some(function (c) { return perms.indexOf(c) !== -1; });
   }
   return false;
 }

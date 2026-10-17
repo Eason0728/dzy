@@ -382,6 +382,37 @@ function flipChar(str, index) {
 })();
 
 // ============================================================
+// E2. 登入鎖依裝置（Eason 2026-10-17）：鎖定鍵＝帳號＋來源（ipHash），只擋該來源；ipHash 空字串退回以帳號為鍵
+// ============================================================
+(() => {
+  const { sandbox } = freshApp();
+  const A = 'aaaaaaaaaaaa';
+  const B = 'bbbbbbbbbbbb';
+  const LOCKED = { ok: false, error: '嘗試次數過多，請 15 分鐘後再試' };
+  for (let i = 1; i <= 3; i++) sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, A);
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, A), LOCKED, 'E2a: A 來源錯 3 次後被鎖');
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, A), LOCKED, 'E2b: A 來源鎖定期內正確密碼仍被擋');
+  const fromB = sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, B);
+  assertTrue(fromB.ok === true, 'E2c: B 來源同帳號正確密碼仍可登入');
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, A), LOCKED, 'E2d: B 登入成功不會解開 A 的鎖');
+  // B 自己錯 3 次也只鎖 B
+  for (let i = 1; i <= 3; i++) sandbox.handleLogin_({ username: 'acc1', password: 'wrong-password' }, B);
+  assertEqual(sandbox.handleLogin_({ username: 'acc1', password: PW.acc1 }, B), LOCKED, 'E2e: B 來源錯 3 次 acc1 被鎖');
+  assertTrue(sandbox.handleLogin_({ username: 'acc1', password: PW.acc1 }, A).ok === true, 'E2f: 其他來源登 acc1 不受影響');
+  // 管理端重設（不帶來源）清掉該帳號所有來源的鎖
+  sandbox.clearLoginState_('lockuser');
+  assertTrue(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, A).ok === true, 'E2g: clearLoginState_(帳號) 清掉所有來源的鎖定');
+})();
+(() => {
+  // ipHash 空字串：行為同舊版（以帳號為鍵）；帶來源與不帶來源的計數互不相干
+  const { sandbox } = freshApp();
+  const LOCKED = { ok: false, error: '嘗試次數過多，請 15 分鐘後再試' };
+  for (let i = 1; i <= 3; i++) sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, '');
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, ''), LOCKED, 'E2h: ipHash 空字串 → 以帳號為鍵鎖定（同舊版）');
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }), LOCKED, 'E2i: 不傳 ipHash 也被同一把鎖擋');
+})();
+
+// ============================================================
 // F. 停用帳號：login 擋下、me 每次重查 active
 // ============================================================
 (() => {

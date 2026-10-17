@@ -557,7 +557,8 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   const tokHr = post(sb, 'login', { username: 'hr1', password: 'fake-hr-pw-01' }).data.token;
   const pHr = post(sb, 'unitPending', {}, tokHr);
   ok(pHr.ok && pHr.data.all_units === true && pHr.data.people.map((x) => x.name).sort().join() === '審庚,審辛', 'A12 人資看得到全部單位的待審', pHr);
-  ok(post(sb, 'unitApprove', { emp_no: emp('審庚') }, tokHr).ok, 'A12 ★人資可審（財務部沒有主管也能開通）');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審庚') }, tokHr).code === 'perm_admin_only', 'A12 人資審財務部同仁 → 會拿到 audit.write，鎖碼擴大後擋下（2026-10-17）');
+  ok(post(sb, 'unitApprove', { emp_no: emp('審庚') }, tok).ok, 'A12 ★admin 可審（財務部沒有主管也能開通）');
   ok(post(sb, 'unitApprove', { emp_no: emp('審辛') }, tok).ok, 'A12 admin（*）也可審');
 
   // 紀錄只寫事件不寫個資

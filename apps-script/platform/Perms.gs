@@ -10,8 +10,10 @@
 
 // 可給的權限碼白名單（順序即畫面順序）
 var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap'];
-// 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則
-var PERM_LOCKED = ['platform.users', 'platform.permmap'];
+// 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
+// 角色（roles 分頁）含這兩碼＝高權限角色，只有 admin 能指派（Users.gs）；不跟 PERM_LOCKED 擴大而變
+var PERM_ROLE_SUPER = ['platform.users', 'platform.permmap'];
+var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff'];
 
 var PERM_SHEET_MAP = 'perm_map';
 var PERM_SHEET_EX = 'perm_ex';
@@ -532,6 +534,14 @@ function permSessionCompute_(base, staffValues) {
 // ============================================================
 
 var PERM_MSG_ADMIN_ONLY = '人資主管要請系統管理員設定';
+// 非 admin 的調動改變了對方的鎖碼：依實際變動的碼組出中文訊息（含 platform.permmap 沿用原句）
+var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理' };
+function permLockedMsg_(changedCodes) {
+  if (changedCodes.indexOf('platform.permmap') !== -1) return PERM_MSG_ADMIN_ONLY;
+  var ph = [];
+  changedCodes.forEach(function (c) { var t = PERM_LOCKED_PHRASE[c] || c; if (ph.indexOf(t) === -1) ph.push(t); });
+  return '這個調動會改變對方的' + ph.join('／') + '權限，請系統管理員處理';
+}
 var PERM_MSG_SELF_ORG = '不能修改自己的單位、部門或職稱，請找人資或系統管理員';
 
 function permDiff_(before, after) {
@@ -581,11 +591,11 @@ function permStaffChangeCheck_(isAdmin, beforeValues, beforeExtra, afterValues, 
   var a = permComputeRow_(ctx, permAsActive_(afterValues), afterExtra);
   var res = { block: null, diff: null, inited: ctx.inited };
   // 鎖碼家族（PERM_LOCKED 全部碼，含 platform.users、platform.permmap）：任一有無改變且非 admin → 擋
-  var lockedChanged = PERM_LOCKED.some(function (c) {
+  var lockedChanged = PERM_LOCKED.filter(function (c) {
     return (b.perms.indexOf(c) !== -1) !== (a.perms.indexOf(c) !== -1);
   });
-  if (!isAdmin && lockedChanged) {
-    res.block = { ok: false, error: PERM_MSG_ADMIN_ONLY, code: 'perm_admin_only' };
+  if (!isAdmin && lockedChanged.length) {
+    res.block = { ok: false, error: permLockedMsg_(lockedChanged), code: 'perm_admin_only' };
     return res;
   }
   res.diff = permDiff_(b.perms, a.perms);
@@ -617,8 +627,8 @@ function permAuditEnabled_(by, values) {
 function permNewRowBlock_(isAdmin, values) {
   if (isAdmin) return null;
   var r = permComputeRow_(permLoadCtx_(true), permAsActive_(values), []);
-  var hit = PERM_LOCKED.some(function (c) { return r.perms.indexOf(c) !== -1; });
-  return hit ? { ok: false, error: PERM_MSG_ADMIN_ONLY, code: 'perm_admin_only' } : null;
+  var hit = PERM_LOCKED.filter(function (c) { return r.perms.indexOf(c) !== -1; });
+  return hit.length ? { ok: false, error: permLockedMsg_(hit), code: 'perm_admin_only' } : null;
 }
 
 /** 追加一列 perm_audit（分頁不存在或表頭不對就略過，回 false）。added／removed 是字串（逗號相連的權限碼，或 perm_map 的 JSON 明細） */

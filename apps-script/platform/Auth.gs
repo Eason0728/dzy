@@ -382,36 +382,57 @@ function proxyAuthorize_(token, ns, action) {
 //    過期但沒人清的 key。內部系統少量帳號，CacheService 的「盡力保存、非保證持久」特性可接受。
 // ============================================================
 
-function authLoginStateKey_(username) {
+function authLoginStateKey_(username, ipHash) {
   // 帳號不分大小寫（2026-10-12）：dzy001／DZY001、boss／BOSS 共用同一個鎖定計數
-  return 'auth_login_state:' + String(username).toLowerCase();
+  // 2026-10-17 依裝置：有 ipHash 時鍵＝帳號＋來源，鎖定只擋該來源；沒有（空字串）退回只以帳號為鍵
+  var base = 'auth_login_state:' + String(username).toLowerCase();
+  return ipHash ? base + ':' + ipHash : base;
 }
 
-function getLoginState_(username) {
-  var raw = CacheService.getScriptCache().get(authLoginStateKey_(username));
+// 世代：管理端重設密碼／救回帳號時要一次清掉該帳號「所有來源」的鎖，但快取不能列舉 key，
+// 所以每個狀態記下寫入時的世代，清除＝世代 +1，世代對不上的狀態一律當作沒有。
+function authLoginEpochKey_(username) { return 'auth_login_epoch:' + String(username).toLowerCase(); }
+function authLoginEpoch_(username) {
+  return Number(CacheService.getScriptCache().get(authLoginEpochKey_(username)) || 0) || 0;
+}
+
+function getLoginState_(username, ipHash) {
+  var raw = CacheService.getScriptCache().get(authLoginStateKey_(username, ipHash));
   if (!raw) return { count: 0, lockedUntil: 0 };
   try {
     var parsed = JSON.parse(raw);
+    if ((Number(parsed.ep) || 0) !== authLoginEpoch_(username)) return { count: 0, lockedUntil: 0 };
     return { count: Number(parsed.count) || 0, lockedUntil: Number(parsed.lockedUntil) || 0 };
   } catch (e) {
     return { count: 0, lockedUntil: 0 };
   }
 }
 
-function setLoginState_(username, state, ttlSeconds) {
-  CacheService.getScriptCache().put(authLoginStateKey_(username), JSON.stringify(state), ttlSeconds);
+function setLoginState_(username, state, ttlSeconds, ipHash) {
+  state.ep = authLoginEpoch_(username);
+  CacheService.getScriptCache().put(authLoginStateKey_(username, ipHash), JSON.stringify(state), ttlSeconds);
 }
 
-function clearLoginState_(username) {
-  CacheService.getScriptCache().remove(authLoginStateKey_(username));
+/**
+ * 清鎖：帶 ipHash＝只清該來源（登入成功）；不帶＝清該帳號所有來源（重設密碼、救回管理員）。
+ * 不帶 ipHash 時除了世代 +1，也移除只以帳號為鍵的舊式狀態。
+ */
+function clearLoginState_(username, ipHash) {
+  var cache = CacheService.getScriptCache();
+  if (ipHash) {
+    cache.remove(authLoginStateKey_(username, ipHash));
+    return;
+  }
+  cache.remove(authLoginStateKey_(username, ''));
+  cache.put(authLoginEpochKey_(username), String(authLoginEpoch_(username) + 1), 6 * 60 * 60);
 }
 
-/** 記一次失敗：次數到 5 才寫入 lockedUntil；TTL 用鎖定秒數，超過這段時間沒再失敗就自然重置 */
-function recordLoginFailure_(username, state) {
+/** 記一次失敗：次數到門檻才寫入 lockedUntil；TTL 用鎖定秒數，超過這段時間沒再失敗就自然重置 */
+function recordLoginFailure_(username, state, ipHash) {
   var count = (state.count || 0) + 1;
   var nowSec = Math.floor(Date.now() / 1000);
   var next = { count: count, lockedUntil: count >= AUTH_LOGIN_FAIL_LIMIT ? nowSec + AUTH_LOGIN_LOCK_SECONDS : 0 };
-  setLoginState_(username, next, AUTH_LOGIN_LOCK_SECONDS);
+  setLoginState_(username, next, AUTH_LOGIN_LOCK_SECONDS, ipHash);
 }
 
 // ── 來源桶（2026-10-12，防跨帳號密碼噴灑）─────────────────────────
@@ -450,7 +471,7 @@ function recordSourceFailure_(ipHash) {
 
 /** 失敗共用收尾：帳號計數＋來源計數＋login_log，回前端錯誤物件 */
 function authFail_(username, state, ipHash, msg) {
-  recordLoginFailure_(username, state);
+  recordLoginFailure_(username, state, ipHash);
   var slow = recordSourceFailure_(ipHash);
   writeLoginLog_(username, ipHash, AUTH_LOG_BAD_PASSWORD);
   return { ok: false, error: slow ? msg + AUTH_MSG_SLOW_DOWN_SUFFIX : msg };
@@ -585,7 +606,7 @@ function handleLogin_(payload, ipHash) {
     return { ok: false, error: AUTH_MSG_LOCKED };
   }
 
-  var state = getLoginState_(username);
+  var state = getLoginState_(username, ipHash);
   var nowSec = Math.floor(Date.now() / 1000);
   if (state.lockedUntil && state.lockedUntil > nowSec) {
     writeLoginLog_(username, ipHash, AUTH_LOG_LOCKED);
@@ -629,13 +650,13 @@ function handleLogin_(payload, ipHash) {
   // 同仁認領待審（2026-10-12 Eason：主管審核通過才開通）：密碼對了才說原因，不先洩漏帳號狀態
   var gate = authStaffGate_(user);
   if (gate.block) {
-    clearLoginState_(username);
+    clearLoginState_(username, ipHash);
     writeLoginLog_(username, ipHash, AUTH_LOG_DISABLED);
     return { ok: false, error: gate.block };
   }
 
   // 成功
-  clearLoginState_(username);
+  clearLoginState_(username, ipHash);
   updateLastLogin_(recheck.row);
   writeLoginLog_(username, ipHash, AUTH_LOG_OK);
 
