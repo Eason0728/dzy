@@ -377,7 +377,7 @@ const CONTRACT_FIXTURE = {
   }
 };
 
-function makeFakeFetch(calls, { contractResponse = CONTRACT_FIXTURE, signResponse = { ok: true, pdf_url: 'https://example.test/fake.pdf' } } = {}) {
+function makeFakeFetch(calls, { contractResponse = CONTRACT_FIXTURE, signResponse = { ok: true, pdf_url: 'https://example.test/fake.pdf' }, postBehavior = null } = {}) {
   return async (url, init) => {
     const record = { url: String(url), init };
     calls.push(record);
@@ -385,6 +385,8 @@ function makeFakeFetch(calls, { contractResponse = CONTRACT_FIXTURE, signRespons
       return { ok: true, json: async () => contractResponse };
     }
     if (init.method === 'POST') {
+      if (postBehavior === 'network-error') throw new TypeError('Failed to fetch');
+      if (postBehavior === 'not-json') return { ok: true, json: async () => { throw new SyntaxError('Unexpected token <'); } };
       try {
         record.parsedBody = JSON.parse(init.body);
       } catch (e) {
@@ -609,6 +611,25 @@ await at('2026-10-12 pdf_url 白名單：簽署完成後只有 https 的 drive�
     await page.submit.onclick();
     assert.equal(page.doc.querySelectorAll('.done').length > 0, true, '應顯示完成畫面');
     assert.equal(page.doc.querySelectorAll('.done a').length, n, 'pdf_url=' + JSON.stringify(u));
+  }
+});
+
+await at('送出失敗（網路錯誤／回應不是 JSON）→ 顯示連線失敗提示，按鈕恢復可再按，再按一次可成功', async () => {
+  for (const behavior of ['network-error', 'not-json']) {
+    const page = await openSignPage({ fetchOptions: { postBehavior: behavior } });
+    fillField(page.idInput, 'a123456789');
+    fillField(page.phoneInput, '0912345678');
+    fillField(page.mailInput, '新竹市某路1號');
+    drawSignature(page.canvas, page.win);
+    await page.submit.onclick();
+    assert.ok(page.alerts.includes('連線失敗，請檢查網路後再按一次送出'), behavior + '：應提示連線失敗：' + JSON.stringify(page.alerts));
+    assert.equal(page.submit.disabled, false, behavior + '：按鈕應恢復可按');
+    assert.equal(page.submit.textContent, '確認送出', behavior + '：按鈕文字應還原');
+    assert.equal(page.doc.querySelectorAll('.done').length, 0, behavior + '：不該顯示完成畫面');
+    // 網路恢復後再按一次可成功
+    globalThis.fetch = makeFakeFetch(page.calls);
+    await page.submit.onclick();
+    assert.ok(page.doc.querySelectorAll('.done').length > 0, behavior + '：重按後應成功');
   }
 });
 

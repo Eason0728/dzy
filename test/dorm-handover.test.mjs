@@ -21,6 +21,7 @@ globalThis.fetch = async (url) => {
 
 import assert from 'node:assert/strict';
 import { esc, datetime, date, roc, money } from '../platform/fmt.js';
+import { safePdfUrl } from '../modules/dorm/views/handover.js';
 
 // ============================================================
 // 0／1. 最小 DOM stub（做法照抄 test/dorm-create.test.mjs）
@@ -551,6 +552,65 @@ await at('unmount 呼叫 signaturePad.destroy()：只呼叫一次，且發生在
   unmount();
   assert.equal(state.padDestroyCalls, 1, 'unmount 之後必須呼叫一次 destroy');
 });
+
+// ============================================================
+// G2. PDF 連結白名單：只接受 https 的 Google Drive／Docs 主機
+// ============================================================
+
+t('safePdfUrl：不合格的網址一律回空字串', () => {
+  const bad = ['javascript:void(0)', 'data:text/html,x', 'http://drive.google.com/file/d/abc',
+    'https://evil.example.com/x.pdf', 'https://drive.google.com.evil.com/x', '', null, undefined, 'not a url'];
+  for (const u of bad) assert.equal(safePdfUrl(u), '', 'u=' + JSON.stringify(u));
+});
+t('safePdfUrl：合法 https Drive／Docs 照放行', () => {
+  assert.equal(safePdfUrl('https://drive.google.com/file/d/abc/view'), 'https://drive.google.com/file/d/abc/view');
+  assert.equal(safePdfUrl('https://docs.google.com/document/d/abc'), 'https://docs.google.com/document/d/abc');
+});
+
+async function pdfLinksAfterSign(pdfUrl, fromSummary) {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx({ params: { contract_id: 'C-PDF' } });
+  if (fromSummary) {
+    state.apiHandlers.handover = () => ({ ok: true, data: { state: 'signed', handover: { name: 'X', room_bed: 'R', signed_at: 'T', compensation_total: 0, pdf_url: pdfUrl } } });
+    ctx.params = { token: 'tok-pdf' };
+    mountHandover(root, ctx);
+    await flush();
+  } else {
+    state.apiHandlers.handoverCreate = () => apiHandoverCreateOk('tok-pdf');
+    state.apiHandlers.handover = () => apiHandoverDataOk();
+    state.apiHandlers.handoverSign = () => ({ ok: true, data: { pdf_url: pdfUrl, compensation_total: 0, signed_at: 'T' } });
+    mountHandover(root, ctx);
+    await flush();
+    fireClick(byId(root, 'dorm-handover-create'));
+    await flush();
+    markAllItemsOk(root);
+    state.padEmpty = false;
+    fireClick(byId(root, 'dorm-handover-submit'));
+    await flush();
+  }
+  const container = byId(root, 'dorm-handover-container');
+  return {
+    links: findAllDescendants(container, (n) => n.tagName === 'A'),
+    text: findDescendant(container, (n) => (n.textContent || '').includes('連結格式不正確，請找管理員')),
+  };
+}
+
+for (const fromSummary of [false, true]) {
+  for (const u of ['javascript:void(0)', 'data:text/html,x', 'http://drive.google.com/file/d/abc', 'https://evil.example.com/x.pdf']) {
+    await at(`PDF 連結不合格不畫（${fromSummary ? '已簽摘要' : '送出後'}）：${u}`, async () => {
+      const r = await pdfLinksAfterSign(u, fromSummary);
+      assert.equal(r.links.length, 0, '不該畫出任何 <a>');
+      assert.ok(r.text, '應顯示「連結格式不正確，請找管理員」');
+    });
+  }
+  await at(`PDF 連結合法照畫（${fromSummary ? '已簽摘要' : '送出後'}）`, async () => {
+    const r = await pdfLinksAfterSign('https://drive.google.com/file/d/abc/view', fromSummary);
+    assert.equal(r.links.length, 1);
+    assert.equal(r.links[0].getAttribute('href'), 'https://drive.google.com/file/d/abc/view');
+    assert.equal(r.links[0].getAttribute('target'), '_blank');
+    assert.equal(r.links[0].getAttribute('rel'), 'noopener noreferrer');
+  });
+}
 
 // ============================================================
 // H. 真實網路守衛總量斷言

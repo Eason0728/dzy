@@ -249,9 +249,19 @@ async function submit(data) {
     await new Promise(r => setTimeout(r, 600));
     return showDone('（本機預覽：沒有真的送出）', null);
   }
-  const r = await fetch(API_URL, { method:'POST', body: JSON.stringify(payload) });
-  const j = await r.json();
-  if (!j.ok) { alert('送出失敗：' + j.error); btn.disabled = false; btn.textContent='確認送出'; return; }
+  let j = null;
+  try {
+    const r = await fetch(API_URL, { method:'POST', body: JSON.stringify(payload) });
+    j = await r.json();
+  } catch (e) {
+    j = null;
+    alert('連線失敗，請檢查網路後再按一次送出');
+  } finally {
+    // 失敗（網路錯誤、回應不是 JSON、後端回 ok:false）一律還原按鈕，讓人可以再按一次
+    if (!j || !j.ok) { btn.disabled = false; btn.textContent = '確認送出'; }
+  }
+  if (!j) return;
+  if (!j.ok) { alert('送出失敗：' + j.error); return; }
   showDone('簽署完成', j.pdf_url);
 }
 
