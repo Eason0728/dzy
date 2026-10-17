@@ -58,6 +58,18 @@ export function mountThr(el, ctx) {
     el.innerHTML = '<div class="card"><p class="text-muted">讀取中…</p></div>';
     const r = await ctx.api.call('approvals', 'apvThresholdGet', {});
     if (!alive) return;
+    if (r && r.error === 'not_inited') {
+      // 第一次上線：資料表還沒建（只有 admin 看得到本頁）→ 給一顆初始化按鈕，免下指令
+      el.innerHTML = `<div class="card" data-role="apv-init"><p>表單簽核還沒初始化。按下面按鈕會建立資料表，並寫入預設核決權限（店長 5,000／品牌總監 10,000／總經理 30,000／以上董事長）。</p>
+        <button type="button" class="btn btn-primary" data-act="init">初始化表單簽核</button><p class="field-hint" data-role="thr-msg"></p></div>`;
+      el.querySelector('[data-act="init"]').addEventListener('click', async () => {
+        const x = await ctx.api.call('approvals', 'apvSetup', {});
+        if (!alive) return;
+        if (x && x.ok) { load(); return; }
+        setMsg(errText(x));
+      });
+      return;
+    }
     if (!r || !r.ok) { el.innerHTML = `<div class="card" data-role="apv-error"><p class="text-muted">${esc(errText(r))}</p></div>`; return; }
     const d = r.data || {};
     ver = d.ver || 0;

@@ -236,6 +236,9 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   // 未初始化的讀寫 → not_inited
   const raw = freshApp({ noSetup: true });
   ok(post(raw, 'DZY901', 'apvMine', {}).error === 'not_inited' && post(raw, 'DZY901', 'apvSubmit', { client_id: 'abcdefgh1', type: 'expense' }).error === 'not_inited', '沒建表 → not_inited，不自動建表');
+  ok(post(raw, 'DZY901', 'apvSetup', {}).error === 'forbidden', '一般同仁不能 apvSetup');
+  { const r = post(raw, 'admin', 'apvSetup', {}); ok(r.ok && post(raw, 'admin', 'apvThresholdGet', {}).ok && post(raw, 'admin', 'apvThresholdGet', {}).data.rows.length === 4, 'admin apvSetup → 建表＋預設四列', r); }
+  ok(post(raw, 'admin', 'apvSetup', {}).ok && post(raw, 'admin', 'apvThresholdGet', {}).data.rows.length === 4, '重按 apvSetup 不重複寫');
 }
 
 // ============================================================

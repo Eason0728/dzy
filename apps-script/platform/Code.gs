@@ -35,7 +35,7 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'permInit', 'permMapGet', 'permMapSave', 'permExList', 'permExSave', 'permExRevoke',
   'permStoreGet', 'permStoreSave', 'myPerms', 'permAuditList', 'permAuditSeen', 'permWho',
   // 2026-10-18：第三期表單簽核（Approvals.gs；契約 docs/approvals/api.md）。jobs 專用的全域函式（apvFile*_／apvDigest_ 等）刻意不在這裡
-  'apvThresholdGet', 'apvThresholdSave', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta',
+  'apvSetup', 'apvThresholdGet', 'apvThresholdSave', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta',
   'apvSubmit', 'apvResubmit', 'apvWithdraw', 'apvDecide', 'apvSign', 'apvHandle', 'apvReassign', 'apvVoid'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
@@ -95,7 +95,7 @@ function dispatch_(e) {
     clockOutboxRetry: 1, clockOutboxCancel: 1, clockSetHome: 1, clockOldHomeDecide: 1, clockLink: 1, clockAddHome: 1,
     orgUpgrade2026: 1, orgRollback2026: 1,
     permInit: 1, permMapSave: 1, permExSave: 1, permExRevoke: 1, permStoreSave: 1, permAuditSeen: 1,
-    apvThresholdSave: 1, apvSubmit: 1, apvResubmit: 1, apvWithdraw: 1, apvDecide: 1, apvSign: 1, apvHandle: 1, apvReassign: 1, apvVoid: 1 };
+    apvSetup: 1, apvThresholdSave: 1, apvSubmit: 1, apvResubmit: 1, apvWithdraw: 1, apvDecide: 1, apvSign: 1, apvHandle: 1, apvReassign: 1, apvVoid: 1 };
   if (MUTATING_ACTIONS[action]) {
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) {
@@ -200,6 +200,7 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'permAuditSeen': return handlePermAuditSeen_(token, payload);
     case 'permWho': return handlePermWho_(token, payload);
     case 'apvThresholdGet': return handleApvThresholdGet_(token);
+    case 'apvSetup': return handleApvSetup_(token);
     case 'apvThresholdSave': return handleApvThresholdSave_(token, payload);
     case 'apvRoutePreview': return handleApvRoutePreview_(token, payload);
     case 'apvMine': return handleApvMine_(token, payload);

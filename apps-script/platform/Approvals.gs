@@ -428,6 +428,15 @@ function setupApprovals() {
   return { ok: true };
 }
 
+/** action apvSetup：只有 role admin；呼叫 setupApprovals（只補不覆蓋，重按無害）。讓上線時不必在 mini 下指令。 */
+function handleApvSetup_(token) {
+  var c = apvEnter_(token);
+  if (!c.ok) return c;
+  if (!c.isAdmin) return apvForbidden_('只有系統管理者可以初始化');
+  try { setupApprovals(); } catch (e) { return apvFail_('bad_request', String(e && e.message || e)); }
+  return { ok: true, data: { inited: true } };
+}
+
 /** 沒建表 → 讀寫都回 not_inited（不自動建表；建表只有 setupApprovals） */
 function apvReady_() {
   return !!(stfSheet_(APV_SHEET_FORMS) && stfSheet_(APV_SHEET_EVENTS) && stfSheet_(APV_SHEET_FILES) && stfSheet_(APV_SHEET_THR) && stfSheet_(APV_SHEET_REVS));

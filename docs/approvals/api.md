@@ -44,6 +44,7 @@ ThrRow = { seq, max:number|null, store_role, hq_role }
 | apvHandle | `{id, rev, result:'done'|'return', note?}` | `{status}` |
 | apvReassign | `{id, rev, step, to, reason}` | `{status, step}` |
 | apvVoid | `{id, reason}` | `{status:'voided'}` |
+| apvSetup | `{}`（只有 role admin；建表＋預設權限表，重按無害） | `{inited:true}` |
 | apvThresholdSave | `{expected_ver, rows:[ThrRow]}` | `{ver, diff:[{seq, before, after}]}` |
 
 ## body 形狀（伺服器驗；spec §4＋§14.6、§14.9）
