@@ -823,6 +823,10 @@ function authPermsWithGate_(role, gate) {
   if (gate && gate.att && perms.indexOf('platform.att') === -1 && perms.indexOf('*') === -1) {
     perms = perms.concat(['platform.att']);
   }
+  // 門市營運選單（StoreOps.gs storeOpsGate_）：衍生權限，不寫進 roles
+  if (gate && gate.storeops && perms.indexOf('platform.storeops') === -1 && perms.indexOf('*') === -1) {
+    perms = perms.concat(['platform.storeops']);
+  }
   return perms;
 }
 

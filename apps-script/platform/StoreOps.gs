@@ -7,7 +7,7 @@
  *  2. svcStoreRedeem／svcStoreWho／svcStoreRoster（憑 Script Property STORE_SVC_KEY）
  *  3. 誰核誰：attNeedOf_／attApproverOf_（純函式）＋ storeAttPeople_
  *  4. 身分 ident 計算（storeIdent_）、試點開關 STORE_SSO_UNITS
- *  5. 衍生權限 platform.att 的閘門（storeAttGate_；Staff.gs stfLoginGate_ 呼叫）
+ *  5. 衍生權限 platform.att／platform.storeops 的閘門（storeAttGate_／storeOpsGate_；Staff.gs stfLoginGate_ 呼叫）
  *  6. 人資主管判斷 stfIsHrHead_、perm_map 補預設規則 storeopsPermSeed_
  *
  * ⚠ ssoTicket／svcStoreRedeem／svcStoreWho／svcStoreRoster 永遠不可列進 minikit app.json 的 readActions，
@@ -384,14 +384,20 @@ function handleSvcStoreRoster_(payload) {
 // ============================================================
 
 /**
- * 在職且（職稱 sm／odir／hm／ceo／gm／chair、或人資主管、或有 att.extra）→ true。
+ * 總開關（STORE_SSO_UNITS）空 → 一律 false（考勤管理選單不顯示）。
+ * 否則：在職且（職稱 sm／odir／hm／ceo／gm／chair、或人資主管、或有 att.extra）→ true。
  * admin 本來就是 '*'，不在這裡判斷。values＝staff 分頁一列。
  */
 function storeAttGate_(values) {
+  if (!storePilotUnits_().length) return false;
   if (!values || stfStr_(values[STF_COL.status]) !== 'active') return false;
   var p = { status: 'active', dept: stfStr_(values[STF_COL.dept]), title: stfStr_(values[STF_COL.title]) };
   if (['sm', 'odir', 'hm', 'ceo', 'gm', 'chair'].indexOf(p.title) !== -1) return true;
   if (stfIsHrHead_(p)) return true;
+  return storeHasAttExtra_(values);
+}
+
+function storeHasAttExtra_(values) {
   try {
     var emp = stfNormEmp_(values[STF_COL.emp_no]);
     var ctx = permLoadCtx_(false);
@@ -400,6 +406,27 @@ function storeAttGate_(values) {
   } catch (e) {
     return false;
   }
+}
+
+/**
+ * 衍生權限 platform.storeops（「門市營運」選單；登入時的便宜判斷，不跑 storeIdent_ 的完整計算）。
+ * 總開關空 → false。否則在職且：
+ *   本人單位在試點清單內且是 store 階梯（門市、央廚 ck；單位／職稱有效且職稱屬該階梯）、
+ *   或職稱是 odir／hm／ceo／gm／chair（這些人的名單由營運系統再依範圍算）、
+ *   或有 att.extra。
+ * admin 是 '*'，不在這裡判斷。org＝stfReadOrg_() 結果（可省略）。
+ */
+function storeOpsGate_(values, org) {
+  var pilot = storePilotUnits_();
+  if (!pilot.length) return false;
+  if (!values || stfStr_(values[STF_COL.status]) !== 'active') return false;
+  var p = { unit: stfStr_(values[STF_COL.unit]), title: stfStr_(values[STF_COL.title]) };
+  if (STORE_NO_ATT_TITLES.indexOf(p.title) !== -1) return true;
+  if (pilot.indexOf(p.unit) !== -1) {
+    var o = storeOrgOf_(p, org || stfReadOrg_());
+    if (o && o.ladder === 'store') return true;
+  }
+  return storeHasAttExtra_(values);
 }
 
 // ============================================================

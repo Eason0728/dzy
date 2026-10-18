@@ -451,7 +451,7 @@ var PERM_NAMES = {
   'platform.staff': '同仁名單', 'platform.users': '人員管理', 'platform.permmap': '權限設定',
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
-  'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理'
+  'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.storeops': '門市營運'
 };
 function permName_(code) { return PERM_NAMES[code] || code; }
 

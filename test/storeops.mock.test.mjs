@@ -571,6 +571,44 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
 })();
 
 // ============================================================
+// 7b. 總開關 STORE_SSO_UNITS：platform.att／platform.storeops 兩個衍生權限
+// ============================================================
+(() => {
+  const app = world(BIG, { pilot: '' });
+  const { sb } = app;
+  const perms = (u) => { const r = post(sb, 'login', { username: u, password: PW }); return r.ok ? r.data.perms : null; };
+  const both = (u) => { const p = perms(u); return { att: has(p, 'platform.att'), ops: has(p, 'platform.storeops') }; };
+  const none = { att: false, ops: false };
+  // 總開關空：誰都沒有（含總監、店長）
+  ok(['DZY001', 'DZY002', 'DZY010', 'DZY020', 'DZY025', 'DZY022'].every((u) => eq(both(u), none)), '7b 總開關空：店長、同仁、總監、人資主管、執行長都沒有 platform.att／platform.storeops');
+  ok(has(perms('BOSS'), '*'), '7b 總開關空：admin 仍是 *（全權限，選單由 * 放行）');
+  const me0 = post(sb, 'me', {}, app.login('DZY010'));
+  ok(me0.ok && !has(me0.data.perms, 'platform.att') && !has(me0.data.perms, 'platform.storeops'), '7b 總開關空：me 也沒有');
+  // 打開（只開 mzt-gf）
+  app.props.STORE_SSO_UNITS = 'mzt-gf';
+  ok(eq(both('DZY001'), { att: true, ops: true }), '7b 開了：試點店店長有 platform.att 與 platform.storeops');
+  ok(eq(both('DZY002'), { att: false, ops: true }), '7b 開了：試點店正職只有 platform.storeops');
+  ok(eq(both('DZY003'), { att: false, ops: true }), '7b 開了：試點店計時有 platform.storeops');
+  ok(eq(both('DZY010'), { att: true, ops: true }), '7b 開了：總監有 platform.att 與 platform.storeops');
+  ok(eq(both('DZY025'), { att: true, ops: true }), '7b 開了：執行長兩個都有');
+  ok(eq(both('DZY023'), none) && eq(both('DZY021'), none) && eq(both('DZY024'), none), '7b 開了：總部財務同仁、人資同仁、管理部同仁沒有');
+  ok(eq(both('DZY004'), { att: true, ops: false }) && eq(both('DZY005'), none), '7b 開了：試點外的店，店長只有 platform.att（既有規則）、計時沒有 platform.storeops');
+  ok(eq(both('DZY042'), { att: true, ops: false }), '7b 開了：試點外另一品牌店長沒有 platform.storeops');
+  ok(eq(both('DZY011'), none) && eq(both('DZY013'), none), '7b 開了：品牌辦公室區經理、行政沒有');
+  const me1 = post(sb, 'me', {}, app.login('DZY002'));
+  ok(me1.ok && has(me1.data.perms, 'platform.storeops'), '7b 開了：me 也回 platform.storeops');
+  // att.extra 例外
+  ok(eq(both('DZY040'), none), '7b 有 att.extra 之前沒有');
+  post(sb, 'permExSave', { emp_no: 'DZY040', perm: 'att.extra', mode: 'add', until: '', note: '額外核定' }, app.adminTok);
+  ok(eq(both('DZY040'), { att: true, ops: true }), '7b 有 att.extra 例外：兩個都有');
+  // 再關掉
+  app.props.STORE_SSO_UNITS = '';
+  ok(eq(both('DZY001'), none) && eq(both('DZY040'), none), '7b 再關掉：立刻都沒有');
+  ok(!app.sheets.roles._rows().some((r) => String(r[2]).indexOf('platform.storeops') !== -1), '7b platform.storeops 沒有寫進 roles 分頁');
+  ok(typeof sb.storeOpsGate_ === 'function', '7b storeOpsGate_ 存在');
+})();
+
+// ============================================================
 // 8. 分派與 dryrun
 // ============================================================
 (async () => {

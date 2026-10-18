@@ -852,7 +852,10 @@ function stfLoginGate_(userId) {
   var bulletin = status === 'active' && stfBulletinAdmins_().indexOf(stfNormEmp_(hit.values[STF_COL.emp_no])) !== -1;
   // att＝衍生權限 platform.att（StoreOps.gs storeAttGate_；Auth.gs authPermsWithGate_ 補上）
   var att = typeof storeAttGate_ === 'function' ? storeAttGate_(hit.values) : false;
-  return { review: !!stfReviewScope_(hit.values, stfReadOrg_()), bulletin: bulletin, att: att };
+  // storeops＝衍生權限 platform.storeops（StoreOps.gs storeOpsGate_；STORE_SSO_UNITS 空＝全關）
+  var org = stfReadOrg_();
+  var storeops = typeof storeOpsGate_ === 'function' ? storeOpsGate_(hit.values, org) : false;
+  return { review: !!stfReviewScope_(hit.values, org), bulletin: bulletin, att: att, storeops: storeops };
 }
 
 /**
