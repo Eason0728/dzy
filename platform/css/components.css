@@ -1156,9 +1156,11 @@ textarea.input:disabled {
   --login-letterbox: var(--letterbox-dark);
 }
 .login-bg[data-hero="mzt"] {
-  --login-ink: var(--ink);
-  --login-ink-soft: var(--ink);   /* 亮背景上 muted 灰不夠力，標籤直接用主文字色 */
-  --login-text-glow: var(--text-glow-on-light);
+  /* 2026-10-18 Eason：墨竹亭底圖上的文字是深灰、看不清楚。照片經 brightness .82＋scrim 壓暗、
+     letterbox 實際呈現中灰（約 #6f7075），深字對比只有 ~3:1；改白字＋暗影（~5:1），跟另外兩張一致。 */
+  --login-ink: var(--on-glass-ink);
+  --login-ink-soft: var(--on-glass-ink);
+  --login-text-glow: var(--text-glow-on-dark);
   --login-accent: var(--accent-mzt);
   --login-accent-dark: var(--accent-mzt-dark);
   /* 淺色照片＝深色文字，留白也必須是淺的，否則深字落在深底上看不見 */
