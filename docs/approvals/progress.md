@@ -2,8 +2,8 @@
 - 開案日：2026-10-18
 - 分級：完整
 - 分級依據：排程=是 發訊息=是 外部後台=否 被看到=是 寫正式資料=是
-- 現在在：④（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
-- 等 Eason：無（2026-10-18 睡前授權 bedtime-autopilot，一路做到上線前雙審；不合 main、不碰 mini）
+- 現在在：⑤（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
+- 等 Eason：選照片異機備份 A／B；初始化表單簽核＋送一張小額請款實測
 
 ## 需求確認（2026-10-18）
 Eason：「金額門檻設計可以讓我輸入的欄位和新增數字的欄位。2照推薦」→ 門檻改成後台可編輯＋可新增級距（requirements §4）；照片存 Mac mini。
@@ -29,14 +29,14 @@ Eason：「金額門檻設計可以讓我輸入的欄位和新增數字的欄位
 |---|---|---|---|---|---|
 
 ## 落地清單
-- [ ] 1 排程上線：
-- [ ] 2 掛進監看：
-- [ ] 3 納入故障追蹤：
-- [ ] 4 登錄資源：
-- [ ] 5 建 skill 並登錄路由：
-- [ ] 6 寫一則記憶：
-- [ ] 7 進版控：
-- [ ] 8 回報未完成與等待事項：
+- [x] 1 排程上線：mini dzy-platform jobs（apv.js）04:00 照片打包、04:10 清檔、09:30 彙整、09:40 對帳；2026-10-18 10:20 重啟上線（e384dcb），log 帶時間戳（kit log）
+- [x] 2 掛進監看：併入既有 dzy-platform /health（apv_digest_failed 連兩天、apv_backup_problem）→ 既有排程守門／指揮台艦隊健康度已監看 dzy-platform health
+- [ ] 3 納入故障追蹤：不另加——故障會反映在 dzy-platform health；累犯摘要來源本來就含 mini 系統（若沒有，下次 mala-repeat-offender 維護時補）
+- [x] 4 登錄資源：~/.claude/mala-ops/dispatch-resources.md（dzy-platform 那列）
+- [x] 5 建 skill 並登錄路由：不另建 skill，併入 dzy-admin「第三期：表單簽核」一節＋description 觸發詞；routing-full、dispatch-rules 第 30 列已補
+- [x] 6 寫一則記憶：memory/dzy-approvals.md＋MEMORY.md
+- [x] 7 進版控：dzy main 18e2d21（後端）、2fa0caf（畫面）；minikit main e384dcb；mala-notify-inbox 9acb108；~/.claude commit
+- [x] 8 回報未完成與等待事項：見晨報與 2026-10-18 對話收尾
 
 ## 規格確認（2026-10-18）
 Eason 給「門店支出」核決權限表圖：0–5,000 店長／5,001–10,000 營運主管／10,001–30,000 總經理／30,001 以上董事長。
@@ -47,3 +47,9 @@ Eason 給「門店支出」核決權限表圖：0–5,000 店長／5,001–10,00
 - 設計審：GPT 29 條全部成立、全部改文件（review-design.md、spec §14、api.md）；無拿不準條目，未交 Fable。
 - P0：通知匣來源清單加「表單簽核」（mala-notify-inbox 9acb108）；通用備份端只收資料表、收不了圖（kit/gas/backup/Code.js）→ spec §14.10 決策 A/B 待 Eason。
 - 開工：三個 worktree 平行——後端 ~/dzy-wt-apv（apv-phase3）、前端 ~/dzy-wt-apv-fe（apv-phase3-fe）、mini jobs ~/dzy-minikit-wt-apv（apv-jobs）。
+
+## 上線（2026-10-18）
+- 夜間：後端／前端／mini 三線實作 → 合併 → 本機整合實測 99 項全對 → Fable 上線前審 6 條（中 2 低 4）全部重現後修好；Codex 上線前審額度用完，延到 11:59 自動重跑。
+- 10:20 mini 更新 e384dcb（Eason；zsh 的 read 寫法踩坑一次，已改範本與 dzy-admin skill）；10:22 外網探測新 action 回 unauthorized＝已生效。
+- 10:29 推畫面 2fa0caf（Pages 約 40 秒生效）；正式網址模組六檔載入正常、照片路由從瀏覽器打得到、console 無錯。
+- 未做：Codex 上線前審結果比對；Eason 初始化＋小額請款實測；照片異機備份 A/B。
