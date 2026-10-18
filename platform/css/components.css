@@ -1161,8 +1161,9 @@ textarea.input:disabled {
   --login-ink: var(--on-glass-ink);
   --login-ink-soft: var(--on-glass-ink);
   --login-text-glow: var(--text-glow-on-dark);
-  --login-accent: var(--accent-mzt);
-  --login-accent-dark: var(--accent-mzt-dark);
+  /* 登入鈕加深（2026-10-19 Eason）：原 #595859 放在中灰底上輪廓不明顯；只改登入頁，不動全站 --accent-mzt */
+  --login-accent: #2b2a2b;
+  --login-accent-dark: #1a191a;
   /* 淺色照片＝深色文字，留白也必須是淺的，否則深字落在深底上看不見 */
   --login-letterbox: var(--letterbox-light);
 }
