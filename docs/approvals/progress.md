@@ -30,7 +30,7 @@ Eason：「金額門檻設計可以讓我輸入的欄位和新增數字的欄位
 
 ## 落地清單
 - [x] 1 排程上線：mini dzy-platform jobs（apv.js）04:00 照片打包、04:10 清檔、09:30 彙整、09:40 對帳；2026-10-18 10:20 重啟上線（e384dcb），log 帶時間戳（kit log）
-- [x] 2 掛進監看：併入既有 dzy-platform /health（apv_digest_failed 連兩天、apv_backup_problem）→ 既有排程守門／指揮台艦隊健康度已監看 dzy-platform health
+- [x] 2 掛進監看：併入既有 dzy-platform /health（apv_digest_failed 連兩天、apv_backup_problem）→ 排程守門已監看 /platform/health（~/mala-fortune/tools/gas-watchdog/Code.js:1524，2026-10-18 核實）
 - [ ] 3 納入故障追蹤：不另加——故障會反映在 dzy-platform health；累犯摘要來源本來就含 mini 系統（若沒有，下次 mala-repeat-offender 維護時補）
 - [x] 4 登錄資源：~/.claude/mala-ops/dispatch-resources.md（dzy-platform 那列）
 - [x] 5 建 skill 並登錄路由：不另建 skill，併入 dzy-admin「第三期：表單簽核」一節＋description 觸發詞；routing-full、dispatch-rules 第 30 列已補
