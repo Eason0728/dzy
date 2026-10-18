@@ -267,3 +267,8 @@ purchase → **`purchase`**（org 正本 `Staff.gs:1450`），expense → `fin`�
 
 ### 14.13 API 契約（審 #25）
 每支 action 的 request／response／錯誤碼寫在 `api.md`（正本）；P3 的假後端照 api.md 寫。sender、unit、route、handler_dept、amount（請購）一律伺服器產生，前端送了也忽略。
+
+### 14.14 照片異機備份：方案 A（2026-10-18 Eason 選 A，取代 §14.10「未選之前」那段）
+- 通用備份端（minikit `kit/gas/backup/Code.js`）新增 `action:'file'`：`{key, app, files:[{name:'YYYY/MM/<檔號>.(jpg|png)', sha256, mime, b64}]}`，每次 ≤30 檔、≤8 MB；存公司備份帳號雲端硬碟 `dzy-minikit-files-<app>/YYYY/MM/`（不分享），同名＝skipped、sha 不符＝bad。oauthScopes 加 drive；部署第 2 版（同一個部署 ID），Eason 2026-10-18 已在編輯器執行 authorizeDrive 授權。
+- mini `apv.js`：04:00 本機 tar 之後，依水位 `offsiteSeq` 分批（≤30 檔、≤6 MB）送 `app='dzy-platform-apv'`，一批 ok 才推進；bad／缺檔進 pending 隔天重試。health：沒設 BACKUP_URL／KEY＝`apv_offsite_off`、有待送且 48 小時沒送完＝`apv_offsite_stale`。本機 tar 保留（雙保險）。
+- 首頁「照片尚無異機備份」提醒因此不做。

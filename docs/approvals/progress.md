@@ -3,7 +3,7 @@
 - 分級：完整
 - 分級依據：排程=是 發訊息=是 外部後台=否 被看到=是 寫正式資料=是
 - 現在在：⑤（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
-- 等 Eason：選照片異機備份 A／B；初始化表單簽核＋送一張小額請款實測
+- 等 Eason：Mac mini 更新（照片異機備份）；初始化表單簽核＋送一張小額請款實測
 
 ## 需求確認（2026-10-18）
 Eason：「金額門檻設計可以讓我輸入的欄位和新增數字的欄位。2照推薦」→ 門檻改成後台可編輯＋可新增級距（requirements §4）；照片存 Mac mini。
@@ -53,3 +53,9 @@ Eason 給「門店支出」核決權限表圖：0–5,000 店長／5,001–10,00
 - 10:20 mini 更新 e384dcb（Eason；zsh 的 read 寫法踩坑一次，已改範本與 dzy-admin skill）；10:22 外網探測新 action 回 unauthorized＝已生效。
 - 10:29 推畫面 2fa0caf（Pages 約 40 秒生效）；正式網址模組六檔載入正常、照片路由從瀏覽器打得到、console 無錯。
 - 未做：Codex 上線前審結果比對；Eason 初始化＋小額請款實測；照片異機備份 A/B。
+
+## 照片異機備份 A（2026-10-18 下午）
+- Eason 選 A。minikit c678a20（備份端 action file＋apv.js 每日送雲端；npm test 430/428 pass、0 fail、2 skip）。
+- 備份端 clasp push → Eason 授權雲端硬碟 → create-version 2 → update-deployment 同 ID @2；外網 GET 正常、file／backup 兩動作錯金鑰都回 AUTH。
+- 待：mini pull＋重啟；隔天 04:00 後確認 health 沒有 apv_offsite_*、雲端硬碟出現 dzy-minikit-files-dzy-platform-apv。
+- Codex 上線前審：依 Eason 指示暫停（營運系統個人帳號先審），等通知。
