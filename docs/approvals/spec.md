@@ -272,3 +272,4 @@ purchase → **`purchase`**（org 正本 `Staff.gs:1450`），expense → `fin`�
 - 通用備份端（minikit `kit/gas/backup/Code.js`）新增 `action:'file'`：`{key, app, files:[{name:'YYYY/MM/<檔號>.(jpg|png)', sha256, mime, b64}]}`，每次 ≤30 檔、≤8 MB；存公司備份帳號雲端硬碟 `dzy-minikit-files-<app>/YYYY/MM/`（不分享），同名＝skipped、sha 不符＝bad。oauthScopes 加 drive；部署第 2 版（同一個部署 ID），Eason 2026-10-18 已在編輯器執行 authorizeDrive 授權。
 - mini `apv.js`：04:00 本機 tar 之後，依水位 `offsiteSeq` 分批（≤30 檔、≤6 MB）送 `app='dzy-platform-apv'`，一批 ok 才推進；bad／缺檔進 pending 隔天重試。health：沒設 BACKUP_URL／KEY＝`apv_offsite_off`、有待送且 48 小時沒送完＝`apv_offsite_stale`。本機 tar 保留（雙保險）。
 - 首頁「照片尚無異機備份」提醒因此不做。
+- 2026-10-18 晚 Fable 審異機備份（中 2 低 5）修正，minikit 146aa59、備份端第 3 版：水位逐批落盤；一批 ≤10 檔／3 MB、逾時不立刻重送；**異機送出改獨立排程 04:20**（04:00 只做本機 tar、04:10 sweep）；BAD_REQ／AUTH 立刻亮 `apv_offsite_error`；網址格式錯 log 警告。未修：scope 改 drive.file（要重新授權，另排）、未綁單孤兒照片也會上雲端。

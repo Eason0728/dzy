@@ -59,3 +59,4 @@ Eason 給「門店支出」核決權限表圖：0–5,000 店長／5,001–10,00
 - 備份端 clasp push → Eason 授權雲端硬碟 → create-version 2 → update-deployment 同 ID @2；外網 GET 正常、file／backup 兩動作錯金鑰都回 AUTH。
 - 待：mini pull＋重啟；隔天 04:00 後確認 health 沒有 apv_offsite_*、雲端硬碟出現 dzy-minikit-files-dzy-platform-apv。
 - Codex 上線前審：依 Eason 指示暫停（營運系統個人帳號先審），等通知。
+- 18:00 Fable 審異機備份 7 條（中 2 低 5）→ 修 5 條（146aa59、b11048f），npm test 439/437/0 fail；備份端第 3 版部署、外網驗證正常。待 mini pull＋重啟；mini 複查排程要改 04:35（異機送出改 04:20）。Codex 22:02 跑一次全面審。
