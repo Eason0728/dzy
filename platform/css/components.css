@@ -1101,22 +1101,35 @@ textarea.input:disabled {
   .login-bg[data-hero="yakiniku"] .login-blur { background-size: 130% auto; }
 }
 
-/* 手機：表單緊接在照片下方（2026-10-18 Eason：高螢幕上照片與表單之間不要留大空白，
-   之前表單沉到底部，375×812 時輸入框頂端在 y≈590）。
-   --hero-h＝該張照片在手機上顯示的高度（跟上面 background-size 同一組算式：
-   mala 900×650 用 contain＝寬度填滿；mzt 正方形 100% 寬；yakiniku 1600×1000 放大 130% 寬），
-   改上面的 background-size 要同步改這裡。表單從照片下緣往上約 32% 處開始往下排（#/claim 說明文字長，不疊一點 375 寬的墨竹亭正方形照片會把輸入框推到 450px 以下）；
+/* 手機：表單緊接在照片下方，不重疊（2026-10-18 Eason：高螢幕上照片與表單之間不要留大空白，
+   之前表單沉到底部，375×812 時輸入框頂端在 y≈590；第一版讓表單疊上照片下緣，
+   標題與說明文字會跨在照片邊界上，改成固定間距接在照片下）。
+   --hero-h＝照片在手機上顯示的高度：mala 900×650 用 contain＝寬度填滿；mzt 正方形 100% 寬；
+   yakiniku 1600×1000 放大 130% 寬（跟上面 background-size 同一組算式，改一邊要同步改另一邊）。
+   mzt／yakiniku 太高（375 寬時 375／304px），#/claim 的說明文字又長，輸入框會被推到 450px 以下，
+   所以照片高度上限取 max(240px, 64vw)，超出的下緣裁掉（兩張下緣都是桌面留白，logo 與主體在上半），
+   裁掉的部分用 .login-blur::before 蓋上跟 letterbox 同色。
    矮螢幕（375×667）內容比畫面高時由頁面自己往下捲，不再 overflow:hidden 切掉。 */
 @media (max-width: 767px) {
   .login-bg {
-    --hero-h: calc(100vw * 650 / 900);
+    --hero-nat: calc(100vw * 650 / 900);
+    --hero-h: min(var(--hero-nat), max(240px, 64vw));
+    --hero-gap: var(--space-2, 8px);
     align-items: flex-start;
-    padding-top: calc(var(--hero-h) * .68);   /* 表單內距 32px 在這之下；照片下緣約 32% 多為桌面留白，讓表單疊上去 */
+    padding-top: calc(var(--hero-h) + var(--hero-gap));
     overflow-x: hidden;
     overflow-y: auto;
   }
-  .login-bg[data-hero="mzt"] { --hero-h: 100vw; }
-  .login-bg[data-hero="yakiniku"] { --hero-h: calc(130vw * 1000 / 1600); }
+  .login-bg[data-hero="mzt"] { --hero-nat: 100vw; }
+  .login-bg[data-hero="yakiniku"] { --hero-nat: calc(130vw * 1000 / 1600); }
+  .login-blur::before {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    top: var(--hero-h);
+    background: var(--login-letterbox);
+  }
+  .login-card-form { padding-top: var(--space-2, 8px); }
 }
 
 .login-bg::after {
