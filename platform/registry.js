@@ -22,6 +22,8 @@ export const MODULES = [
   { load: () => import('../modules/me/manifest.js') },
   { load: () => import('../modules/bulletin/manifest.js') },
   { load: () => import('../modules/approvals/manifest.js') },
+  { load: () => import('../modules/storeops/manifest.js') },
+  { load: () => import('../modules/attendance/manifest.js') },
 ];
 
 /**

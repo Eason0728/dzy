@@ -18,6 +18,7 @@ TESTS=(
   e2e_t11_perms.py
   e2e_t12_mobile_width.py
   e2e_t13_approvals.py
+  e2e_t13_storeops.py
 )
 
 for i in "${!TESTS[@]}"; do
