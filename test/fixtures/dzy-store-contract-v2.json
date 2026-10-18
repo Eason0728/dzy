@@ -82,6 +82,7 @@
         "unit": "mzt-gf",
         "title": "sm",
         "epoch": "2026-03-01",
+        "token_after": 0,
         "pilot_units": [
           "mala-gf"
         ],
@@ -121,6 +122,7 @@
         "unit": "",
         "title": "",
         "epoch": "",
+        "token_after": 0,
         "pilot_units": [
           "mala-gf"
         ],
@@ -150,13 +152,17 @@
             "sub": "DZY023",
             "emp_no": "DZY023",
             "name": "陳小明",
-            "title": "sm"
+            "title": "sm",
+            "unit": "mzt-gf",
+            "epoch": "2026-03-01"
           },
           {
             "sub": "DZY031",
             "emp_no": "DZY031",
             "name": "李計時",
-            "title": "pt"
+            "title": "pt",
+            "unit": "mzt-gf",
+            "epoch": "2026-05-01"
           }
         ]
       }
@@ -172,6 +178,7 @@
     "pilot": "STORE_SSO_UNITS（逗號單位碼，空＝全關）。ident 一律照發；units_managed、void_units 只留試點內單位；att.people 只留『被核的人』單位在試點內的",
     "admin": "admin=true 時 units_managed、void_units＝試點內全部 store 階梯單位（含 ck）；att.people＝試點內所有要考勤的人（不含自己）",
     "epoch": "同仁最近一次在職起日（到職或復職）YYYY-MM-DD；admin 無同仁編號為空字串",
+    "token_after": "營運系統 session 記兌券當下的 token_after；之後重查回來的值變大（使用者在管理系統登出全部裝置、改密碼、被重設）就刪除該 session",
     "att": "spec §12：門市與央廚店長核自己與同店；品牌辦公室行政／督導／區經理→同辦公室總監；總部部門同仁→同部門主管；管理部同仁→執行長以上；odir hm ceo gm chair 不列；人資主管＝dept hr 且 title hm 看全部要考勤的人（不含自己）；att.extra 個別例外＝本人單位內要考勤的人（不含自己）；只取 staff_clock state=confirmed 且 roster_active 不是 FALSE 的對照"
   },
   "postMessage": {

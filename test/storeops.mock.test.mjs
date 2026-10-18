@@ -216,7 +216,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // 1a. 復刻 fixture 的 ident_active 情境（sm 陳小明，店長，到職 2026-03-01，帶一位同店計時）
   const cast = [
     ['DZY023', '陳小明', 'mzt-gf', '', 'sm', 'active', '2026-03-01'],
-    ['DZY031', '李計時', 'mzt-gf', '', 'pt', 'active', '2026-04-01']
+    ['DZY031', '李計時', 'mzt-gf', '', 'pt', 'active', '2026-05-01']
   ];
   const app = world(cast, { pilot: 'mzt-gf', admins: [['u_admin01', 'BOSS', '系統管理員']] });
   // 打卡編號改成 fixture 的 MZTGF03／MZTGF07、店別 mztgf
@@ -240,7 +240,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // 1c. inactive、roster、ticket、錯誤
   ok(eq(app.ident('DZY999'), { sub: 'DZY999', active: false }) && eq(FIX.responses.ident_inactive.data, { sub: 'DZY023', active: false }), '1 契約 ident_inactive 形狀 {sub, active:false}');
   const r = post(app.sb, 'svcStoreRoster', { svc_key: SVC, unit: 'mzt-gf' });
-  ok(eq(r, { ok: true, data: { staff: [{ sub: 'DZY023', emp_no: 'DZY023', name: '陳小明', title: 'sm' }, { sub: 'DZY031', emp_no: 'DZY031', name: '李計時', title: 'pt' }] } }) && eq(r, FIX.responses.roster), '1 契約 roster：逐欄相同、依 emp_no 排序', r);
+  ok(eq(r, { ok: true, data: { staff: [{ sub: 'DZY023', emp_no: 'DZY023', name: '陳小明', title: 'sm', unit: 'mzt-gf', epoch: '2026-03-01' }, { sub: 'DZY031', emp_no: 'DZY031', name: '李計時', title: 'pt', unit: 'mzt-gf', epoch: '2026-05-01' }] } }) && eq(r, FIX.responses.roster), '1 契約 roster：逐欄相同、依 emp_no 排序', r);
   app.props.STORE_SSO_UNITS = 'mzt-gf';
   const tk = post(app.sb, 'ssoTicket', { aud: 'store' }, app.login('DZY023'));
   ok(tk.ok && eq(keysOf(tk), keysOf(FIX.responses.ssoTicket)) && eq(keysOf(tk.data), ['ticket', 'expires_in']) && /^[0-9a-f]{64}$/.test(tk.data.ticket) && tk.data.expires_in === 60 && /^[0-9a-f]{64}$/.test(FIX.responses.ssoTicket.data.ticket), '1 契約 ssoTicket：{ok,data:{ticket 64 hex, expires_in 60}}', tk);
@@ -322,7 +322,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(eq(app.ident('DZY002'), { sub: 'DZY002', active: false }), '2 Who：登入帳號被停用 → inactive');
   // Roster：只有 active、依 emp_no
   const ro = post(sb, 'svcStoreRoster', { svc_key: SVC, unit: 'mzt-gf' });
-  ok(eq(ro.data.staff.map((x) => x.sub), ['DZY001', 'DZY002', 'DZY003', 'DZY008']) && ro.data.staff.every((x) => eq(keysOf(x), ['sub', 'emp_no', 'name', 'title'])), '2 Roster：只有 active、依 emp_no 排序、欄位四個', ro);
+  ok(eq(ro.data.staff.map((x) => x.sub), ['DZY001', 'DZY002', 'DZY003', 'DZY008']) && ro.data.staff.every((x) => eq(keysOf(x), ['sub', 'emp_no', 'name', 'title', 'unit', 'epoch'])), '2 Roster：只有 active、依 emp_no 排序、欄位六個', ro);
   ok(eq(post(sb, 'svcStoreRoster', { svc_key: SVC, unit: 'nowhere' }).data.staff, []), '2 Roster：沒有這個單位 → 空名單');
   // 分派：三支不上全域寫入鎖（自己控制鎖）；不在 dryrun READ_ACTIONS
   const mut = /MUTATING_ACTIONS = \{([\s\S]*?)\};/.exec(SRC.find(([f]) => f === 'Code.gs')[1])[1];
@@ -440,9 +440,22 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(rm.ok && eq(app.ident('DZY001').void_units, []) && eq(app.ident('DZY001').units_managed, ['mzt-gf']), '4 店長被拿掉 store.void → void_units 空、units_managed 不變', rm);
   // epoch
   ok(app.ident('DZY001').epoch === '2026-01-05', '4 epoch＝到職日');
+  ok(app.ident('DZY001').token_after === 0 && app.ident('U:a001').token_after === 0, '4 token_after：沒有＝0');
+  app.sheets.users._data.find((r) => r[0] === 'a001')[10] = 1790000000123;
+  const ux = app.sheets.users._data.find((r) => r[1] === 'DZY001'); ux[10] = '1790000009999';
+  ok(app.ident('U:a001').token_after === 1790000000123 && app.ident('DZY001').token_after === 1790000009999 && typeof app.ident('DZY001').token_after === 'number', '4 token_after＝users 第 11 欄整數毫秒（admin、同仁皆是）');
+  const rs0 = post(app.sb, 'svcStoreRoster', { svc_key: SVC, unit: 'mzt-gf' }).data.staff.find((x) => x.sub === 'DZY001');
+  ok(rs0 && rs0.unit === 'mzt-gf' && rs0.epoch === '2026-01-05', '4 roster 每筆有 unit、epoch（到職日）');
   app.sheets.staff_log._data.push(['2026-09-01 09:00:00', 'DZY001', 'enable', 'u001', 'reinstate']);
   app.sheets.staff_log._data.push(['2026-10-05 09:00:00', 'DZY002', 'disable', 'u001', '']);
   ok(app.ident('DZY001').epoch === '2026-09-01' && app.ident('DZY002').epoch === '2026-02-01', '4 epoch＝到職與最近一次復職（enable／reinstate）較晚者；停用不算');
+  const rsAll = post(app.sb, 'svcStoreRoster', { svc_key: SVC, unit: 'mzt-gf' }).data.staff;
+  ok(rsAll.find((x) => x.sub === 'DZY001').epoch === '2026-09-01' && rsAll.every((x) => x.epoch === app.ident(x.sub).epoch), '4 roster epoch 與 ident 一致（復職較晚者）');
+  const logSh = app.sheets.staff_log; const origGet = logSh.getRange.bind(logSh); let logReads = 0;
+  logSh.getRange = (...a) => { logReads++; return origGet(...a); };
+  post(app.sb, 'svcStoreRoster', { svc_key: SVC, unit: 'mzt-gf' });
+  ok(logReads <= 1, '4 roster 整批只讀 staff_log 一次（不是每人一次）：讀了 ' + logReads + ' 次');
+  logSh.getRange = origGet;
   app.sheets.staff._data.find((r) => r[0] === 'DZY003')[24] = '';
   ok(app.ident('DZY003').epoch === '2026-02-03', '4 沒有到職日 → 退回開通日（confirmed_at）');
   ok(app.ident('U:a001').epoch === '' && app.ident('U:a001').emp_no === '' && app.ident('U:a001').unit === '' && app.ident('U:a001').title === '', '4 admin 無同仁編號：epoch、emp_no、unit、title 皆空字串');

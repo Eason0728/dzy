@@ -191,16 +191,24 @@ function storePeople_() {
 }
 
 /** 同仁最近一次在職起日：到職日、staff_log 最近一次 enable／reinstate（復職）取較晚者；都沒有就用開通日 */
-function storeEpoch_(p) {
+function storeEpoch_(p, logBest) {
   var best = storeDatePart_(p.hire);
+  var d = (logBest || storeEpochLogMap_())[p.emp];
+  if (d && d > best) best = d;
+  return best || p.confirmedAt || '';
+}
+
+/** staff_log 只讀一次：回 {同仁編號: 最近一次 enable／reinstate 的日期}（名冊整批算 epoch 用） */
+function storeEpochLogMap_() {
+  var map = {};
   stfReadRows_(STF_SHEET_LOG, STF_LOG_HEADERS.length).forEach(function (r) {
-    if (stfNormEmp_(r[1]) !== p.emp) return;
     var ev = stfStr_(r[2]);
     if (ev !== 'enable' && ev !== 'reinstate') return;
+    var emp = stfNormEmp_(r[1]);
     var d = storeDatePart_(r[0]);
-    if (d && d > best) best = d;
+    if (emp && d && (!map[emp] || d > map[emp])) map[emp] = d;
   });
-  return best || p.confirmedAt || '';
+  return map;
 }
 
 /** 能核的人換成打卡帳號：staff_clock state=confirmed 且 roster_active 不是 FALSE；被核的人單位必須在試點內 */
@@ -257,12 +265,13 @@ function storeIdent_(sub) {
   var inactive = { sub: sub, active: false };
   var org = stfReadOrg_();
   var pilot = storePilotUnits_();
-  var user = null, p = null;
+  var user = null, p = null, tokenAfter = 0;
 
   if (STORE_SUB_ADMIN_RE.test(sub)) {
     var f = findUserById_(sub.slice(2));
     if (!f || !isActiveValue_(f.values[AUTH_USERS_COL.active])) return inactive;
     user = rowToUser_(f.values);
+    tokenAfter = Number(f.values[AUTH_USERS_COL.token_after]) || 0;
     if (String(user.role) !== 'admin') return inactive;
   } else if (STORE_SUB_STAFF_RE.test(sub)) {
     var all = storePeople_();
@@ -271,6 +280,7 @@ function storeIdent_(sub) {
     var uf = findUserById_(p.userId);
     if (!uf || !isActiveValue_(uf.values[AUTH_USERS_COL.active])) return inactive;
     user = rowToUser_(uf.values);
+    tokenAfter = Number(uf.values[AUTH_USERS_COL.token_after]) || 0;
     if (String(user.role) !== 'admin' && String(user.role) !== 'staff') return inactive;
   } else {
     return inactive;
@@ -303,6 +313,7 @@ function storeIdent_(sub) {
     unit: p ? p.unit : '',
     title: p ? p.title : '',
     epoch: p ? storeEpoch_(p) : '',
+    token_after: tokenAfter,
     pilot_units: pilot,
     units_managed: storeUniqSorted_(managed),
     void_units: storeUniqSorted_(voidUnits),
@@ -376,7 +387,10 @@ function handleSvcStoreRoster_(payload) {
   var list = storePeople_().filter(function (p) {
     return p.status === 'active' && p.unit === unit && STORE_SUB_STAFF_RE.test(p.emp);
   }).sort(function (a, b) { return a.emp < b.emp ? -1 : (a.emp > b.emp ? 1 : 0); });
-  return { ok: true, data: { staff: list.map(function (p) { return { sub: p.emp, emp_no: p.emp, name: p.name, title: p.title }; }) } };
+  var logMap = list.length ? storeEpochLogMap_() : {};
+  return { ok: true, data: { staff: list.map(function (p) {
+    return { sub: p.emp, emp_no: p.emp, name: p.name, title: p.title, unit: p.unit, epoch: storeEpoch_(p, logMap) };
+  }) } };
 }
 
 // ============================================================
