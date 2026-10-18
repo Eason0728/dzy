@@ -150,20 +150,76 @@ function attApproverOf_(approver, target, org) {
   return false;
 }
 
+/** 單位或職稱是空的、或代碼不存在／已停用 → true（正式資料不完整，才輪得到主店推算） */
+function storeOrgIncomplete_(p, org) {
+  var u = stfStr_(p.unit), t = stfStr_(p.title);
+  if (!u || !t) return true;
+  return !(org.unit[u] && org.unit[u].active && org.title[t] && org.title[t].active);
+}
+
+/**
+ * 主店打卡推算（Eason 2026-10-18 選 A）：被核者單位或職稱不完整時，用主店打卡（home）對到的唯一一個 store 階梯單位，
+ * 當作該單位 rank 1 的一般同仁。home(emp)＝{units: [單位代碼…]}（沒有主店打卡回 null）。
+ * 回 {unit, title} 或 null（沒有主店、對到零個或多個單位、單位不是啟用的 store 階梯、org 沒有 rank 1 職稱）。
+ */
+function storeInferFromHome_(t, org, home) {
+  if (!home) return null;
+  var h = home(stfStr_(t.emp));
+  if (!h || !h.units || h.units.length !== 1) return null;
+  var u = org.unit[h.units[0]];
+  if (!u || !u.active || (u.ladder || 'store') !== 'store') return null;
+  var title = '';
+  org.list.title.forEach(function (x) {
+    if (!title && x.active && x.parent === 'store' && x.rank === 1) title = x.code;
+  });
+  return title ? { unit: u.code, title: title } : null;
+}
+
+/**
+ * 把一位同仁變成「算名單用的被核者」。回 null＝不列入；
+ * 否則回 {…同仁, pilotUnits, inferred, orphan}：正式資料完整 → 原樣（pilotUnits＝[unit]）；
+ * 不完整且能推算 → unit／title 換成推算值、status 視為 active、inferred＝true；
+ * 不完整又推算不出 → orphan＝true（只有人資主管與 admin 看得到，pilotUnits＝主店對到的全部單位）。
+ * 只處理 active／unclaimed；責任制職稱（只在有填職稱時判斷）一律不列。
+ */
+function storeEffectiveTarget_(t0, org, home) {
+  var st = stfStr_(t0.status);
+  var e = {};
+  Object.keys(t0).forEach(function (k) { e[k] = t0[k]; });
+  if (!storeOrgIncomplete_(t0, org)) {
+    if (st !== 'active') return null;
+    e.pilotUnits = [stfStr_(t0.unit)];
+    return e;
+  }
+  if (st !== 'active' && st !== 'unclaimed') return null;
+  if (STORE_NO_ATT_TITLES.indexOf(stfStr_(t0.title)) !== -1) return null;
+  var inf = storeInferFromHome_(t0, org, home);
+  if (inf) {
+    e.status = 'active'; e.unit = inf.unit; e.title = inf.title; e.dept = ''; e.inferred = true; e.pilotUnits = [inf.unit];
+    return e;
+  }
+  var h = home ? home(stfStr_(t0.emp)) : null;
+  e.orphan = true; e.pilotUnits = h && h.units ? h.units.slice() : [];
+  return e;
+}
+
 /**
  * 這個人能核的人（尚未換成打卡帳號）。
  * me＝{emp, status, unit, dept, title}（admin 沒有同仁編號時 emp 為空）；flags＝{admin, hrHead, attExtra}；
- * people＝全部同仁物件陣列。回符合的 target 陣列。
+ * people＝全部同仁物件陣列；home＝選填，emp → {units}（主店打卡推算用，見 storeInferFromHome_）。回符合的 target 陣列。
+ * 推算出來的人當作單位 rank 1 一般同仁；推算不出的 orphan 只有 admin／人資主管看得到。
  */
-function storeAttTargets_(me, flags, people, org) {
+function storeAttTargets_(me, flags, people, org, home) {
   var out = [];
-  people.forEach(function (t) {
-    if (stfStr_(t.status) !== 'active') return;
-    if (!attNeedOf_(t, org)) return;
+  people.forEach(function (t0) {
+    var t = storeEffectiveTarget_(t0, org, home);
+    if (!t) return;
+    if (!t.orphan && !attNeedOf_(t, org)) return;
     var notSelf = !(stfStr_(me.emp) && stfStr_(me.emp) === stfStr_(t.emp));
     var ok = false;
     // 店長核自己：本人是店長（title sm）且要考勤（上面 attNeedOf_ 已判定）時，admin／人資主管名單仍含自己
     if (flags.admin || flags.hrHead) ok = notSelf || stfStr_(me.title) === 'sm';
+    else if (t.orphan) ok = false;
     else {
       ok = attApproverOf_(me, t, org);
       if (!ok && flags.attExtra && notSelf && stfStr_(me.unit) && stfStr_(me.unit) === stfStr_(t.unit)) ok = true;
@@ -211,13 +267,33 @@ function storeEpochLogMap_() {
   return map;
 }
 
+/** 主店打卡對照：emp → {store, units}。取 staff_clock 中 state=confirmed、roster_active 不是 FALSE、role=home 的那一筆（多個不同店互相矛盾就當沒有）；units＝該店 clock_stores 的 unit_code（逗號多個都列） */
+function storeHomeFn_() {
+  if (!clkSheetsReady_()) return function () { return null; };
+  var byStore = {};
+  clkStores_().forEach(function (st) { byStore[st.store_code] = clkUnitsOf_(st); });
+  var homes = {};
+  clkMaps_().forEach(function (m) {
+    if (m.state !== 'confirmed' || m.roster_active === 'FALSE' || m.role !== 'home') return;
+    (homes[m.emp_no] = homes[m.emp_no] || {})[m.store_code] = true;
+  });
+  return function (emp) {
+    var h = homes[emp];
+    if (!h) return null;
+    var codes = Object.keys(h);
+    if (codes.length !== 1) return null;
+    return { store: codes[0], units: byStore[codes[0]] || [] };
+  };
+}
+
 /** 能核的人換成打卡帳號：staff_clock state=confirmed 且 roster_active 不是 FALSE；被核的人單位必須在試點內 */
 function storeAttPeople_(targets, pilot) {
   if (!pilot.length || !targets.length) return [];
   var maps = clkSheetsReady_() ? clkMaps_() : [];
   var seen = {}, out = [];
   targets.forEach(function (t) {
-    if (pilot.indexOf(t.unit) === -1) return;
+    var pu = t.pilotUnits || [t.unit];
+    if (!pu.some(function (u) { return pilot.indexOf(u) !== -1; })) return;
     maps.forEach(function (m) {
       if (m.emp_no !== t.emp || m.state !== 'confirmed' || m.roster_active === 'FALSE') return;
       var k = m.store_code + '|' + m.emp_id;
@@ -303,7 +379,7 @@ function storeIdent_(sub) {
     if (valid && perms.indexOf(STORE_PERM_VOID) !== -1 && pilot.indexOf(p.unit) !== -1) voidUnits = [p.unit];
   }
 
-  var targets = storeAttTargets_(me, flags, people, org);
+  var targets = storeAttTargets_(me, flags, people, org, storeHomeFn_());
   return {
     sub: sub, active: true,
     emp_no: p ? p.emp : '',

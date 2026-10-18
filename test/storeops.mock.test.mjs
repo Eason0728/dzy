@@ -131,7 +131,7 @@ const SVC = 'fake-store-svc-key-0001';
 const USERS_HEAD = ['id', 'username', 'name', 'role', 'node', 'salt', 'hash', 'active', 'created_at', 'last_login_at', 'token_after'];
 
 // 人：[emp, 姓名, unit, dept, title, status, hire, 打卡店, 打卡編號]
-const CLK = { 'mzt-gf': 'mztgf', 'mzt-js': 'mztjs', 'mala-gf': 'gf', ck: 'cf', 'mzt-hq': 'hq', 'mala-hq': 'hq', 'dzy-hq': 'hq' };
+const CLK = { '': 'gf', 'mzt-wx': 'gf', 'mzt-gf': 'mztgf', 'mzt-js': 'mztjs', 'mala-gf': 'gf', ck: 'cf', 'mzt-hq': 'hq', 'mala-hq': 'hq', 'dzy-hq': 'hq' };
 const BIG = [
   ['DZY001', '店長一', 'mzt-gf', '', 'sm', 'active', '2026-01-05'],
   ['DZY002', '陳小明', 'mzt-gf', '', 'ft', 'active', '2026-02-01'],
@@ -619,6 +619,71 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(eq(both('DZY001'), none) && eq(both('DZY040'), none), '7b 再關掉：立刻都沒有');
   ok(!app.sheets.roles._rows().some((r) => String(r[2]).indexOf('platform.storeops') !== -1), '7b platform.storeops 沒有寫進 roles 分頁');
   ok(typeof sb.storeOpsGate_ === 'function', '7b storeOpsGate_ 存在');
+})();
+
+// ============================================================
+// 7c. 主店打卡推算（2026-10-18 Eason 選 A）：沒單位職稱的同仁，用 staff_clock 的主店（role=home）推算單位
+// ============================================================
+(() => {
+  const E = (emp, name, status, unit, title) => [emp, name, unit, '', title, status, '2026-03-01'];
+  const cast = [
+    E('DZY101', '光復店長', 'active', 'mala-gf', 'sm'),
+    E('DZY102', '未認領甲', 'unclaimed', '', ''),         // 主店 gf → mala-gf
+    E('DZY103', '總部無職稱', 'unclaimed', '', ''),       // 主店 hq（四個單位）→ 不推算
+    E('DZY104', '正式計時', 'active', 'mala-gf', 'pt'),   // 正式資料
+    E('DZY105', '央廚未認領', 'unclaimed', '', ''),       // 主店 cf → ck
+    E('DZY106', '只有支援店', 'unclaimed', '', ''),       // 沒有 home → 不推算
+    E('DZY107', '正式資料在別店', 'active', 'mzt-gf', 'ft'),   // 主店 gf，但正式資料是 mzt-gf → 不受推算影響
+    E('DZY108', '責任制無單位', 'unclaimed', '', 'hm'),   // 有職稱且責任制 → 不列
+    E('DZY109', '已離職無資料', 'disabled', '', ''),      // 離職 → 不列
+    E('DZY110', '單位停用', 'unclaimed', 'mzt-wx', 'pt'), // 單位已停用視為不完整，主店 gf → mala-gf
+    E('DZY120', '人資主管', 'active', 'dzy-hq', 'hm'),
+    E('DZY121', '財務主管', 'active', 'dzy-hq', 'hm'),
+    E('DZY122', '總監', 'active', 'mala-hq', 'odir')
+  ];
+  cast[10][3] = 'hr'; cast[11][3] = 'fin';
+  const build = (pilot) => {
+    const app = world(cast, { pilot });
+    const sc = app.sheets.staff_clock._data;
+    const homeOf = { DZY101: 'gf', DZY102: 'gf', DZY103: 'hq', DZY104: 'gf', DZY105: 'cf', DZY107: 'gf', DZY108: 'gf', DZY109: 'gf', DZY110: 'gf' };
+    sc.length = 1;
+    Object.keys(homeOf).forEach((e) => sc.push([e, homeOf[e], homeOf[e].toUpperCase() + e.slice(3), 'home', 'confirmed', 'created', 'TRUE', '', '', '', '']));
+    sc.push(['DZY106', 'gf', 'GF106', 'support', 'confirmed', 'created', 'TRUE', '', '', '', '']);   // 只有支援
+    sc.push(['DZY120', 'hq', 'HQ120', 'home', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+    return app;
+  };
+  const app = build(PERMS_ALL_PILOT);
+  const sm = app.subs('DZY101');
+  ok(has(sm, 'DZY102'), '7c 光復店長名單含未認領、無單位職稱但主店是 gf 的同仁', sm);
+  ok(has(sm, 'DZY110'), '7c 單位代碼已停用也算不完整，改用主店推算', sm);
+  ok(has(sm, 'DZY104') && has(sm, 'DZY101'), '7c 正式資料的計時與店長自己照舊在名單');
+  ok(!has(sm, 'DZY103') && !has(sm, 'DZY105') && !has(sm, 'DZY106') && !has(sm, 'DZY108') && !has(sm, 'DZY109'), '7c 店長名單不含：主店 hq、主店 cf、無主店、責任制、離職', sm);
+  ok(!has(sm, 'DZY107'), '7c 有正式單位職稱的人不受推算影響（正式資料是 mzt-gf，不會冒進光復名單）');
+  const inf = app.people('DZY101').find((x) => x.sub === 'DZY102');
+  ok(inf && inf.clock === 'gf' && inf.emp_id === 'GF102', '7c 推算出的人換成打卡帳號（店別 gf、編號 GF102）', inf);
+  // 只有人資主管與管理員看得到不推算的人
+  const hr = app.subs('DZY120'), adm = app.subs('U:a001');
+  ok(has(hr, 'DZY103') && has(adm, 'DZY103'), '7c 主店 hq 的無職稱同仁出現在人資主管與管理員名單', { hr, adm });
+  ok(has(hr, 'DZY102') && has(adm, 'DZY102') && has(hr, 'DZY105') && has(adm, 'DZY105'), '7c 人資主管與管理員也看得到推算出的人');
+  ok(!has(hr, 'DZY108') && !has(adm, 'DZY108') && !has(hr, 'DZY109') && !has(adm, 'DZY109'), '7c 責任制職稱、離職不因為沒單位就被帶進全部名單');
+  ok(!has(app.subs('DZY122'), 'DZY103') && !has(app.subs('DZY121'), 'DZY103') && !has(app.subs('DZY101'), 'DZY103'), '7c 主店 hq 的無職稱同仁不在總監、部門主管、店長名單');
+  ok(!has(hr, 'DZY106') && !has(adm, 'DZY106'), '7c 沒有主店打卡（只有支援）的人不推算也沒有可列的主店帳號');
+  // 補上正式單位＋職稱後完全用正式資料：DZY102 改成 mzt-gf 正職 → 不再出現在光復名單
+  const row = app.sheets.staff._data.find((r) => r[0] === 'DZY102');
+  row[3] = 'active'; row[5] = 'mzt-gf'; row[7] = 'ft';
+  ok(!has(app.subs('DZY101'), 'DZY102'), '7c 補上正式 unit＋title 後不再推算（不再出現在 mala-gf 店長名單）');
+  // 推算單位不在試點清單 → 不出現
+  const app2 = build('mzt-gf');
+  ok(!has(app2.subs('U:a001'), 'DZY102') && !has(app2.subs('U:a001'), 'DZY105') && !has(app2.subs('DZY120'), 'DZY103'), '7c 推算單位不在試點清單時不出現（admin 與人資主管也一樣）');
+  const app3 = build('ck');
+  ok(has(app3.subs('U:a001'), 'DZY105') && !has(app3.subs('U:a001'), 'DZY102'), '7c 試點只開 ck：只剩推算為 ck 的人');
+  // 不能核自己的規則照舊；沒給 home 就不推算
+  const org = app.sb.stfReadOrg_();
+  const me = { emp: 'DZY102', status: 'unclaimed', unit: '', dept: '', title: '' };
+  const home = () => ({ units: ['mala-gf'] });
+  const pp = [me, { emp: 'DZY103', status: 'unclaimed', unit: '', dept: '', title: '' }];
+  ok(eq(app.sb.storeAttTargets_(me, { admin: true }, pp, org, home).map((x) => x.emp), ['DZY103']), '7c 不能核自己的規則照舊（推算的人也不含自己）');
+  ok(app.sb.storeAttTargets_({ emp: 'DZY101', status: 'active', unit: 'mala-gf', dept: '', title: 'sm' }, {}, pp, org, null).length === 0, '7c 沒給 home 對照就不推算');
 })();
 
 // ============================================================
