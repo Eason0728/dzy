@@ -332,6 +332,7 @@ const KIND_TEXT = {
   rejected: '對照被退回，需重指定', escalated: '店長說不對，轉總部'
 };
 const ROLE_TEXT = { home: '主店', support: '支援' };
+const SOURCE_TEXT = { auto_support_map: '自動（已確認身分的跨店支援）', auto_support: '自動（LINE 首次支援）' };
 const HQ_TABS = [['all', '全部對照'], ['needs', '需總部處理'], ['cand', '候選新人'], ['oldhome', '舊主店'], ['jobs', '待辦單']];
 
 /** env = { ctx, mod, viewer, org, tab? } */
@@ -363,6 +364,7 @@ export function mountClockMap(el, env) {
       <div class="card stack" data-role="cm-row" data-state="${esc(x.state)}" data-store="${esc(x.store_code)}" data-emp-id="${esc(x.emp_id)}">
         <div class="card-row"><div class="card-title">${esc(x.name)}　${esc(x.emp_no)}</div>
           <span class="tag ${confirmed ? 'tag-ok' : x.state === 'rejected' ? 'tag-danger' : 'tag-warn'}">${confirmed ? '已確認' : x.state === 'rejected' ? '已退回' : '等確認'}</span></div>
+        ${SOURCE_TEXT[x.source] ? `<div><span class="tag" data-role="cm-source">${esc(SOURCE_TEXT[x.source])}</span></div>` : ''}
         <div class="text-muted">${esc(unitOf(x))}｜打卡：${esc(x.store_name || x.store_code)} 編號 ${esc(x.emp_id)}（${esc(ROLE_TEXT[x.role] || x.role)}）${x.last_punch ? `｜最近打卡 ${esc(x.last_punch)}` : ''}</div>
         ${confirmed ? '' : `<p class="field-hint">這個人在打卡系統的 ${esc(x.emp_id)}，就是 ${esc(x.name)} 本人嗎？</p>`}
         <div class="btn-row">

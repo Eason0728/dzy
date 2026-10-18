@@ -2036,5 +2036,60 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(re.ok && rows.length === n0 + 1 && last[2] === sm.emp && String(last[3]).length > 0 && last[5] === 'staff_edit', 'N3c 復職後寫一列 perm_audit（added）', { re, last });
 })();
 
+// AS：clockMapBuildApply_ 自動確認（已確認身分的同仁，到非主店名冊多一個編號 → confirmed／support／auto_support_map）
+(() => {
+  const app = fresh();
+  const { sb } = app;
+  const mk = (n, over) => claimApprove(app, n, 'pw-' + n + '-0001', over || MZT_GF('pt'));
+  const okp = mk('自動甲'), unc = (() => { post(sb, 'staffImport', { names: ['自動未認領'] }, app.tok); return post(sb, 'claimLookup', { name: '自動未認領' }).data; })();
+  const noconf = mk('自動乙'), gone = mk('自動丙'), homeP = mk('自動丁', MZT_JS('pt')), rej = mk('自動戊');
+  const dupA = mk('自動己'), dupB = mk('自動己');
+  giveMap(app, okp.emp, 'mztgf', 'AH1', 'home');
+  giveMap(app, unc.emp_no, 'mztgf', 'AH2', 'home', { last_punch: '2026-10-18' });
+  giveMap(app, gone.emp, 'mztgf', 'AH3', 'home');
+  giveMap(app, homeP.emp, 'mztgf', 'AH4', 'support');          // 丁主店在金山（單位 mzt-js），已有 confirmed 對照
+  giveMap(app, rej.emp, 'mztgf', 'AH5', 'home');
+  giveMap(app, rej.emp, 'mztjs', 'AR5', 'support', { state: 'rejected', source: 'name_match' });
+  giveMap(app, dupA.emp, 'mztgf', 'AH6', 'home');
+  setStaff(app, gone.emp, 'status', 'disabled');
+  setStaff(app, dupB.emp, 'status', 'disabled');                 // 同名的另一位是停用者 → 不算「只有他一位」
+  const ap = sb.clockMapBuildApply_({
+    mztgf: [rosterRow('AH1', '自動甲'), rosterRow('AH2', '自動未認領'), rosterRow('AH3', '自動丙'), rosterRow('AH4', '自動丁'), rosterRow('AH5', '自動戊'), rosterRow('AH6', '自動己'), rosterRow('AN1', '自動乙')],
+    mztjs: [rosterRow('AJ1', '自動甲'), rosterRow('AJ2', '自動未認領'), rosterRow('AJ3', '自動乙'), rosterRow('AJ4', '自動丙'), rosterRow('AJ5', '自動丁'), rosterRow('AR5', '自動戊'), rosterRow('AJ6', '自動己')]
+  }, nowT(0));
+  ok(ap.ok, 'AS 套用成功', ap);
+  const one = (emp, store) => mapOf(app, emp, store).filter((m) => m.state !== 'rejected' || m.emp_id === 'AR5')[0];
+  const a = mapOf(app, okp.emp, 'mztjs')[0];
+  ok(a && a.state === 'confirmed' && a.role === 'support' && a.source === 'auto_support_map' && a.emp_id === 'AJ1' && a.confirmed_by !== '', 'AS ★符合全部條件 → confirmed／support／auto_support_map', a);
+  ok(mapOf(app, okp.emp, 'mztgf')[0].role === 'home' && mapOf(app, okp.emp, 'mztgf')[0].emp_id === 'AH1', 'AS 主店那筆原樣（home）');
+  const u = mapOf(app, unc.emp_no, 'mztjs')[0];
+  ok(u && u.state === 'confirmed' && u.role === 'support' && u.source === 'auto_support_map', 'AS 單位未填的未認領者（已有 confirmed）也自動確認', u);
+  const n = mapOf(app, noconf.emp, 'mztjs')[0];
+  ok(n && n.state === 'suggested' && n.source === 'name_match', 'AS 沒有任何已確認對照 → 照舊 suggested', n);
+  ok(mapOf(app, gone.emp, 'mztjs').length === 0, 'AS 停用同仁不自動、也不建對照（交總部）');
+  ok(ap.data.needs_hq === 2 && jobs(app).length === 0, 'AS 不發任何打卡單', ap);
+  const h = mapOf(app, homeP.emp, 'mztjs')[0];
+  ok(h && h.state === 'suggested' && h.source === 'name_match' && h.role === 'home', 'AS ★這家是他的主店 → 照原流程 suggested', h);
+  const r = mapOf(app, rej.emp, 'mztjs')[0];
+  ok(r && r.state === 'rejected' && r.emp_id === 'AR5' && r.source === 'name_match', 'AS rejected 不被改', r);
+  const d = mapOf(app, dupA.emp, 'mztjs')[0];
+  ok(d && d.state === 'suggested' && d.source === 'name_match', 'AS 同名還有停用者 → 不算唯一，照舊 suggested', d);
+  // 同名兩位在職 → ambiguous，不建任何列
+  const x1 = mk('自動庚'), x2 = mk('自動庚');
+  giveMap(app, x1.emp, 'mztgf', 'AH7', 'home');
+  const ap2 = sb.clockMapBuildApply_({ mztgf: [rosterRow('AH7', '自動庚')], mztjs: [rosterRow('AJ7', '自動庚')] }, nowT(1));
+  ok(ap2.ok && !maps(app).some((m) => m.emp_id === 'AJ7'), 'AS 同名兩位在職 → 不建對照（需總部處理）', ap2);
+  const lg = rowsOf(app, 'staff_log').filter((l) => l.event === 'auto_support_map');
+  ok(lg.length === 2 && lg.every((l) => l.detail.indexOf('自動') === -1 && /^mztjs:AJ[12]$/.test(l.detail)), 'AS staff_log 有記、不含姓名', lg);
+  const ml = post(sb, 'clockMapList', {}, app.tok);
+  ok(ml.data.confirmed.some((m) => m.emp_no === okp.emp && m.source === 'auto_support_map'), 'AS clockMapList 的 confirmed 帶出 source', ml.data.confirmed.map((m) => m.source));
+  // 重跑冪等；總部可按「不對」
+  const nb = maps(app).length;
+  sb.clockMapBuildApply_({ mztgf: [rosterRow('AH1', '自動甲')], mztjs: [rosterRow('AJ1', '自動甲')] }, nowT(2));
+  ok(maps(app).length === nb && mapOf(app, okp.emp, 'mztjs')[0].state === 'confirmed', 'AS 重跑不重複、不改');
+  const no = post(sb, 'clockMapDecide', { emp_no: okp.emp, store_code: 'mztjs', emp_id: 'AJ1', decision: 'reject' }, app.tok);
+  ok(no.ok && mapOf(app, okp.emp, 'mztjs')[0].state === 'rejected', 'AS 總部發現錯了仍可按「不對」', no);
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

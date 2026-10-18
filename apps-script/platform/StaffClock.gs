@@ -1689,6 +1689,8 @@ function clkNoHomeMap_(staffAll, maps, jobs, todayText) {
  * 唯一同名 → staff_clock suggested（home＝DZY 單位對應那家，其他 support）；
  * 同名多人、或一人同一家有兩個編號 → needs_hq；DZY 找不到 → candidates（不建 staff）。
  */
+var CLK_SRC_AUTO_MAP = 'auto_support_map';
+var CLK_AUTO_MAP_BY = '系統自動（已確認身分的跨店支援）';
 function clockMapBuildApply_(rostersByStore, now) {
   return clkWithLock_(function () {
     var d = clkDate_(now), nowText = clkNowText_(d);
@@ -1725,7 +1727,7 @@ function clockMapBuildApply_(rostersByStore, now) {
     var groups = {};
     entries.forEach(function (e, i) { var r = find(i); (groups[r] = groups[r] || []).push(e); });
 
-    var res = { suggested: 0, kept: 0, candidates: 0, needs_hq: 0, role_changes: 0 };
+    var res = { suggested: 0, auto_confirmed: 0, kept: 0, candidates: 0, needs_hq: 0, role_changes: 0 };
     var candidates = [], needs = [];
     // 保留總部尚未處理的「店長轉來」項目（只要那一列現在仍是 rejected 且沒別的生效對照）
     (ms.needs_hq || []).forEach(function (n) {
@@ -1781,10 +1783,17 @@ function clockMapBuildApply_(rostersByStore, now) {
           needs.push({ kind: 'conflict', name: name, entries: [{ store_code: e.store, emp_id: e.eid }], emp_nos: [s.emp] });
           return;
         }
-        var row = clkNewMap_(s.emp, e.store, e.eid, 'support', 'suggested', 'name_match', true, '', d);
+        // 自動確認（Eason 2026-10-19）：身分已被人確認過的在職同仁，到「非主店」的名冊多一個編號 → 直接 confirmed／support。
+        // 條件：唯一同名（含停用）、狀態 active／unclaimed、已有 confirmed 對照、這家不是主店。source 用 auto_support_map，
+        // 不沿用 auto_support（那是 LINE 首次支援；被退回時 clockDailyApply_ 會對 auto_support 發停用單，這裡的帳號是本來就有的，不能停）。
+        // 主店要把這一列算進去再判斷（單位空的人靠打卡推斷，新列若最近打卡就會變主店 → 不自動）
+        var st = clkStaffStatus_(s), homeNow = clkHomeStoreFor_(s, maps.concat([{ emp_no: s.emp, store_code: e.store, emp_id: e.eid, role: 'support', state: 'suggested', roster_active: 'TRUE', last_punch: e.punch }])).store;
+        var auto = (st === 'active' || st === 'unclaimed') && !(deadByNorm[grp[0].norm] || []).length &&
+          maps.some(function (m) { return m.emp_no === s.emp && m.state === 'confirmed'; }) && !!homeNow && homeNow !== e.store;
+        var row = clkNewMap_(s.emp, e.store, e.eid, 'support', auto ? 'confirmed' : 'suggested', auto ? CLK_SRC_AUTO_MAP : 'name_match', true, auto ? CLK_AUTO_MAP_BY : '', d);
         row.last_punch = e.punch; clkSave_(CLK_SHEET_MAP, CLK_MAP_HEADERS, row);
         maps.push(row);
-        res.suggested++;
+        if (auto) { res.auto_confirmed++; stfLog_(s.emp, 'auto_support_map', 'sync', e.store + ':' + e.eid); } else res.suggested++;
       });
       // 主店依 clkHomeStoreFor_（DZY 單位優先，單位空用打卡資料推斷）；已存在的列也一起更新 role（重跑 build 也會校正）
       res.role_changes += clkRecomputeRoles_(s.emp, d, 'build');

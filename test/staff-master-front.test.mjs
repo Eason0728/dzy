@@ -135,6 +135,7 @@ ok(L.personActions({ emp_no: 'DZY010', status: 'active', clock_total: 1, is_self
   const ui = fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-ui.js'), 'utf8');
   ok(/clockOutboxCancel/.test(ui) && /data-act="job-cancel"/.test(ui) && /請填結案原因/.test(ui), '待辦單每筆有「結案」鈕，必填原因後送 clockOutboxCancel');
   ok(/data\.confirmed/.test(ui) && /personFilter\('?\w*'?/.test(ui) && /name_diff === true/.test(fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-lib.js'), 'utf8')), '全部對照用後端 confirmed；打卡姓名不同用 name_diff 布林');
+  ok(/auto_support_map: '自動（已確認身分的跨店支援）'/.test(ui) && /data-role="cm-source"/.test(ui), '全部對照看得出自動確認（auto_support_map 中文標籤）');
   ok(!/btn btn-primary" data-act="cm-yes"/.test(ui) && /data-act="cm-yes"/.test(ui), '「對」不是紅色主按鈕（改用 --ok 綠）');
 }
 

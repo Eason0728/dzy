@@ -238,7 +238,7 @@ pending/running ──claim 時重驗不過──► cancelled（不送）
 - 聚人：同名（去全形／半形空白）或 `src_*` 指到的列 → 同一人（跨店）。
 - 每一組：
   - 同店有兩個以上編號 → `needs_hq` `dup_in_store`。
-  - 比對**全部** DZY（含停用、不限單位）：0 個 → 候選新人（`candidates`，不建 staff；組內全部已有對照的略過）；多個 → `needs_hq` `ambiguous`；剛好 1 個 → 各店寫 `suggested／name_match`，`home`＝該 DZY 單位對應的店、其他 `support`（DZY 單位沒打卡＝全 support）。
+  - 比對**全部** DZY（含停用、不限單位）：0 個 → 候選新人（`candidates`，不建 staff；組內全部已有對照的略過）；多個 → `needs_hq` `ambiguous`；剛好 1 個 → 各店寫 `suggested／name_match`（**例外·自動確認 2026-10-19**：該同仁 status 為 active／unclaimed、全部 DZY（含停用）同名只有他一位、已有至少一筆 confirmed 對照、且這家不是主店（把新列算進去後仍不是）→ 直接寫 `confirmed／support／auto_support_map`、`confirmed_by=系統自動（已確認身分的跨店支援）`、staff_log `auto_support_map`〔只記店:編號〕；輸出多 `auto_confirmed` 筆數。source 刻意不用 `auto_support`：該值被退回時 `clockDailyApply_` 會發停用單，而這種帳號是店端本來就有的。前端「全部對照」顯示中文標籤，總部仍可按「不對」），`home`＝該 DZY 單位對應的店、其他 `support`（DZY 單位沒打卡＝全 support）。
   - 已存在的對照列不動（confirmed 保留；rejected → `needs_hq` `rejected`；此人此店已有別的 confirmed → `needs_hq` `conflict`）。
 - `CLOCK_MAP_STATE` 整份重寫（`excluded` 保留、店長轉來未處理的 `escalated` 保留）。可重跑、不重複建列。
 - 輸出：`{ok:true, data:{suggested, kept, candidates, needs_hq}}`（筆數）。
