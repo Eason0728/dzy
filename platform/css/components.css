@@ -1101,6 +1101,24 @@ textarea.input:disabled {
   .login-bg[data-hero="yakiniku"] .login-blur { background-size: 130% auto; }
 }
 
+/* 手機：表單緊接在照片下方（2026-10-18 Eason：高螢幕上照片與表單之間不要留大空白，
+   之前表單沉到底部，375×812 時輸入框頂端在 y≈590）。
+   --hero-h＝該張照片在手機上顯示的高度（跟上面 background-size 同一組算式：
+   mala 900×650 用 contain＝寬度填滿；mzt 正方形 100% 寬；yakiniku 1600×1000 放大 130% 寬），
+   改上面的 background-size 要同步改這裡。表單從照片下緣往上約 32% 處開始往下排（#/claim 說明文字長，不疊一點 375 寬的墨竹亭正方形照片會把輸入框推到 450px 以下）；
+   矮螢幕（375×667）內容比畫面高時由頁面自己往下捲，不再 overflow:hidden 切掉。 */
+@media (max-width: 767px) {
+  .login-bg {
+    --hero-h: calc(100vw * 650 / 900);
+    align-items: flex-start;
+    padding-top: calc(var(--hero-h) * .68);   /* 表單內距 32px 在這之下；照片下緣約 32% 多為桌面留白，讓表單疊上去 */
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .login-bg[data-hero="mzt"] { --hero-h: 100vw; }
+  .login-bg[data-hero="yakiniku"] { --hero-h: calc(130vw * 1000 / 1600); }
+}
+
 .login-bg::after {
   content: "";
   position: absolute;
@@ -1467,4 +1485,14 @@ textarea.input:disabled {
 }
 @media (prefers-reduced-motion: reduce) {
   .pm-switch::after { transition: none; }
+}
+
+/* iPhone Safari 點進字級 < 16px 的輸入框會自動放大畫面（2026-10-18）。
+   只在手機寬度（跟全站手機斷點 860px 一致）把輸入元件設成 16px，桌機維持 --fs-base。
+   放檔尾＋用 :where 以外的元素選擇器疊加 .input，確保特異性贏過各處 .input / 對話框內的設定。 */
+@media (max-width: 860px) {
+  input, select, textarea,
+  .input, select.input, textarea.input {
+    font-size: 16px;
+  }
 }

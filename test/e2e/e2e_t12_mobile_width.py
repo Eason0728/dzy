@@ -6,6 +6,8 @@
   ① #/audit-ops/fill（稽核填寫：19 項檢查＋長店名＋未完成說明）
   ② #/staff/clockmap（總部打卡對照：很多筆待確認，姓名／店名很長）
   ③ #/me/clock（店長打卡對照：同上，自己單位）
+④（2026-10-18）登入前畫面：375 寬所有輸入框 computed font-size ≥16px（iPhone 不自動放大）、桌機 1280 寬維持 15px；
+   #/claim 在 375×812 輸入框頂端 <450px（表單緊接照片下方，不沉到底），375×667 表單與按鈕完整可見、無橫向捲動。
 另外量每個畫面裡所有元素的右緣都不超過視窗寬，抓得出是哪一顆撐出來。
 """
 import os
@@ -103,6 +105,40 @@ def main():
             lead.wait_for_selector('[data-role="cm-row"]', timeout=10000)
             check(lead.locator('[data-role="cm-row"]').count() >= 14, '③店長打卡對照筆數 ≥14：%d' % lead.locator('[data-role="cm-row"]').count())
             measure(lead, '③ #/me/clock')
+
+            # ④ 登入前畫面：輸入框字級（手機 ≥16px、桌機 15px）與表單位置
+            for hero_seed in (0.1, 0.5, 0.9):  # 隨機挑照片的三張都測
+                for route, label in (('', '登入'), ('#/claim', '#/claim'), ('#/forgot', '#/forgot')):
+                    for (vw, vh) in ((375, 812), (375, 667)):
+                        pg = browser.new_context(viewport={'width': vw, 'height': vh}).new_page()
+                        mock.install(pg)
+                        pg.add_init_script('Math.random=()=>%s' % hero_seed)
+                        pg.goto(base + '/index.html' + route)
+                        pg.wait_for_selector('.input', timeout=10000)
+                        sizes = pg.evaluate("[...document.querySelectorAll('input,select,textarea')].filter(e=>e.type!=='hidden'&&e.type!=='checkbox').map(e=>parseFloat(getComputedStyle(e).fontSize))")
+                        check(sizes and min(sizes) >= 16, '④%s %dx%d（照片%s）輸入框字級 ≥16：%s' % (label, vw, vh, hero_seed, sizes))
+                        sw, bad = overflow(pg)
+                        check(sw <= W, '④%s %dx%d 無橫向捲動：%d %s' % (label, vw, vh, sw, bad))
+                        top = pg.evaluate("document.querySelector('.input').getBoundingClientRect().top")
+                        if route == '#/claim' and vh == 812:
+                            check(top < 450, '④#/claim 375x812（照片%s）輸入框頂端 %.0f < 450' % (hero_seed, top))
+                        # 按鈕要在可捲動範圍內，且捲到底看得到
+                        btn_ok = pg.evaluate("(()=>{const b=document.querySelector('[data-role=submit]')||document.querySelector('.login-card button');b.scrollIntoView();const r=b.getBoundingClientRect();return r.bottom<=innerHeight&&r.top>=0})()")
+                        check(btn_ok, '④%s %dx%d 按鈕完整可見' % (label, vw, vh))
+                        pg.context.close()
+            desk = browser.new_context(viewport={'width': 1280, 'height': 800}).new_page()
+            mock.install(desk)
+            desk.goto(base + '/index.html')
+            desk.wait_for_selector('.input', timeout=10000)
+            dsizes = desk.evaluate("[...document.querySelectorAll('input,select,textarea')].filter(e=>e.type!=='hidden').map(e=>getComputedStyle(e).fontSize)")
+            check(dsizes and all(x == '15px' for x in dsizes), '④桌機 1280 登入頁輸入框維持 15px：%s' % dsizes)
+            # 登入後的輸入框（同仁名單搜尋等）手機也要 ≥16px
+            for pgx, nm in ((adm, '管理者 #/staff'),):
+                pgx.goto(base + '/index.html#/staff')
+                pgx.wait_for_selector('[data-role="view-content"]', state='attached', timeout=10000)
+                pgx.wait_for_timeout(500)
+                s2 = pgx.evaluate("[...document.querySelectorAll('input,select,textarea')].filter(e=>e.type!=='hidden'&&e.type!=='checkbox'&&e.offsetParent!==null).map(e=>parseFloat(getComputedStyle(e).fontSize))")
+                check(s2 and all(x >= 16 for x in s2), '④登入後 %s 375 寬輸入框字級 ≥16：%s' % (nm, s2))
 
             check(not mock.leaked, '沒有請求漏出 mock：%s' % mock.leaked)
             browser.close()
