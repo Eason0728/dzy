@@ -1,0 +1,69 @@
+/**
+ * modules/payroll/index.js — 薪酬系統：把薪資管理頁整頁嵌進內容區（iframe），呼叫一律由本模組代轉（見 bridge.js）。
+ * 只理會「這個 iframe 本身」且 origin 正確的訊息；回覆時 targetOrigin 寫死薪酬頁網址。
+ */
+'use strict';
+
+import { payrollTarget, parseCall, toPageResult } from './bridge.js';
+
+const LOAD_TIMEOUT_MS = 20000;
+let state = null;   // { el, ctx, frame, target, down, timer }
+
+function clearDown() {
+  if (!state) return;
+  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+  if (state.down && state.down.parentNode) state.down.parentNode.removeChild(state.down);
+  state.down = null;
+}
+
+function showDown() {
+  if (!state || state.down) return;
+  const n = document.createElement('div');
+  n.className = 'card';
+  n.setAttribute('data-role', 'payroll-down');
+  n.textContent = '薪酬系統暫時連不上，請稍後重新整理。';
+  state.el.insertBefore(n, state.frame);
+  state.down = n;
+}
+
+async function onMessage(e) {
+  if (!state || e.origin !== state.target.origin || e.source !== state.frame.contentWindow) return;
+  const d = e.data;
+  if (d && d.type === 'dzy-payroll-ready' && d.v === 1) { clearDown(); return; }
+  const call = parseCall(d);
+  if (!call) return;
+  const frame = state.frame, origin = state.target.origin, ctx = state.ctx;
+  let r;
+  try { r = await ctx.api.call('payroll', call.action, call.payload); } catch (err) { r = { ok: false, error: '網路連線失敗，請稍後再試', status: 0 }; }
+  if (!state || state.frame !== frame || !frame.contentWindow) return;   // 已切走
+  frame.contentWindow.postMessage({ type: 'dzy-payroll-result', v: 1, id: call.id, result: toPageResult(r) }, origin);
+}
+
+export default {
+  mount(el, ctx) {
+    const target = payrollTarget(location.hostname);
+    const bar = document.createElement('div');
+    bar.className = 'bulletin-bar';
+    bar.textContent = '薪資資料只有被開通「薪酬系統」權限的人看得到；所有修改都會記錄是誰做的。';
+    const frame = document.createElement('iframe');
+    frame.title = '薪酬系統';
+    frame.className = 'bulletin-frame';
+    frame.setAttribute('data-role', 'payroll-frame');
+    frame.addEventListener('error', () => showDown());
+    state = { el, ctx, frame, target, down: null, timer: null };
+    window.addEventListener('message', onMessage);
+    el.appendChild(bar);
+    el.appendChild(frame);
+    state.timer = setTimeout(showDown, LOAD_TIMEOUT_MS);
+    frame.src = target.url;
+    return function unmount() {
+      window.removeEventListener('message', onMessage);
+      clearDown();
+      state = null;
+      while (el.firstChild) el.removeChild(el.firstChild);
+    };
+  },
+  onRoute(ctx) {
+    if (state) state.ctx = ctx;
+  }
+};

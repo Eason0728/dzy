@@ -4,8 +4,8 @@
  */
 'use strict';
 
-/** 可給的 11 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
-export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra'];
+/** 可給的 12 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
+export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write'];
 
 /** 人資主管（platform.permmap 但不是 admin）在個別例外只能動的兩碼；對照後端 STORE_HR_GRANTABLE，真正擋的是後端，前端只是不顯示選不了的 */
 export const HR_EX_FEATURES = ['store.void', 'att.extra'];
@@ -21,7 +21,8 @@ export const FEATURE_NAMES = {
   'platform.users': '人員管理',
   'platform.permmap': '改權限對照表',
   'store.void': '收支作廢',
-  'att.extra': '額外考勤核定'
+  'att.extra': '額外考勤核定',
+  'payroll.write': '薪酬系統'
 };
 
 /** 其他會出現在 myPerms／異動裡的碼 */
@@ -232,7 +233,8 @@ export const FEATURE_DESC = {
   'platform.users': '管理系統帳號（BOSS 這類）',
   'platform.permmap': '改這一頁',
   'store.void': '門市現金收支可以作廢（店長預設有；其他人要在個別例外給）',
-  'att.extra': '額外核定本單位所有要考勤的人（只能在個別例外給，可設到期日）'
+  'att.extra': '額外核定本單位所有要考勤的人（只能在個別例外給，可設到期日）',
+  'payroll.write': '進薪酬系統：看與改全集團薪資、鎖定月份（建議只用個別例外開給指定的人）'
 };
 
 /** 總部高層（不分部門）的職稱代碼 */

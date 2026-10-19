@@ -17,6 +17,7 @@ ICONS = {
     'audit-ops': ('#4a86b8', f'<rect {S} x="52" y="48" width="76" height="92" rx="10"/><path {S} d="M74 44 H106 V58 H74 Z"/><path {S} d="M66 84 L72 90 L82 78 M92 84 H114"/><path {S} d="M66 112 L72 118 L82 106 M92 112 H114"/>'),
     'approvals': ('#8a5a2b', f'<path {S} d="M56 44 H104 L128 68 V136 H56 Z"/><path {S} d="M104 44 V68 H128"/><path {S} d="M70 100 L82 112 L106 88"/><path {S} d="M70 126 H114"/>'),
     'storeops': ('#d4a017', f'<path {S} d="M44 70 L54 46 H126 L136 70"/><path {S} d="M44 70 C44 80 58 80 58 70 C58 80 76 80 76 70 C76 80 94 80 94 70 C94 80 112 80 112 70 C112 80 130 80 130 70 H136 C136 80 130 84 124 82"/><path {S} d="M52 84 V134 H128 V84"/><path {S} d="M76 134 V104 H104 V134"/>'),
+    'payroll': ('#b5462f', f'<rect {S} x="40" y="56" width="100" height="68" rx="10"/><circle {S} cx="90" cy="90" r="16"/><path {S} d="M56 74 V106 M124 74 V106"/><path {S} d="M52 138 H128"/>'),
     'attendance': ('#1f8a5b', f'<circle {S} cx="90" cy="88" r="42"/><path {S} d="M90 62 V90 L108 102"/><path {S} d="M70 140 H110"/>'),
 }
 

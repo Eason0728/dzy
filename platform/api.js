@@ -46,7 +46,9 @@ import { isDryRun, isReadAction, notifyDryRun } from './dryrun.js';
 
 // 代轉逾時 35 秒：mini 對舊後端等 30 秒，再留 5 秒餘裕（PROXY.md 第 3 節）
 const PROXY_TIMEOUT_MS = 35000;
-const PROXY_NS = { audit: true, dorm: true };
+// 薪酬系統（2026-10-19）：重算整月、出勤紀錄表匯出可能超過 30 秒，mini 對薪資後端等 120 秒（app.json backends.payroll.timeoutMs），這裡多留 5 秒
+const PROXY_TIMEOUT_BY_NS = { payroll: 125000 };
+const PROXY_NS = { audit: true, dorm: true, payroll: true };
 
 // 45 秒（2026-08-17 由 15 秒放寬，與 auth.js 同一個理由：Apps Script 本來就慢，
 // 稽核 getAll 還要一次讀回五個分頁的整年資料，行動網路上 15 秒不夠用）。
@@ -96,6 +98,7 @@ function buildRequestBody_(backendId, action, payload) {
   delete rest.action;
   delete rest.code;
   delete rest.pass;
+  delete rest.admin_key;   // 薪酬管理金鑰只在 mini 那邊帶（2026-10-19）
   return { token: getToken(), ns: backendId, action, payload: rest };
 }
 
@@ -276,7 +279,7 @@ export async function call(backendId, action, payload = {}) {
 
   let res;
   try {
-    res = await postJson_(url, body, viaProxy ? PROXY_TIMEOUT_MS : timeoutMs);
+    res = await postJson_(url, body, viaProxy ? (PROXY_TIMEOUT_BY_NS[backendId] || PROXY_TIMEOUT_MS) : timeoutMs);
   } catch (err) {
     const timedOut = !!(err && err.name === 'AbortError');
     return {
