@@ -37,13 +37,13 @@ ThrRow = { seq, max:number|null, store_role, hq_role }
 | action | payload | data |
 |---|---|---|
 | apvSubmit | `{client_id, type, body, files:[id], subject?}` | `{id, status, route}`（同 client_id 重送回原單） |
-| apvResubmit | `{id, rev, body, files:[id]}` | `{id, rev, status, route}` |
+| apvResubmit | `{id, rev, step, body, files:[id]}`（rejected 單的 step 是 null，要送 null） | `{id, rev, status, route}` |
 | apvWithdraw | `{id, rev, step}` | `{status:'withdrawn'}` |
 | apvDecide | `{id, rev, step, decision:'approve'|'reject', note?}` | `{status, step}` |
 | apvSign | `{id, rev, step, sign_file}` | `{status, step}` |
-| apvHandle | `{id, rev, result:'done'|'return', note?}` | `{status}` |
+| apvHandle | `{id, rev, step, result:'done'|'return', note?}`（handling 單的 step 是 null，要送 null） | `{status}` |
 | apvReassign | `{id, rev, step, to, reason}` | `{status, step}` |
-| apvVoid | `{id, reason}` | `{status:'voided'}` |
+| apvVoid | `{id, rev, step, reason}`（順序：看得到→rev／step→權限） | `{status:'voided'}` |
 | apvSetup | `{}`（只有 role admin；建表＋預設權限表，重按無害） | `{inited:true}` |
 | apvThresholdSave | `{expected_ver, rows:[ThrRow]}` | `{ver, diff:[{seq, before, after}]}` |
 

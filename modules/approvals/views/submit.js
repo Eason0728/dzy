@@ -325,7 +325,7 @@ export function mountSubmit(el, ctx) {
       let r;
       try {
         r = resub
-          ? await ctx.api.call('approvals', 'apvResubmit', { id: resub.id, rev: resub.rev, body, files })
+          ? await ctx.api.call('approvals', 'apvResubmit', { id: resub.id, rev: resub.rev, step: resub.step, body, files })
           : await ctx.api.call('approvals', 'apvSubmit', { client_id: clientId, type, body, files, ...(b.payload.subject ? { subject: b.payload.subject } : {}) });
       } finally { ctx.ui.loading(false); }
       if (!alive) return;

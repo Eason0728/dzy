@@ -135,7 +135,7 @@ def dispatch(st, action, payload, who):
         f = by_id.get(payload.get('id'))
         if not f:
             return None, _err('not_found')
-        if rev and (payload.get('rev') != f['rev'] or ('step' in payload and payload.get('step') != f['step'])):
+        if rev and (payload.get('rev') != f['rev'] or 'step' not in payload or payload.get('step') != f['step']):
             return None, _err('conflict')
         return f, None
     if action == 'apvSubmit':
@@ -158,11 +158,9 @@ def dispatch(st, action, payload, who):
         st['client_ids'][cid] = f
         return {'ok': True, 'data': {'id': f['id'], 'status': 'signing', 'route': f['route']}}
     if action == 'apvResubmit':
-        f, e = need(rev=False)
+        f, e = need()
         if e:
             return e
-        if payload.get('rev') != f['rev']:
-            return _err('conflict')
         f.update(body=payload['body'], rev=f['rev'] + 1, status='signing', step=0)
         return {'ok': True, 'data': {'id': f['id'], 'rev': f['rev'], 'status': 'signing', 'route': f['route']}}
     if action == 'apvDecide':
@@ -184,7 +182,7 @@ def dispatch(st, action, payload, who):
         f['status'] = 'handling'
         return {'ok': True, 'data': {'status': 'handling', 'step': None}}
     if action == 'apvHandle':
-        f, e = need(rev=False)
+        f, e = need()
         if e:
             return e
         f['status'] = 'done' if payload['result'] == 'done' else 'rejected'
@@ -201,7 +199,7 @@ def dispatch(st, action, payload, who):
             return e
         return {'ok': True, 'data': {'status': 'signing', 'step': f['step']}}
     if action == 'apvVoid':
-        f, e = need(rev=False)
+        f, e = need()
         if e:
             return e
         f['status'] = 'voided'

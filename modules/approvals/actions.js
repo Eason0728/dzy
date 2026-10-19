@@ -53,13 +53,13 @@ export async function runAction(ctx, form, act) {
   if (act === 'done') {
     const note = await reasonDialog(ctx, `已處理 ${form.id}`, '承辦備註（選填）', '已處理', 'primary', false);
     if (note === null) return false;
-    const r = await send(ctx, 'apvHandle', { id: form.id, rev: form.rev, result: 'done', note }, '已標為處理完成');
+    const r = await send(ctx, 'apvHandle', { ...base, result: 'done', note }, '已標為處理完成');
     return r.ok || r.conflict;
   }
   if (act === 'return') {
     const note = await reasonDialog(ctx, `退回送件人 ${form.id}`, '退回原因（必填；送件人改完要重新核准）', '退回', 'danger', true);
     if (note === null) return false;
-    const r = await send(ctx, 'apvHandle', { id: form.id, rev: form.rev, result: 'return', note }, '已退回送件人');
+    const r = await send(ctx, 'apvHandle', { ...base, result: 'return', note }, '已退回送件人');
     return r.ok || r.conflict;
   }
   if (act === 'withdraw') {
@@ -71,7 +71,7 @@ export async function runAction(ctx, form, act) {
   if (act === 'void') {
     const reason = await reasonDialog(ctx, `作廢 ${form.id}`, '作廢原因（必填）', '作廢', 'danger', true);
     if (reason === null) return false;
-    const r = await send(ctx, 'apvVoid', { id: form.id, reason }, '已作廢');
+    const r = await send(ctx, 'apvVoid', { ...base, reason }, '已作廢');
     return r.ok || r.conflict;
   }
   if (act === 'resubmit') { ctx.nav('submit', { resubmit: form.id }); return false; }

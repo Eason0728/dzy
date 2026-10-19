@@ -168,7 +168,7 @@ function rowsOf(app, sheet, headers) {
 }
 const FORMS = (app) => rowsOf(app, 'apv_forms', ['id', 'type', 'status', 'sender', 'unit', 'subject', 'amount', 'body_json', 'route_json', 'step', 'step_at', 'handler_dept', 'created_at', 'updated_at', 'rev', 'client_id']);
 const EVENTS = (app, id) => rowsOf(app, 'apv_events', ['at', 'form_id', 'rev', 'actor', 'action', 'note', 'sha256']).filter((e) => !id || e.form_id === id);
-const FILEROWS = (app) => rowsOf(app, 'apv_files', ['id', 'owner', 'form_id', 'path', 'bytes', 'sha256', 'created_at', 'kind', 'state', 'seq', 'rev']);
+const FILEROWS = (app) => rowsOf(app, 'apv_files', ['id', 'owner', 'form_id', 'path', 'bytes', 'sha256', 'created_at', 'kind', 'state', 'seq', 'rev', 'deleting_at']);
 const formOf = (app, id) => FORMS(app).find((f) => f.id === id);
 function setCell(app, sheet, headers, id, key, val, idKey) {
   const c = col(headers);
@@ -176,7 +176,7 @@ function setCell(app, sheet, headers, id, key, val, idKey) {
   row[c[key]] = val;
 }
 const FORM_H = ['id', 'type', 'status', 'sender', 'unit', 'subject', 'amount', 'body_json', 'route_json', 'step', 'step_at', 'handler_dept', 'created_at', 'updated_at', 'rev', 'client_id'];
-const FILE_H = ['id', 'owner', 'form_id', 'path', 'bytes', 'sha256', 'created_at', 'kind', 'state', 'seq', 'rev'];
+const FILE_H = ['id', 'owner', 'form_id', 'path', 'bytes', 'sha256', 'created_at', 'kind', 'state', 'seq', 'rev', 'deleting_at'];
 const ageStep = (app, id, ms) => setCell(app, 'apv_forms', FORM_H, id, 'step_at', Date.now() - ms);
 const HOUR = 3600 * 1000;
 const SHA = 'a'.repeat(64);
@@ -213,7 +213,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const H = (n) => s[n]._data[0].join('|');
   ok(H('apv_forms') === 'id|type|status|sender|unit|subject|amount|body_json|route_json|step|step_at|handler_dept|created_at|updated_at|rev|client_id', '建表：apv_forms 表頭（含 client_id）');
   ok(H('apv_events') === 'at|form_id|rev|actor|action|note|sha256', '建表：apv_events 表頭（含 sha256）');
-  ok(H('apv_files') === 'id|owner|form_id|path|bytes|sha256|created_at|kind|state|seq|rev', '建表：apv_files 表頭（kind／state／seq）');
+  ok(H('apv_files') === 'id|owner|form_id|path|bytes|sha256|created_at|kind|state|seq|rev|deleting_at', '建表：apv_files 表頭（kind／state／seq／deleting_at）');
   ok(H('apv_thresholds') === 'form_type|seq|max_amount|store_role|hq_role|ver', '建表：apv_thresholds 表頭（含 ver）');
   ok(H('apv_threshold_log') === 'at|actor|form_type|before_json|after_json', '建表：apv_threshold_log');
   ok(H('apv_revisions') === 'form_id|rev|at|body_json|amount|files_json|route_json|thr_ver|sha256', '建表：apv_revisions');
@@ -434,7 +434,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(post(app, 'DZY903', 'apvDecide', { id, rev: 2, step: 0, decision: 'approve' }).error === 'conflict', 'rev 不符 → conflict');
   ok(post(app, 'DZY903', 'apvDecide', { id, rev: 1, step: 3, decision: 'approve' }).error === 'conflict', 'step 不符 → conflict');
   ok(post(app, 'DZY903', 'apvDecide', { id: 'APV-000000-999', rev: 1, step: 0, decision: 'approve' }).error === 'not_found', '不存在的單 → not_found');
-  ok(post(app, 'DZY903', 'apvHandle', { id, rev: 1, result: 'done' }).error === 'conflict', '還在簽核中不能承辦（狀態不符）');
+  ok(post(app, 'DZY903', 'apvHandle', { id, rev: 1, step: null, result: 'done' }).error === 'conflict', '還在簽核中不能承辦（狀態不符）');
   const ap = post(app, 'DZY903', 'apvDecide', { id, rev: 1, step: 0, decision: 'approve', note: '同意' });
   ok(ap.ok && ap.data.status === 'handling' && ap.data.step === null, '品牌總監核准 → handling', ap);
   ok(post(app, 'DZY903', 'apvDecide', { id, rev: 1, step: 0, decision: 'approve' }).error === 'conflict', '同一個人重按第二次 → conflict（狀態已變）');
@@ -445,18 +445,18 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(appr && appr.actor === 'DZY903' && appr.sha256 === sub.sha256 && appr.note === '同意', 'approve 事件記誰、核准哪一版（sha256 與送出版本相同）');
   // 承辦：只限 fin 部門
   ['DZY901', 'DZY903', 'DZY910'].forEach((w) => {
-    ok(post(app, w, 'apvHandle', { id, rev: 1, result: 'done' }).error === 'forbidden', `看得到這張單的非財務部（${w}）不能承辦 → forbidden`);
+    ok(post(app, w, 'apvHandle', { id, rev: 1, step: null, result: 'done' }).error === 'forbidden', `看得到這張單的非財務部（${w}）不能承辦 → forbidden`);
   });
   ['DZY907', 'DZY914'].forEach((w) => {
-    ok(post(app, w, 'apvHandle', { id, rev: 1, result: 'done' }).error === 'not_found', `與這張單無關的非財務部（${w}）不能承辦，也看不到 → not_found`);
+    ok(post(app, w, 'apvHandle', { id, rev: 1, step: null, result: 'done' }).error === 'not_found', `與這張單無關的非財務部（${w}）不能承辦，也看不到 → not_found`);
   });
-  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 2, result: 'done' }).error === 'conflict', '承辦 rev 不符 → conflict');
-  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, result: 'x' }).error === 'bad_request', 'result 不合法');
-  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, result: 'return' }).error === 'bad_request', '承辦退回沒原因 → bad_request');
+  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 2, step: null, result: 'done' }).error === 'conflict', '承辦 rev 不符 → conflict');
+  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, step: null, result: 'x' }).error === 'bad_request', 'result 不合法');
+  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, step: null, result: 'return' }).error === 'bad_request', '承辦退回沒原因 → bad_request');
   const todo = post(app, 'DZY909', 'apvTodo', {});
   ok(todo.ok && todo.data.handle.length === 1 && todo.data.handle[0].id === id && todo.data.sign.length === 0 && todo.data.exception === undefined, '財務部 apvTodo：待我辦 1 張；沒有 exception 欄（非人資）', todo);
-  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, result: 'done', note: '10/20 已匯款' }).data.status === 'done', '財務按已處理 → done');
-  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, result: 'done' }).error === 'conflict', '結案後不能再處理');
+  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, step: null, result: 'done', note: '10/20 已匯款' }).data.status === 'done', '財務按已處理 → done');
+  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, step: null, result: 'done' }).error === 'conflict', '結案後不能再處理');
   const done = getForm(app, 'DZY901', id).data;
   ok(done.form.status === 'done' && done.events.some((e) => e.action === 'handle' && e.note === '10/20 已匯款' && e.actor.name === '測試壬'), '送件人看得到結案與備註');
   ok(done.revisions.length === 1 && done.revisions[0].rev === 1, 'apvGet 回版本證據');
@@ -466,7 +466,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   app2.sheets.staff._data.forEach((r) => { if (r[app2.sb.STF_COL.emp_no] === 'DZY914') r[26] = 'fin'; });
   const s2 = sendExpense(app2, 'DZY901', 800);
   decide(app2, 'DZY902', s2.data.id, 'approve');
-  ok(post(app2, 'DZY914', 'apvHandle', { id: s2.data.id, rev: 1, result: 'done' }).ok, '兼任部門（extra_depts＝fin）也能承辦');
+  ok(post(app2, 'DZY914', 'apvHandle', { id: s2.data.id, rev: 1, step: null, result: 'done' }).ok, '兼任部門（extra_depts＝fin）也能承辦');
 }
 
 // ============================================================
@@ -492,11 +492,11 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(g.form.can.resubmit === true && g.form.can.withdraw === false, '送件人 can.resubmit');
   // 再送
   const f2 = upload(app, 'DZY901');
-  ok(post(app, 'DZY902', 'apvResubmit', { id, rev: 1, body: expenseBody({ amount: 9000 }), files: [f2] }).error === 'forbidden', '只有送件人可再送');
-  ok(post(app, 'DZY901', 'apvResubmit', { id, rev: 7, body: expenseBody({ amount: 9000 }), files: [f2] }).error === 'conflict', '再送 rev 不符 → conflict');
-  ok(post(app, 'DZY901', 'apvResubmit', { id, rev: 1, body: expenseBody({ amount: 9000 }), files: [] }).error === 'no_files', '再送也要有收據');
-  ok(post(app, 'DZY901', 'apvResubmit', { id, rev: 1, body: expenseBody({ amount: -1 }), files: [f2] }).error === 'bad_amount', '再送金額反例');
-  const rs = post(app, 'DZY901', 'apvResubmit', { id, rev: 1, body: expenseBody({ amount: 9000 }), files: [f2] });
+  ok(post(app, 'DZY902', 'apvResubmit', { id, rev: 1, step: null, body: expenseBody({ amount: 9000 }), files: [f2] }).error === 'forbidden', '只有送件人可再送');
+  ok(post(app, 'DZY901', 'apvResubmit', { id, rev: 7, step: null, body: expenseBody({ amount: 9000 }), files: [f2] }).error === 'conflict', '再送 rev 不符 → conflict');
+  ok(post(app, 'DZY901', 'apvResubmit', { id, rev: 1, step: null, body: expenseBody({ amount: 9000 }), files: [] }).error === 'no_files', '再送也要有收據');
+  ok(post(app, 'DZY901', 'apvResubmit', { id, rev: 1, step: null, body: expenseBody({ amount: -1 }), files: [f2] }).error === 'bad_amount', '再送金額反例');
+  const rs = post(app, 'DZY901', 'apvResubmit', { id, rev: 1, step: null, body: expenseBody({ amount: 9000 }), files: [f2] });
   ok(rs.ok && rs.data.rev === 2 && rs.data.status === 'signing' && rs.data.route.steps[0].role === 'brand_dir' && rs.data.route.row.seq === 2, '再送：rev 2、金額 9,000 → 路線重算成品牌總監、從第一關重簽', rs);
   const fr = formOf(app, id);
   ok(fr.amount === 9000 && fr.rev === 2 && fr.step === 0, '再送後單的 amount／rev／step 更新');
@@ -504,14 +504,14 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const revs = rowsOf(app, 'apv_revisions', ['form_id', 'rev', 'at', 'body_json', 'amount', 'files_json', 'route_json', 'thr_ver', 'sha256']).filter((r) => r.form_id === id);
   ok(revs.length === 2 && revs[0].sha256 !== revs[1].sha256 && revs[1].amount === 9000, '每次送出一列版本證據，sha256 不同');
   ok(post(app, 'DZY902', 'apvDecide', { id, rev: 1, step: 0, decision: 'approve' }).ok === false, '舊 rev 的簽核畫面已失效（店長不是新路線的簽核人／rev 不符）');
-  ok(post(app, 'DZY901', 'apvResubmit', { id, rev: 2, body: expenseBody(), files: [f2] }).error === 'conflict', '不是 rejected 不能再送');
+  ok(post(app, 'DZY901', 'apvResubmit', { id, rev: 2, step: null, body: expenseBody(), files: [f2] }).error === 'conflict', '不是 rejected 不能再送');
   // 品牌總監核准 → 財務退回 → 再送要重新核准
   decide(app, 'DZY903', id, 'approve');
-  const rt = post(app, 'DZY909', 'apvHandle', { id, rev: 2, result: 'return', note: '金額和收據不符' });
+  const rt = post(app, 'DZY909', 'apvHandle', { id, rev: 2, step: null, result: 'return', note: '金額和收據不符' });
   ok(rt.ok && rt.data.status === 'rejected', '承辦退回 → rejected', rt);
   ok(EVENTS(app, id).some((e) => e.action === 'reject' && /承辦退回/.test(e.note)), '承辦退回寫事件');
   const f3 = upload(app, 'DZY901');
-  const rs2 = post(app, 'DZY901', 'apvResubmit', { id, rev: 2, body: expenseBody({ amount: 9000 }), files: [f3, f2] });
+  const rs2 = post(app, 'DZY901', 'apvResubmit', { id, rev: 2, step: null, body: expenseBody({ amount: 9000 }), files: [f3, f2] });
   ok(rs2.ok && rs2.data.rev === 3 && rs2.data.status === 'signing' && rs2.data.route.steps[0].status === 'pending', '承辦退回後再送：重新走簽核（品牌總監要重新核准）', rs2);
   ok(FILEROWS(app).find((x) => x.id === f2).rev === 3, '同一張單舊檔可在再送時沿用（改綁新 rev）');
 }
@@ -556,19 +556,19 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(rx.ok && rx.data.status === 'signing' && decide(app, 'DZY904', exId, 'approve').data.status === 'handling', 'exception 改派給總經理 → signing → 核准 → handling', rx);
   // 作廢
   const v1 = sendExpense(app, 'DZY901', 800);
-  ok(post(app, 'DZY902', 'apvVoid', { id: v1.data.id, reason: '重複' }).error === 'forbidden', '非人資／admin 不能作廢');
-  ok(post(app, 'DZY910', 'apvVoid', { id: v1.data.id, reason: '' }).error === 'bad_request', '作廢沒原因被擋');
-  ok(post(app, 'DZY910', 'apvVoid', { id: v1.data.id, reason: '重複送單' }).data.status === 'voided', '人資作廢');
-  ok(post(app, 'DZY910', 'apvVoid', { id: v1.data.id, reason: '再一次' }).error === 'conflict', '已作廢不能再作廢');
+  ok(post(app, 'DZY902', 'apvVoid', { id: v1.data.id, rev: 1, step: 0, reason: '重複' }).error === 'forbidden', '非人資／admin 不能作廢');
+  ok(post(app, 'DZY910', 'apvVoid', { id: v1.data.id, rev: 1, step: 0, reason: '' }).error === 'bad_request', '作廢沒原因被擋');
+  ok(post(app, 'DZY910', 'apvVoid', { id: v1.data.id, rev: 1, step: 0, reason: '重複送單' }).data.status === 'voided', '人資作廢');
+  ok(post(app, 'DZY910', 'apvVoid', { id: v1.data.id, rev: 1, step: null, reason: '再一次' }).error === 'conflict', '已作廢不能再作廢');
   ok(post(app, 'DZY902', 'apvDecide', { id: v1.data.id, rev: 1, step: 0, decision: 'approve' }).error === 'conflict', '作廢後不能核准');
   const v2 = sendExpense(app, 'DZY901', 800);
-  ok(post(app, 'admin', 'apvVoid', { id: v2.data.id, reason: 'admin 作廢' }).data.status === 'voided', 'admin 可作廢');
-  ok(post(app, 'DZY910', 'apvVoid', { id, reason: '核准後發現重複' }).data.status === 'voided', 'handling 的單也可作廢');
+  ok(post(app, 'admin', 'apvVoid', { id: v2.data.id, rev: 1, step: 0, reason: 'admin 作廢' }).data.status === 'voided', 'admin 可作廢');
+  ok(post(app, 'DZY910', 'apvVoid', { id, rev: 1, step: null, reason: '核准後發現重複' }).data.status === 'voided', 'handling 的單也可作廢');
   // done 不能作廢
   const dn = sendExpense(app, 'DZY901', 800);
   decide(app, 'DZY902', dn.data.id, 'approve');
-  post(app, 'DZY909', 'apvHandle', { id: dn.data.id, rev: 1, result: 'done' });
-  ok(post(app, 'DZY910', 'apvVoid', { id: dn.data.id, reason: '想作廢' }).error === 'conflict', 'done 不能作廢');
+  post(app, 'DZY909', 'apvHandle', { id: dn.data.id, rev: 1, step: null, result: 'done' });
+  ok(post(app, 'DZY910', 'apvVoid', { id: dn.data.id, rev: 1, step: null, reason: '想作廢' }).error === 'conflict', 'done 不能作廢');
 }
 
 // ============================================================
@@ -626,8 +626,8 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const lid = l1.data.id;
   ok(decide(app, 'DZY902', lid, 'approve').data.status === 'handling', '店長核准 → 人資承辦');
   ok(l1.data.route.handler === 'hr', '離職承辦 hr');
-  ok(post(app, 'DZY911', 'apvHandle', { id: lid, rev: 1, result: 'done', note: '已辦離職' }).data.status === 'done', '人資承辦結案');
-  ok(post(app, 'DZY909', 'apvHandle', { id: lid, rev: 1, result: 'done' }).ok === false, '財務不能承辦人事單');
+  ok(post(app, 'DZY911', 'apvHandle', { id: lid, rev: 1, step: null, result: 'done', note: '已辦離職' }).data.status === 'done', '人資承辦結案');
+  ok(post(app, 'DZY909', 'apvHandle', { id: lid, rev: 1, step: null, result: 'done' }).ok === false, '財務不能承辦人事單');
   // 離職：主管送、對象已開通 → 本人簽名關
   const l2 = send('DZY902', 'leave', 'DZY915', pb('leave'));
   ok(l2.ok && l2.data.route.steps[0].role === 'self_sign' && l2.data.route.steps[0].status === 'pending', '主管送離職（對象已開通）：第一關本人簽名', l2);
@@ -728,10 +728,10 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(post(app, 'DZY901', 'apvExport', { month: '2026-10' }).error === 'forbidden' && post(app, 'DZY907', 'apvExport', { month: '2026-10' }).error === 'forbidden', 'apvExport：非財務／人資 403');
   ok(post(app, 'DZY909', 'apvExport', { month: 'x' }).error === 'bad_request', 'apvExport month 格式');
   // 結案後匯出
-  post(app, 'DZY909', 'apvHandle', { id, rev: 1, result: 'done', note: '已匯款' });
+  post(app, 'DZY909', 'apvHandle', { id, rev: 1, step: null, result: 'done', note: '已匯款' });
   const s3 = sendExpense(app, 'DZY901', 800, null);
   decide(app, 'DZY902', s3.data.id, 'approve');
-  post(app, 'DZY909', 'apvHandle', { id: s3.data.id, rev: 1, result: 'done' });
+  post(app, 'DZY909', 'apvHandle', { id: s3.data.id, rev: 1, step: null, result: 'done' });
   const nowMonth = (() => { const d = new Date(Date.now() + 8 * HOUR); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0'); })();
   const ex = post(app, 'DZY909', 'apvExport', { month: nowMonth });
   ok(ex.ok && ex.data.rows.length === 2 && ex.data.rows.reduce((a, r) => a + r.amount, 0) === 9400, '匯出當月已處理的請款，加總＝8600＋800', ex);
@@ -745,7 +745,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   // 請購單進匯出（承辦 purchase；財務部匯出包含請購）
   const p = post(app, 'DZY901', 'apvSubmit', { client_id: newCid(), type: 'purchase', body: purchaseBody(), files: [] });
   decide(app, 'DZY902', p.data.id, 'approve');
-  post(app, 'DZY908', 'apvHandle', { id: p.data.id, rev: 1, result: 'done' });
+  post(app, 'DZY908', 'apvHandle', { id: p.data.id, rev: 1, step: null, result: 'done' });
   const ex2 = post(app, 'DZY909', 'apvExport', { month: nowMonth });
   ok(ex2.data.rows.length === 3 && ex2.data.rows.find((r) => r.id === p.data.id).desc === '測試用途', '匯出也含請購單');
 }
@@ -875,7 +875,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const d3 = app.sb.apvDigest_();
   ok(d3.count === 3 && d3.text.includes(e.data.id + '｜請款｜無合格簽核人｜0天'), 'exception 不等 72 小時，當天就列', d3.text);
   // 已結案／撤回不列
-  post(app, 'DZY909', 'apvHandle', { id: h.data.id, rev: 1, result: 'done' });
+  post(app, 'DZY909', 'apvHandle', { id: h.data.id, rev: 1, step: null, result: 'done' });
   ok(app.sb.apvDigest_().count === 2, '結案後不列');
   // 截斷
   const big = freshApp();
@@ -934,7 +934,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const s = sendExpense(app, 'DZY901', 800);
   const id = s.data.id;
   const none = post(app, 'DZY914', 'apvDecide', { id: 'APV-000000-999', rev: 1, step: 0, decision: 'approve' });
-  ['apvDecide', 'apvSign', 'apvHandle', 'apvReassign', 'apvWithdraw', 'apvResubmit'].forEach((a) => {
+  ['apvDecide', 'apvSign', 'apvHandle', 'apvReassign', 'apvWithdraw', 'apvResubmit', 'apvVoid'].forEach((a) => {
     [{ rev: 7, step: 0 }, { rev: 1, step: 0 }, { rev: 1, step: 5 }].forEach((rs) => {
       const r = post(app, 'DZY914', a, Object.assign({ id, decision: 'approve', result: 'done', to: 'DZY904', reason: 'x', sign_file: 'F000000', body: {}, files: [] }, rs));
       ok(r.ok === false && r.error === 'not_found' && r.message === none.message, `（第3條）不相干的人（DZY914）對 ${a} rev=${rs.rev} step=${rs.step} → not_found，跟不存在的單一樣`, r);
@@ -994,6 +994,64 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(ok1.ok, '（第6條）不帶紙本照 → 照常開單（走本人線上簽名）', ok1);
   const unc = post(app, 'DZY910', 'apvSubmit', { client_id: newCid(), type: 'personnel', subject: 'DZY917', body: pb({ paper_files: [paper] }), files: [paper] });
   ok(unc.ok, '（第6條）未開通對象帶紙本照 → 仍照規格收', unc);
+}
+
+{ // QA-final 第 1 條：apvHandle／apvResubmit／apvVoid 與 apvDecide 一樣比對 rev＋step（spec §14.2）
+  const app = freshApp();
+  const s = sendExpense(app, 'DZY901', 8600);
+  const id = s.data.id;
+  // Void：signing（step 0）
+  ok(post(app, 'DZY910', 'apvVoid', { id, rev: 1, reason: 'x' }).error === 'conflict', '（QA1）apvVoid 缺 step → conflict');
+  ok(post(app, 'DZY910', 'apvVoid', { id, rev: 1, step: 3, reason: 'x' }).error === 'conflict', '（QA1）apvVoid step 不符 → conflict');
+  ok(post(app, 'DZY910', 'apvVoid', { id, rev: 9, step: 0, reason: 'x' }).error === 'conflict', '（QA1）apvVoid rev 不符 → conflict');
+  ok(post(app, 'DZY903', 'apvVoid', { id, rev: 1, step: 3, reason: 'x' }).error === 'conflict', '（QA1）看得到單的非人資：rev／step 錯先 conflict');
+  ok(post(app, 'DZY903', 'apvVoid', { id, rev: 1, step: 0, reason: 'x' }).error === 'forbidden', '（QA1）看得到單的非人資：rev／step 對 → forbidden');
+  ok(formOf(app, id).status === 'signing', '（QA1）上面都沒動到單');
+  // 核准 → handling（step 空值）
+  decide(app, 'DZY903', id, 'approve');
+  ok(formOf(app, id).status === 'handling', '（QA1）進入 handling');
+  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, result: 'done' }).error === 'conflict', '（QA1）apvHandle 缺 step → conflict');
+  ok(post(app, 'DZY909', 'apvHandle', { id, rev: 1, step: 0, result: 'done' }).error === 'conflict', '（QA1）apvHandle 舊畫面 step＝0（單已 handling）→ conflict');
+  ok(post(app, 'DZY910', 'apvVoid', { id, rev: 1, step: 0, reason: '舊畫面作廢' }).error === 'conflict' && formOf(app, id).status === 'handling', '（QA1）舊畫面（step 0）作廢 handling 的單 → conflict、不作廢');
+  ok(post(app, 'DZY910', 'apvVoid', { id, rev: 1, reason: '缺 step' }).error === 'conflict', '（QA1）handling 缺 step 作廢 → conflict');
+  const hd = post(app, 'DZY909', 'apvHandle', { id, rev: 1, step: null, result: 'return', note: '退回測試' });
+  ok(hd.ok && hd.data.status === 'rejected', '（QA1）apvHandle step＝null 與 handling 單相符 → 成功', hd);
+  // Resubmit：rejected（step 空值）
+  const f2 = upload(app, 'DZY901');
+  ok(post(app, 'DZY901', 'apvResubmit', { id, rev: 1, body: expenseBody(), files: [f2] }).error === 'conflict', '（QA1）apvResubmit 缺 step → conflict');
+  ok(post(app, 'DZY901', 'apvResubmit', { id, rev: 1, step: 0, body: expenseBody(), files: [f2] }).error === 'conflict', '（QA1）apvResubmit 舊畫面 step＝0 → conflict');
+  ok(formOf(app, id).status === 'rejected', '（QA1）conflict 沒動到單');
+  const rs = post(app, 'DZY901', 'apvResubmit', { id, rev: 1, step: null, body: expenseBody(), files: [f2] });
+  ok(rs.ok && rs.data.rev === 2, '（QA1）apvResubmit step＝null 相符 → 成功', rs);
+  ok(post(app, 'DZY910', 'apvVoid', { id, rev: 2, step: 0, reason: '最新畫面作廢' }).data.status === 'voided', '（QA1）照最新 rev／step 作廢成功');
+}
+{ // QA-final 第 4 條：清孤兒照片刪檔後、回報前當機 → 列卡在 deleting；下一輪要重新列出
+  const app = freshApp();
+  const sb = app.sb;
+  const reg = () => { const x = sb.apvFileRegister_('DZY902', { kind: 'receipt', bytes: 10, sha256: SHA }).id; sb.apvFileCommit_(x); return x; };
+  const a = reg(), b = reg();
+  setCell(app, 'apv_files', FILE_H, a, 'created_at', Date.now() - 30 * HOUR);
+  setCell(app, 'apv_files', FILE_H, b, 'created_at', Date.now() - 30 * HOUR);
+  const l1 = sb.apvFileSweepList_();
+  ok(l1.length === 2, '（QA4）第一輪列出兩個逾期 uploaded', l1);
+  ok(Number(FILEROWS(app).find((x) => x.id === a).deleting_at) > Date.now() - 60 * 1000, '（QA4）改 deleting 時記下 deleting_at');
+  ok(sb.apvFileSweepList_().length === 0, '（QA4）1 小時內不重複列 deleting');
+  const created = FILEROWS(app).find((x) => x.id === a).created_at;
+  setCell(app, 'apv_files', FILE_H, a, 'deleting_at', Date.now() - 2 * HOUR);   // 刪檔後、回報前當機：卡了超過 1 小時
+  const l2 = sb.apvFileSweepList_();
+  ok(l2.length === 1 && l2[0].id === a && l2[0].path, '（QA4）卡在 deleting 超過 1 小時的列重新列出（另一個還在 1 小時內不列）', l2);
+  ok(FILEROWS(app).find((x) => x.id === a).created_at === created && Number(FILEROWS(app).find((x) => x.id === a).deleting_at) > Date.now() - 60 * 1000, '（QA4）重列時更新 deleting_at、不動 created_at（不影響配額）');
+  ok(sb.apvFileSweepDone_([a]).done === 1 && FILEROWS(app).find((x) => x.id === a).state === 'deleted', '（QA4）回報後 deleted');
+  // 舊資料：沒有 deleting_at 的 deleting 列（舊表）視同卡住 → 重列
+  setCell(app, 'apv_files', FILE_H, b, 'deleting_at', '');
+  ok(sb.apvFileSweepList_().some((x) => x.id === b), '（QA4）舊表 deleting 列（deleting_at 空）重新列出');
+  // 舊表頭（11 欄）→ setupApprovals 自動補第 12 欄，不拋錯、資料不動
+  const old = freshApp({ noSetup: true });
+  old.sheets.apv_files = makeSheet([['id', 'owner', 'form_id', 'path', 'bytes', 'sha256', 'created_at', 'kind', 'state', 'seq', 'rev'], ['F1', 'DZY901', '', '2026/10/F1.jpg', 10, SHA, 1, 'receipt', 'deleting', 1, '']]);
+  let e4 = '';
+  try { old.sb.setupApprovals(); } catch (e) { e4 = String(e.message); }
+  ok(e4 === '' && old.sheets.apv_files._data[0].join('|').endsWith('|rev|deleting_at') && old.sheets.apv_files._data[1][8] === 'deleting', '（QA4）舊 11 欄表頭 → setupApprovals 補 deleting_at 欄、舊資料不動', e4);
+  ok(old.sb.apvFileSweepList_().length === 1, '（QA4）舊表補欄後 sweep 能列出卡住的 deleting');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

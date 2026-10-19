@@ -21,7 +21,7 @@ var APV_SHEET_REVS = 'apv_revisions';
 var APV_FORM_HEADERS = ['id', 'type', 'status', 'sender', 'unit', 'subject', 'amount', 'body_json', 'route_json', 'step', 'step_at',
   'handler_dept', 'created_at', 'updated_at', 'rev', 'client_id'];
 var APV_EVENT_HEADERS = ['at', 'form_id', 'rev', 'actor', 'action', 'note', 'sha256'];
-var APV_FILE_HEADERS = ['id', 'owner', 'form_id', 'path', 'bytes', 'sha256', 'created_at', 'kind', 'state', 'seq', 'rev'];
+var APV_FILE_HEADERS = ['id', 'owner', 'form_id', 'path', 'bytes', 'sha256', 'created_at', 'kind', 'state', 'seq', 'rev', 'deleting_at'];
 var APV_THR_HEADERS = ['form_type', 'seq', 'max_amount', 'store_role', 'hq_role', 'ver'];
 var APV_THRLOG_HEADERS = ['at', 'actor', 'form_type', 'before_json', 'after_json'];
 var APV_REV_HEADERS = ['form_id', 'rev', 'at', 'body_json', 'amount', 'files_json', 'route_json', 'thr_ver', 'sha256'];
@@ -204,7 +204,7 @@ function apvReadFiles_() {
   return apvRows_(APV_SHEET_FILES, APV_FILE_HEADERS).map(function (r) {
     var o = r.o;
     return { row: r.row, o: { id: apvStr_(o.id), owner: apvStr_(o.owner).toUpperCase(), form_id: apvStr_(o.form_id), path: apvStr_(o.path), bytes: Number(o.bytes) || 0,
-      sha256: apvStr_(o.sha256), created_at: Number(o.created_at) || 0, kind: apvStr_(o.kind), state: apvStr_(o.state), seq: Number(o.seq) || 0, rev: apvNum_(o.rev) } };
+      sha256: apvStr_(o.sha256), created_at: Number(o.created_at) || 0, kind: apvStr_(o.kind), state: apvStr_(o.state), seq: Number(o.seq) || 0, rev: apvNum_(o.rev), deleting_at: Number(o.deleting_at) || 0 } };
   }).filter(function (r) { return r.o.id !== ''; });
 }
 function apvSaveFile_(fr) { apvPutRow_(APV_SHEET_FILES, APV_FILE_HEADERS, fr.row, fr.o); }
@@ -433,6 +433,17 @@ function apvFormView_(c, f, eff, allFiles, opts) {
 // 4. 建表（手動在編輯器執行一次 setupApprovals，可重跑；只補不覆蓋）
 // ============================================================
 
+/** 舊表（11 欄、沒有 deleting_at）：表頭剛好是舊版才補第 12 欄表頭，資料不動；其他不一致照舊讓 stfEnsureSheet_ 停下 */
+function apvMigrateFilesHeader_(ss) {
+  var sh = ss.getSheetByName(APV_SHEET_FILES);
+  if (!sh) return;
+  var n = APV_FILE_HEADERS.length - 1;
+  var cur = sh.getRange(1, 1, 1, APV_FILE_HEADERS.length).getValues()[0].map(function (v) { return String(v).trim(); });
+  if (cur.slice(0, n).join('|') === APV_FILE_HEADERS.slice(0, n).join('|') && cur[n] === '') {
+    sh.getRange(1, n + 1, 1, 1).setValues([[APV_FILE_HEADERS[n]]]);
+  }
+}
+
 function setupApprovals() {
   var ss = SpreadsheetApp.getActive();
   var org = stfReadOrg_();
@@ -441,6 +452,7 @@ function setupApprovals() {
   });
   stfEnsureSheet_(ss, APV_SHEET_FORMS, APV_FORM_HEADERS, []);
   stfEnsureSheet_(ss, APV_SHEET_EVENTS, APV_EVENT_HEADERS, []);
+  apvMigrateFilesHeader_(ss);
   stfEnsureSheet_(ss, APV_SHEET_FILES, APV_FILE_HEADERS, []);
   stfEnsureSheet_(ss, APV_SHEET_THR, APV_THR_HEADERS, APV_THR_DEFAULT);
   stfEnsureSheet_(ss, APV_SHEET_THRLOG, APV_THRLOG_HEADERS, []);
@@ -736,7 +748,8 @@ function handleApvSubmit_(token, payload) {
 }
 
 function handleApvResubmit_(token, payload) {
-  var o = apvOpenForWrite_(token, payload, false);
+  // rejected 單的 step 是 null：前端也要送 null 才算相符（spec §14.2，同 apvDecide）
+  var o = apvOpenForWrite_(token, payload, true);
   if (!o.ok) return o;
   var c = o.c, fr = o.fr, f = o.f;
   payload = payload || {};
@@ -890,7 +903,8 @@ function handleApvSign_(token, payload) {
 }
 
 function handleApvHandle_(token, payload) {
-  var o = apvOpenForWrite_(token, payload, false);
+  // handling 單的 step 是 null：前端也要送 null 才算相符（spec §14.2）
+  var o = apvOpenForWrite_(token, payload, true);
   if (!o.ok) return o;
   var c = o.c, fr = o.fr, f = o.f;
   if (payload.result !== 'done' && payload.result !== 'return') return apvFail_('bad_request', 'result 要是 done 或 return');
@@ -943,14 +957,11 @@ function handleApvReassign_(token, payload) {
 }
 
 function handleApvVoid_(token, payload) {
-  var c = apvEnter_(token);
-  if (!c.ok) return c;
-  if (!apvReady_()) return apvNotInited_();
+  // 順序同其他改單 action：看得到→rev／step（conflict）→權限（forbidden）
+  var o = apvOpenForWrite_(token, payload, true);
+  if (!o.ok) return o;
+  var c = o.c, fr = o.fr, f = o.f;
   if (!c.isStaffPerm && !c.isAdmin) return apvForbidden_('只有人資或系統管理者可以作廢');
-  payload = payload || {};
-  var fr = apvFindForm_(apvStr_(payload.id));
-  if (!fr) return apvFail_('not_found', '找不到這張單');
-  var f = fr.f;
   var reason = apvText_(payload.reason, 1, APV_NOTE_MAX);
   if (reason === null) return apvFail_('bad_request', '作廢要寫原因');
   if (f.status === 'done' || f.status === 'voided') return apvFail_('conflict', '這張單已結案或已作廢');
@@ -1215,15 +1226,20 @@ function apvFileCanRead_(token, id) {
   return { ok: true, path: hit.o.path, mime: hit.o.kind === 'sign' ? 'image/png' : 'image/jpeg' };
 }
 
-/** 孤兒清除第一步：列 uploaded 超過 24 小時、putting 超過 1 小時（put 中途當機）的檔，並在鎖內先改成 deleting。回 [{id, path}] */
+/**
+ * 孤兒清除第一步：列 uploaded 超過 24 小時、putting 超過 1 小時（put 中途當機）的檔，
+ * 以及 deleting 超過 1 小時的檔（jobs 刪檔後、回報前當機會卡住；刪檔對 ENOENT 視為成功，重列無害），並在鎖內改成／維持 deleting 且記 deleting_at。回 [{id, path}]
+ */
 function apvFileSweepList_() {
   var r = apvWithLock_(function () {
     if (!apvReady_()) return { ok: true, list: [] };
     var now = apvNow_();
     var list = [];
     apvReadFiles_().forEach(function (x) {
-      if ((x.o.state === 'uploaded' && now - x.o.created_at > 24 * 60 * 60 * 1000) || (x.o.state === 'putting' && now - x.o.created_at > 60 * 60 * 1000)) {
+      if ((x.o.state === 'uploaded' && now - x.o.created_at > 24 * 60 * 60 * 1000) || (x.o.state === 'putting' && now - x.o.created_at > 60 * 60 * 1000) ||
+          (x.o.state === 'deleting' && now - x.o.deleting_at > 60 * 60 * 1000)) {
         x.o.state = 'deleting';
+        x.o.deleting_at = now;
         apvSaveFile_(x);
         list.push({ id: x.o.id, path: x.o.path });
       }

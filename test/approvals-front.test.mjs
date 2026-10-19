@@ -157,6 +157,27 @@ const fmt = { datetime, esc };
   ok(lib.whereText(mk({}, { status: 'exception' })).includes('找不到'), 'exception 說明');
 }
 
+// ── 6b. QA-final 第 1 條：apvHandle／apvVoid／apvResubmit 要送畫面當下的 rev＋step ─────────
+{
+  const { runAction } = await import('../modules/approvals/actions.js');
+  globalThis.document = { createElement: () => ({ set innerHTML(v) {}, querySelector: () => ({ value: '測試原因' }) }) };
+  const sent = [];
+  const ctx = { api: { call: async (m, a, p) => { sent.push({ a, p }); return { ok: true, data: {} }; } },
+    ui: { loading() {}, toast() {}, confirm: async () => true, dialog: async () => 'ok' } };
+  const form = { id: 'APV-261018-901', rev: 3, step: null, status: 'handling' };
+  for (const act of ['done', 'return', 'void']) {
+    sent.length = 0;
+    await runAction(ctx, form, act);
+    const c = sent[0];
+    ok(c && c.p.id === form.id && c.p.rev === 3 && 'step' in c.p && c.p.step === null, `動作 ${act}（${c && c.a}）送出畫面的 rev＋step（handling 單 step＝null）`, c);
+  }
+  sent.length = 0;
+  await runAction(ctx, { ...form, status: 'signing', rev: 2, step: 1 }, 'void');
+  ok(sent[0].p.rev === 2 && sent[0].p.step === 1, '作廢 signing 的單送 rev＝2、step＝1', sent[0]);
+  const sub = fs.readFileSync(path.join(ROOT, 'modules/approvals/views/submit.js'), 'utf8');
+  ok(/'apvResubmit', \{[^}]*rev: resub\.rev,\s*step: resub\.step/.test(sub), 'apvResubmit 送 resub.rev 與 resub.step');
+}
+
 // ── 7. 核決權限：驗證與 diff ───────────────────────────
 {
   const base = () => [{ seq: 1, max: 5000, store_role: 'head', hq_role: 'head' }, { seq: 2, max: 10000, store_role: 'brand_dir', hq_role: 'head' }, { seq: 3, max: 30000, store_role: 'gm', hq_role: 'gm' }, { seq: 4, max: null, store_role: 'chair', hq_role: 'chair' }];
