@@ -31,14 +31,14 @@ def main():
 
             page.wait_for_selector('[data-role="module-card"]')
             cards = page.locator('[data-role="module-card"]')
-            check(cards.count() == 12, 'admin 首頁有十二組模組（2026-10-11 加同仁名單、我的資料；10-16 加公告專區；10-17 加權限設定；10-18 加表單簽核；10-19 加薪酬系統）')
+            check(cards.count() == 12, 'admin 首頁有十二組模組（2026-10-11 加同仁名單、我的資料；10-16 加公告專區；10-17 加權限設定；10-18 加表單簽核；10-19 加薪酬管理）')
 
             ids = [cards.nth(i).get_attribute('data-module') for i in range(cards.count())]
             check(ids == ['users', 'perms', 'audit-stock', 'audit-ops', 'dorm', 'staff', 'me', 'bulletin', 'approvals', 'storeops', 'attendance', 'payroll'],
                   '卡片順序＝registry 順序，實際：%s' % ids)
 
             titles = page.locator('[data-role="module-card"] .card-title').all_inner_texts()
-            check(titles == ['人員管理', '權限設定', '盤點抽查', '營運稽核', '宿舍合約', '同仁名單', '我的資料', '公告專區', '表單簽核', '門市營運', '考勤管理', '薪酬系統'],
+            check(titles == ['人員管理', '權限設定', '盤點抽查', '營運稽核', '宿舍合約', '同仁名單', '我的資料', '公告專區', '表單簽核', '門市營運', '考勤管理', '薪酬管理'],
                   '卡片標題顯示 manifest.name，實際：%s' % titles)
 
             # 圖示真的載入（不是 404 的裂圖）

@@ -1,5 +1,5 @@
 /**
- * modules/payroll/index.js — 薪酬系統：把薪資管理頁整頁嵌進內容區（iframe），呼叫一律由本模組代轉（見 bridge.js）。
+ * modules/payroll/index.js — 薪酬管理：把薪資管理頁整頁嵌進內容區（iframe），呼叫一律由本模組代轉（見 bridge.js）。
  * 只理會「這個 iframe 本身」且 origin 正確的訊息；回覆時 targetOrigin 寫死薪酬頁網址。
  */
 'use strict';
@@ -21,7 +21,7 @@ function showDown() {
   const n = document.createElement('div');
   n.className = 'card';
   n.setAttribute('data-role', 'payroll-down');
-  n.textContent = '薪酬系統暫時連不上，請稍後重新整理。';
+  n.textContent = '薪酬管理暫時連不上，請稍後重新整理。';
   state.el.insertBefore(n, state.frame);
   state.down = n;
 }
@@ -44,9 +44,9 @@ export default {
     const target = payrollTarget(location.hostname);
     const bar = document.createElement('div');
     bar.className = 'bulletin-bar';
-    bar.textContent = '薪資資料只有被開通「薪酬系統」權限的人看得到；所有修改都會記錄是誰做的。';
+    bar.textContent = '薪資資料只有被開通「薪酬管理」權限的人看得到；所有修改都會記錄是誰做的。';
     const frame = document.createElement('iframe');
-    frame.title = '薪酬系統';
+    frame.title = '薪酬管理';
     frame.className = 'bulletin-frame';
     frame.setAttribute('data-role', 'payroll-frame');
     frame.addEventListener('error', () => showDown());

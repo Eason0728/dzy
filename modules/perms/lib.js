@@ -22,7 +22,7 @@ export const FEATURE_NAMES = {
   'platform.permmap': '改權限對照表',
   'store.void': '收支作廢',
   'att.extra': '額外考勤核定',
-  'payroll.write': '薪酬系統'
+  'payroll.write': '薪酬管理'
 };
 
 /** 其他會出現在 myPerms／異動裡的碼 */
@@ -234,7 +234,7 @@ export const FEATURE_DESC = {
   'platform.permmap': '改這一頁',
   'store.void': '門市現金收支可以作廢（店長預設有；其他人要在個別例外給）',
   'att.extra': '額外核定本單位所有要考勤的人（只能在個別例外給，可設到期日）',
-  'payroll.write': '進薪酬系統：看與改全集團薪資、鎖定月份（建議只用個別例外開給指定的人）'
+  'payroll.write': '進薪酬管理：看與改全集團薪資、鎖定月份（建議只用個別例外開給指定的人）'
 };
 
 /** 總部高層（不分部門）的職稱代碼 */

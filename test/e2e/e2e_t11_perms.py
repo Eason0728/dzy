@@ -20,7 +20,7 @@ from playwright.sync_api import sync_playwright
 
 PORT = 8802
 
-LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write']   # 2026-10-19 加薪酬系統（＝後端 PERM_LOCKED）
+LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write']   # 2026-10-19 加薪酬管理（＝後端 PERM_LOCKED）
 # 預設規則（Perms.gs PERM_DEFAULT_RULES，20 條）
 DEFAULT_RULES = (
     [('store', '', 'sm', 'audit.read.own')]
@@ -306,7 +306,7 @@ def main():
             check(on(ad, 'audit.read.own') and not on(ad, 'dorm.read') and not on(ad, 'audit.read'), '店長：看自己店稽核＝開，其餘關')
             check('看自己那家店的盤點與稽核結果' in ad.inner_text('[data-perm="audit.read.own"]'), '每個功能有一句白話說明')
             check(ad.locator('[data-role="feature-row"][data-locked="1"]').count() == 5 and ad.locator('[data-role="feature-row"][data-locked="1"] [data-act="toggle"]:not([disabled])').count() == 5,
-                  '鎖碼五列標記（含薪酬系統）；admin 的開關不灰掉')
+                  '鎖碼五列標記（含薪酬管理）；admin 的開關不灰掉')
             check(ad.inner_text('[data-role="bar-msg"]').strip() == '沒有未儲存的變更' and ad.locator('[data-act="save"][disabled]').count() == 1, '沒有變更：儲存鈕 disabled')
             # 「也從…拿到」：人資主管同時命中「人資部・全部職稱」
             role('人資部・部門主管').click()
@@ -492,8 +492,8 @@ def main():
             check(tabs(hr) == ['對照表', '個別例外'], '★人資主管有「對照表」「個別例外」兩個分頁（沒有店別對照、權限異動），實際：%s' % tabs(hr))
             hr.locator('.pm-role', has=hr.locator('span', has_text='店長')).first.click()
             lk = hr.locator('[data-role="feature-row"][data-locked="1"]')
-            check(lk.count() == 5, '鎖住的五列仍顯示（含薪酬系統）')
-            check(lk.locator('[data-act="toggle"][disabled]').count() == 5, '★鎖碼五列對非 admin：開關 disabled（含薪酬系統）')
+            check(lk.count() == 5, '鎖住的五列仍顯示（含薪酬管理）')
+            check(lk.locator('[data-act="toggle"][disabled]').count() == 5, '★鎖碼五列對非 admin：開關 disabled（含薪酬管理）')
             check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 5, '鎖列標示「只有系統管理員能改」')
             check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 7, '其餘 7 列可開關（含新增的收支作廢、額外考勤核定，後端沒鎖）')
             hr.locator('[data-perm="platform.users"] [data-act="toggle"]').click(force=True)

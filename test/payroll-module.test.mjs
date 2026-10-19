@@ -1,5 +1,5 @@
 /**
- * 薪酬系統模組（2026-10-19）：轉接只收合格的呼叫、絕不轉送金鑰欄位、回傳還原成薪酬頁認得的扁平形狀；manifest 合規。
+ * 薪酬管理模組（2026-10-19）：轉接只收合格的呼叫、絕不轉送金鑰欄位、回傳還原成薪酬頁認得的扁平形狀；manifest 合規。
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

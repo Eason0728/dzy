@@ -51,7 +51,7 @@ t('對照表 12 列、順序固定（不跟後端 grantable 順序）', () => {
   assert.equal(rows[8].name, '改權限對照表');
   assert.equal(rows[9].name, '收支作廢');
   assert.equal(rows[10].name, '額外考勤核定');
-  assert.equal(rows[11].name, '薪酬系統');
+  assert.equal(rows[11].name, '薪酬管理');
 });
 t('鎖住的兩列', () => {
   const locked = L.featureRows(DATA).filter((r) => r.locked).map((r) => r.perm);
