@@ -280,6 +280,8 @@ function pickSecrets_(perms) {
   var byBackend = readModuleSecrets_();
   var out = {};
   Object.keys(byBackend).forEach(function (backendId) {
+    // 薪酬管理金鑰（2026-10-19）能讀寫全集團薪資：就算有人把過渡旗標 LEGACY_SECRETS 打開，也絕不下發到瀏覽器
+    if (backendId === 'payroll') return;
     var s = pickSecretFor_(perms, backendId, byBackend);
     if (s) out[backendId] = s;
   });
@@ -296,7 +298,12 @@ function pickSecrets_(perms) {
  */
 var PROXY_READ_ACTIONS = {
   audit: ['getAll'],
-  dorm: ['rooms', 'list', 'contract', 'handover']
+  dorm: ['rooms', 'list', 'contract', 'handover'],
+  // 薪酬系統（2026-10-19，光復打卡 Apps Script 的薪資模組）：只有一個權限 payroll.write，讀寫都要它；
+  // 分讀寫只為了試跑模式能照常讀。⚠ payroll_month 在「該月沒有 run」時會自動試算並寫入（mala-payroll skill），仍列讀取＝試跑時翻月份照舊可用
+  payroll: ['payroll_month', 'payroll_get', 'payroll_group', 'payroll_trend', 'payroll_inputs', 'payroll_punch',
+    'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
+    'payroll_attendance_export']
 };
 
 /**
@@ -305,7 +312,10 @@ var PROXY_READ_ACTIONS = {
  */
 var PROXY_WRITE_ACTIONS = {
   audit: ['submitAudit', 'markRest', 'submitOpsAudit', 'addStore', 'setStoreStatus', 'renameStore'],
-  dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign']
+  dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign'],
+  // 薪酬頁（mala-clock-in/payroll.html）實際會呼叫的寫入 action；後端還有 payroll_migrate_store 等維運動作，刻意不列
+  payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
+    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set']
 };
 
 /**
@@ -355,7 +365,7 @@ function proxyAuthorize_(token, ns, action) {
     }
     var sSecret = proxyPickSecret_(perms, ns, byBackend);
     if (!sSecret) return { ok: false, code: 'NO_SECRET', error: '這個系統尚未設定通行碼，請聯絡管理者' };
-    return { ok: true, secret: sSecret, filterNode: sNode, isWrite: isWrite };
+    return proxyWithOperator_({ ok: true, secret: sSecret, filterNode: sNode, isWrite: isWrite }, ns, sess.user);
   }
 
   var canWrite = hasPerm_(perms, ns + '.write');
@@ -372,7 +382,20 @@ function proxyAuthorize_(token, ns, action) {
   // 6. 店長裁切：沒有 <ns>.read 但有 <ns>.read.own → 只給自己節點（.write 不豁免）；'' ＝沒節點→空列
   var filterNode = (!canRead && canOwn) ? String(sess.user.node || '') : null;
 
-  return { ok: true, secret: secret, filterNode: filterNode, isWrite: isWrite };
+  return proxyWithOperator_({ ok: true, secret: secret, filterNode: filterNode, isWrite: isWrite }, ns, sess.user);
+}
+
+/**
+ * 薪酬系統的操作人（2026-10-19）：薪資後端的 payroll_audit.operator 原本是呼叫端自填（共用金鑰時無法證明誰做的）。
+ * 代轉時由平台依登入身分決定、mini 的 proxy-hook.js 一律覆寫上游 body.operator，瀏覽器送什麼都不採信。
+ * 其他 ns 不加（舊後端不認這個欄位）。
+ */
+function proxyWithOperator_(res, ns, user) {
+  if (ns !== 'payroll') return res;
+  var name = String((user && user.name) || '').trim();
+  var uname = String((user && user.username) || '').trim();
+  res.operator = (name || uname || '未知') + (uname ? '（' + uname + '）' : '') + '（管理系統）';
+  return res;
 }
 
 // ============================================================

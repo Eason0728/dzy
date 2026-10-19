@@ -490,6 +490,60 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   ok(JSON.stringify(sb.PROXY_WRITE_ACTIONS && sb.PROXY_WRITE_ACTIONS.dorm) === JSON.stringify(WRITE_ACTIONS.dorm), '12g: dorm 寫入清單兩邊一致');
 }
 
+// ============================================================
+// 13. 薪酬系統（2026-10-19）：payroll.write 一個開關、管理金鑰只在代轉時給、操作人由平台決定
+// ============================================================
+{
+  const PAY = 'FAKE-PAYROLL-ADMIN-KEY-55';
+  const extra = { module_secrets: seed().module_secrets.concat([['payroll', 'write', PAY]]) };
+  const { sb, sheets } = fresh(extra);
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  const hasPay = (o) => JSON.stringify(o).indexOf(PAY) !== -1;
+
+  ok(JSON.stringify(sb.PROXY_READ_ACTIONS.payroll) === JSON.stringify(READ_ACTIONS.payroll), '13a: payroll 讀清單兩邊（Auth.gs／dryrun.js）一致');
+  ok(JSON.stringify(sb.PROXY_WRITE_ACTIONS.payroll) === JSON.stringify(WRITE_ACTIONS.payroll), '13b: payroll 寫入清單兩邊一致');
+  ok(sb.PERM_GRANTABLE.indexOf('payroll.write') !== -1 && sb.PERM_LOCKED.indexOf('payroll.write') !== -1, '13c: payroll.write 可給、且是鎖碼（只有 admin 能開給人）');
+
+  const a = sb.proxyAuthorize_(boss, 'payroll', 'payroll_month');
+  ok(a.ok && a.secret === PAY && a.isWrite === false && a.filterNode === null, '13d: admin 讀 → 給管理金鑰、讀、不裁切', a);
+  ok(a.operator === '系統管理者（BOSS）（管理系統）', '13e: 操作人＝登入者姓名＋帳號（平台決定）', a.operator);
+  const w = sb.proxyAuthorize_(boss, 'payroll', 'payroll_finalize');
+  ok(w.ok && w.isWrite === true && w.operator, '13f: admin 鎖定本月 → 寫入、帶操作人', w);
+  ok(sb.proxyAuthorize_(boss, 'payroll', 'payroll_migrate_store').code === 'FORBIDDEN', '13g: 不在白名單的維運 action（payroll_migrate_store）→ FORBIDDEN');
+  ok(sb.proxyAuthorize_(boss, 'audit', 'getAll').operator === undefined, '13h: 其他系統不帶 operator（舊後端不認）');
+
+  for (const [u, pw] of [['acc1', PW.acc], ['lead1', PW.lead], ['mgr1', PW.mgr], ['viewer1', PW.viewer]]) {
+    const t = tokenOf(sb, u, pw);
+    for (const act of ['payroll_month', 'payroll_calc']) {
+      const r = sb.proxyAuthorize_(t, 'payroll', act);
+      ok(r.ok === false && r.code === 'FORBIDDEN' && !hasPay(r), '13i: 沒有 payroll.write 的 ' + u + ' ' + act + ' → FORBIDDEN、不含金鑰', r);
+    }
+  }
+  // 過渡旗標打開也絕不下發薪酬金鑰
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '1');
+  const lg = post(sb, 'login', { username: 'BOSS', password: PW.boss });
+  ok(lg.ok && !hasPay(lg) && !hasPay(post(sb, 'me', {}, lg.data.token)), '13j: LEGACY_SECRETS=1 時 admin 的 login／me 仍不含薪酬金鑰', lg.data && lg.data.secrets);
+  ok(!('payroll' in sb.pickSecrets_(['*'])), '13k: pickSecrets_ 永不含 payroll');
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '');
+
+  // 同仁（PERMS_ON）：人資主管預設沒有；只有個別例外給 payroll.write 的人才進得去
+  const hrHead = mkStaff(sb, boss, '人資主管辛', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hm' });
+  const hrStaff = mkStaff(sb, boss, '人資同仁壬', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '13 前置：permInit_');
+  turnOn(sb);
+  ok(sb.proxyAuthorize_(hrHead.token, 'payroll', 'payroll_month').code === 'FORBIDDEN', '13l: 人資主管預設沒有薪酬權限 → FORBIDDEN');
+  sheets.perm_ex.appendRow(['X901', hrHead.emp, 'payroll.write', 'add', '', 'Eason 開', 'TRUE', '', 'u001', '', '']);
+  const h = sb.proxyAuthorize_(hrHead.token, 'payroll', 'payroll_calc');
+  ok(h.ok && h.secret === PAY && h.isWrite === true && /人資主管辛（DZY\d+）（管理系統）/.test(h.operator), '13m: 個別例外給了 payroll.write 的人資主管 → 可寫、操作人是本人', h);
+  ok(sb.proxyAuthorize_(hrStaff.token, 'payroll', 'payroll_month').code === 'FORBIDDEN', '13n: 同部門其他人資同仁仍 FORBIDDEN');
+  const me = post(sb, 'me', {}, hrHead.token);
+  ok(me.ok && !hasPay(me) && me.data.perms.indexOf('payroll.write') !== -1, '13o: 人資主管 me 有 payroll.write 但不含金鑰', me.data && me.data.perms);
+  // 停用帳號 → 下一次代轉就擋
+  const rowIdx = sheets.users._rows().findIndex((r) => String(r[1]) === hrHead.emp);
+  sheets.users.getRange(rowIdx + 1, 8).setValue('FALSE');
+  ok(sb.proxyAuthorize_(hrHead.token, 'payroll', 'payroll_month').code === 'BAD_TOKEN', '13p: 帳號停用後立刻 BAD_TOKEN');
+}
+
 if (failed > 0) {
   console.error('\n' + failed + ' 項測試失敗（共 ' + (passed + failed) + ' 項）');
   process.exit(1);
