@@ -273,3 +273,8 @@ purchase → **`purchase`**（org 正本 `Staff.gs:1450`），expense → `fin`�
 - mini `apv.js`：04:00 本機 tar 之後，依水位 `offsiteSeq` 分批（≤30 檔、≤6 MB）送 `app='dzy-platform-apv'`，一批 ok 才推進；bad／缺檔進 pending 隔天重試。health：沒設 BACKUP_URL／KEY＝`apv_offsite_off`、有待送且 48 小時沒送完＝`apv_offsite_stale`。本機 tar 保留（雙保險）。
 - 首頁「照片尚無異機備份」提醒因此不做。
 - 2026-10-18 晚 Fable 審異機備份（中 2 低 5）修正，minikit 146aa59、備份端第 3 版：水位逐批落盤；一批 ≤10 檔／3 MB、逾時不立刻重送；**異機送出改獨立排程 04:20**（04:00 只做本機 tar、04:10 sweep）；BAD_REQ／AUTH 立刻亮 `apv_offsite_error`；網址格式錯 log 警告。未修：scope 改 drive.file（要重新授權，另排）、未綁單孤兒照片也會上雲端。
+
+### 14.15 Codex 上線前審（2026-10-19）後的規格對齊
+- **§14.5 修訂**：apvTodo／apvGet 讀取時只在記憶體重解（畫面與待辦即時正確），**不寫入**；寫入 skip 只在改單 action 前（apvOpenForWrite_，已在寫入鎖內）與每天 09:40 apvReconcile_。理由：讀取 action 不在寫入鎖內，讀時寫入會有併發覆寫風險。
+- **§14.11 修訂**：通知匣回 `ok:true` 且 `added:false`（同一個 key 已在通知匣，多半是前一次其實送到、回應遺失）＝視為已送達，當天不再送；避免重複通知 Eason。
+- **照片被人在 mini 上手動刪除後仍能綁單**：不改綁定流程（.gs 端讀不到磁碟）；改靠每天 04:00 備份時發現缺檔 → health `apv_backup_problem`。
