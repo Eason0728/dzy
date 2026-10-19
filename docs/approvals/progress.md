@@ -60,3 +60,5 @@ Eason 給「門店支出」核決權限表圖：0–5,000 店長／5,001–10,00
 - 待：mini pull＋重啟；隔天 04:00 後確認 health 沒有 apv_offsite_*、雲端硬碟出現 dzy-minikit-files-dzy-platform-apv。
 - Codex 上線前審：依 Eason 指示暫停（營運系統個人帳號先審），等通知。
 - 18:00 Fable 審異機備份 7 條（中 2 低 5）→ 修 5 條（146aa59、b11048f），npm test 439/437/0 fail；備份端第 3 版部署、外網驗證正常。待 mini pull＋重啟；mini 複查排程要改 04:35（異機送出改 04:20）。Codex 22:02 跑一次全面審。
+- 10/19 03:21 Codex 上線前審：1 高 4 中。處置：#1 Handle/Resubmit/Void 補 rev＋step（修，3d69c66）、#4 sweep 卡 deleting（修，dzy 端；mini 端早已處理）、#2 照片被手動刪除仍可綁單（不改，靠 04:00 缺檔偵測）、#3 讀取不寫 skip、#5 added:false 視同送達（改規格對齊，spec §14.15）。
+- 23:03 先推畫面 3d69c66（新畫面多送 step，舊後端忽略＝安全），minikit b72427b 待 mini pull＋重啟。
