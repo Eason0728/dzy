@@ -428,7 +428,6 @@ async function teardownCurrent(opts) {
     entry.timer = setTimeout(() => { destroyParked(id); }, currentModule.keepAlive);
     parked.set(id, entry);
     currentHost = null;
-    viewContentEl.hidden = false;
     currentModuleBody = null;
     currentMountUnmount = null;
     currentModule = null;
@@ -456,7 +455,11 @@ async function teardownCurrent(opts) {
   currentView = null;
   currentCtx = null;
   if (currentHost) { if (currentHost.parentNode) currentHost.parentNode.removeChild(currentHost); currentHost = null; }
-  if (viewContentEl) viewContentEl.hidden = false;
+}
+
+/** 清內容區，但保留中的模組（keepRootEl）不動 */
+function clearView() {
+  for (const c of [...viewContentEl.children]) if (c !== keepRootEl) viewContentEl.removeChild(c);
 }
 
 /** 真的卸載一個保留中的模組（時間到、或登出）：照一般流程呼叫 unmount，再移掉它的容器 */
@@ -598,7 +601,7 @@ let homeToken = 0;
  * 先畫骨架（讀取中…），各組再非同步填。整組卡片點了也能進模組（data-role="module-card"）。
  */
 function renderHomeCards() {
-  clearChildren(viewContentEl);
+  clearView();
   const tok = ++homeToken;
   const isStale = () => tok !== homeToken || currentModule !== null;
   const wrap = el('div', { class: 'todo-groups', 'aria-live': 'polite' });
@@ -708,8 +711,10 @@ function ensureShellDom() {
   viewNavEl = el('div', { class: 'view-tabs', 'data-role': 'view-nav' });
   viewContentEl = el('div', { 'data-role': 'view-content' });
 
+  // 保留中的模組放在內容區裡（測試與其他程式都以內容區為準）；clearView() 清內容區時跳過它
   keepRootEl = el('div', { 'data-role': 'keep-root' });
-  const pageEl = el('div', { class: 'page' }, [viewContentEl, keepRootEl]);
+  viewContentEl.appendChild(keepRootEl);
+  const pageEl = el('div', { class: 'page' }, [viewContentEl]);
   const mainEl = el('div', { class: 'app-main' }, [topbarEl, viewNavEl, pageEl]);
   const shellEl = el('div', { class: 'app-shell' }, [navDesktopEl, mainEl]);
 
@@ -740,14 +745,13 @@ async function mountModuleView(manifest, view, params) {
   currentView = view.id;
   renderTopNav();
   renderViewNav(manifest);
-  clearChildren(viewContentEl);
+  clearView();
 
   // 保留中的模組：直接拿回來顯示，不重新 mount（iframe 不重載、不重新登入）
   const kept = parked.get(manifest.id);
   if (kept) {
     parked.delete(manifest.id);
     clearTimeout(kept.timer);
-    viewContentEl.hidden = true;
     kept.host.hidden = false;
     currentHost = kept.host;
     currentModuleBody = kept.body;
@@ -762,19 +766,23 @@ async function mountModuleView(manifest, view, params) {
       currentView = vid;
       renderViewNav(manifest);
     }
+    // 分頁與參數都跟離開時一樣 → 不通知模組（多數模組收到 onRoute 會整頁重畫重讀，保留就白做了）
+    const same = currentCtx && currentCtx.viewId === vid && JSON.stringify(currentCtx.params || {}) === JSON.stringify(params || {});
     if (currentCtx) { currentCtx.viewId = vid; currentCtx.params = params || {}; }
-    if (currentModuleBody && typeof currentModuleBody.onRoute === 'function') {
+    if (!same && currentModuleBody && typeof currentModuleBody.onRoute === 'function') {
       try { currentModuleBody.onRoute(currentCtx); } catch (err) { console.error(`[shell] 模組 onRoute() 拋錯：${manifest.id}`, err); }
     }
     return;
   }
-  let mountEl = viewContentEl;
+  // 每個模組掛在自己的容器：保留型放 keepRootEl 底下，一般的放內容區（模組卸載時清自己的容器，不會清到別人）
   if (manifest.keepAlive > 0) {
     currentHost = el('div', { 'data-keep': manifest.id });
     keepRootEl.appendChild(currentHost);
-    viewContentEl.hidden = true;
-    mountEl = currentHost;
+  } else {
+    currentHost = el('div', { 'data-host': manifest.id });
+    viewContentEl.appendChild(currentHost);
   }
+  const mountEl = currentHost;
 
   const ctx = buildCtx(manifest, view.id, params);
 

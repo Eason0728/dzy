@@ -11,6 +11,7 @@ export default {
   name: '我的資料',
   desc: '看狀態、改手機地址與職稱',
   icon: 'me',
+  keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘（2026-10-21 Eason：不用最新狀態沒關係；登出管理系統時一起卸載）
   requires: ['platform.self'],
   views: [
     { id: 'profile', name: '個人資料', requires: ['platform.self'] },

@@ -16,6 +16,7 @@ export default {
   name:    '盤點抽查',                // 顯示名，2–8 字
   desc:    '品項抽查 20 項＋金庫抽查',   // 卡片副標，一句話 ≤20 字
   icon:    'audit-stock',              // 對應 assets/icons/audit-stock.svg
+  keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘（2026-10-21 Eason：不用最新狀態沒關係；登出管理系統時一起卸載）
   dept: 'mgmt',                  // 左側選單掛在哪個部門（platform/config.js DEPARTMENTS）
   requires: ['audit.read', 'audit.read.brand', 'audit.read.own'],  // 任一符合即可進入本模組（2026-10-17 加 brand：區督導）
   views: [                             // 模組內分頁；陣列第一個＝預設分頁

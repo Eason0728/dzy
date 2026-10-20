@@ -22,6 +22,7 @@ export default {
   name:    '營運稽核',                  // 顯示名，2–8 字
   desc:    '19 項檢查，合格率統計',      // 卡片副標，一句話 ≤20 字
   icon:    'audit-ops',                // 對應 assets/icons/audit-ops.svg
+  keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘（2026-10-21 Eason：不用最新狀態沒關係；登出管理系統時一起卸載）
   dept: 'mgmt',                  // 左側選單掛在哪個部門（platform/config.js DEPARTMENTS）
   requires: ['audit.read', 'audit.read.brand', 'audit.read.own'],  // 任一符合即可進入本模組（2026-10-17 加 brand：區督導）
   views: [                             // 模組內分頁；陣列第一個＝預設分頁

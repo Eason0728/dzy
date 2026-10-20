@@ -130,7 +130,8 @@ def main():
 
             # 營運稽核表也讀到新清單（共用快取已 invalidate）
             page.evaluate("() => { window.location.hash = '#/audit-ops/overview'; }")
-            page.wait_for_selector('text=測試新店竹北', timeout=8000)
+            # 盤點抽查切走後保留在背景（2026-10-21），只在營運稽核自己的範圍裡找
+            page.wait_for_selector('[data-keep="audit-ops"] >> text=測試新店竹北', timeout=8000)
             check(True, '營運稽核總覽也出現新店（改名後的名稱）')
 
             # 重新啟用

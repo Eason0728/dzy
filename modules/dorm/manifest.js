@@ -18,6 +18,7 @@ export default {
   name:    '宿舍合約',                  // 顯示名，2–8 字
   desc:    '合約清單、建單與退宿點交',   // 卡片副標，一句話 ≤20 字
   icon:    'dorm',                     // 對應 assets/icons/dorm.svg
+  keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘（2026-10-21 Eason：不用最新狀態沒關係；登出管理系統時一起卸載）
   dept: 'hr',                    // 左側選單掛在哪個部門（platform/config.js DEPARTMENTS）
   requires: ['dorm.read', 'dorm.write'], // 任一符合即可進入本模組
   views: [                             // 模組內分頁；陣列第一個＝預設分頁
