@@ -202,6 +202,41 @@ def main():
             check(fa is not None and fa.url == STORE + '/dzy-store/?embed=dzy&only=duty', '考勤管理 iframe 網址帶 &only=duty：%s' % (fa.url if fa else None))
             ga = fa.evaluate("() => window.__got") if fa else []
             check(len(ga) == 1 and ga[0]['data']['type'] == 'dzy-store-sso' and ga[0]['data']['ticket'] == TICKET and len(mock.sso_calls) == before + 1, '考勤管理握手拿到券：%s' % ga)
+            # ⑤b 考勤管理頁頂分頁（2026-10-20）：出勤核定子分頁（核定工時／申請審核帶數字）畫在頁頂、點了送 go、重新整理停在原分頁
+            DNAV = "(cur) => parent.postMessage({ type: 'dzy-store-nav', v: 1, cur: cur, items: [{ id: 'approve', label: '核定工時', badge: 0 }, { id: 'request', label: '申請審核', badge: 3 }] }, '*')"
+            atabs = lambda: [x.replace('\n', '') for x in at.locator('[data-role="view-nav"] .nav-item').all_inner_texts()]
+            fa.evaluate(DNAV, 'approve')
+            at.wait_for_function("() => document.querySelectorAll('[data-role=\"view-nav\"] .nav-item').length === 2")
+            check(atabs() == ['核定工時', '申請審核3'] and at.evaluate('location.hash') == '#/attendance/approve', '考勤管理頁頂＝出勤核定子分頁、申請審核帶數字 3、網址 #/attendance/approve：%s %s' % (atabs(), at.evaluate('location.hash')))
+            check({'type': 'dzy-store-tabs', 'v': 1} in fa.evaluate("() => window.__got.map(m => m.data)"), '考勤管理：收到選單後回 dzy-store-tabs')
+            at.locator('[data-role="view-nav"] .nav-item', has_text='申請審核').click()
+            at.wait_for_timeout(300)
+            agos = [m for m in fa.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(agos == [{'type': 'dzy-store-go', 'v': 1, 'id': 'request'}] and at.evaluate('location.hash') == '#/attendance/request', '點頁頂「申請審核」→ 送 {dzy-store-go, id:request}、網址跟著變：%s' % agos)
+            fa.evaluate(DNAV, 'request')
+            at.wait_for_timeout(300)
+            at.screenshot(path=os.path.join(SHOTS, 'attendance-tabs-1280.png'))
+            at.set_viewport_size({'width': 390, 'height': 844})
+            at.wait_for_timeout(300)
+            check(at.evaluate("() => document.documentElement.scrollWidth <= innerWidth + 1") and all(at.locator('[data-role="view-nav"] .nav-item').nth(i).is_visible() for i in range(2)), '手機 390 寬：考勤管理兩個頁頂分頁都看得到、沒有橫向捲動')
+            at.screenshot(path=os.path.join(SHOTS, 'attendance-tabs-390.png'))
+            at.set_viewport_size({'width': 1280, 'height': 800})
+            at.reload()
+            at.wait_for_selector('iframe[data-role="store-frame"]')
+            fa = None
+            for _ in range(50):
+                fa = store_frame(at)
+                if fa:
+                    try:
+                        if fa.evaluate("() => window.__got.length") >= 1:
+                            break
+                    except Exception:
+                        pass
+                at.wait_for_timeout(100)
+            fa.evaluate(DNAV, 'approve')
+            at.wait_for_timeout(500)
+            agos = [m for m in fa.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(agos == [{'type': 'dzy-store-go', 'v': 1, 'id': 'request'}] and at.evaluate('location.hash') == '#/attendance/request', '重新整理在申請審核：出勤核定先回報核定工時時，管理系統叫它切回申請審核、網址不變：%s %s' % (agos, at.evaluate('location.hash')))
 
             # ⑥ 管理員兩個都看得到
             ad = new_page()

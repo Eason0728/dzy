@@ -41,13 +41,13 @@ t('navTabs：只認 dzy-store-nav v1；cur 要在清單裡', () => {
   assert.equal(navTabs({ ...d, cur: 'admin' }).cur, '');
   for (const bad of [null, { ...d, type: 'x' }, { ...d, v: 2 }, { ...d, items: 'x' }]) assert.equal(navTabs(bad), null);
 });
-t('manifest：門市營運 dynamicTabs、考勤管理沒有；兩者都合規', () => {
+t('manifest：門市營運、考勤管理都 dynamicTabs（考勤管理＝出勤核定子分頁，2026-10-20）；兩者都合規', () => {
   assert.equal(storeops.dynamicTabs, true);
-  assert.equal(attendance.dynamicTabs, undefined);
+  assert.equal(attendance.dynamicTabs, true);
   for (const m of [storeops, attendance]) { const r = validateManifest(m); assert.ok(r.ok !== false && !(r.errors && r.errors.length), JSON.stringify(r)); }
 });
-t('門市營運開 tabs、考勤管理不開', () => {
+t('門市營運、考勤管理都開 tabs', () => {
   assert.match(fs.readFileSync(new URL('../modules/storeops/index.js', import.meta.url), 'utf8'), /tabs: true/);
-  assert.doesNotMatch(fs.readFileSync(new URL('../modules/attendance/index.js', import.meta.url), 'utf8'), /tabs: true/);
+  assert.match(fs.readFileSync(new URL('../modules/attendance/index.js', import.meta.url), 'utf8'), /tabs: true/);
 });
 console.log('全部通過 ' + n);

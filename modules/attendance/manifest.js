@@ -13,6 +13,8 @@ export default {
   icon: 'attendance',
   dept: 'hr',
   requires: ['platform.att'],
+  // 頁頂分頁＝營運系統出勤核定送來的子分頁（核定工時／申請審核…，依人依店、帶待審數字；platform/tabs.js）；views 只剩一個當進入權限的門（2026-10-20）
+  dynamicTabs: true,
   views: [
     { id: 'main', name: '考勤管理', requires: ['platform.att'] }
   ],
