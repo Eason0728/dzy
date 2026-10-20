@@ -211,6 +211,22 @@ ok(L.NAME_MAX === 20 && L.addFormErrors({ ...good, name: 'x'.repeat(20) }, '2026
   ok(done === false && !calls.includes('clockJobStatus') && toasts.some((t) => t.includes('試跑模式')), '#20 試跑新增：不輪詢 clockJobStatus、顯示試跑訊息', { calls, toasts });
   delete globalThis.document;
 }
+// 第 15 節（2026-10-20）：主管新增同仁的職稱下拉依自己的單位過濾（中央工廠：計時／正職／廠長／研發總監）
+{
+  const { openAddFlow } = await import('../modules/staff-shared/clock-ui.js');
+  globalThis.document = { createElement: () => ({ _h: '', set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h; }, querySelector: () => null }) };
+  const ORG15 = { units: [{ code: 'ck', name: '中央工廠', parent: 'ck', ladder: 'store' }, { code: 'mala-gf', name: '光復', parent: 'mala', ladder: 'store' }],
+    titles: ['pt', 'ft', 'sm', 'am', 'fm', 'rdd'].map((c, i) => ({ code: c, name: c + '名', parent: 'store', rank: i })), unit_titles: { ck: ['pt', 'ft', 'fm', 'rdd'] }, title_units: { fm: ['ck'], rdd: ['ck'] } };
+  const opts = async (unit) => {
+    let html = '';
+    const ctx15 = { ui: { dialog: async (o) => { html = o.body.innerHTML; return null; }, toast() {}, loading() {} }, api: { call: async () => ({ ok: false }) } };
+    await openAddFlow({ ctx: ctx15, mod: 'me', viewer: lead, org: ORG15, myUnit: unit, myUnitName: unit, reload: async () => {} });
+    return Array.from(html.matchAll(/<option value="([a-z]+)"/g)).map((m) => m[1]).join();
+  };
+  ok(await opts('ck') === 'pt,ft,fm,rdd', '15 中央工廠主管新增：職稱只有 pt／ft／fm／rdd', await opts('ck'));
+  ok(await opts('mala-gf') === 'pt,ft,sm,am', '15 門市店長新增：職稱 pt／ft／sm／am（沒有廠長、研發總監）', await opts('mala-gf'));
+  delete globalThis.document;
+}
 // #22 總部單位部門主管開店長分頁 → 白話說明，不露 no_perm
 {
   ok(L.storeLeadOnlyText({ ok: false, code: 'no_perm', error: '沒有權限' }).includes('門市店長') && L.storeLeadOnlyText({ ok: false, code: 'busy' }) === '', '#22 storeLeadOnlyText 只對 no_perm 出白話說明');

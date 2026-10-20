@@ -29,6 +29,8 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'clockAddHome',
   // 2026-10-14：組織架構改版一次性升級／回退（只有 role admin；Staff.gs 第 10 節）
   'orgUpgrade2026', 'orgRollback2026',
+  // 2026-10-20：職稱調整（區經理移回門市、中央工廠廠長／研發總監）一次性升級／回退（只有 role admin；Staff.gs 第 11 節）
+  'orgUpgrade202610', 'orgRollback202610',
   // 2026-10-16：公告專區自動登入電子佈告欄（StaffClock.gs SSO 節）
   'ssoTicket', 'svcSsoRedeem',
   // 2026-10-17：個人帳號第二期，依單位＋職稱給權限（PermActions.gs）
@@ -95,7 +97,7 @@ function dispatch_(e) {
     staffCreateByUnit: 1, staffLeave: 1, staffLeaveCancel: 1, staffRename: 1, staffReinstate: 1,
     clockMapBuild: 1, clockMapDecide: 1, clockCandidateCreate: 1, clockCandidateDismiss: 1,
     clockOutboxRetry: 1, clockOutboxCancel: 1, clockSetHome: 1, clockOldHomeDecide: 1, clockLink: 1, clockAddHome: 1,
-    orgUpgrade2026: 1, orgRollback2026: 1,
+    orgUpgrade2026: 1, orgRollback2026: 1, orgUpgrade202610: 1, orgRollback202610: 1,
     permInit: 1, permMapSave: 1, permExSave: 1, permExRevoke: 1, permStoreSave: 1, permAuditSeen: 1,
     apvSetup: 1, apvThresholdSave: 1, apvSubmit: 1, apvResubmit: 1, apvWithdraw: 1, apvDecide: 1, apvSign: 1, apvHandle: 1, apvReassign: 1, apvVoid: 1 };
   if (MUTATING_ACTIONS[action]) {
@@ -189,6 +191,8 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'svcSsoRedeem': return handleSvcSsoRedeem_(payload);
     case 'orgUpgrade2026': return handleOrgUpgrade_(token, payload);
     case 'orgRollback2026': return handleOrgRollback_(token);
+    case 'orgUpgrade202610': return handleOrgUpgrade202610_(token, payload);
+    case 'orgRollback202610': return handleOrgRollback202610_(token);
     case 'permInit': return handlePermInit_(token);
     case 'permMapGet': return handlePermMapGet_(token);
     case 'permMapSave': return handlePermMapSave_(token, payload);

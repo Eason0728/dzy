@@ -48,12 +48,12 @@ const BASE = [
   mk('DZY907', '測試庚', { unit: 'dzy-hq', dept: 'purchase', title: 'hs' }),
   mk('DZY908', '測試辛', { unit: 'dzy-hq', dept: 'purchase', title: 'hm' }),
   mk('DZY909', '測試壬', { unit: 'ck', title: 'ft' }),
-  mk('DZY910', '測試癸', { unit: 'ck', title: 'sm' }),
+  mk('DZY910', '測試癸', { unit: 'ck', title: 'fm' }),         // 中央工廠廠長（2026-10-20 起央廚不設店長）
   mk('DZY911', '測試子', { unit: 'dzy-hq', dept: 'hr', title: 'hm' }),
   mk('DZY913', '測試寅', { unit: 'mzt-gf', title: 'sm' }),
   mk('DZY914', '測試卯', { unit: 'mzt-hq', title: 'odir' }),
   mk('DZY915', '測試辰', { unit: 'mala-gf', title: 'pt' }),
-  mk('DZY916', '測試巳', { unit: 'mala-hq', title: 'oam' }),
+  mk('DZY916', '測試巳', { unit: 'mala-hq', title: 'osv' }),     // 小辛辣辦公室區督導（oam 2026-10-20 停用）
   mk('DZY917', '測試午', { status: 'unclaimed', unit: 'mala-gf', title: 'ft' })
 ];
 const TABLE = {
@@ -133,7 +133,7 @@ function pers(kind, senderEmp, subjectEmp, people, extra) {
   ok(ck.eff.status === 'signing' && eq(who(ck.eff.candidates), ['DZY905']) && ck.eff.skips.length === 1 && ck.eff.skips[0].role === 'brand_dir' && ck.eff.skips[0].next === 'ceo', 'ck 8,000：央廚沒有品牌總監 → skip → 執行長', ck.eff);
   ok(ck.eff.route.steps.map((s) => s.role + ':' + s.status).join() === 'brand_dir:skipped,ceo:pending', 'ck 路線留下被跳過的那一格');
   const ck2 = spend('DZY909', 800, null);
-  ok(eq(who(ck2.eff.candidates), ['DZY910']), 'ck 800 → ck 店長（head）');
+  ok(eq(who(ck2.eff.candidates), ['DZY910']), 'ck 800 → ck 廠長（head）');
   const sm = spend('DZY902', 3000, null);
   ok(sm.eff.status === 'signing' && eq(who(sm.eff.candidates), ['DZY903']) && sm.eff.skips[0].role === 'head', '店長送 3,000：權限人是自己 → 往上到品牌總監', sm.eff);
   const noDir = BASE.filter((p) => p.emp !== 'DZY903');
@@ -159,7 +159,44 @@ function pers(kind, senderEmp, subjectEmp, people, extra) {
   const mzt = spend('DZY913', 8000, null);
   ok(eq(who(mzt.eff.candidates), ['DZY914']), '墨竹亭店長 8,000 → 墨竹亭辦公室總監（依品牌找人，不會找到小辛辣總監）', mzt.eff);
   const oamS = spend('DZY916', 800, null);
-  ok(oamS.eff.status === 'signing' && eq(who(oamS.eff.candidates), ['DZY903']), '品牌辦公室區經理 800：head 同級不算 → 總監', oamS.eff);
+  ok(oamS.eff.status === 'signing' && eq(who(oamS.eff.candidates), ['DZY903']), '品牌辦公室區督導 800：head 同級不算 → 總監', oamS.eff);
+}
+
+// ===== 2026-10-20 職稱調整（docs/org/spec.md 第 15 節）：中央工廠廠長→研發總監、門市區經理 =====
+{
+  const X = BASE.concat([
+    mk('DZY921', '測試戌', { unit: 'ck', title: 'rdd' }),        // 中央工廠研發總監
+    mk('DZY922', '測試亥', { unit: 'mala-gf', title: 'am' })      // 光復區經理（門市、rank 4）
+  ]);
+  const ck1 = spend('DZY909', 800, X);
+  ok(eq(who(ck1.eff.candidates), ['DZY910']), '15 ck 同仁 800 → 廠長 fm（head，店長同等）', ck1.eff);
+  const ck2 = spend('DZY909', 8000, X);
+  ok(ck2.route.steps[0].role === 'brand_dir' && ck2.eff.skips.length === 0 && eq(who(ck2.eff.candidates), ['DZY921']), '15 ck 同仁 8,000 → brand_dir＝研發總監 rdd', ck2.eff);
+  ok(ck2.route.steps[0].scope === 'ck', '15 ck brand_dir 的 scope＝ck');
+  const ck3 = spend('DZY909', 25000, X);
+  ok(eq(who(ck3.eff.candidates), ['DZY904']), '15 ck 同仁 25,000 → 總經理（照門檻）', ck3.eff);
+  const fm1 = spend('DZY910', 3000, X);
+  ok(fm1.eff.skips[0].role === 'head' && eq(who(fm1.eff.candidates), ['DZY921']), '15 廠長送 3,000：head 是自己 → 研發總監', fm1.eff);
+  const rd1 = spend('DZY921', 3000, X);
+  ok(rd1.eff.route.steps.map((s) => s.role + ':' + s.status).join() === 'head:skipped,brand_dir:skipped,ceo:pending' && eq(who(rd1.eff.candidates), ['DZY905']), '15 研發總監送 3,000：廠長職級較低、自己不能簽 → 執行長', rd1.eff);
+  const st1 = spend('DZY901', 800, X);
+  ok(eq(who(st1.eff.candidates), ['DZY902']), '15 門市同仁 800 → 只有店長（區經理不進請購請款）', st1.eff);
+  const st2 = spend('DZY901', 8600, X);
+  ok(eq(who(st2.eff.candidates), ['DZY903']), '15 門市同仁 8,600 → 品牌總監（區經理不是 brand_dir）', st2.eff);
+  const am1 = spend('DZY922', 800, X);
+  ok(am1.eff.skips[0].role === 'head' && eq(who(am1.eff.candidates), ['DZY903']), '15 區經理送 800：店長職級較低 → 品牌總監', am1.eff);
+  const ctx = ctxOf(X);
+  const direct = (emp) => who(sb.apvDirectMembers_(ctx.byEmp[emp], ctx)).sort().join();
+  ok(direct('DZY902') === 'DZY903,DZY916,DZY922', '15 店長的直屬主管＝品牌辦公室區督導以上＋同店區經理', direct('DZY902'));
+  ok(direct('DZY922') === 'DZY903,DZY916', '15 區經理的直屬主管＝品牌辦公室（不含店長）', direct('DZY922'));
+  ok(direct('DZY910') === 'DZY904,DZY905,DZY906,DZY921', '15 廠長的直屬主管＝研發總監或執行長以上', direct('DZY910'));
+  ok(direct('DZY921') === 'DZY904,DZY905,DZY906', '15 研發總監的直屬主管＝執行長以上', direct('DZY921'));
+  ok(direct('DZY909') === 'DZY910,DZY921', '15 ck 正職的直屬主管＝廠長、研發總監', direct('DZY909'));
+  const can = (kind, s, t) => sb.apvCanSendPersonnel_(kind, ctx.byEmp[s], ctx.byEmp[t], ctx, false);
+  ok(can('transfer', 'DZY922', 'DZY902') && can('transfer', 'DZY922', 'DZY901'), '15 資格：區經理可送同店店長、同仁');
+  ok(can('transfer', 'DZY902', 'DZY922') === false, '15 資格：店長不能送區經理');
+  ok(can('transfer', 'DZY921', 'DZY910') && can('transfer', 'DZY910', 'DZY921') === false, '15 資格：研發總監可送廠長；廠長不能送研發總監');
+  ok(can('transfer', 'DZY922', 'DZY913') === false, '15 資格：區經理不能送別店店長');
 }
 
 // ===== 快照不受改權限表影響 =====
@@ -215,7 +252,7 @@ function pers(kind, senderEmp, subjectEmp, people, extra) {
   ok(can('transfer', 'DZY908', 'DZY907') && can('transfer', 'DZY907', 'DZY908') === false, '資格：部門主管可送同部門同仁；同仁不能送主管');
   ok(can('transfer', 'DZY902', 'DZY902') === false && can('transfer', 'DZY915', 'DZY902') === false, '資格：下級不能送上級的調職');
   ok(can('transfer', 'DZY911', 'DZY901', true) === true && can('raise', 'DZY915', 'DZY901', true) === true, '資格：人資（platform.staff）一律可送');
-  ok(can('transfer', 'DZY910', 'DZY909') === true && can('transfer', 'DZY910', 'DZY901') === false, '資格：央廚店長只能送央廚同仁');
+  ok(can('transfer', 'DZY910', 'DZY909') === true && can('transfer', 'DZY910', 'DZY901') === false, '資格：央廚廠長只能送央廚同仁');
 }
 
 // ===== 輔助：承辦、改派 =====

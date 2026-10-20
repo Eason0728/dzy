@@ -120,10 +120,10 @@ const PEOPLE = [
   ['DZY913', '測試寅', 'staff', 'mzt-gf', '', 'sm'],          // 墨竹亭店長
   ['DZY914', '測試卯', 'staff', 'dzy-hq', 'it', 'hs'],        // 資訊部同仁（與簽核無關的人）
   ['DZY915', '測試辰', 'staff', 'mala-gf', '', 'pt'],         // 光復計時（另一位同店同仁）
-  ['DZY916', '測試巳', 'staff', 'mala-hq', '', 'oam'],        // 小辛辣區經理
+  ['DZY916', '測試巳', 'staff', 'mala-hq', '', 'osv'],        // 小辛辣區督導（oam 2026-10-20 停用）
   ['DZY917', '測試午', 'staff', 'mala-gf', '', 'ft', 'unclaimed'],   // 還沒開通
   ['DZY918', '測試未', 'staff', 'ck', '', 'ft'],              // 央廚店員
-  ['DZY919', '測試申', 'staff', 'ck', '', 'sm']               // 央廚店長
+  ['DZY919', '測試申', 'staff', 'ck', '', 'fm']               // 央廚廠長（2026-10-20 起央廚不設店長）
 ];
 const ADMIN_PW = 'fake-admin-pw-01';
 const MZ = (emp) => 'u' + emp.slice(3);
@@ -658,8 +658,8 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const t1 = send('DZY902', 'transfer', 'DZY901');
   ok(t1.ok && t1.data.route.steps.length === 1 && t1.data.route.steps[0].role === 'direct', '店長送調職：一關直屬主管');
   const tCands = getForm(app, 'admin', t1.data.id).data.form.route.steps[0].candidates.map((c) => c.emp).sort();
-  ok(eq(tCands, ['DZY903', 'DZY916']), '店長的直屬主管＝小辛辣辦公室區經理以上（測試丙、測試巳）', tCands);
-  ok(decide(app, 'DZY916', t1.data.id, 'approve').data.status === 'handling', '區經理核准調職 → handling');
+  ok(eq(tCands, ['DZY903', 'DZY916']), '店長的直屬主管＝小辛辣辦公室區督導以上（測試丙、測試巳）', tCands);
+  ok(decide(app, 'DZY916', t1.data.id, 'approve').data.status === 'handling', '區督導核准調職 → handling');
   const r1 = send('DZY902', 'raise', 'DZY901');
   ok(r1.ok && r1.data.route.steps[0].role === 'gm', '調薪：總經理一關');
   ok(post(app, 'DZY903', 'apvDecide', { id: r1.data.id, rev: 1, step: 0, decision: 'approve' }).error === 'not_found', '調薪：品牌總監不能簽（只有總經理；薪資單他也看不到 → not_found）');

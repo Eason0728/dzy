@@ -134,6 +134,8 @@ function permAcCounts_(permOrg, keys) {
     var ladder = permStr_(unit.ladder);
     var tdef = st.title && permOrg.titles[st.title];
     if (!tdef || tdef.active === false || permStr_(tdef.parent) !== ladder) return;
+    // 單位限定職稱（與 permCompute_ 同一關）：例如切換後還掛中央工廠的店長不算人數
+    if (permOrg.unitRules && typeof stfTitleUnitOk_ === 'function' && !stfTitleUnitOk_(permOrg.unitRules, st.title, st.unit)) return;
     var depts = {};
     [st.dept].concat(st.extra_depts || []).forEach(function (d) {
       d = permStr_(d);

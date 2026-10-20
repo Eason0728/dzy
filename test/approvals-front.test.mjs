@@ -149,7 +149,7 @@ const fmt = { datetime, esc };
   eq(acts(mk({ decide: true, handle: true }), 'all'), [], '全部單據：不會出現核准／已處理');
   const html = cards.cardHtml(mk({ decide: true }), 'sign', esc, fmt);
   ok(html.includes('data-act="approve"') && html.includes('data-act="reject"') && !html.includes('data-act="done"') && html.includes('data-act="view"'), '卡片 HTML：核准／退回／展開，沒有已處理');
-  ok(html.includes('APV-261018-901') && html.includes('8,600') && html.includes('卡在：品牌總監（測試乙）') && html.includes('data-file="F1"'), '卡片 HTML：單號、金額、卡在誰、照片縮圖', html);
+  ok(html.includes('APV-261018-901') && html.includes('8,600') && html.includes('卡在：品牌總監／研發總監（測試乙）') && html.includes('data-file="F1"'), '卡片 HTML：單號、金額、卡在誰、照片縮圖', html);
   ok(!cards.cardHtml(mk({}, { stuck: true }), 'sign', esc, fmt).includes('data-act="approve"') && cards.cardHtml(mk({}, { stuck: true }), 'sign', esc, fmt).includes('卡關'), '卡關標記；沒資格仍不出按鈕');
   const evil = cards.cardHtml(mk({}, { sender: { emp: 'DZY901', name: '<img src=x onerror=1>', unit_name: 'u' } }), 'mine', esc, fmt);
   ok(!evil.includes('<img src=x'), '送件人姓名有被轉義');

@@ -192,3 +192,38 @@
   - 其他部門的部門主管→執行長以上（不變）。
 - **掛錯地方的執行長以上（3A）**：職稱是 ceo／gm／chair，但單位不是 dzy-hq 或主要部門不是 mgmt → 名單 flags 加 `exec_misplaced`、升級預覽 todo 列出（flag `exec_misplaced`），**不自動搬**；畫面標「建議改到鼎兆元總部／管理部」。若同時符合 title_ladder（例：掛品牌辦公室），兩個 flag 都列。
 - **管理部不設部門主管（追加）：** 單位 dzy-hq＋主要部門 mgmt＋職稱 hm（含送出待審的 p_*）→ flags 加 `title_ladder`（職稱需重選），升級預覽 todo 也列；org 裡沒有啟用的 mgmt 部門列時（切換組織之前）不產生 `exec_misplaced`，也不產生此 `title_ladder`，切換後才出現。
+
+## 15. 職稱調整（Eason 2026-10-20；覆蓋第 13 節的門市／品牌辦公室職稱與審核表、第 4 節中央工廠列）
+**職稱**
+| code | name | ladder | rank | 適用單位 | 變化 |
+|---|---|---|---|---|---|
+| am | 區經理 | store | 4 | 門市（不含中央工廠） | **重新啟用**（從品牌辦公室移回門市） |
+| oam | 區經理 | office | 2 | — | **停用**（不刪；目前沒人用，有人用就出「職稱需重選」） |
+| fm | 廠長 | store | 3 | **只有中央工廠** | 新增，＝店長同等 |
+| rdd | 研發總監 | store | 4 | **只有中央工廠** | 新增，廠長之上 |
+- 中央工廠只能選 pt／ft／fm／rdd（不能選店長、區經理）；廠長、研發總監只能在中央工廠。
+- 機制：`Staff.gs STF_UNIT_TITLES = { ck: ['pt','ft','fm','rdd'] }`、`STF_TITLE_UNITS = { fm: ['ck'], rdd: ['ck'] }`，判斷一律走 `stfTitleFitsUnit_`／`stfTitleUnitOk_`（驗證、名單旗標、審核、主管範圍、考勤、`permCompute_` 共用）；前端由 orgOptions 的 `unit_titles`／`title_units` 過濾（`org-fields.js titlesForUnit`，兩份同步；店長新增同仁的職稱下拉也用它）。
+- **生效條件**：某單位清單裡的專屬職稱（fm／rdd）在 org 裡存在且啟用，限定才生效。後端先上線、還沒跑 orgUpgrade202610 前，中央工廠店長照舊有效。
+
+**審核（只往上一層；同階梯職級要更高）**
+| 被審的人 | 誰可以審 |
+|---|---|
+| 門市計時／正職 | 同店店長、同店區經理 |
+| 門市店長 | 該品牌辦公室（osv／odir）**或同店區經理** |
+| 門市區經理 | 該品牌辦公室（osv／odir） |
+| 中央工廠計時／正職 | 中央工廠廠長、研發總監 |
+| 中央工廠廠長 | 研發總監 **或** 執行長以上 |
+| 中央工廠研發總監 | 執行長以上 |
+（其他列同第 13、14 節。實作：`stfReviewNeed_` 回 `alt` 備選種類，`stfScopeMeets_` 任一符合即可。）
+
+**表單簽核（請購請款）**：單位主管 head＝店長 sm／廠長 fm（`STF_STORE_HEAD_TITLES`），**區經理不進請購請款**；brand_dir＝品牌辦公室總監，中央工廠＝研發總監（`ApprovalRoute.gs APV_UNIT_DIR_TITLE`）。中央工廠預設門檻＝廠長 0–5,000 → 研發總監 5,001–10,000 → 總經理／董事長照門檻。人事單「直屬主管」照上面審核表。
+
+**考勤（出勤核定，StoreOps.gs）**：區經理、廠長、研發總監＝店長同等（核同店計時正職與自己、要打卡、有考勤管理選單、營運系統管理單位）；研發總監另可核同單位職級較低的廠長。**判斷：區經理不核同店店長**（店長照舊自己核，要改再說）。
+
+**權限預設**：am／fm／rdd 與店長同一套（audit.read.own、store.void；PERM_DEFAULT_RULES 第 21–26 條）。研發總監沒有另外加碼（spec 沒提，照店長）。
+
+**正式環境切換**：admin 專用 `orgUpgrade202610`（`dryrun:true` 預覽）／`orgRollback202610`，同仁名單「職稱調整（10/20）」「退回職稱調整」兩顆鈕。
+- 升級：am 啟用、oam 停用、補 fm／rdd 列；中央工廠的店長 title→fm、送出待審的 p_title（送出單位或目前單位是 ck）→fm；perm_map 把店長 sm 的**現行** active 規則複製給 am／fm／rdd（同一條已有就不補）；只寫那幾格，單位不變（不觸發調店、不寫打卡）。
+- 備份：`org_bak2610_*`（org 整份）、`stf_bak2610_*`（emp_no／欄位／原值／新值）、快照 `org_upg2610_*`；狀態在 Script Property `ORG_UPGRADE_202610_STATE`（含補的規則編號）。
+- 退回：org 切換後被改過、或受影響同仁那一格被改過 → 拒絕並列差異，什麼都不改；否則 org 蓋回、職稱還原、補的規則 active＝FALSE；切換後才設成 am／fm／rdd 的人列孤兒（只列不改）。
+- 這次沒退回前 `orgRollback2026` 拒絕；`orgUpgrade2026` 重跑不會把 am／oam 改回去。

@@ -307,7 +307,9 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(post(sb, 'staffCreateByUnit', body({ name: '新人五', unit: 'dzy-hq', dept: 'it' }), head.token).code === 'no_perm', 'B2 ★總部部門主管（hq rank≥2）不能走店長路徑');
   ok(post(sb, 'staffCreateByUnit', body({ name: '新人五', unit: 'dzy-hq', dept: 'it' }), ceo.token).code === 'no_perm', 'B2 ★總部 rank≥3 的主管也被拒');
   ok(post(sb, 'staffCreateByUnit', body({ name: '新人五' }), '').ok === false, 'B2 沒登入被拒');
-  ok(post(sb, 'staffCreateByUnit', body({ name: '新人五', title: 'am' }), mgrGF.token).code === 'bad_input', 'B2 店長新增停用的區經理職稱 → 擋（門市只剩 pt／ft／sm）');
+  ok(post(sb, 'staffCreateByUnit', body({ name: '新人五', title: 'sv' }), mgrGF.token).code === 'bad_input', 'B2 店長新增停用的督導職稱 → 擋');
+  ok(post(sb, 'staffCreateByUnit', body({ name: '新人五', title: 'am' }), mgrGF.token).code === 'no_perm', 'B2 店長新增區經理（2026-10-20 起門市職稱、職級比自己高）→ 擋');
+  ok(post(sb, 'staffCreateByUnit', body({ name: '新人五', title: 'fm' }), mgrGF.token).code === 'bad_input', 'B2 門市新增中央工廠專用的廠長 → 擋（單位限定職稱）');
   ok(post(sb, 'staffCreateByUnit', body({ name: '新人五', title: 'hs' }), mgrGF.token).ok === false, 'B2 門市單位選總部職稱 → 擋');
 
   // 總部：可指定單位；單位沒有打卡 → job_id=null

@@ -28,7 +28,7 @@ var PERM_AUDIT_HEADERS = ['at', 'by', 'emp_no', 'added', 'removed', 'cause', 'se
 
 var PERM_LADDERS = ['store', 'office', 'hq'];
 
-// 預設規則（spec §3.1）：[ladder, dept, title, perm]；寫入時依序編 R001…（共 19 條）
+// 預設規則（spec §3.1）：[ladder, dept, title, perm]；寫入時依序編 R001…（共 26 條）
 var PERM_DEFAULT_RULES = (function () {
   var out = [];
   var add = function (ladder, dept, title, perms) {
@@ -43,6 +43,9 @@ var PERM_DEFAULT_RULES = (function () {
   add('hq', 'hr', '*', ['platform.staff', 'dorm.read', 'dorm.write']);
   add('hq', 'hr', 'hm', ['platform.permmap']);
   add('store', '', 'sm', ['store.void']);   // 2026-10-18：店長預設可作廢收支（第 20 條；已初始化的環境不會自動補，見 StoreOps.gs storeopsPermSeed_）
+  // 2026-10-20（docs/org/spec.md 第 15 節；第 21–26 條，接在後面不改既有編號）：區經理 am、中央工廠廠長 fm／研發總監 rdd 與店長同一套預設。
+  // 正式環境 perm_map 早已初始化，由 orgUpgrade202610 複製「店長的現行規則」（Eason 可能改過店長）；oam 已停用、它的規則保留不影響。
+  ['am', 'fm', 'rdd'].forEach(function (t) { add('store', '', t, ['audit.read.own', 'store.void']); });
   return out;
 })();
 
@@ -147,7 +150,7 @@ function permEnsureSheet_(ss, name, headers) {
 
 /**
  * 初始化四張權限分頁。只有 role admin。只補不覆蓋：表頭一致就不動；
- * perm_map 只有表頭（空表）才寫 19 條預設規則；perm_store_map 空表才寫 5 筆對照。
+ * perm_map 只有表頭（空表）才寫預設規則（PERM_DEFAULT_RULES，目前 26 條）；perm_store_map 空表才寫 5 筆對照。
  * 任一分頁表頭不一致 → 一張都不建，回錯。
  * 回 { ok:true, created:[分頁名], rules_seeded:n, stores_seeded:n } 或 { ok:false, error, message }
  */
@@ -214,6 +217,8 @@ function permCompute_(input) {
   var title = permStr_(staff.title);
   var tdef = title && org.titles && org.titles[title];
   if (!tdef || tdef.active === false || permStr_(tdef.parent) !== ladder) return empty;
+  // 單位限定職稱（Staff.gs STF_UNIT_TITLES；docs/org/spec.md 第 15 節）：org.unitRules 由 permOrgIndex_ 帶入，例如中央工廠的店長 → 空權限
+  if (org.unitRules && typeof stfTitleUnitOk_ === 'function' && !stfTitleUnitOk_(org.unitRules, title, permStr_(staff.unit))) return empty;
   var brand = permStr_(unit.parent);   // 品牌一律由單位推得，不信 staff.brand
   var today = permStr_(input.today);
 
@@ -438,6 +443,7 @@ function permOrgIndex_() {
     else if (kind === 'title') out.titles[code] = { parent: permStr_(r[3]), rank: Number(r[5]) || 0, active: active };
     else if (kind === 'dept') out.depts[code] = { parent: permStr_(r[3]), active: active };
   });
+  if (typeof stfUnitTitleRules_ === 'function') out.unitRules = stfUnitTitleRules_(function (c) { return !!out.titles[c] && out.titles[c].active; });
   return out;
 }
 

@@ -73,6 +73,9 @@ export function isReadAction(backendId, action, payload) {
   // 切換組織先 dryrun:true 預覽（Staff.gs 在寫入前就 return）視為讀取；dryrun:false 與 orgRollback2026 仍攔
   if (backendId === 'platform' && action === 'orgUpgrade2026'
     && payload && payload.dryrun === true) return true;
+  // 2026-10-20 職稱調整同一套：dryrun:true 預覽放行；dryrun:false 與 orgRollback202610 仍攔
+  if (backendId === 'platform' && action === 'orgUpgrade202610'
+    && payload && payload.dryrun === true) return true;
   // 復職先 preview（只回舊對照清單、後端在寫入前就 return）視為讀取
   if (backendId === 'platform' && action === 'staffReinstate'
     && payload && payload.preview === true) return true;

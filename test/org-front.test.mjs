@@ -333,6 +333,61 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ok(ctx.dialogs.length === 0 && ctx.toasts.some((t) => t[0] === '試跑模式：未寫入') && ctx.calls.filter((c) => c.action === 'staffList').length === n0, '#4 試跑：退回組織只 toast，沒有報告、不重載');
 }
 
+// ── 第 15 節：職稱調整（2026-10-20）前端 ──
+{
+  const el1 = await mount(makeCtx(baseHandler(), { perms: ['platform.staff'], role: 'hr' }));
+  ok(!el1.innerHTML.includes('data-role="org-upgrade-2610"') && !el1.innerHTML.includes('data-role="org-rollback-2610"'), '15 ★非 admin 看不到「職稱調整」「退回職稱調整」');
+  const PV = { ok: true, data: { dryrun: true, backup: 'created', org: [{ kind: 'title', code: 'fm', field: 'row', from: '', to: 'added' }, { kind: 'title', code: 'oam', field: 'active', from: 'TRUE', to: 'FALSE' }],
+    staff: [{ emp_no: 'DZY050', name: '測試央', field: 'title', from: 'sm', to: 'fm', from_name: '店長', to_name: '廠長' }, { emp_no: 'DZY051', name: '測試待', field: 'p_title', from: 'sm', to: 'fm', from_name: '店長', to_name: '廠長' }],
+    perm: { status: 'ok', add: [{ ladder: 'store', dept: '', title: 'fm', perm: 'store.void', from_rule: 'R020' }] },
+    todo: [{ emp_no: 'DZY052', name: '測試辦', unit_name: '小辛辣品牌辦公室', flag: 'title_ladder', submitted: false }],
+    resolved: [{ emp_no: 'DZY053', name: '測試區', unit_name: '新竹光復', flag: 'title_ladder', submitted: false }] } };
+  const ctx = makeCtx(baseHandler((a, p) => (a === 'orgUpgrade202610' ? (p.dryrun ? PV : { ok: true, data: Object.assign({}, PV.data, { dryrun: false }) }) : null)), { perms: ['platform.staff'], role: 'admin' });
+  const el = await mount(ctx);
+  ok(el.innerHTML.includes('data-role="org-upgrade-2610"') && el.innerHTML.includes('data-role="org-rollback-2610"'), '15 admin 看得到兩顆新按鈕');
+  ctx.answers.push(null);
+  el.querySelector('[data-role="org-upgrade-2610"]').fire('click'); await flush();
+  const c1 = ctx.calls.filter((c) => c.action === 'orgUpgrade202610');
+  ok(c1.length === 1 && c1[0].payload.dryrun === true, '15 ★先 dryrun:true 預覽，取消就不寫');
+  const pv = ctx.dialogs[0].body.innerHTML;
+  ok(pv.includes('DZY050 測試央') && pv.includes('店長 → 廠長') && pv.includes('送出待審的職稱') && pv.includes('fm：store.void') && pv.includes('測試辦') && pv.includes('職稱需重選') && pv.includes('測試區'), '15 預覽列出組織列、同仁職稱（含待審）、權限規則、需處理與變合規名單', pv);
+  ctx.calls.length = 0; ctx.dialogs.length = 0; ctx.answers.push('go', 'ok');
+  el.querySelector('[data-role="org-upgrade-2610"]').fire('click'); await flush();
+  ok(JSON.stringify(ctx.calls.filter((c) => c.action === 'orgUpgrade202610').map((c) => c.payload.dryrun)) === '[true,false]' && /完成/.test(ctx.dialogs[1].title), '15 按「確定調整」才 dryrun:false，完成顯示報告');
+}
+{ // 退回職稱調整：確認、成功報告、被拒差異表
+  const ctx = makeCtx(baseHandler((a) => (a === 'orgRollback202610' ? { ok: true, data: { restored: 50, staff_restored: 2, perm_disabled: ['R030', 'R031'], orphans: [{ emp_no: 'DZY060', name: '測試研', unit: 'ck', title: 'rdd', p_title: '' }] } } : null)), { role: 'admin' });
+  const el = await mount(ctx);
+  ctx.confirmAnswer = false;
+  el.querySelector('[data-role="org-rollback-2610"]').fire('click'); await flush();
+  ok(ctx.confirms.length === 1 && !ctx.calls.some((c) => c.action === 'orgRollback202610'), '15 退回先確認，取消不呼叫');
+  ctx.confirmAnswer = true; ctx.answers.push('ok');
+  el.querySelector('[data-role="org-rollback-2610"]').fire('click'); await flush();
+  const rb = ctx.dialogs[0].body.innerHTML;
+  ok(rb.includes('50') && rb.includes('同仁職稱還原 2') && rb.includes('停用權限規則 2') && rb.includes('測試研'), '15 退回報告', rb);
+  const ctx2 = makeCtx(baseHandler((a) => (a === 'orgRollback202610' ? { ok: false, error: '職稱調整後同仁職稱又被改過', data: { data: { staff_diff: [{ emp_no: 'DZY061', field: 'title', expected: 'fm', actual: 'pt' }] } } } : null)), { role: 'admin' });
+  const el2 = await mount(ctx2);
+  ctx2.answers.push('ok');
+  el2.querySelector('[data-role="org-rollback-2610"]').fire('click'); await flush();
+  const rb2 = ctx2.dialogs[0] && ctx2.dialogs[0].body.innerHTML;
+  ok(rb2 && rb2.includes('DZY061') && rb2.includes('fm') && rb2.includes('pt') && rb2.includes('同仁職稱差異'), '15 退回被拒：顯示同仁差異表', rb2);
+}
+{ // 試跑模式：orgUpgrade202610 dryrun:true 放行，其餘攔
+  const { isReadAction } = await import('../platform/dryrun.js');
+  ok(isReadAction('platform', 'orgUpgrade202610', { dryrun: true }) && !isReadAction('platform', 'orgUpgrade202610', { dryrun: false }) && !isReadAction('platform', 'orgUpgrade202610', {}) && !isReadAction('platform', 'orgRollback202610', {}), '15 dryrun.js：預覽放行、執行與退回攔下');
+}
+{ // org-fields titlesForUnit（兩份同一份程式）
+  const { titlesForUnit } = await import('../platform/views/org-fields.js');
+  const { titlesForUnit: t2 } = await import('../modules/staff-shared/org-fields.js');
+  const O = { titles: ['pt', 'ft', 'sm', 'am', 'fm', 'rdd'].map((c, i) => ({ code: c, name: c, parent: 'store', rank: i })).concat([{ code: 'ofs', name: 'ofs', parent: 'office', rank: 1 }]),
+    unit_titles: { ck: ['pt', 'ft', 'fm', 'rdd'] }, title_units: { fm: ['ck'], rdd: ['ck'] } };
+  const codes = (f, u) => f(O, u).map((t) => t.code).join();
+  ok(codes(titlesForUnit, { code: 'ck', ladder: 'store' }) === 'pt,ft,fm,rdd' && codes(t2, { code: 'ck', ladder: 'store' }) === 'pt,ft,fm,rdd', '15 前端：中央工廠只列 pt／ft／fm／rdd（不列店長、區經理）');
+  ok(codes(titlesForUnit, { code: 'mala-gf', ladder: 'store' }) === 'pt,ft,sm,am', '15 前端：門市列 pt／ft／sm／am（不列廠長、研發總監）');
+  ok(codes(titlesForUnit, { code: 'mala-hq', ladder: 'office' }) === 'ofs', '15 前端：品牌辦公室照階梯');
+  ok(titlesForUnit({ titles: O.titles }, { code: 'ck', ladder: 'store' }).length === 6, '15 前端：舊後端沒有 unit_titles → 不限定（相容）');
+}
+
 // ── 檢查 ──
 for (const f of ['modules/staff/views/list.js', 'modules/me/views/profile.js']) {
   const s = fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');

@@ -10,7 +10,7 @@
 'use strict';
 
 import { esc } from './esc.js';
-import { orgFieldsHtml, bindOrgFields, readOrgFields } from './org-fields.js';
+import { orgFieldsHtml, bindOrgFields, readOrgFields, titlesForUnit } from './org-fields.js';
 import {
   ymd, leaveMinDate, leaveDateError, leaveLabel, stoppedLabel, personActions, addFormErrors,
   pollJob, linkOutcome, clockLinkUrl, jobKindText, personFilter, isDryRunResult, storeLeadOnlyText, homeAction
@@ -228,13 +228,16 @@ export async function openAddFlow(env) {
   const { ctx, mod, viewer, org } = env;
   const today = ymd(new Date());
   const val = { name: '', hire_date: today, phone: '', title: '', brand: '', unit: '', dept: '' };
+  // 店長新增：單位固定是自己的單位 → 職稱依該單位過濾（單位限定職稱，例如中央工廠只有計時／正職／廠長／研發總監）
+  const myUnitObj = (org.units || []).find((u) => u.code === env.myUnit);
+  const myTitles = myUnitObj ? titlesForUnit(org, myUnitObj) : (org.titles || []).filter((t) => t.parent === 'store');
   for (;;) {
     const unitPart = viewer.isHq
       ? orgFieldsHtml('ad')
       : `<div class="field"><span class="field-label">單位</span><div data-role="fixed-unit"><b>${esc(env.myUnitName || '你的單位')}</b>
           <span class="text-muted">（固定，不能選）</span></div></div>
         <div class="field"><label class="field-label" for="ad-title">職稱</label><select class="input" id="ad-title">
-          <option value="">請選擇</option>${(org.titles || []).filter((t) => t.parent === 'store').map((t) => `<option value="${esc(t.code)}"${t.code === val.title ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>`;
+          <option value="">請選擇</option>${myTitles.map((t) => `<option value="${esc(t.code)}"${t.code === val.title ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>`;
     const body = domOf(`<div class="field"><label class="field-label" for="ad-name">姓名（全名）</label><input class="input" id="ad-name" maxlength="20" value="${esc(val.name)}"></div>
       ${unitPart}
       <div class="form-grid-2">

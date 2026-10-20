@@ -138,11 +138,11 @@ const BIG = [
   ['DZY003', '李計時', 'mzt-gf', '', 'pt', 'active', '2026-02-02'],
   ['DZY004', '店長二', 'mzt-js', '', 'sm', 'active', '2026-01-06'],
   ['DZY005', '別店計時', 'mzt-js', '', 'pt', 'active', '2026-02-03'],
-  ['DZY006', '央廚店長', 'ck', '', 'sm', 'active', '2026-01-07'],
+  ['DZY006', '央廚廠長', 'ck', '', 'fm', 'active', '2026-01-07'],   // 2026-10-20 起央廚不設店長，廠長＝店長同等
   ['DZY007', '央廚計時', 'ck', '', 'pt', 'active', '2026-02-04'],
   ['DZY008', '同店另一店長', 'mzt-gf', '', 'sm', 'active', '2026-01-08'],
   ['DZY010', '墨竹亭總監', 'mzt-hq', '', 'odir', 'active', '2026-01-09'],
-  ['DZY011', '墨竹亭區經理', 'mzt-hq', '', 'oam', 'active', '2026-01-10'],
+  ['DZY011', '墨竹亭區經理', 'mzt-hq', '', 'oam', 'active', '2026-01-10'],   // 品牌辦公室區經理 oam 2026-10-20 停用（舊資料）
   ['DZY012', '墨竹亭督導', 'mzt-hq', '', 'osv', 'active', '2026-01-11'],
   ['DZY013', '墨竹亭行政', 'mzt-hq', '', 'ofs', 'active', '2026-01-12'],
   ['DZY014', '小辛辣總監', 'mala-hq', '', 'odir', 'active', '2026-01-13'],
@@ -350,7 +350,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(subs('DZY012').length === 0, '3 督導名單空');
   ok(subs('DZY013').length === 0, '3 行政名單空');
   const dir = subs('DZY010');
-  ok(eq(dir, ['DZY011', 'DZY012', 'DZY013']), '3 總監核同辦公室的區經理、督導、行政（不含自己、不含別人）', dir);
+  ok(eq(dir, ['DZY012', 'DZY013']), '3 總監核同辦公室的督導、行政（不含自己、不含別人；停用的區經理 oam 不列）', dir);
   ok(!has(dir, 'DZY014') && !has(dir, 'DZY015'), '3 ★總監不能核別品牌辦公室的人');
   ok(eq(subs('DZY014'), ['DZY015']), '3 另一品牌總監只核自己辦公室的行政', subs('DZY014'));
   // 總部
@@ -393,6 +393,19 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(ap(mk('DZY010', 'mzt-hq', '', 'odir'), mk('DZY013', 'mzt-hq', '', 'ofs')) === true && ap(mk('DZY010', 'mzt-hq', '', 'odir'), mk('DZY015', 'mala-hq', '', 'ofs')) === false, '3 attApproverOf_：總監核本辦公室行政 true、別辦公室 false');
   ok(ap(mk('DZY001', 'mzt-gf', '', 'sm'), mk('DZY001', 'mzt-gf', '', 'sm')) === true && ap(mk('DZY003', 'mzt-gf', '', 'pt'), mk('DZY003', 'mzt-gf', '', 'pt')) === false, '3 attApproverOf_：只有店長核自己，計時核自己 false');
   ok(ap({ emp: 'DZY030', status: 'disabled', unit: 'mzt-gf', title: 'sm' }, mk('DZY003', 'mzt-gf', '', 'pt')) === false, '3 attApproverOf_：核定人已離職 → false');
+  // 2026-10-20 職稱調整（docs/org/spec.md 第 15 節）：區經理 am、中央工廠廠長 fm／研發總監 rdd
+  const am = mk('DZY090', 'mzt-gf', '', 'am'), fm = mk('DZY091', 'ck', '', 'fm'), rdd = mk('DZY092', 'ck', '', 'rdd');
+  ok(need({ unit: 'mzt-gf', title: 'am' }).kind === 'self' && need({ unit: 'ck', title: 'fm' }).kind === 'self' && need({ unit: 'ck', title: 'rdd' }).kind === 'self', '15 attNeedOf_：區經理、廠長、研發總監都要考勤（自己核自己，同店長）');
+  ok(need({ unit: 'ck', title: 'sm' }) === null && need({ unit: 'ck', title: 'am' }) === null && need({ unit: 'mzt-gf', title: 'fm' }) === null && need({ unit: 'mzt-gf', title: 'rdd' }) === null, '15 attNeedOf_：中央工廠店長／區經理、門市廠長／研發總監 → 不合規（null）');
+  ok(ap(am, mk('DZY003', 'mzt-gf', '', 'pt')) && ap(am, mk('DZY002', 'mzt-gf', '', 'ft')) && ap(am, am), '15 區經理核同店計時、正職與自己（同店長）');
+  ok(ap(am, mk('DZY001', 'mzt-gf', '', 'sm')) === false && ap(am, mk('DZY005', 'mzt-js', '', 'pt')) === false, '15 區經理不核同店店長（店長照舊自己核）、不核別店');
+  ok(ap(fm, mk('DZY007', 'ck', '', 'pt')) && ap(fm, fm) && ap(fm, rdd) === false, '15 廠長＝央廚店長：核央廚同仁與自己，不能核研發總監');
+  ok(ap(rdd, mk('DZY007', 'ck', '', 'pt')) && ap(rdd, fm) && ap(rdd, rdd), '15 研發總監核央廚全部（含廠長）與自己');
+  ok(ap(rdd, mk('DZY003', 'mzt-gf', '', 'pt')) === false, '15 研發總監不核門市');
+  ok(ap(mk('DZY006', 'ck', '', 'sm'), mk('DZY007', 'ck', '', 'pt')) === false, '15 切換後還掛中央工廠的店長 → 不能核（要改廠長）');
+  ok(['fm', 'am', 'rdd'].every((t) => app.sb.STORE_ATT_GATE_TITLES.indexOf(t) !== -1 && app.sb.STORE_NO_ATT_TITLES.indexOf(t) === -1), '15 廠長／區經理／研發總監有考勤管理選單、且要打卡（不是責任制）');
+  const tAm = app.sb.storeAttTargets_(am, { admin: true }, [am], org).map((x) => x.emp);
+  ok(eq(tAm, ['DZY090']), '15 兼 admin 的區經理 → 名單含自己（同店長）', tAm);
   // 打卡對照條件
   app.sheets.staff_clock._data.push(['DZY002', 'mztgf', 'MZTGF002B', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
   const idx = (e) => app.sheets.staff_clock._data.findIndex((r, i) => i > 0 && r[0] === e && r[2].indexOf('B') === -1);
@@ -492,7 +505,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // 試點裡有 ck（含 ck 的 store 階梯）
   app.props.STORE_SSO_UNITS = 'ck,mzt-hq';
   ok(eq(app.ident('U:a001').units_managed, ['ck']), '5 admin：辦公室單位不算 store 階梯、ck 算');
-  ok(eq(app.subs('DZY010'), ['DZY011', 'DZY012', 'DZY013']), '5 辦公室在試點時總監名單照常');
+  ok(eq(app.subs('DZY010'), ['DZY012', 'DZY013']), '5 辦公室在試點時總監名單照常（停用的 oam 不列）');
 })();
 
 // ============================================================
@@ -543,16 +556,16 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // 已初始化環境：補預設規則（只補不覆蓋）
   const old = world(BIG, { init: true });
   const mapRows = old.sheets.perm_map._data;
-  const r20 = mapRows.findIndex((r, i) => i > 0 && r[4] === 'store.void');
-  mapRows.splice(r20, 1);                                       // 模擬 2026-10-18 上線時的 19 條
-  ok(old.sb.permLoadTables_().rules.length === 19, '6 模擬正式環境：perm_map 只有 19 條（新預設規則不會自動生效）');
+  const r20 = mapRows.findIndex((r, i) => i > 0 && r[3] === 'sm' && r[4] === 'store.void');
+  mapRows.splice(r20, 1);                                       // 模擬少了店長 store.void 那一條
+  ok(old.sb.permLoadTables_().rules.length === 25, '6 模擬正式環境：perm_map 少一條（新預設規則不會自動生效）');
   ok(eq(old.ident('DZY001').void_units, []), '6 正式環境未補規則前：店長沒有 store.void');
   ok(old.sb.storeopsPermSeed_({ role: 'staff', id: 'u1' }).error === 'no_perm', '6 補規則函式只有 admin');
   const sd = old.sb.storeopsPermSeed_({ role: 'admin', id: 'a001' });
-  ok(sd.ok && eq(sd.added, ['R020']) && old.sheets.perm_map._data.length === 21, '6 補預設規則：只補缺的一條，流水號接在最大號後', sd);
+  ok(sd.ok && eq(sd.added, ['R027']) && old.sheets.perm_map._data.length === 27, '6 補預設規則：只補缺的一條，流水號接在最大號後', sd);
   ok(eq(old.ident('DZY001').void_units, ['mzt-gf']), '6 補完後店長有 store.void');
   ok(eq(old.sb.storeopsPermSeed_({ role: 'admin', id: 'a001' }).added, []), '6 重跑不重複');
-  old.sheets.perm_map._data.find((r, i) => i > 0 && r[4] === 'store.void')[5] = 'FALSE';
+  old.sheets.perm_map._data.find((r, i) => i > 0 && r[3] === 'sm' && r[4] === 'store.void')[5] = 'FALSE';
   ok(eq(old.sb.storeopsPermSeed_({ role: 'admin', id: 'a001' }).added, []) && eq(old.ident('DZY001').void_units, []), '6 被人工停用的規則不會被補回（只補不覆蓋）');
 })();
 

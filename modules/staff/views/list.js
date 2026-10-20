@@ -106,7 +106,7 @@ export function mountList(el, ctx) {
     el.innerHTML = `
       <div class="card stack">
         <div class="card-row"><div class="card-title">同仁名單（${staff.length} 位）</div>
-          <span>${isAdmin ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
+          <span>${isAdmin ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
         <div class="card-row"><span class="text-muted">未開通 ${counts.unclaimed || 0}・待確認 ${counts.pending || 0}・已開通 ${counts.active || 0}・已停用 ${counts.disabled || 0}</span></div>
         <div class="form-grid-2">
           <div class="field"><label class="field-label" for="stf-q">搜尋姓名或編號</label><input class="input" id="stf-q" type="search" value="${esc(state.q)}"></div>
@@ -132,6 +132,8 @@ export function mountList(el, ctx) {
     if (isAdmin) {
       el.querySelector('[data-role="org-upgrade"]').addEventListener('click', upgradeFlow);
       el.querySelector('[data-role="org-rollback"]').addEventListener('click', rollbackFlow);
+      el.querySelector('[data-role="org-upgrade-2610"]').addEventListener('click', upgrade2610Flow);
+      el.querySelector('[data-role="org-rollback-2610"]').addEventListener('click', rollback2610Flow);
     }
   }
 
@@ -238,6 +240,68 @@ export function mountList(el, ctx) {
       body: domOf(`<p>組織表還原 ${esc(d.restored)} 列${d.clock_restored ? '，打卡對照也已還原' : ''}；職稱還原 ${esc(d.titles_restored || 0)} 人。</p>
         <p><b>職稱沒還原（之後被改過，沒動）</b></p>${li(d.titles_skipped || [])}
         <p><b>孤兒名單（退回後單位或職稱找不到，只列不改）</b></p>${li(orphans)}`),
+      actions: OK_ONLY
+    });
+    if (alive) load();
+  }
+
+  // 2026-10-20 職稱調整（docs/org/spec.md 第 15 節）：區經理移回門市、中央工廠廠長／研發總監、央廚店長→廠長、權限規則複製
+  const PERM_TEXT = { ok: '', not_inited: '權限設定還沒初始化（初始化時會直接帶預設規則）', header_mismatch: '權限對照表表頭不對' };
+  function upgrade2610Html(d, done) {
+    const orgRows = (d.org || []).map((o) => `${o.kind} ${o.code}　${o.field === 'row' ? '新增一列' : `${o.field}：${o.from || '（空）'} → ${o.to}`}`);
+    const staffRows = (d.staff || []).map((x) => `${x.emp_no} ${x.name}：${x.field === 'p_title' ? '送出待審的職稱' : '職稱'} ${x.from_name || x.from} → ${x.to_name || x.to}`);
+    const perm = d.perm || {};
+    const permRows = (perm.add || []).map((x) => `${x.title}：${x.perm}（複製自 ${x.from_rule || '店長'}）`);
+    const todo = (d.todo || []).map((t) => `${t.emp_no} ${t.name}（${t.unit_name || ''}）：${FLAG_TEXT[t.flag] || t.flag}${t.submitted ? '（送出待審的資料）' : ''}`);
+    const resolved = (d.resolved || []).map((t) => `${t.emp_no} ${t.name}（${t.unit_name || ''}）：不再是「${FLAG_TEXT[t.flag] || t.flag}」`);
+    return `<p>備份：${d.backup === 'exists' ? '已有備份（不覆蓋）' : done ? '已建立' : '會建立'}</p>
+      <p><b>組織表${done ? '已改' : '會改'}（${orgRows.length} 筆）</b></p>${li(orgRows)}
+      <p><b>同仁職稱${done ? '已改' : '會改'}（${staffRows.length} 筆）</b></p>${li(staffRows)}
+      <p><b>權限規則${done ? '已補' : '會補'}（${permRows.length} 條）</b>${perm.status && perm.status !== 'ok' ? `<span class="text-muted">　${esc(PERM_TEXT[perm.status] || perm.status)}</span>` : ''}</p>${li(permRows)}
+      <p><b>新出現的需處理名單（${todo.length} 人，要人資手動改派）</b></p>${li(todo)}
+      <p><b>因此變合規（${resolved.length} 筆）</b></p>${li(resolved)}`;
+  }
+  async function upgrade2610Flow() {
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'orgUpgrade202610', { dryrun: true }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { ctx.ui.toast(r.error || '預覽失敗', 'danger'); return; }
+    const go = await ctx.ui.dialog({ title: '職稱調整：預覽（還沒寫入）', body: domOf(upgrade2610Html(r.data, false)), actions: [CANCEL, { label: '確定調整', value: 'go', variant: 'danger' }] });
+    if (go !== 'go') return;
+    ctx.ui.loading(true);
+    let w;
+    try { w = await ctx.api.call('staff', 'orgUpgrade202610', { dryrun: false }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!w.ok) { ctx.ui.toast(w.error || '調整失敗', 'danger'); return; }
+    if (w.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '職稱調整完成', body: domOf(upgrade2610Html(w.data, true)), actions: OK_ONLY });
+    if (alive) load();
+  }
+  async function rollback2610Flow() {
+    if (!(await ctx.ui.confirm('退回職稱調整？組織表蓋回調整前的備份、中央工廠廠長改回店長、這次補的權限規則停用。若調整後組織表或這些同仁的職稱又被改過，系統會拒絕。'))) return;
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'orgRollback202610', {}); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) {
+      const rd = (r.data && (r.data.diff || r.data.staff_diff ? r.data : r.data.data)) || {};
+      const diff = rd.diff || [];
+      const sdiff = rd.staff_diff || [];
+      if (diff.length || sdiff.length) {
+        const orgTbl = diff.length ? `<p><b>組織表差異</b></p><div class="table-wrap"><table class="table"><thead><tr><th>類別</th><th>代碼</th><th>欄位</th><th>調整後應為</th><th>目前</th></tr></thead><tbody>${diff.map((x) => `<tr><td>${esc(x.kind)}</td><td>${esc(x.code)}</td><td>${esc(x.field)}</td><td>${esc(x.expected)}</td><td>${esc(x.actual)}</td></tr>`).join('')}</tbody></table></div>` : '';
+        const stfTbl = sdiff.length ? `<p><b>同仁職稱差異</b></p><div class="table-wrap"><table class="table"><thead><tr><th>編號</th><th>欄位</th><th>調整後應為</th><th>目前</th></tr></thead><tbody>${sdiff.map((x) => `<tr><td>${esc(x.emp_no)}</td><td>${esc(x.field)}</td><td>${esc(x.expected)}</td><td>${esc(x.actual)}</td></tr>`).join('')}</tbody></table></div>` : '';
+        await ctx.ui.dialog({ title: '退回被拒絕', body: domOf(`<p>${esc(r.error)}</p>${orgTbl}${stfTbl}`), actions: OK_ONLY });
+      } else ctx.ui.toast(r.error || '退回失敗', 'danger');
+      return;
+    }
+    if (r.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    const d = r.data || {};
+    const orphans = (d.orphans || []).map((o) => `${o.emp_no} ${o.name}（單位 ${o.unit || '—'}／職稱 ${o.title || '—'}${o.p_title ? '／送出待審 ' + o.p_title : ''}）`);
+    await ctx.ui.dialog({
+      title: '職稱調整已退回',
+      body: domOf(`<p data-role="rb2610-sum">組織表還原 ${esc(d.restored)} 列；同仁職稱還原 ${esc(d.staff_restored || 0)} 筆；停用權限規則 ${esc((d.perm_disabled || []).length)} 條。</p>
+        <p><b>退回後職稱需重選（只列不改）</b></p>${li(orphans)}`),
       actions: OK_ONLY
     });
     if (alive) load();

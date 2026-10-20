@@ -39,6 +39,18 @@ var STF_EXTRA_CK = 'ck';
 // office（品牌辦公室，自己一套 ofs/oam/osv/odir 職稱）：rank≥2 區經理以上算品牌辦公室主管（規格第 13 節）
 var STF_UNIT_VIEW_MIN_RANK = { store: 3, hq: 2, office: 2 };
 
+// 單位限定職稱（Eason 2026-10-20，docs/org/spec.md 第 15 節）：
+//   STF_UNIT_TITLES：列出的單位「只能」選這些職稱（中央工廠沒有店長、區經理，改設廠長 fm、研發總監 rdd）；
+//   STF_TITLE_UNITS：這些職稱「只能」用在列出的單位（廠長、研發總監只在中央工廠）。
+// 生效條件：某單位清單裡的專屬職稱（STF_TITLE_UNITS 的鍵）至少一個在 org 裡存在且啟用，該單位的限定才生效——
+// 後端先上線、還沒按 orgUpgrade202610 之前，org 沒有 fm／rdd 列，中央工廠店長照舊有效（不會在切換前失去審核／權限）。
+// 判斷一律走 stfTitleFitsUnit_／stfTitleUnitOk_（stfValidateOrg_、名單旗標、審核、考勤、Perms.gs permCompute_ 共用）；
+// 前端由 orgOptions 的 unit_titles／title_units 拿同一份（org-fields.js titlesForUnit）。
+var STF_UNIT_TITLES = { ck: ['pt', 'ft', 'fm', 'rdd'] };
+var STF_TITLE_UNITS = { fm: ['ck'], rdd: ['ck'] };
+// 「店長同等」的同店主管職稱：門市店長 sm、中央工廠廠長 fm（請購請款單位主管、考勤核定、營運系統管理單位都一樣）
+var STF_STORE_HEAD_TITLES = ['sm', 'fm'];
+
 // 忘記密碼（§6.6）
 var STF_RESET_FAIL_LIMIT = 5;
 var STF_RESET_TIMELOCK_SECONDS = 60 * 60;
@@ -227,7 +239,41 @@ function stfBuildOrg_(rows) {
   Object.keys(org.list).forEach(function (k) {
     org.list[k].sort(function (a, b) { return a.order - b.order; });
   });
+  org.unitRules = stfUnitTitleRules_(function (c) { return !!org.title[c] && org.title[c].active; });
   return org;
+}
+
+/**
+ * 生效中的單位限定職稱規則（見 STF_UNIT_TITLES）。titleActive(code)＝這個職稱在 org 裡存在且啟用。
+ * 回 {unit_titles: {單位: [職稱…]}（只含已生效的單位）, title_units: {職稱: [單位…]}}。
+ */
+function stfUnitTitleRules_(titleActive) {
+  var out = { unit_titles: {}, title_units: {} };
+  Object.keys(STF_UNIT_TITLES).forEach(function (u) {
+    var list = STF_UNIT_TITLES[u];
+    if (list.some(function (t) { return !!STF_TITLE_UNITS[t] && titleActive(t); })) out.unit_titles[u] = list.slice();
+  });
+  Object.keys(STF_TITLE_UNITS).forEach(function (t) { out.title_units[t] = STF_TITLE_UNITS[t].slice(); });
+  return out;
+}
+
+/** 單位限定這一關（不看階梯、啟用）：rules＝stfUnitTitleRules_ 的結果；沒有 rules＝不限定 */
+function stfTitleUnitOk_(rules, titleCode, unitCode) {
+  if (!rules) return true;
+  var ul = rules.unit_titles && rules.unit_titles[unitCode];
+  if (ul && ul.indexOf(titleCode) === -1) return false;
+  var tl = rules.title_units && rules.title_units[titleCode];
+  if (tl && tl.indexOf(unitCode) === -1) return false;
+  return true;
+}
+
+/** 職稱能不能用在這個單位：職稱存在、啟用、屬於單位的職稱階梯、且符合單位限定（單位本身是否啟用由呼叫端判斷） */
+function stfTitleFitsUnit_(org, titleCode, unitCode) {
+  var u = org.unit[unitCode];
+  var t = org.title[titleCode];
+  if (!u || !t || !t.active) return false;
+  if (t.parent !== (u.ladder || 'store')) return false;
+  return stfTitleUnitOk_(org.unitRules, titleCode, unitCode);
 }
 
 function stfActiveDeptsOf_(org, unitCode) {
@@ -247,8 +293,7 @@ function stfValidateOrg_(org, v) {
   } else if (v.dept) {
     return '這個單位不用選部門';
   }
-  var t = org.title[v.title];
-  if (!t || !t.active || t.parent !== (u.ladder || 'store')) return '請選擇這個單位適用的職稱';
+  if (!stfTitleFitsUnit_(org, v.title, v.unit)) return '請選擇這個單位適用的職稱';
   return null;
 }
 
@@ -288,7 +333,10 @@ function handleOrgOptions_() {
       brands: pick('brand', []),
       units: pick('unit', ['parent', 'ladder']),
       depts: pick('dept', ['parent']),
-      titles: pick('title', ['parent', 'rank'])
+      titles: pick('title', ['parent', 'rank']),
+      // 單位限定職稱（第 15 節）：前端 org-fields.js titlesForUnit 依這兩份過濾職稱下拉
+      unit_titles: org.unitRules.unit_titles,
+      title_units: org.unitRules.title_units
     }
   };
 }
@@ -347,8 +395,7 @@ function stfFlagDetails_(o, org) {
     if (!u || !u.active) add('unit_inactive', submitted);
     if (dept) { var d = org.dept[dept]; if (!d || !d.active) add('dept_inactive', submitted); }
     if (title && u) {
-      var t = org.title[title];
-      if (!t || !t.active || t.parent !== (u.ladder || 'store')) add('title_ladder', submitted);
+      if (!stfTitleFitsUnit_(org, title, unit)) add('title_ladder', submitted);
     }
     // 管理部（org 有啟用的 mgmt 列才判斷；切換組織之前不出，免得人資照建議改卻選不到管理部）
     var mg = org.dept[STF_MGMT_DEPT];
@@ -820,6 +867,8 @@ function stfManagerScope_(values, org) {
   var title = org.title[stfStr_(values[STF_COL.title])];
   var ladder = unit ? (unit.ladder || 'store') : 'store';
   if (!title || title.rank < (STF_UNIT_VIEW_MIN_RANK[ladder] || 99)) return null;
+  // 單位限定職稱（第 15 節）：例如切換後還掛在中央工廠的店長 → 沒有主管範圍（要改成廠長）
+  if (!stfTitleUnitOk_(org.unitRules, title.code, unitCode)) return null;
   var dept = stfStr_(values[STF_COL.dept]);
   // GPT 複審第 4 條（2026-10-12）：總部單位底下有 active 部門、本人部門卻空白 → 不具資格（往拒絕方向）。
   // 否則 sameDept＝false 會讓他看得到／審得到整個總部所有部門（通訊錄 myUnit 與認領審核共用這裡）。
@@ -863,7 +912,8 @@ function stfLoginGate_(userId) {
  * {kinds, unit, unit_name, brand, dept, rank, titleLadder}。kinds 可能值：
  *   'store' 同店店長（門市 sm）　　'brand' 品牌辦公室區經理以上（rank≥2，帶 brand）
  *   'ops' 營運部主管（dzy-hq、主要部門 ops、部門主管）　'dept' 部門主管（帶 dept）
- *   'exec' 執行長以上（dzy-hq、hq 職級≥3）　　'ck' 中央工廠店長（單位 ck、rank≥3）
+ *   'exec' 執行長以上（dzy-hq、hq 職級≥3）　　'ck' 中央工廠主管（單位 ck、rank≥3：廠長 fm、研發總監 rdd）
+ *   門市 rank≥3（店長 sm、區經理 am，第 15 節）都是 'store'；能審誰再由 stfScopeMeets_ 的「同階梯職級要更高」決定。
  * 審核者本人必須 status active、單位 active、職稱 active 且屬於該單位的職稱階梯；未知 ladder 一律沒有資格。
  * 人資（platform.staff）與 admin 不在這裡判斷（stfReviewer_ 另外放行）。
  */
@@ -874,7 +924,7 @@ function stfReviewScope_(values, org) {
   var title = org.title[stfStr_(values[STF_COL.title])];
   if (!unit || !unit.active || !title || !title.active) return null;
   var ladder = unit.ladder || 'store';
-  if (title.parent !== ladder) return null;
+  if (!stfTitleFitsUnit_(org, title.code, unitCode)) return null;
   var dept = stfStr_(values[STF_COL.dept]);
   var kinds = [];
   if (ladder === 'store') {
@@ -898,17 +948,34 @@ function stfReviewScope_(values, org) {
 }
 
 /** 被審的一個身分（單位、部門、職稱）需要哪一種審核者；回 null＝資料已不合規或沒有上一層 → 只有人資 */
+/**
+ * need＝{title, kind, unit?, brand?, dept?, alt?}；alt＝其他也可以的審核者種類（[{kind, unit?, brand?, dept?}]，任一符合即可；
+ * 「同階梯職級要更高」對每一種都適用）。第 15 節（Eason 2026-10-20）：
+ *   門市店長 sm → 該品牌辦公室，或同店職級更高的人（區經理 am）；門市區經理 am（rank 4）→ 該品牌辦公室
+ *   中央工廠廠長 fm（rank 3；切換前的央廚店長同此）→ 中央工廠職級更高的人（研發總監 rdd）或執行長以上
+ *   中央工廠研發總監 rdd（rank 4）→ 執行長以上
+ */
 function stfReviewNeed_(org, unitCode, dept, titleCode) {
   var u = org.unit[unitCode];
   var t = org.title[titleCode];
   if (!u || !u.active || !t || !t.active) return null;
   var ladder = u.ladder || 'store';
-  if (t.parent !== ladder) return null;
+  if (!stfTitleFitsUnit_(org, titleCode, unitCode)) return null;
   var need = { title: t };
   if (ladder === 'office') { need.kind = 'ops'; return need; }
   if (ladder === 'store') {
-    if (unitCode === 'ck') { need.kind = t.rank >= 3 ? 'exec' : 'ck'; need.unit = 'ck'; return need; }
-    if (t.rank >= 3) { need.kind = 'brand'; need.brand = u.parent; return need; }
+    if (unitCode === 'ck') {
+      need.unit = 'ck';
+      if (t.rank >= 4) { need.kind = 'exec'; return need; }
+      need.kind = 'ck';
+      if (t.rank === 3) need.alt = [{ kind: 'exec' }];
+      return need;
+    }
+    if (t.rank >= 3) {
+      need.kind = 'brand'; need.brand = u.parent;
+      if (t.rank === 3) need.alt = [{ kind: 'store', unit: unitCode }];
+      return need;
+    }
     need.kind = 'store'; need.unit = unitCode; return need;
   }
   if (ladder === 'hq') {
@@ -923,12 +990,16 @@ function stfReviewNeed_(org, unitCode, dept, titleCode) {
 }
 
 function stfScopeMeets_(scope, need) {
-  if (!scope || !need || scope.kinds.indexOf(need.kind) === -1) return false;
-  if ((need.kind === 'store' || need.kind === 'ck') && scope.unit !== need.unit) return false;
-  if (need.kind === 'brand' && scope.brand !== need.brand) return false;
-  if (need.kind === 'dept' && scope.dept !== need.dept) return false;
+  if (!scope || !need) return false;
   // 同一個職稱階梯才比職級：被審的人職級跟審核者同級或更高 → 擋（不同階梯不比；第二期起職稱＝權限，不能核准同級或更高）
   if (scope.titleLadder === need.title.parent && scope.rank <= need.title.rank) return false;
+  return [need].concat(need.alt || []).some(function (o) { return stfScopeMeetsKind_(scope, o); });
+}
+function stfScopeMeetsKind_(scope, o) {
+  if (scope.kinds.indexOf(o.kind) === -1) return false;
+  if ((o.kind === 'store' || o.kind === 'ck') && scope.unit !== o.unit) return false;
+  if (o.kind === 'brand' && scope.brand !== o.brand) return false;
+  if (o.kind === 'dept' && scope.dept !== o.dept) return false;
   return true;
 }
 
@@ -1434,11 +1505,13 @@ var STF_DEFAULT_ORG = [
   ['title', 'pt', '計時同仁', 'store', '', 1, 1, 'TRUE'],
   ['title', 'ft', '正職同仁', 'store', '', 2, 2, 'TRUE'],
   ['title', 'sm', '店長', 'store', '', 3, 3, 'TRUE'],
-  ['title', 'am', '區經理', 'store', '', 4, 4, 'FALSE'],
+  ['title', 'am', '區經理', 'store', '', 4, 4, 'TRUE'],    // 2026-10-20 區經理移回門市（第 15 節）
   ['title', 'sv', '督導', 'store', '', 5, 5, 'FALSE'],
   ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'FALSE'],
+  ['title', 'fm', '廠長', 'store', '', 3, 7, 'TRUE'],      // 中央工廠專用（STF_TITLE_UNITS），店長同等
+  ['title', 'rdd', '研發總監', 'store', '', 4, 8, 'TRUE'], // 中央工廠專用，廠長之上
   ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
-  ['title', 'oam', '區經理', 'office', '', 2, 2, 'TRUE'],
+  ['title', 'oam', '區經理', 'office', '', 2, 2, 'FALSE'],  // 2026-10-20 停用（區經理移回門市）
   ['title', 'osv', '區督導', 'office', '', 2, 3, 'TRUE'],
   ['title', 'odir', '總監', 'office', '', 3, 4, 'TRUE'],
   ['title', 'hs', '部門同仁', 'hq', '', 1, 1, 'TRUE'],
@@ -1686,9 +1759,12 @@ function stfUpgradePlan_() {
       report.push({ code: row[1], kind: row[0], field: 'row', from: '', to: 'added' });
     }
   });
+  // 已套用 2026-10-20 職稱調整（org 有廠長 fm 列）→ 區經理 am 的啟用、品牌辦公室區經理 oam 的停用以那次為準，這裡不再改回去（重跑不倒退）
+  var post2610 = find('title', 'fm') !== -1;
+  var keep2610 = function (kind, code, field) { return post2610 && kind === 'title' && field === 'active' && (code === 'am' || code === 'oam'); };
   STF_UPGRADE_SET.forEach(function (x) {
     var i = find(x[0], x[1]);
-    if (i !== -1) setCell(i, x[2], x[3]);
+    if (i !== -1 && !keep2610(x[0], x[1], x[2])) setCell(i, x[2], x[3]);
   });
   STF_UPGRADE_ADD.forEach(function (row) {
     var i = find(row[0], row[1]);
@@ -1697,7 +1773,7 @@ function stfUpgradePlan_() {
       addRows.push(row.slice());
       report.push({ code: row[1], kind: row[0], field: 'row', from: '', to: 'added' });
     } else {
-      STF_UPGRADE_ADD_FIELDS.forEach(function (f) { setCell(i, f, row[STF_ORG_COL[f]]); });
+      STF_UPGRADE_ADD_FIELDS.forEach(function (f) { if (!keep2610(row[0], row[1], f)) setCell(i, f, row[STF_ORG_COL[f]]); });
     }
   });
   var newOrg = stfBuildOrg_(work);
@@ -1881,6 +1957,27 @@ function stfDiffClockRows_(expectRows, curRows) {
   return diff;
 }
 
+/** 目前 org 與「切換後快照」分頁的差異（以 kind|code 為 key）：[{kind, code, field, expected, actual}] */
+function stfOrgDiffVsSnap_(snapName) {
+  var diff = [];
+  var snap = snapName ? stfSheet_(snapName) : null;
+  var expectRows = snap ? stfSheetValues_(snap, STF_ORG_HEADERS.length).slice(1).map(function (r) { return r.slice(0, 8).map(function (v, i) { return stfNormCell_(v, i); }); }) : [];
+  var key = function (r) { return r[0] + '|' + r[1]; };
+  var curRows = stfOrgSnapshot_();
+  var expMap = {}, curMap = {};
+  expectRows.forEach(function (r) { expMap[key(r)] = r; });
+  curRows.forEach(function (r) { curMap[key(r)] = r; });
+  Object.keys(expMap).forEach(function (k) {
+    var e = expMap[k], c = curMap[k];
+    if (!c) { diff.push({ kind: e[0], code: e[1], field: 'row', expected: 'exists', actual: 'removed' }); return; }
+    STF_ORG_HEADERS.forEach(function (f, i) { if (e[i] !== c[i]) diff.push({ kind: e[0], code: e[1], field: f, expected: e[i], actual: c[i] }); });
+  });
+  Object.keys(curMap).forEach(function (k) {
+    if (!expMap[k]) diff.push({ kind: curMap[k][0], code: curMap[k][1], field: 'row', expected: 'absent', actual: 'added' });
+  });
+  return diff;
+}
+
 /**
  * 回退：org（和 clock_stores）整份蓋回備份。
  * - 寫入前先檢查 state 指向的備份分頁與正式分頁都在，缺一零寫入失敗、保留 state。
@@ -1889,6 +1986,8 @@ function stfDiffClockRows_(expectRows, curRows) {
 function handleOrgRollback_(token) {
   var auth = stfRequireAdmin_(token);
   if (!auth.ok) return auth;
+  // 2026-10-20 職稱調整還沒退回 → 先退那一次（不然這次整表蓋回會把職稱調整一起抹掉、留下半套的同仁職稱與權限規則）
+  if (stf2610GetState_()) return { ok: false, error: '已套用 2026-10-20 職稱調整（中央工廠廠長／研發總監、區經理移回門市），請先按「退回職稱調整」再退回組織' };
   var state = stfGetUpgradeState_();
   if (!state) return { ok: false, error: '找不到升級紀錄，沒有可退回的備份' };
   var bak = stfSheet_(state.org_bak);
@@ -1915,25 +2014,7 @@ function handleOrgRollback_(token) {
     if ((orgBad && !stfSheet_(state.org_snap)) || (clockBad && !(state.clk_snap && stfSheet_(state.clk_snap)))) {
       return { ok: false, error: '找不到切換後快照，無法比對差異；請先確認組織表沒被改過' };
     }
-    if (orgBad) {
-      var diff = [];
-      var snap = stfSheet_(state.org_snap);
-      var expectRows = snap ? stfSheetValues_(snap, STF_ORG_HEADERS.length).slice(1).map(function (r) { return r.slice(0, 8).map(function (v, i) { return stfNormCell_(v, i); }); }) : [];
-      var key = function (r) { return r[0] + '|' + r[1]; };
-      var curRows = stfOrgSnapshot_();
-      var expMap = {}, curMap = {};
-      expectRows.forEach(function (r) { expMap[key(r)] = r; });
-      curRows.forEach(function (r) { curMap[key(r)] = r; });
-      Object.keys(expMap).forEach(function (k) {
-        var e = expMap[k], c = curMap[k];
-        if (!c) { diff.push({ kind: e[0], code: e[1], field: 'row', expected: 'exists', actual: 'removed' }); return; }
-        STF_ORG_HEADERS.forEach(function (f, i) { if (e[i] !== c[i]) diff.push({ kind: e[0], code: e[1], field: f, expected: e[i], actual: c[i] }); });
-      });
-      Object.keys(curMap).forEach(function (k) {
-        if (!expMap[k]) diff.push({ kind: curMap[k][0], code: curMap[k][1], field: 'row', expected: 'absent', actual: 'added' });
-      });
-      out.diff = diff;
-    }
+    if (orgBad) out.diff = stfOrgDiffVsSnap_(state.org_snap);
     if (clockBad) {
       var csnap = state.clk_snap ? stfSheet_(state.clk_snap) : null;
       out.clock_diff = stfDiffClockRows_(csnap ? stfNormClockRows_(stfSheetValues_(csnap, 5)) : [], stfClockSnapshot_());
@@ -1988,4 +2069,312 @@ function handleOrgRollback_(token) {
   });
   stfSetUpgradeState_(null);   // 備份分頁保留；下次升級重新備份
   return { ok: true, data: { restored: restored, clock_restored: clockRestored, titles_restored: titlesRestored, titles_skipped: titlesSkipped, orphans: orphans, backup: state.org_bak } };
+}
+
+// ============================================================
+// 11. 2026-10-20 職稱調整一次性升級／回退（docs/org/spec.md 第 15 節；只有 role admin）
+//   區經理 am 移回門市（啟用）、品牌辦公室區經理 oam 停用、新增中央工廠廠長 fm／研發總監 rdd、
+//   中央工廠的店長（title／送出待審的 p_title）改廠長、perm_map 把店長 sm 的現行規則複製給 am／fm／rdd。
+//   做法比照第 10 節：dryrun:true 預覽、備份分頁、切換後雜湊；回退時 org 或受影響同仁被改過就拒絕。
+// ============================================================
+
+var STF_PROP_ORG_2610 = 'ORG_UPGRADE_202610_STATE';
+var STF_2610_TITLE_SET = [['am', 'active', 'TRUE'], ['oam', 'active', 'FALSE']];   // 既有職稱列只改這一格
+var STF_2610_AM_ROW = ['title', 'am', '區經理', 'store', '', 4, 4, 'TRUE'];          // am 整列不見才補
+var STF_2610_ADD = [
+  ['title', 'fm', '廠長', 'store', '', 3, 7, 'TRUE'],
+  ['title', 'rdd', '研發總監', 'store', '', 4, 8, 'TRUE']
+];
+var STF_2610_STAFF_MAP = { unit: 'ck', from: 'sm', to: 'fm' };   // 中央工廠的店長 → 廠長
+var STF_2610_PERM_FROM = 'sm';
+var STF_2610_PERM_TO = ['am', 'fm', 'rdd'];
+var STF_2610_BAK_HEAD = ['emp_no', 'field', 'from', 'to'];
+
+function stf2610GetState_() {
+  var raw = PropertiesService.getScriptProperties().getProperty(STF_PROP_ORG_2610);
+  if (!raw) return null;
+  try { var o = JSON.parse(raw); return (o && typeof o === 'object' && o.org_bak) ? o : null; } catch (e) { return null; }
+}
+function stf2610SetState_(o) {
+  PropertiesService.getScriptProperties().setProperty(STF_PROP_ORG_2610, o ? JSON.stringify(o) : '');
+}
+
+/** 一次決定三個分頁名（同時間戳＋共用序號，撞名就 _2…） */
+function stf2610PickNames_() {
+  var base = stfStamp_();
+  for (var n = 1; n < 1000; n++) {
+    var suf = n === 1 ? base : base + '_' + n;
+    var names = { org_bak: 'org_bak2610_' + suf, stf_bak: 'stf_bak2610_' + suf, org_snap: 'org_upg2610_' + suf };
+    if (!Object.keys(names).some(function (k) { return stfSheet_(names[k]); })) return names;
+  }
+  throw new Error('備份分頁名稱無法決定');
+}
+
+/** perm_map 現況：{ok:false}＝沒初始化或表頭不對；{ok:true, rows} */
+function stf2610PermTable_() {
+  if (typeof permReadTable_ !== 'function') return { ok: false, status: 'not_inited' };
+  var t = permReadTable_(SpreadsheetApp.getActive(), PERM_SHEET_MAP, PERM_MAP_HEADERS);
+  if (t.missing) return { ok: false, status: 'not_inited' };
+  if (t.mismatch) return { ok: false, status: 'header_mismatch' };
+  return { ok: true, status: 'ok', rows: t.rows };
+}
+
+/** 某同仁物件（unit／title／p_*）的旗標集合 → 'flag|submitted' 字串陣列 */
+function stf2610FlagKeys_(o, org) {
+  return stfFlagDetails_(o, org).map(function (f) { return f.flag + '|' + (f.submitted ? 1 : 0); });
+}
+
+/** 升級計畫（唯讀）：org 要改的格／新增列、同仁職稱改動、perm_map 要補的規則、新出現與消失的名單旗標 */
+function stf2610Plan_() {
+  var work = stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length).map(function (r) { return r.slice(); });
+  var curOrg = stfBuildOrg_(work.map(function (r) { return r.slice(); }));
+  var report = [], cells = [], addRows = [];
+  var find = function (kind, code) {
+    for (var i = 0; i < work.length; i++) if (stfStr_(work[i][STF_ORG_COL.kind]) === kind && stfStr_(work[i][STF_ORG_COL.code]) === code) return i;
+    return -1;
+  };
+  var setCell = function (i, field, to) {
+    var idx = STF_ORG_COL[field];
+    var from = stfNormCell_(work[i][idx], idx);
+    if (from === stfNormCell_(to, idx)) return;
+    report.push({ kind: stfStr_(work[i][STF_ORG_COL.kind]), code: stfStr_(work[i][STF_ORG_COL.code]), field: field, from: from, to: String(to) });
+    work[i][idx] = to;
+    cells.push({ row: i + 2, col: idx + 1, value: to });
+  };
+  var addRow = function (row) {
+    work.push(row.slice());
+    addRows.push(row.slice());
+    report.push({ kind: row[0], code: row[1], field: 'row', from: '', to: 'added' });
+  };
+  if (find('title', 'am') === -1) addRow(STF_2610_AM_ROW);
+  STF_2610_TITLE_SET.forEach(function (x) { var i = find('title', x[0]); if (i !== -1) setCell(i, x[1], x[2]); });
+  STF_2610_ADD.forEach(function (row) {
+    var i = find(row[0], row[1]);
+    if (i === -1) addRow(row);
+    else STF_UPGRADE_ADD_FIELDS.forEach(function (f) { setCell(i, f, row[STF_ORG_COL[f]]); });
+  });
+  var newOrg = stfBuildOrg_(work);
+
+  // 同仁：中央工廠的店長 → 廠長（目前職稱；送出待審的職稱看「送出的單位，沒填就目前單位」）
+  var M = STF_2610_STAFF_MAP;
+  var staff = [], todo = [], resolved = [];
+  var nm = function (o, code) { return o.title[code] ? o.title[code].name : code; };
+  stfAllRows_().forEach(function (r) {
+    var v = r.values;
+    var emp = stfStr_(v[STF_COL.emp_no]), name = stfStr_(v[STF_COL.name]);
+    var o = { status: stfStr_(v[STF_COL.status]), unit: stfStr_(v[STF_COL.unit]), title: stfStr_(v[STF_COL.title]), dept: stfStr_(v[STF_COL.dept]),
+      p_unit: stfStr_(v[STF_COL.p_unit]), p_title: stfStr_(v[STF_COL.p_title]), p_dept: stfStr_(v[STF_COL.p_dept]) };
+    var after = JSON.parse(JSON.stringify(o));
+    if (o.unit === M.unit && o.title === M.from) {
+      after.title = M.to;
+      staff.push({ emp_no: emp, name: name, field: 'title', from: M.from, to: M.to, row: r.row });
+    }
+    if (o.p_title === M.from && (o.p_unit || o.unit) === M.unit) {
+      after.p_title = M.to;
+      staff.push({ emp_no: emp, name: name, field: 'p_title', from: M.from, to: M.to, row: r.row });
+    }
+    // 名單旗標前後比對：新出現的（例如還掛品牌辦公室區經理 oam 的人）列 todo，消失的（例如舊的門市區經理 am 變合規）列 resolved
+    var b = stf2610FlagKeys_(o, curOrg), a = stf2610FlagKeys_(after, newOrg);
+    var unitName = function (k) { var uc = k.split('|')[1] === '1' && o.p_unit ? o.p_unit : o.unit; return newOrg.unit[uc] ? newOrg.unit[uc].name : uc; };
+    a.filter(function (k) { return b.indexOf(k) === -1; }).forEach(function (k) {
+      todo.push({ emp_no: emp, name: name, unit_name: unitName(k), flag: k.split('|')[0], submitted: k.split('|')[1] === '1', title: k.split('|')[1] === '1' ? o.p_title : o.title });
+    });
+    b.filter(function (k) { return a.indexOf(k) === -1; }).forEach(function (k) {
+      resolved.push({ emp_no: emp, name: name, unit_name: unitName(k), flag: k.split('|')[0], submitted: k.split('|')[1] === '1' });
+    });
+  });
+  staff.forEach(function (x) { x.from_name = nm(curOrg, x.from); x.to_name = nm(newOrg, x.to); });
+
+  // perm_map：店長 sm 的現行（active）規則複製給 am／fm／rdd（同一條已有 active 的就不補）
+  var perm = { status: 'ok', add: [] };
+  var pt = stf2610PermTable_();
+  if (!pt.ok) {
+    perm.status = pt.status;
+  } else {
+    var activeKey = {};
+    var srcRules = [];
+    pt.rows.forEach(function (r) {
+      if (!permIsActive_(r[5])) return;
+      var rule = { rule_id: permStr_(r[0]), ladder: permStr_(r[1]), dept: permStr_(r[2]), title: permStr_(r[3]), perm: permStr_(r[4]) };
+      activeKey[[rule.ladder, rule.dept, rule.title, rule.perm].join('|')] = true;
+      if (rule.ladder === 'store' && rule.title === STF_2610_PERM_FROM) srcRules.push(rule);
+    });
+    srcRules.forEach(function (src) {
+      STF_2610_PERM_TO.forEach(function (t) {
+        var k = ['store', src.dept, t, src.perm].join('|');
+        if (activeKey[k]) return;
+        activeKey[k] = true;
+        perm.add.push({ ladder: 'store', dept: src.dept, title: t, perm: src.perm, from_rule: src.rule_id });
+      });
+    });
+  }
+  return { report: report, cells: cells, addRows: addRows, newOrg: newOrg, staff: staff, perm: perm, todo: todo, resolved: resolved };
+}
+
+function handleOrgUpgrade202610_(token, payload) {
+  var auth = stfRequireAdmin_(token);
+  if (!auth.ok) return auth;
+  var problem = stfOrgSheetProblem_();
+  if (problem) return { ok: false, error: problem };
+  var dry = !!(payload && payload.dryrun === true);
+  var state = stf2610GetState_();
+  if (state) {
+    var lost = stfLostBackups_({ org_bak: state.org_bak, stf_bak: state.stf_bak });
+    if (lost.length) return { ok: false, error: '已有職稱調整紀錄，但備份分頁不見了或被清空：' + lost.join('、') + '。為避免之後退回沒有東西可還原，停止升級，請先處理' };
+  }
+  var pt0 = stf2610PermTable_();
+  if (pt0.status === 'header_mismatch') return { ok: false, error: '分頁「perm_map」的表頭與程式不一致，停止升級以免資料錯位' };
+  var plan = stf2610Plan_();
+  var backupExists = !!(state && stfSheet_(state.org_bak));
+  var data = {
+    dryrun: dry,
+    backup: backupExists ? 'exists' : 'created',
+    org: plan.report,
+    staff: plan.staff.map(function (x) { return { emp_no: x.emp_no, name: x.name, field: x.field, from: x.from, to: x.to, from_name: x.from_name, to_name: x.to_name }; }),
+    perm: { status: plan.perm.status, add: plan.perm.add.map(function (x) { return { ladder: x.ladder, dept: x.dept, title: x.title, perm: x.perm, from_rule: x.from_rule }; }) },
+    todo: plan.todo,
+    resolved: plan.resolved
+  };
+  if (dry) return { ok: true, data: data };
+
+  var by = String(auth.user.id);
+  // ① 備份（已有就不覆蓋）：org 整份；受影響同仁「欄位、原值、新值」
+  if (!backupExists) {
+    var nm = stf2610PickNames_();
+    state = { at: stfNowText_(), by: by, org_bak: nm.org_bak, stf_bak: nm.stf_bak, org_snap: nm.org_snap, org_hash: '', perm_added: [] };
+    stfCopyToNewSheet_(stfSheet_(STF_SHEET_ORG), state.org_bak, STF_ORG_HEADERS.length);
+    stfPutBlock_(SpreadsheetApp.getActive().insertSheet(state.stf_bak), [STF_2610_BAK_HEAD], STF_2610_BAK_HEAD.length);
+    stf2610SetState_(state);
+  }
+  var bakSheet = stfSheet_(state.stf_bak) || SpreadsheetApp.getActive().insertSheet(state.stf_bak);
+  var bakVals = stfSheetValues_(bakSheet, STF_2610_BAK_HEAD.length);
+  if (!bakVals.length) bakVals = [STF_2610_BAK_HEAD];
+  var have = {};
+  bakVals.slice(1).forEach(function (r) { have[stfNormEmp_(r[0]) + '|' + stfStr_(r[1])] = true; });
+  var newBak = plan.staff.filter(function (x) { return !have[stfNormEmp_(x.emp_no) + '|' + x.field]; });
+  if (newBak.length) {
+    newBak.forEach(function (x) { bakVals.push([x.emp_no, x.field, x.from, x.to]); });
+    stfPutBlock_(bakSheet, bakVals, STF_2610_BAK_HEAD.length);
+  }
+  // ② org 列（只寫要改的格；新列一次寫完）
+  var osh = stfSheet_(STF_SHEET_ORG);
+  plan.cells.forEach(function (c) { osh.getRange(c.row, c.col, 1, 1).setValue(c.value); });
+  if (plan.addRows.length) stfAppendBlock_(STF_SHEET_ORG, plan.addRows, STF_ORG_HEADERS.length, false);
+  // ③ 同仁職稱（只改「目前仍是原值」的格，只寫那一格；不碰打卡對照：單位沒變，clkAfterConfirm_ 不需要）
+  plan.staff.forEach(function (x) {
+    var cur = stfFindByEmp_(x.emp_no);
+    if (!cur || stfStr_(cur.values[STF_COL[x.field]]) !== x.from) return;
+    stfSheet_(STF_SHEET).getRange(cur.row, STF_COL[x.field] + 1, 1, 1).setValue(x.to);
+    stfLog_(x.emp_no, 'org_upgrade_2610', by, x.field + ':' + x.from + '>' + x.to);
+  });
+  // ④ perm_map 補規則（流水號接最大號；記下編號給退回用）
+  if (plan.perm.status === 'ok' && plan.perm.add.length) {
+    var pt = stf2610PermTable_();
+    var next = permAcNextId_(pt.rows, 'R');
+    var now = permNowText_();
+    var ids = [];
+    var prow = plan.perm.add.map(function (x) { var id = next(); ids.push(id); return [id, x.ladder, x.dept, x.title, x.perm, 'TRUE', now, by]; });
+    var psh = SpreadsheetApp.getActive().getSheetByName(PERM_SHEET_MAP);
+    psh.getRange(psh.getLastRow() + 1, 1, prow.length, PERM_MAP_HEADERS.length).setValues(prow);
+    stfLog_('', 'perm_map_seed', by, 'orgUpgrade202610:' + ids.join(','));
+    state.perm_added = (state.perm_added || []).concat(ids);
+    stf2610SetState_(state);
+  }
+  // ⑤ 後置條件：重算計畫，org／同仁／perm_map 都不該再有差異
+  var after = stf2610Plan_();
+  if (after.cells.length || after.addRows.length || after.staff.length || after.perm.add.length) {
+    return { ok: false, error: '職稱調整後驗證失敗（資料與目標不一致），請檢查後重跑；原始資料可用 orgRollback202610 還原' };
+  }
+  // ⑥ 「升級後」雜湊與快照只在首次成功時建立（重跑不把之後別人的修改洗進基準）
+  if (!state.org_hash) {
+    state.org_hash = stfOrgHash_();
+    var snapSheet = stfSheet_(state.org_snap) || SpreadsheetApp.getActive().insertSheet(state.org_snap);
+    stfPutBlock_(snapSheet, [STF_ORG_HEADERS].concat(stfOrgSnapshot_()), STF_ORG_HEADERS.length);
+    state.upgraded_at = stfNowText_();
+    stf2610SetState_(state);
+  }
+  return { ok: true, data: data };
+}
+
+/**
+ * 退回：org 整份蓋回備份、受影響同仁的 title／p_title 還原、這次補的 perm_map 規則停用（active＝FALSE，與 permMapSave 刪除同做法）。
+ * 寫入前全部先檢查：org 切換後被改過（雜湊不符且不等於備份）、或任一受影響同仁那一格既不是新值也不是原值 → 拒絕，什麼都不改。
+ */
+function handleOrgRollback202610_(token) {
+  var auth = stfRequireAdmin_(token);
+  if (!auth.ok) return auth;
+  var state = stf2610GetState_();
+  if (!state) return { ok: false, error: '找不到職稱調整紀錄，沒有可退回的備份' };
+  var bak = stfSheet_(state.org_bak);
+  var sbak = stfSheet_(state.stf_bak);
+  if (!bak || !sbak) return { ok: false, error: '找不到備份 ' + (!bak ? state.org_bak : state.stf_bak) + '，為避免半套退回，什麼都沒有改' };
+  var osh = stfSheet_(STF_SHEET_ORG);
+  if (!osh || !stfSheet_(STF_SHEET)) return { ok: false, error: '找不到 org 或 staff 分頁' };
+  var emptied = stfLostBackups_({ org_bak: state.org_bak, stf_bak: state.stf_bak });
+  if (emptied.length) return { ok: false, error: '備份分頁被清空了：' + emptied.join('、') + '，為避免半套退回，什麼都沒有改' };
+
+  // ① org：已等於備份＝已完成；否則雜湊不符＝切換後被改過 → 拒絕
+  var bakOrgRows = stfNormOrgRows_(stfSheetValues_(bak, STF_ORG_HEADERS.length));
+  var orgDone = stfSameRows_(stfOrgSnapshot_(), bakOrgRows);
+  var orgBad = !orgDone && !!state.org_hash && stfOrgHash_() !== state.org_hash;
+  // ② 同仁：每一格要嘛還是新值（要還原）、要嘛已是原值（已還原），其他＝被改過 → 拒絕
+  var todoStaff = [], staffDiff = [];
+  stfSheetValues_(sbak, STF_2610_BAK_HEAD.length).slice(1).forEach(function (r) {
+    var emp = stfStr_(r[0]), field = stfStr_(r[1]);
+    if (!emp || !STF_COL.hasOwnProperty(field)) return;
+    var cur = stfFindByEmp_(emp);
+    var now = cur ? stfStr_(cur.values[STF_COL[field]]) : '';
+    if (cur && now === stfStr_(r[3])) todoStaff.push({ row: cur.row, emp: emp, field: field, from: now, to: stfStr_(r[2]) });
+    else if (!cur || now !== stfStr_(r[2])) staffDiff.push({ emp_no: emp, field: field, expected: stfStr_(r[3]), actual: cur ? now : '（找不到這位同仁）' });
+  });
+  if (orgBad || staffDiff.length) {
+    if (orgBad && !stfSheet_(state.org_snap)) return { ok: false, error: '找不到切換後快照，無法比對差異；請先確認組織表沒被改過' };
+    var out = {};
+    if (orgBad) out.diff = stfOrgDiffVsSnap_(state.org_snap);
+    if (staffDiff.length) out.staff_diff = staffDiff;
+    return { ok: false, error: '職稱調整後' + (orgBad ? '組織資料' : '') + (orgBad && staffDiff.length ? '和' : '') + (staffDiff.length ? '同仁職稱' : '') + '又被改過，為避免蓋掉新的修改，拒絕退回；差異已列出', data: out };
+  }
+  var by = String(auth.user.id);
+  // ③ 同仁職稱還原（只寫那一格）
+  todoStaff.forEach(function (x) {
+    stfSheet_(STF_SHEET).getRange(x.row, STF_COL[x.field] + 1, 1, 1).setValue(x.to);
+    stfLog_(x.emp, 'org_rollback_2610', by, x.field + ':' + x.from + '>' + x.to);
+  });
+  // ④ org 整份蓋回（已等於備份就略過）
+  var bakVals = stfSheetValues_(bak, STF_ORG_HEADERS.length);
+  var restored = orgDone ? bakVals.length - 1 : stfPutBlock_(osh, bakVals, STF_ORG_HEADERS.length) - 1;
+  // ⑤ 這次補的 perm_map 規則停用（找不到或已停用的略過）
+  var permOff = [];
+  var ids = state.perm_added || [];
+  if (ids.length) {
+    var pt = stf2610PermTable_();
+    if (pt.ok) {
+      var psh = SpreadsheetApp.getActive().getSheetByName(PERM_SHEET_MAP);
+      var now = permNowText_();
+      pt.rows.forEach(function (r, i) {
+        if (ids.indexOf(permStr_(r[0])) === -1 || !permIsActive_(r[5])) return;
+        psh.getRange(i + 2, 6).setValue('FALSE');
+        psh.getRange(i + 2, 7, 1, 2).setValues([[now, by]]);
+        permOff.push(permStr_(r[0]));
+      });
+      if (permOff.length) stfLog_('', 'perm_map_save', by, 'orgRollback202610:' + permOff.map(function (x) { return '-' + x; }).join(';'));
+    }
+  }
+  // ⑥ 退回後職稱不合規的人（切換後才被設成廠長／研發總監、或門市區經理）：只列不改
+  var org = stfReadOrg_();
+  var orphans = [];
+  stfAllRows_().forEach(function (r) {
+    var v = r.values;
+    if (stfStr_(v[STF_COL.status]) === 'disabled') return;
+    var t = stfStr_(v[STF_COL.title]), p = stfStr_(v[STF_COL.p_title]);
+    var watch = ['am', 'fm', 'rdd'];
+    if (watch.indexOf(t) === -1 && watch.indexOf(p) === -1) return;
+    var fl = stfFlagDetails_({ status: stfStr_(v[STF_COL.status]), unit: stfStr_(v[STF_COL.unit]), title: t, dept: stfStr_(v[STF_COL.dept]),
+      p_unit: stfStr_(v[STF_COL.p_unit]), p_title: p, p_dept: stfStr_(v[STF_COL.p_dept]) }, org);
+    if (fl.some(function (f) { return f.flag === 'title_ladder'; })) {
+      orphans.push({ emp_no: stfStr_(v[STF_COL.emp_no]), name: stfStr_(v[STF_COL.name]), unit: stfStr_(v[STF_COL.unit]), title: t, p_title: p });
+    }
+  });
+  stf2610SetState_(null);   // 備份分頁保留
+  return { ok: true, data: { restored: restored, staff_restored: todoStaff.length, perm_disabled: permOff, orphans: orphans, backup: state.org_bak } };
 }

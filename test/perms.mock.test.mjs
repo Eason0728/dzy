@@ -113,9 +113,10 @@ const has = (res, p) => res.perms.indexOf(p) !== -1;
 // ===== T1-1 =====
 ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write']), 'PERM_GRANTABLE 與契約一致（含營運系統新增的 store.void、att.extra，薪酬系統 payroll.write）');
 ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write']), 'PERM_LOCKED 與契約一致（五碼，2026-10-19 加薪酬系統）');
-ok(r0.ok === true && r0.rules_seeded === 20 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋20 條規則＋5 筆對照', r0);
+ok(r0.ok === true && r0.rules_seeded === 26 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋26 條規則＋5 筆對照（2026-10-20 加 am／fm／rdd 六條）', r0);
 ok(eq(r0.created, ['perm_map', 'perm_ex', 'perm_store_map', 'perm_audit']), '四張分頁都建出來', r0.created);
-ok(RULES.length === 20 && RULES[0].rule_id === 'R001' && RULES[19].rule_id === 'R020' && RULES[19].perm === 'store.void', '規則編號 R001..R020（R020＝店長 store.void）', [RULES[0], RULES[19]]);
+ok(RULES.length === 26 && RULES[0].rule_id === 'R001' && RULES[19].rule_id === 'R020' && RULES[19].perm === 'store.void', '規則編號 R001..R026（R020＝店長 store.void，既有編號不變）', [RULES[0], RULES[19]]);
+ok(['am', 'fm', 'rdd'].every((t) => ['audit.read.own', 'store.void'].every((p) => RULES.slice(20).some((r) => r.ladder === 'store' && r.title === t && r.perm === p && r.dept === ''))), '第 21–26 條：am／fm／rdd 與店長同一套（audit.read.own、store.void）', RULES.slice(20));
 ok(eq(tables.storeMap, STORE_MAP), '店別對照 5 筆讀回一致', tables.storeMap);
 ok(tables.inited === true && tables.exs.length === 0, 'permLoadTables_ inited，例外為空');
 ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|cause|seen', 'perm_audit 表頭正確');
@@ -126,7 +127,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
 {
   const again = dbInit.sb.permInit_({ role: 'admin', id: 'boss' });
   ok(again.ok && again.rules_seeded === 0 && again.stores_seeded === 0 && again.created.length === 0, '重跑不重複建、不重複寫', again);
-  ok(dbInit.sheets.perm_map._data.length === 21 && dbInit.sheets.perm_store_map._data.length === 6, '重跑後列數不變（20+表頭、5+表頭）');
+  ok(dbInit.sheets.perm_map._data.length === 27 && dbInit.sheets.perm_store_map._data.length === 6, '重跑後列數不變（26+表頭、5+表頭）');
 }
 {
   const d = load({});
@@ -148,7 +149,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
   d.sheets.perm_map._data.push(['R020', 'store', '', 'ft', 'dorm.read', 'FALSE', '', '']);
   d.sheets.perm_ex._data.push(['X001', 'dzy001', 'dorm.read', 'ADD', new Date(Date.UTC(2026, 9, 31, 15, 59, 59)), 'x', true, '', '', '', '']);
   const t = d.sb.permLoadTables_();
-  ok(t.rules.length === 20, 'permLoadTables_ 只取 active=TRUE 的規則', t.rules.length);
+  ok(t.rules.length === 26, 'permLoadTables_ 只取 active=TRUE 的規則', t.rules.length);
   ok(t.exs.length === 1 && t.exs[0].emp_no === 'DZY001' && t.exs[0].mode === 'add' && t.exs[0].until === '2026-10-31', '例外：布林 TRUE、Date 物件正規化、大小寫', t.exs[0]);
 }
 {

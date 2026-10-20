@@ -25,6 +25,12 @@ var STORE_LOCK_WAIT_MS = 10000;
 
 // 責任制職稱（spec §12）：不打卡、不列入任何人的可核名單；仍可以當核定人
 var STORE_NO_ATT_TITLES = ['odir', 'hm', 'ceo', 'gm', 'chair'];
+// 門市／中央工廠「核自己＋核同店計時正職」的職稱（spec §12＋docs/org/spec.md 第 15 節）：店長 sm、廠長 fm、區經理 am、研發總監 rdd
+var STORE_ATT_HEAD_TITLES = ['sm', 'fm', 'am', 'rdd'];
+// 另外可以核「同單位、職級較低的主管」的職稱：研發總監核中央工廠廠長
+var STORE_ATT_OVER_HEAD_TITLES = ['rdd'];
+// 考勤管理選單（platform.att）：上面那些＋責任制職稱
+var STORE_ATT_GATE_TITLES = ['sm', 'fm', 'am', 'rdd', 'odir', 'hm', 'ceo', 'gm', 'chair'];
 // 人資主管（不是 admin）可以設個別例外的兩個權限碼（spec §13.1）
 var STORE_HR_GRANTABLE = ['store.void', 'att.extra'];
 var STORE_PERM_VOID = 'store.void';
@@ -90,14 +96,15 @@ function storeOrgOf_(p, org) {
   var t = org.title[stfStr_(p.title)];
   if (!u || !u.active || !t || !t.active) return null;
   var ladder = u.ladder || 'store';
-  if (t.parent !== ladder) return null;
+  if (!stfTitleFitsUnit_(org, stfStr_(p.title), stfStr_(p.unit))) return null;   // 含單位限定職稱（中央工廠沒有店長）
   return { unit: u, title: t, ladder: ladder };
 }
 
 /**
  * 被核者需要什麼樣的核定人（spec §12 表格）。回 null＝不考勤（責任制職稱、資料不合規）。
  * 回 {kind, unit?, dept?}：
- *   'self'   門市／央廚店長（自己核自己）　　'store' 門市／央廚計時、正職（同店店長）
+ *   'self'   門市店長／區經理、中央工廠廠長／研發總監（自己核自己；廠長另可由研發總監核）
+ *   'store'  門市／央廚計時、正職（同店店長、區經理；中央工廠為廠長、研發總監）
  *   'office' 品牌辦公室行政／督導／區經理（同辦公室總監）
  *   'dept'   總部部門同仁（同主要部門的部門主管）　'mgmt' 管理部同仁（執行長以上）
  * target＝{unit, dept, title}。
@@ -109,7 +116,7 @@ function attNeedOf_(target, org) {
   if (STORE_NO_ATT_TITLES.indexOf(title) !== -1) return null;
   var unit = stfStr_(target.unit);
   if (o.ladder === 'store') {
-    if (title === 'sm') return { kind: 'self', unit: unit };
+    if (STORE_ATT_HEAD_TITLES.indexOf(title) !== -1) return { kind: 'self', unit: unit, rank: o.title.rank };
     if (title === 'pt' || title === 'ft') return { kind: 'store', unit: unit };
     return null;
   }
@@ -141,9 +148,13 @@ function attApproverOf_(approver, target, org) {
   if (!ao) return false;
   var title = stfStr_(approver.title);
   var sameMan = stfStr_(approver.emp) !== '' && stfStr_(approver.emp) === stfStr_(target.emp);
-  if (need.kind === 'self') return sameMan && title === 'sm' && ao.ladder === 'store';
+  if (need.kind === 'self') {
+    if (sameMan) return STORE_ATT_HEAD_TITLES.indexOf(title) !== -1 && ao.ladder === 'store';
+    // 研發總監核同單位職級較低的主管（中央工廠廠長）
+    return STORE_ATT_OVER_HEAD_TITLES.indexOf(title) !== -1 && ao.ladder === 'store' && stfStr_(approver.unit) === need.unit && ao.title.rank > need.rank;
+  }
   if (sameMan) return false;
-  if (need.kind === 'store') return ao.ladder === 'store' && title === 'sm' && stfStr_(approver.unit) === need.unit;
+  if (need.kind === 'store') return ao.ladder === 'store' && STORE_ATT_HEAD_TITLES.indexOf(title) !== -1 && stfStr_(approver.unit) === need.unit;
   if (need.kind === 'office') return ao.ladder === 'office' && title === 'odir' && stfStr_(approver.unit) === need.unit;
   if (need.kind === 'dept') return ao.ladder === 'hq' && title === 'hm' && stfStr_(approver.dept) === need.dept;
   if (need.kind === 'mgmt') return ao.ladder === 'hq' && (title === 'ceo' || title === 'gm' || title === 'chair');
@@ -217,8 +228,8 @@ function storeAttTargets_(me, flags, people, org, home) {
     if (!t.orphan && !attNeedOf_(t, org)) return;
     var notSelf = !(stfStr_(me.emp) && stfStr_(me.emp) === stfStr_(t.emp));
     var ok = false;
-    // 店長核自己：本人是店長（title sm）且要考勤（上面 attNeedOf_ 已判定）時，admin／人資主管名單仍含自己
-    if (flags.admin || flags.hrHead) ok = notSelf || stfStr_(me.title) === 'sm';
+    // 店長核自己：本人是店長同等職稱（STORE_ATT_HEAD_TITLES）且要考勤（上面 attNeedOf_ 已判定）時，admin／人資主管名單仍含自己
+    if (flags.admin || flags.hrHead) ok = notSelf || STORE_ATT_HEAD_TITLES.indexOf(stfStr_(me.title)) !== -1;
     else if (t.orphan) ok = false;
     else {
       ok = attApproverOf_(me, t, org);
@@ -375,7 +386,7 @@ function storeIdent_(sub) {
     managed = storeStoreUnits_(org, pilot);
     voidUnits = managed.slice();
   } else {
-    if (valid && p.title === 'sm' && valid.ladder === 'store' && pilot.indexOf(p.unit) !== -1) managed = [p.unit];
+    if (valid && STORE_ATT_HEAD_TITLES.indexOf(p.title) !== -1 && valid.ladder === 'store' && pilot.indexOf(p.unit) !== -1) managed = [p.unit];
     if (valid && perms.indexOf(STORE_PERM_VOID) !== -1 && pilot.indexOf(p.unit) !== -1) voidUnits = [p.unit];
   }
 
@@ -475,14 +486,14 @@ function handleSvcStoreRoster_(payload) {
 
 /**
  * 總開關（STORE_SSO_UNITS）空 → 一律 false（考勤管理選單不顯示）。
- * 否則：在職且（職稱 sm／odir／hm／ceo／gm／chair、或人資主管、或有 att.extra）→ true。
+ * 否則：在職且（職稱 STORE_ATT_GATE_TITLES：sm／fm／am／rdd／odir／hm／ceo／gm／chair、或人資主管、或有 att.extra）→ true。
  * admin 本來就是 '*'，不在這裡判斷。values＝staff 分頁一列。
  */
 function storeAttGate_(values) {
   if (!storePilotUnits_().length) return false;
   if (!values || stfStr_(values[STF_COL.status]) !== 'active') return false;
   var p = { status: 'active', dept: stfStr_(values[STF_COL.dept]), title: stfStr_(values[STF_COL.title]) };
-  if (['sm', 'odir', 'hm', 'ceo', 'gm', 'chair'].indexOf(p.title) !== -1) return true;
+  if (STORE_ATT_GATE_TITLES.indexOf(p.title) !== -1) return true;
   if (stfIsHrHead_(p)) return true;
   return storeHasAttExtra_(values);
 }

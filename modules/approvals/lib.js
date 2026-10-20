@@ -15,10 +15,11 @@ export const TYPE_LABEL = { purchase: '請購', expense: '請款', personnel: '�
 export const KIND_LABEL = { leave: '離職', transfer: '調職', raise: '調薪' };
 export const CATEGORY = { repair: '設備維修', food: '食材臨時採購', misc: '雜支', transport: '交通', supplies: '文具耗材', other: '其他' };
 export const DEPT_LABEL = { purchase: '採購部', fin: '財務部', hr: '人資部' };
-export const ROLE_LABEL = { head: '單位主管', brand_dir: '品牌總監', ceo: '執行長', gm: '總經理', chair: '董事長', direct: '直屬主管', self_sign: '本人簽名' };
+// brand_dir：品牌辦公室總監；中央工廠是研發總監（docs/org/spec.md 第 15 節）。head：門市店長、中央工廠廠長
+export const ROLE_LABEL = { head: '單位主管', brand_dir: '品牌總監／研發總監', ceo: '執行長', gm: '總經理', chair: '董事長', direct: '直屬主管', self_sign: '本人簽名' };
 /** 權限表可選的權限人（由低到高，spec §2） */
 export const THR_ROLES = ['head', 'brand_dir', 'ceo', 'gm', 'chair'];
-export const THR_ROLE_STORE_LABEL = { head: '店長', brand_dir: '品牌總監', ceo: '執行長', gm: '總經理', chair: '董事長' };
+export const THR_ROLE_STORE_LABEL = { head: '店長／廠長', brand_dir: '品牌總監／研發總監', ceo: '執行長', gm: '總經理', chair: '董事長' };
 export const THR_ROLE_HQ_LABEL = { head: '部門主管', brand_dir: '品牌總監', ceo: '執行長', gm: '總經理', chair: '董事長' };
 
 /** status → [中文, tag 色 class] */
