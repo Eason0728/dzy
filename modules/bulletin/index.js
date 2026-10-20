@@ -2,7 +2,8 @@
  * modules/bulletin/index.js — 公告專區：把電子佈告欄整頁嵌進內容區（iframe），並自動登入。
  *
  * 分頁（2026-10-17）：
- *   board  電子佈告欄  → ?embed=dzy            （同仁本人登入，入場券 aud＝bulletin）
+ *   board  公告        → ?embed=dzy            （同仁本人登入，入場券 aud＝bulletin）
+ *   hist   歷史區      → 同一頁，不重新載入，只 postMessage {type:'dzy-bulletin-nav',v:1,p} 叫佈告欄切換（2026-10-20，見 nav.js）
  *   manage 公告管理    → ?embed=dzy&view=posts （佈告欄管理憑證，入場券 aud＝bulletin-admin，要 platform.bulletin）
  *   new    新增公告    → ?embed=dzy&view=new   （同上）
  *
@@ -14,16 +15,18 @@
 'use strict';
 
 import { BACKENDS } from '../../platform/config.js';
+import { isBoardTab, navMessage } from './nav.js';
 
 const BULLETIN_ORIGIN = BACKENDS.bulletin;
 const LOAD_TIMEOUT_MS = 15000;
 const VIEWS = {
   board: { src: '/?embed=dzy', aud: 'bulletin', tip: '同仁帳號會自動登入佈告欄；系統帳號或還沒對上同仁編號的，請選名字登入' },
+  hist: { src: '/?embed=dzy', aud: 'bulletin', tip: '已下架的舊公告，只供查閱、不用再簽名' },
   manage: { src: '/?embed=dzy&view=posts', aud: 'bulletin-admin', tip: '管理公告：上下架、置頂、看誰還沒簽名' },
   new: { src: '/?embed=dzy&view=new', aud: 'bulletin-admin', tip: '新增公告：可附 Word／PDF／Excel，同仁只能線上看' }
 };
 
-let state = null;   // { el, ctx, frame, tip, view, busy, down, timer }
+let state = null;   // { el, ctx, frame, tip, view, src, ready, busy, down, timer }
 
 function clearDown() {
   if (!state) return;
@@ -42,18 +45,28 @@ function showDown() {
   state.down = n;
 }
 
+/** 叫佈告欄切到目前的公告／歷史區（只在公告、歷史區這兩個分頁；佈告欄舊版會忽略） */
+function sendNav() {
+  if (!state || !state.ready || !isBoardTab(state.view) || !state.frame.contentWindow) return;
+  state.frame.contentWindow.postMessage(navMessage(state.view), BULLETIN_ORIGIN);
+}
+
 function render(viewId) {
   const v = VIEWS[viewId] || VIEWS.board;
   state.view = VIEWS[viewId] ? viewId : 'board';
   state.tip.textContent = v.tip;
+  // 公告 ↔ 歷史區：同一頁，不重新載入（免得重新登入），送訊息切換就好
+  if (state.src === v.src && state.ready) { sendNav(); return; }
   clearDown();
+  state.src = v.src;
+  state.ready = false;
   state.timer = setTimeout(showDown, LOAD_TIMEOUT_MS); // 佈告欄頁載好會送 dzyb-sso-ready；逾時沒收到就提示
   state.frame.src = BULLETIN_ORIGIN + v.src;
 }
 
 async function onMessage(e) {
   if (!state || e.origin !== BULLETIN_ORIGIN || e.source !== state.frame.contentWindow) return;
-  if (e.data && e.data.type === 'dzyb-sso-ready') clearDown(); // 佈告欄有回應＝連得上
+  if (e.data && e.data.type === 'dzyb-sso-ready') { clearDown(); state.ready = true; sendNav(); } // 佈告欄有回應＝連得上；先告訴它要停在哪個分頁
   if (!e.data || e.data.type !== 'dzyb-sso-ready' || state.busy) return;
   const frame = state.frame, aud = VIEWS[state.view].aud;
   state.busy = true;
@@ -89,7 +102,7 @@ export default {
     frame.setAttribute('data-role', 'bulletin-frame');
     frame.addEventListener('error', () => showDown());
 
-    state = { el, ctx, frame, tip, view: 'board', busy: false, down: null, timer: null };
+    state = { el, ctx, frame, tip, view: 'board', src: null, ready: false, busy: false, down: null, timer: null };
     window.addEventListener('message', onMessage);
     el.appendChild(bar);
     el.appendChild(frame);

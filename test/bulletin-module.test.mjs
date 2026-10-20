@@ -41,4 +41,59 @@ t('逾時後顯示「暫時連不上」並提到新分頁開啟', () => {
   assert.ok(n && /暫時連不上/.test(n.textContent) && /在新分頁開啟/.test(n.textContent));
 });
 unmount();
+
+// 2026-10-20：公告／歷史區搬到管理系統分頁列
+const { BOARD_TABS, navMessage } = await import('../modules/bulletin/nav.js');
+const manifest = (await import('../modules/bulletin/manifest.js')).default;
+const { validateManifest } = await import('../platform/manifest-check.js');
+t('manifest：前兩個分頁＝BOARD_TABS（公告、歷史區，人人可看）；公告管理／新增公告仍要 platform.bulletin', () => {
+  assert.deepEqual(manifest.views.slice(0, 2).map((v) => [v.id, v.name]), BOARD_TABS);
+  for (const v of manifest.views.slice(0, 2)) assert.deepEqual(v.requires, ['platform.login']);
+  assert.deepEqual(manifest.views.slice(2).map((v) => [v.id, v.requires]), [['manage', ['platform.bulletin']], ['new', ['platform.bulletin']]]);
+  const r = validateManifest(manifest);
+  assert.ok(r.ok !== false && !(r.errors && r.errors.length), JSON.stringify(r));
+});
+t('切換訊息：公告／歷史區照送，其他一律回公告', () => {
+  assert.deepEqual(navMessage('hist'), { type: 'dzy-bulletin-nav', v: 1, p: 'hist' });
+  for (const bad of [null, undefined, 'manage', 'new', '', '__proto__']) assert.equal(navMessage(bad).p, 'board');
+});
+
+const posted = [];
+const fakeWin = { postMessage: (m, o) => posted.push([m, o]) };
+const root2 = new El('div');
+const ctx2 = { viewId: 'hist', api: { call: async () => ({ ok: true, data: { ticket: 'x'.repeat(64) } }) } };
+const un2 = bulletin.mount(root2, ctx2);
+const fr2 = root2.all((n) => n.tagName === 'iframe')[0];
+fr2.contentWindow = fakeWin;
+const src0 = fr2.src;
+t('重新整理停在歷史區：iframe 載的是一般佈告欄頁', () => assert.equal(src0, BACKENDS.bulletin + '/?embed=dzy'));
+t('佈告欄還沒回應前不送切換訊息', () => { bulletin.onRoute({ ...ctx2, viewId: 'hist' }); assert.equal(posted.length, 0); });
+const fire = (data, origin = BACKENDS.bulletin, source = fakeWin) => winListeners.message({ data, origin, source });
+await fire({ type: 'dzyb-sso-ready' }, 'https://evil.example');
+await fire({ type: 'dzyb-sso-ready' }, BACKENDS.bulletin, {});
+t('別的來源／別的視窗說 ready 一律不理', () => assert.equal(posted.length, 0));
+await fire({ type: 'dzyb-sso-ready' });
+t('佈告欄 ready → 先送「切到歷史區」再送入場券，targetOrigin 寫死', () => {
+  assert.deepEqual(posted[0], [{ type: 'dzy-bulletin-nav', v: 1, p: 'hist' }, BACKENDS.bulletin]);
+  assert.equal(posted[1][0].type, 'dzy-sso');
+  assert.equal(posted[1][1], BACKENDS.bulletin);
+});
+posted.length = 0;
+bulletin.onRoute({ ...ctx2, viewId: 'board' });
+t('歷史區 → 公告：不重新載入 iframe，只送切換訊息', () => {
+  assert.equal(fr2.src, src0);
+  assert.deepEqual(posted, [[{ type: 'dzy-bulletin-nav', v: 1, p: 'board' }, BACKENDS.bulletin]]);
+});
+posted.length = 0;
+bulletin.onRoute({ ...ctx2, viewId: 'manage' });
+t('公告 → 公告管理：換成管理頁、不送切換訊息', () => {
+  assert.equal(fr2.src, BACKENDS.bulletin + '/?embed=dzy&view=posts');
+  assert.equal(posted.length, 0);
+});
+bulletin.onRoute({ ...ctx2, viewId: 'hist' });
+t('公告管理 → 歷史區：重新載入一般頁（等 ready 才送切換）', () => {
+  assert.equal(fr2.src, src0);
+  assert.equal(posted.length, 0);
+});
+un2();
 process.exit(failed ? 1 : 0);

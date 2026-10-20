@@ -16,7 +16,9 @@ export default {
   icon: 'bulletin',
   requires: ['platform.login'],
   views: [
-    { id: 'board', name: '電子佈告欄', requires: ['platform.login'] },
+    // 2026-10-20：佈告欄自己的「📌 公告／🗂 歷史區」切換搬到這一列（nav.js BOARD_TABS，測試比對）
+    { id: 'board', name: '公告', requires: ['platform.login'] },
+    { id: 'hist', name: '歷史區', requires: ['platform.login'] },
     // 2026-10-17：公告管理權限（同仁名單勾選＝platform.bulletin；admin 本來就有）
     { id: 'manage', name: '公告管理', requires: ['platform.bulletin'] },
     { id: 'new', name: '新增公告', requires: ['platform.bulletin'] }
