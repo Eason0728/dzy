@@ -45,6 +45,7 @@ import { loadManifests } from './registry.js';
 import { DEPARTMENTS } from './config.js';
 import { reportManifest } from './manifest-check.js';
 import { render as renderLogin } from './views/login.js';
+import { sanitizeTabs, pickDynamicView } from './tabs.js';
 
 /** spec §4.6：badge() 逾時上限 5 秒，逾時視同 null（不得讓首頁壞掉）。 */
 const BADGE_TIMEOUT_MS = 5000;
@@ -78,6 +79,8 @@ let currentMountUnmount = null;
 /** 目前掛載模組拿到的那個 ctx 物件（spec §4.7）——同模組內換分頁／params 改變時，
  *  要原地更新這個物件本身的 viewId／params，不能換一個新物件（模組可能已經存起來）。 */
 let currentCtx = null;
+/** 動態分頁（platform/tabs.js）：模組 id → 該模組最近一次交來的分頁 */
+const dynTabs = {};
 
 // ============================================================
 // 小工具：DOM 建構（不用 innerHTML 塞結構——需要能被查、能被點的節點一律用
@@ -237,8 +240,18 @@ function buildCtx(manifest, viewId, params) {
     fmt,
     nav: (targetViewId, navParams) => navigateTo(`#/${manifest.id}/${targetViewId}${buildQueryString(navParams)}`),
     viewId,
-    params: params || {}
+    params: params || {},
+    // 動態分頁（2026-10-20）：只有 manifest.dynamicTabs 的模組才有，回傳 true＝已更新
+    ...(manifest.dynamicTabs ? { tabs: (list) => setModuleTabs(manifest.id, list) } : {})
   };
+}
+
+function setModuleTabs(moduleId, list) {
+  const clean = sanitizeTabs(list);
+  if (!clean) return false;
+  dynTabs[moduleId] = clean;
+  if (currentModule && currentModule.id === moduleId) renderViewNav(currentModule);
+  return true;
 }
 
 // ============================================================
@@ -508,6 +521,14 @@ function setNavBadge(moduleId, value) {
 function renderViewNav(manifest) {
   clearChildren(viewNavEl);
   if (!manifest) return;
+  if (manifest.dynamicTabs) {
+    for (const t of dynTabs[manifest.id] || []) {
+      const kids = [el('span', { text: t.name })];
+      if (t.badge) kids.push(el('i', { class: `badge${t.err ? ' err' : ''}`, text: String(t.badge), 'aria-label': `${t.badge} 件待處理` }));
+      viewNavEl.appendChild(el('button', { type: 'button', class: `nav-item${t.id === currentView ? ' is-active' : ''}`, 'data-view': t.id }, kids));
+    }
+    return;
+  }
   const views = manifest.views.filter(isViewPermitted);
   for (const v of views) {
     viewNavEl.appendChild(
@@ -808,8 +829,13 @@ function route() {
     return;
   }
 
-  const view = viewId ? manifest.views.find((v) => v.id === viewId) : manifest.views.find(isViewPermitted);
-  if (!view || !isViewPermitted(view)) {
+  let view = viewId ? manifest.views.find((v) => v.id === viewId) : manifest.views.find(isViewPermitted);
+  if (manifest.dynamicTabs) {
+    // 動態分頁：進得了模組（第一個有權限的 view）就收網址上的分頁 id，內容由模組自己決定
+    const gate = manifest.views.find(isViewPermitted);
+    view = gate ? { id: pickDynamicView(viewId, dynTabs[manifest.id], gate.id) } : null;
+  }
+  if (!view || (!manifest.dynamicTabs && !isViewPermitted(view))) {
     goHomeWithWarning();
     return;
   }

@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import USERS, MockBackend, check, finish, start_server
+from common import SHOTS, USERS, MockBackend, check, finish, start_server
 
 from playwright.sync_api import sync_playwright
 
@@ -126,6 +126,49 @@ def main():
             pl.wait_for_timeout(600)
             check(len(mock.sso_calls) == n0, '來源不是營運系統 iframe 的 ready 不會換券')
             check(len(fr.evaluate("() => window.__got")) == 1, '也沒有多送 sso 訊息')
+
+            # ③b 頁頂分頁（2026-10-20）：營運系統送選單 → 管理系統畫在頁頂、帶數字、回 dzy-store-tabs；點分頁送 dzy-store-go
+            NAV = "(cur) => parent.postMessage({ type: 'dzy-store-nav', v: 1, cur: cur, items: [{ id: 'home', label: '首頁', badge: 0 }, { id: 'duty', label: '出勤核定', badge: 0 }, { id: 'inventory', label: '庫存盤點', badge: 33 }, { id: 'staffperm', label: '本店同仁權限', badge: 0 }, { id: 'BAD', label: '壞的' }] }, '*')"
+            tabs_txt = lambda: pl.locator('[data-role="view-nav"] .nav-item').all_inner_texts()
+            pl.evaluate("() => window.postMessage({ type: 'dzy-store-nav', v: 1, cur: 'home', items: [{ id: 'evil', label: '假的' }] }, '*')")
+            pl.wait_for_timeout(400)
+            check('假的' not in ''.join(tabs_txt()), '頁頂分頁：不是營運系統 iframe 送的選單不理：%s' % tabs_txt())
+            fr.evaluate(NAV, 'home')
+            pl.wait_for_function("() => document.querySelectorAll('[data-role=\"view-nav\"] .nav-item').length === 4")
+            t = [x.replace('\n', '') for x in tabs_txt()]
+            check(t == ['首頁', '出勤核定', '庫存盤點33', '本店同仁權限'], '頁頂分頁＝營運系統送來的選單（壞 id 丟掉）、庫存盤點帶數字 33：%s' % t)
+            check(pl.locator('[data-role="view-nav"] .nav-item.is-active').inner_text() == '首頁' and pl.evaluate('location.hash') == '#/storeops/home', '目前分頁跟著營運系統（首頁），網址 #/storeops/home：%s' % pl.evaluate('location.hash'))
+            got = fr.evaluate("() => window.__got.map(m => m.data)")
+            check({'type': 'dzy-store-tabs', 'v': 1} in got, '收到選單後回 {dzy-store-tabs, v:1}，營運系統才藏自己的選單：%s' % got)
+            n_go = lambda: len([m for m in fr.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go'])
+            pl.locator('[data-role="view-nav"] .nav-item', has_text='庫存盤點').click()
+            pl.wait_for_timeout(300)
+            gos = [m for m in fr.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(gos == [{'type': 'dzy-store-go', 'v': 1, 'id': 'inventory'}] and pl.evaluate('location.hash') == '#/storeops/inventory', '點頁頂「庫存盤點」→ 送 {dzy-store-go, id:inventory}、網址跟著變：%s' % gos)
+            fr.evaluate(NAV, 'inventory')
+            pl.wait_for_timeout(300)
+            fr.evaluate(NAV, 'duty')      # 營運系統裡自己換頁（例如點了首頁待辦）
+            pl.wait_for_function("() => location.hash === '#/storeops/duty'")
+            pl.wait_for_timeout(300)
+            check(pl.locator('[data-role="view-nav"] .nav-item.is-active').inner_text() == '出勤核定' and n_go() == 1, '營運系統自己換頁 → 頁頂亮起「出勤核定」、網址跟著，且不會回送 go（不打轉）')
+            pl.screenshot(path=os.path.join(SHOTS, 'storeops-tabs-1280.png'))
+            # 重新整理停在 #/storeops/duty：營運系統開機回報首頁 → 管理系統叫它切回出勤核定，網址不跳回首頁
+            pl.reload()
+            pl.wait_for_selector('iframe[data-role="store-frame"]')
+            fr = None
+            for _ in range(50):
+                fr = store_frame(pl)
+                if fr:
+                    try:
+                        if fr.evaluate("() => window.__got.length") >= 1:
+                            break
+                    except Exception:
+                        pass
+                pl.wait_for_timeout(100)
+            fr.evaluate(NAV, 'home')
+            pl.wait_for_timeout(500)
+            gos = [m for m in fr.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(gos == [{'type': 'dzy-store-go', 'v': 1, 'id': 'duty'}] and pl.evaluate('location.hash') == '#/storeops/duty', '重新整理在出勤核定：營運系統先回報首頁時，管理系統叫它切回出勤核定、網址不變：%s %s' % (gos, pl.evaluate('location.hash')))
 
             # ④ 登出（卸載）→ iframe 收到 dzy-store-logout：切到首頁前先用 evaluate 掛一個旁路記錄
             pl.evaluate("() => { window.__fromStore = []; window.addEventListener('message', (e) => { if (e.data && e.data.fakeStoreGot) window.__fromStore.push(e.data); }); }")

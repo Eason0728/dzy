@@ -15,6 +15,8 @@ export default {
   icon: 'storeops',
   dept: 'ops',
   requires: ['platform.storeops'],
+  // 頁頂分頁＝營運系統送來的選單（platform/tabs.js）；views 只剩一個當進入權限的門
+  dynamicTabs: true,
   views: [
     { id: 'main', name: '門市營運', requires: ['platform.storeops'] }
   ],

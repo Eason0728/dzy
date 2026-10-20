@@ -10,5 +10,6 @@ export default createEmbed({
   title: '門市營運',
   query: '',
   allowReturn: true,
+  tabs: true,   // 營運系統的選單（依人依店、帶待辦數字）畫在管理系統頁頂，2026-10-20
   tip: '用管理系統帳號自動登入；店長與有權限的同仁會看到對應功能'
 });

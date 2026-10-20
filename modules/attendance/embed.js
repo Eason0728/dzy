@@ -9,6 +9,9 @@
  *   → 向平台換一次性入場券 ssoTicket {aud:'store'}（60 秒）→ postMessage {type:'dzy-store-sso', v:1, ticket}（targetOrigin 寫死）。
  * 管理系統的登入 token 從不交給營運系統。卸載（切走模組、登出）時送 {type:'dzy-store-logout', v:1}。
  *
+ * 頁頂分頁（cfg.tabs，2026-10-20）：營運系統送 {type:'dzy-store-nav', v:1, items:[{id,label,badge,err}], cur} → ctx.tabs() 畫在管理系統頁頂；
+ *   點頁頂分頁（onRoute）→ 送 {type:'dzy-store-go', v:1, id}。每次收到選單都回 {type:'dzy-store-tabs', v:1}，營運系統收到才隱藏自己的選單。
+ *
  * 從營運系統原網址來的「用管理系統帳號登入」：#/storeops?return=<網址>（allowReturn 的模組才處理）
  *   已登入 → 取券 → location.replace(return + '#sso=' + 券)；return 只允許營運系統網址（本機網址僅限管理系統跑在 localhost／127.0.0.1 時），其他一律忽略。
  */
@@ -19,6 +22,16 @@ export const STORE_BASE = STORE_ORIGIN + '/dzy-store/';
 const LOAD_TIMEOUT_MS = 15000;
 const LOGOUT_FLUSH_MS = 150;
 const TICKET_RE = /^[0-9a-f]{64}$/;
+const NAV_ID_RE = /^[a-z][a-z0-9-]{0,30}$/;
+
+/** 營運系統送來的選單 → ctx.tabs 的格式；不合格回 null */
+export function navTabs(d) {
+  if (!d || d.type !== 'dzy-store-nav' || d.v !== 1 || !Array.isArray(d.items) || d.items.length > 20) return null;
+  const tabs = d.items.filter((x) => x && typeof x.id === 'string' && NAV_ID_RE.test(x.id) && typeof x.label === 'string')
+    .map((x) => ({ id: x.id, name: x.label, badge: Number(x.badge) || 0, err: x.err === true }));
+  const cur = typeof d.cur === 'string' && tabs.some((t) => t.id === d.cur) ? d.cur : '';
+  return { tabs, cur };
+}
 
 /** return 參數白名單。回傳可安全導向的網址字串（已去掉原有 # 片段），不合格回 null。 */
 export function safeReturnUrl(raw) {
@@ -40,7 +53,8 @@ export function safeReturnUrl(raw) {
 }
 
 /**
- * @param {{title:string, query:string, allowReturn:boolean}} cfg
+ * @param {{title:string, query:string, allowReturn:boolean, tabs?:boolean}} cfg
+ *   tabs：營運系統的選單畫在管理系統頁頂（manifest 要有 dynamicTabs: true）
  *   query：接在 ?embed=dzy 後面的字串（例 '&only=duty'）
  */
 export function createEmbed(cfg) {
@@ -79,6 +93,7 @@ export function createEmbed(cfg) {
   async function onMessage(e) {
     if (!state || e.origin !== STORE_ORIGIN || !state.frame || e.source !== state.frame.contentWindow) return;
     const d = e.data;
+    if (cfg.tabs && d && d.type === 'dzy-store-nav') { onNav(d); return; }
     if (!d || d.type !== 'dzy-store-ready' || d.v !== 1) return;
     clearDown(); // 營運系統有回應＝連得上
     const frame = state.frame;
@@ -90,6 +105,29 @@ export function createEmbed(cfg) {
       return;
     }
     frame.contentWindow.postMessage({ type: 'dzy-store-sso', v: 1, ticket }, STORE_ORIGIN);
+  }
+
+  /** 營運系統換了頁或選單變了：更新頁頂分頁，網址跟著它（第一次以網址為準，重新整理不會跳回首頁） */
+  function onNav(d) {
+    const n = navTabs(d);
+    if (!n || !state || !state.ctx || typeof state.ctx.tabs !== 'function') return;
+    if (!state.ctx.tabs(n.tabs)) return;
+    // 告訴營運系統「頁頂分頁由管理系統畫了」，它收到才藏自己的選單（任一邊退版都不會變成沒有選單）
+    if (state.frame && state.frame.contentWindow) state.frame.contentWindow.postMessage({ type: 'dzy-store-tabs', v: 1 }, STORE_ORIGIN);
+    const want = state.ctx.viewId;
+    if (!state.synced && n.tabs.length) {
+      state.synced = true;
+      if (want && want !== n.cur && n.tabs.some((t) => t.id === want)) { sendGo(want); return; }
+    }
+    if (!n.cur) return;
+    state.cur = n.cur;
+    if (n.cur !== want) state.ctx.nav(n.cur);
+  }
+
+  function sendGo(id) {
+    if (!state || !state.frame || !state.frame.contentWindow || !NAV_ID_RE.test(id)) return;
+    state.cur = id;
+    state.frame.contentWindow.postMessage({ type: 'dzy-store-go', v: 1, id }, STORE_ORIGIN);
   }
 
   function renderFrame() {
@@ -146,7 +184,7 @@ export function createEmbed(cfg) {
       bar.appendChild(tip);
       bar.appendChild(open);
 
-      state = { el, ctx, frame: null, down: null, timer: null, returning: false, noTicket: null };
+      state = { el, ctx, frame: null, down: null, timer: null, returning: false, noTicket: null, cur: '', synced: false };
       window.addEventListener('message', onMessage);
       el.appendChild(bar);
       enter(ctx);
@@ -165,7 +203,8 @@ export function createEmbed(cfg) {
     onRoute(ctx) {
       if (!state) return;
       state.ctx = ctx;
-      if (cfg.allowReturn && ctx.params && safeReturnUrl(ctx.params.return)) enter(ctx);
+      if (cfg.allowReturn && ctx.params && safeReturnUrl(ctx.params.return)) { enter(ctx); return; }
+      if (cfg.tabs && state.synced && ctx.viewId && ctx.viewId !== state.cur) sendGo(ctx.viewId);
     }
   };
 }

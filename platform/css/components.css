@@ -632,6 +632,10 @@ textarea.input:disabled {
   color: var(--brand);
   border-bottom-color: var(--tab-line);
 }
+/* 動態分頁的待辦數字（門市營運，2026-10-20） */
+[data-role="view-nav"] .nav-item .badge {
+  margin-left: 6px;
+}
 
 /* 內容區：靠左、與頂端頁名對齊（覆蓋 base.css .page 的置中窄欄） */
 .app-main .page {
