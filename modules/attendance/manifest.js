@@ -11,6 +11,7 @@ export default {
   name: '考勤管理',
   desc: '出勤核定、請假加班審核',
   icon: 'attendance',
+  keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（2026-10-20 Eason；登出管理系統時一起卸載）
   dept: 'hr',
   requires: ['platform.att'],
   // 頁頂分頁＝營運系統出勤核定送來的子分頁（核定工時／申請審核…，依人依店、帶待審數字；platform/tabs.js）；views 只剩一個當進入權限的門（2026-10-20）

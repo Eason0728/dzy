@@ -356,7 +356,7 @@ def main():
             sw(ad, 'dorm.write').click()
             sw(ad, 'audit.read.brand').click()
             check('等 3 項' in ad.inner_text('[data-role="bar-msg"]'), '多筆摘要「等 3 項」：%s' % ad.inner_text('[data-role="bar-msg"]'))
-            ad.click('[data-act="revert"]')
+            ad.locator('[data-act="revert"]').dispatch_event('click')   # 「已儲存」提示可能還蓋在還原鈕上（機器忙時更久），直接觸發按鈕
 
             # 搜尋同仁（permWho）
             ad.fill('[data-role="who-input"]', 'DZY901')

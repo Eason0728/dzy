@@ -12,6 +12,7 @@ export default {
   name: '薪酬管理',
   desc: '薪資結算、員工薪資主檔、出勤紀錄表',
   icon: 'payroll',
+  keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（2026-10-20 Eason；登出管理系統時一起卸載）
   dept: 'hr',
   requires: ['payroll.write'],
   // 分頁＝薪酬頁原本的側欄（2026-10-20 Eason：跟「薪酬管理」同一列）；要與 bridge.js PAYROLL_PAGES 一致（test/payroll-module.test.mjs 比對）

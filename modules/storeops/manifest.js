@@ -13,6 +13,7 @@ export default {
   name: '門市營運',
   desc: '貨單、現金收支、調撥、排班',
   icon: 'storeops',
+  keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（2026-10-20 Eason；登出管理系統時一起卸載）
   dept: 'ops',
   requires: ['platform.storeops'],
   // 頁頂分頁＝營運系統送來的選單（platform/tabs.js）；views 只剩一個當進入權限的門

@@ -63,6 +63,11 @@ let pageTitleEl = null;
 let pageSubEl = null;
 let viewNavEl = null;
 let viewContentEl = null;
+/** 保留中的嵌入模組（manifest.keepAlive 毫秒，2026-10-20 Eason：切走保留 30 分鐘、登出管理系統一起登出）：
+ *  每個這種模組掛在自己的容器（keepRootEl 底下），切走時只藏起來、不 unmount，iframe 不會重新載入。 */
+let keepRootEl = null;
+let currentHost = null;
+const parked = new Map();   // moduleId → { host, body, unmount, ctx, timer }
 
 /** registry 載入、驗證過的全部 manifest（不論這個使用者有沒有權限） */
 let allManifests = [];
@@ -238,7 +243,11 @@ function buildCtx(manifest, viewId, params) {
     api: sharedApi,
     ui,
     fmt,
-    nav: (targetViewId, navParams) => navigateTo(`#/${manifest.id}/${targetViewId}${buildQueryString(navParams)}`),
+    // 只有這個模組正在畫面上時才換網址（保留中的模組在背景收到訊息，不可以把使用者拉回去）
+    nav: (targetViewId, navParams) => {
+      if (!currentModule || currentModule.id !== manifest.id) return;
+      navigateTo(`#/${manifest.id}/${targetViewId}${buildQueryString(navParams)}`);
+    },
     viewId,
     params: params || {},
     // 動態分頁（2026-10-20）：只有 manifest.dynamicTabs 的模組才有，回傳 true＝已更新
@@ -409,7 +418,24 @@ async function loadHomeGroup(manifest, isStale) {
 // 生命週期：unmount 前一個模組
 // ============================================================
 
-async function teardownCurrent() {
+async function teardownCurrent(opts) {
+  const destroy = !!(opts && opts.destroy);
+  if (!destroy && currentModule && currentModule.keepAlive > 0 && currentHost) {
+    // 保留：藏起來、計時，時間到才真的卸載
+    const id = currentModule.id;
+    const entry = { host: currentHost, body: currentModuleBody, unmount: currentMountUnmount, ctx: currentCtx, timer: null };
+    entry.host.hidden = true;
+    entry.timer = setTimeout(() => { destroyParked(id); }, currentModule.keepAlive);
+    parked.set(id, entry);
+    currentHost = null;
+    viewContentEl.hidden = false;
+    currentModuleBody = null;
+    currentMountUnmount = null;
+    currentModule = null;
+    currentView = null;
+    currentCtx = null;
+    return;
+  }
   if (currentModuleBody && typeof currentModuleBody.unmount === 'function') {
     try {
       await currentModuleBody.unmount();
@@ -429,6 +455,27 @@ async function teardownCurrent() {
   currentModule = null;
   currentView = null;
   currentCtx = null;
+  if (currentHost) { if (currentHost.parentNode) currentHost.parentNode.removeChild(currentHost); currentHost = null; }
+  if (viewContentEl) viewContentEl.hidden = false;
+}
+
+/** 真的卸載一個保留中的模組（時間到、或登出）：照一般流程呼叫 unmount，再移掉它的容器 */
+async function destroyParked(id) {
+  const e = parked.get(id);
+  if (!e) return;
+  parked.delete(id);
+  clearTimeout(e.timer);
+  if (e.body && typeof e.body.unmount === 'function') {
+    try { await e.body.unmount(); } catch (err) { console.error('[shell] 模組 unmount() 失敗', err); }
+  }
+  if (typeof e.unmount === 'function') {
+    try { await e.unmount(); } catch (err) { console.error('[shell] mount() 回傳的 unmount 函式失敗', err); }
+  }
+  if (e.host.parentNode) e.host.parentNode.removeChild(e.host);
+}
+
+async function destroyAllParked() {
+  for (const id of [...parked.keys()]) await destroyParked(id);
 }
 
 // ============================================================
@@ -661,7 +708,8 @@ function ensureShellDom() {
   viewNavEl = el('div', { class: 'view-tabs', 'data-role': 'view-nav' });
   viewContentEl = el('div', { 'data-role': 'view-content' });
 
-  const pageEl = el('div', { class: 'page' }, [viewContentEl]);
+  keepRootEl = el('div', { 'data-role': 'keep-root' });
+  const pageEl = el('div', { class: 'page' }, [viewContentEl, keepRootEl]);
   const mainEl = el('div', { class: 'app-main' }, [topbarEl, viewNavEl, pageEl]);
   const shellEl = el('div', { class: 'app-shell' }, [navDesktopEl, mainEl]);
 
@@ -694,6 +742,40 @@ async function mountModuleView(manifest, view, params) {
   renderViewNav(manifest);
   clearChildren(viewContentEl);
 
+  // 保留中的模組：直接拿回來顯示，不重新 mount（iframe 不重載、不重新登入）
+  const kept = parked.get(manifest.id);
+  if (kept) {
+    parked.delete(manifest.id);
+    clearTimeout(kept.timer);
+    viewContentEl.hidden = true;
+    kept.host.hidden = false;
+    currentHost = kept.host;
+    currentModuleBody = kept.body;
+    currentMountUnmount = kept.unmount;
+    currentCtx = kept.ctx;
+    // 從左側選單點回來（網址是模組的第一個分頁）→ 停在上次離開的那一頁，網址也改成那一頁
+    let vid = view.id;
+    const first = manifest.views.find(isViewPermitted);
+    if (currentCtx && currentCtx.viewId && first && vid === first.id && currentCtx.viewId !== vid) {
+      vid = currentCtx.viewId;
+      try { window.history.replaceState(null, '', `#/${manifest.id}/${vid}`); } catch (e) { /* 測試環境沒有 history */ }
+      currentView = vid;
+      renderViewNav(manifest);
+    }
+    if (currentCtx) { currentCtx.viewId = vid; currentCtx.params = params || {}; }
+    if (currentModuleBody && typeof currentModuleBody.onRoute === 'function') {
+      try { currentModuleBody.onRoute(currentCtx); } catch (err) { console.error(`[shell] 模組 onRoute() 拋錯：${manifest.id}`, err); }
+    }
+    return;
+  }
+  let mountEl = viewContentEl;
+  if (manifest.keepAlive > 0) {
+    currentHost = el('div', { 'data-keep': manifest.id });
+    keepRootEl.appendChild(currentHost);
+    viewContentEl.hidden = true;
+    mountEl = currentHost;
+  }
+
   const ctx = buildCtx(manifest, view.id, params);
 
   let body;
@@ -713,7 +795,7 @@ async function mountModuleView(manifest, view, params) {
 
   let maybeUnmount;
   try {
-    maybeUnmount = await body.mount(viewContentEl, ctx);
+    maybeUnmount = await body.mount(mountEl, ctx);
   } catch (err) {
     console.error(`[shell] 模組掛載失敗：${manifest.id}`, err);
     goHomeWithWarning();
@@ -891,7 +973,8 @@ function showLogin() {
  */
 async function doLogout(opts) {
   const expired = !!(opts && opts.expired);
-  await teardownCurrent();
+  await teardownCurrent({ destroy: true });
+  await destroyAllParked();   // 保留中的嵌入頁一起卸載（營運系統等會收到登出）
   if (expired) {
     auth.expireLocal();
   } else {

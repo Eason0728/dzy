@@ -14,6 +14,7 @@ export default {
   name: '公告專區',
   desc: '集團公告與簽名回條',
   icon: 'bulletin',
+  keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（2026-10-20 Eason；登出管理系統時一起卸載）
   requires: ['platform.login'],
   views: [
     // 2026-10-20：佈告欄自己的「📌 公告／🗂 歷史區」切換搬到這一列（nav.js BOARD_TABS，測試比對）

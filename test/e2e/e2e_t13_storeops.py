@@ -25,6 +25,7 @@ FAKE_STORE = """<!doctype html><meta charset="utf-8"><title>fake store</title>
 window.__got = [];
 window.addEventListener('message', function (e) {
   window.__got.push({ origin: e.origin, data: e.data });
+  try { console.log('FAKESTORE ' + JSON.stringify(e.data)); } catch (x) {}
   if (window.parent !== window) window.parent.postMessage({ fakeStoreGot: e.data, origin: e.origin }, '*'); // 讓外層在 iframe 被移除後仍看得到
 });
 if (window.parent !== window) window.parent.postMessage({ type: 'dzy-store-ready', v: 1 }, '*');
@@ -170,14 +171,41 @@ def main():
             gos = [m for m in fr.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
             check(gos == [{'type': 'dzy-store-go', 'v': 1, 'id': 'duty'}] and pl.evaluate('location.hash') == '#/storeops/duty', '重新整理在出勤核定：營運系統先回報首頁時，管理系統叫它切回出勤核定、網址不變：%s %s' % (gos, pl.evaluate('location.hash')))
 
-            # ④ 登出（卸載）→ iframe 收到 dzy-store-logout：切到首頁前先用 evaluate 掛一個旁路記錄
-            pl.evaluate("() => { window.__fromStore = []; window.addEventListener('message', (e) => { if (e.data && e.data.fakeStoreGot) window.__fromStore.push(e.data); }); }")
+            # ④ 切走保留 30 分鐘（2026-10-20 Eason）：離開模組不登出、iframe 還在；點回來是同一個頁面（不重載、不重新換券）；
+            #    登出管理系統時，保留中的頁面一起卸載、收到 dzy-store-logout
+            store_log = []
+            pl.on('console', lambda m: store_log.append(m.text) if m.text.startswith('FAKESTORE ') else None)
+            n_sso = len(mock.sso_calls)
+            n_hits = len(store_hits)
             pl.click('[data-role="nav-desktop"] [data-nav="__home__"]')
             pl.wait_for_selector('[data-role="module-card"]')
             pl.wait_for_timeout(500)
-            sent = pl.evaluate("() => window.__fromStore")
-            check(sent == [{'fakeStoreGot': {'type': 'dzy-store-logout', 'v': 1}, 'origin': 'http://127.0.0.1:%d' % PORT}],
-                  '離開模組時 iframe 收到 dzy-store-logout（targetOrigin 寫死營運系統，收得到代表 iframe 還在、訊息送達）：%s' % sent)
+            check(not any('dzy-store-logout' in x for x in store_log), '切走（回首頁）不登出營運系統：%s' % store_log)
+            check(pl.locator('[data-keep="storeops"] iframe[data-role="store-frame"]').count() == 1 and not pl.locator('[data-keep="storeops"]').is_visible(),
+                  '切走後營運系統的頁面還在、只是藏起來')
+            check(pl.locator('[data-role="view-nav"] .nav-item').count() == 0, '首頁不顯示門市營運的頁頂分頁')
+            fr.evaluate("() => { window.__mark = 'still-here'; }")
+            pl.click('[data-role="nav-desktop"] [data-nav="storeops"]')
+            pl.wait_for_selector('[data-keep="storeops"]:not([hidden])')
+            pl.wait_for_timeout(400)
+            fr_back = store_frame(pl)
+            check(fr_back is not None and fr_back.evaluate("() => window.__mark") == 'still-here' and len(mock.sso_calls) == n_sso and len(store_hits) == n_hits,
+                  '點回來是同一個頁面：沒有重新載入、沒有重新換券（sso %d→%d、載入 %d→%d）' % (n_sso, len(mock.sso_calls), n_hits, len(store_hits)))
+            check(pl.locator('[data-role="view-nav"] .nav-item').count() == 4 and pl.evaluate('location.hash') == '#/storeops/duty'
+                  and pl.locator('[data-role="view-nav"] .nav-item.is-active').inner_text() == '出勤核定',
+                  '從左側點回來：頁頂分頁還在、停在上次的「出勤核定」（網址 %s）' % pl.evaluate('location.hash'))
+            check(not any('"id":"main"' in x for x in store_log), '點回來不會叫營運系統切去不存在的分頁：%s' % store_log)
+            # 背景收到營運系統換頁訊息不可以把人拉回來
+            pl.click('[data-role="nav-desktop"] [data-nav="__home__"]')
+            pl.wait_for_selector('[data-role="module-card"]')
+            fr_back.evaluate(NAV, 'inventory')
+            pl.wait_for_timeout(500)
+            check(pl.locator('[data-role="module-card"]').count() > 0 and not pl.evaluate('location.hash').startswith('#/storeops'), '保留中的營運系統在背景換頁，不會把人從首頁拉回去：%s' % pl.evaluate('location.hash'))
+            # 登出管理系統（此時門市營運是保留中）→ 一起卸載、營運系統收到登出
+            pl.click('[data-nav="__logout__"]')
+            pl.wait_for_selector('#login-username', timeout=15000)
+            pl.wait_for_timeout(300)
+            check(any('"type":"dzy-store-logout"' in x for x in store_log), '登出管理系統時，保留中的營運系統收到 dzy-store-logout：%s' % store_log[-3:])
 
             # ⑤ 有 platform.att：考勤管理出現、iframe 帶 &only=duty、也能握手
             at = new_page()
