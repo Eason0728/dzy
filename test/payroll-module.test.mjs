@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { parseCall, toPageResult, payrollTarget, PAYROLL_ORIGIN } from '../modules/payroll/bridge.js';
+import { parseCall, toPageResult, payrollTarget, PAYROLL_ORIGIN, PAYROLL_PAGES, navMessage } from '../modules/payroll/bridge.js';
 import manifest from '../modules/payroll/manifest.js';
 import { validateManifest } from '../platform/manifest-check.js';
 
@@ -49,5 +49,13 @@ t('模組程式裡沒有任何金鑰樣子的字串', () => {
     assert.ok(!/admin_key\s*[:=]\s*['"][^'"]/.test(src), f);
     assert.ok(!/AKfycb/.test(src), f + ' 不寫後端網址');
   }
+});
+t('分頁：manifest views＝PAYROLL_PAGES（順序、名稱），全部只認 payroll.write', () => {
+  assert.deepEqual(manifest.views.map((v) => [v.id, v.name]), PAYROLL_PAGES);
+  for (const v of manifest.views) assert.deepEqual(v.requires, ['payroll.write']);
+});
+t('切換訊息：認得的分頁照送，其他一律回儀表板', () => {
+  assert.deepEqual(navMessage('att'), { type: 'dzy-payroll-nav', v: 1, p: 'att' });
+  for (const bad of [null, undefined, 'main', '', 'x;y', '__proto__']) assert.equal(navMessage(bad).p, 'dash');
 });
 console.log('全部通過 ' + n);

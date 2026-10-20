@@ -4,7 +4,7 @@
  */
 'use strict';
 
-import { payrollTarget, parseCall, toPageResult } from './bridge.js';
+import { payrollTarget, parseCall, toPageResult, navMessage } from './bridge.js';
 
 const LOAD_TIMEOUT_MS = 20000;
 let state = null;   // { el, ctx, frame, target, down, timer }
@@ -14,6 +14,12 @@ function clearDown() {
   if (state.timer) { clearTimeout(state.timer); state.timer = null; }
   if (state.down && state.down.parentNode) state.down.parentNode.removeChild(state.down);
   state.down = null;
+}
+
+/** 告訴薪酬頁切到目前分頁（管理系統的分頁列＝薪酬頁的選單） */
+function sendNav() {
+  if (!state || !state.ready || !state.frame.contentWindow) return;
+  state.frame.contentWindow.postMessage(navMessage(state.ctx.viewId), state.target.origin);
 }
 
 function showDown() {
@@ -29,7 +35,7 @@ function showDown() {
 async function onMessage(e) {
   if (!state || e.origin !== state.target.origin || e.source !== state.frame.contentWindow) return;
   const d = e.data;
-  if (d && d.type === 'dzy-payroll-ready' && d.v === 1) { clearDown(); return; }
+  if (d && d.type === 'dzy-payroll-ready' && d.v === 1) { clearDown(); state.ready = true; sendNav(); return; }
   const call = parseCall(d);
   if (!call) return;
   const frame = state.frame, origin = state.target.origin, ctx = state.ctx;
@@ -50,7 +56,7 @@ export default {
     frame.className = 'bulletin-frame';
     frame.setAttribute('data-role', 'payroll-frame');
     frame.addEventListener('error', () => showDown());
-    state = { el, ctx, frame, target, down: null, timer: null };
+    state = { el, ctx, frame, target, down: null, timer: null, ready: false };
     window.addEventListener('message', onMessage);
     el.appendChild(bar);
     el.appendChild(frame);
@@ -64,6 +70,8 @@ export default {
     };
   },
   onRoute(ctx) {
-    if (state) state.ctx = ctx;
+    if (!state) return;
+    state.ctx = ctx;
+    sendNav();
   }
 };

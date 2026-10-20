@@ -14,8 +14,19 @@ export default {
   icon: 'payroll',
   dept: 'hr',
   requires: ['payroll.write'],
+  // 分頁＝薪酬頁原本的側欄（2026-10-20 Eason：跟「薪酬管理」同一列）；要與 bridge.js PAYROLL_PAGES 一致（test/payroll-module.test.mjs 比對）
   views: [
-    { id: 'main', name: '薪酬管理', requires: ['payroll.write'] }
+    { id: 'dash', name: '儀表板', requires: ['payroll.write'] },
+    { id: 'group', name: '集團總覽', requires: ['payroll.write'] },
+    { id: 'run', name: '薪資計算', requires: ['payroll.write'] },
+    { id: 'att', name: '出勤資料', requires: ['payroll.write'] },
+    { id: 'bonus', name: '獎金計算', requires: ['payroll.write'] },
+    { id: 'punch', name: '打卡紀錄', requires: ['payroll.write'] },
+    { id: 'attexp', name: '出勤紀錄表', requires: ['payroll.write'] },
+    { id: 'emp', name: '員工設定', requires: ['payroll.write'] },
+    { id: 'cfg', name: '參數設定', requires: ['payroll.write'] },
+    { id: 'slip', name: '薪資單', requires: ['payroll.write'] },
+    { id: 'export', name: '匯出', requires: ['payroll.write'] }
   ],
   entry: () => import('./index.js')
 };

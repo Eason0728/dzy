@@ -48,3 +48,16 @@ export function toPageResult(r) {
   }
   return out;
 }
+
+/** 薪酬頁的分頁（2026-10-20 Eason：要跟「薪酬管理」同一列，所以由管理系統的分頁列畫，薪酬頁自己的選單在嵌入時隱藏）。
+ *  id＝薪酬頁 #nav button 的 data-p；順序＝薪酬頁原本側欄順序。manifest.js 的 views 要跟這裡一致（測試比對）。 */
+export const PAYROLL_PAGES = [
+  ['dash', '儀表板'], ['group', '集團總覽'], ['run', '薪資計算'], ['att', '出勤資料'], ['bonus', '獎金計算'],
+  ['punch', '打卡紀錄'], ['attexp', '出勤紀錄表'], ['emp', '員工設定'], ['cfg', '參數設定'], ['slip', '薪資單'], ['export', '匯出']
+];
+
+/** 管理系統換分頁 → 通知薪酬頁切換的訊息；不認得的分頁一律回儀表板 */
+export function navMessage(viewId) {
+  const ok = PAYROLL_PAGES.some((x) => x[0] === viewId);
+  return { type: 'dzy-payroll-nav', v: 1, p: ok ? viewId : 'dash' };
+}
