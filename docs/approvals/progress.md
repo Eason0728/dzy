@@ -62,3 +62,5 @@ Eason 給「門店支出」核決權限表圖：0–5,000 店長／5,001–10,00
 - 18:00 Fable 審異機備份 7 條（中 2 低 5）→ 修 5 條（146aa59、b11048f），npm test 439/437/0 fail；備份端第 3 版部署、外網驗證正常。待 mini pull＋重啟；mini 複查排程要改 04:35（異機送出改 04:20）。Codex 22:02 跑一次全面審。
 - 10/19 03:21 Codex 上線前審：1 高 4 中。處置：#1 Handle/Resubmit/Void 補 rev＋step（修，3d69c66）、#4 sweep 卡 deleting（修，dzy 端；mini 端早已處理）、#2 照片被手動刪除仍可綁單（不改，靠 04:00 缺檔偵測）、#3 讀取不寫 skip、#5 added:false 視同送達（改規格對齊，spec §14.15）。
 - 23:03 先推畫面 3d69c66（新畫面多送 step，舊後端忽略＝安全），minikit b72427b 待 mini pull＋重啟。
+- 10/20 mini 合併版（薪酬＋表單簽核）更新完成：health version b72427b、green、reasons 空（薪酬對話轉述）。暫存 worktree 與分支（apv-phase3*、apv-fix2、apv-jobs）已全部併入 main 後移除。
+- 剩：Eason 初始化＋小額請款實測、10/19 04:35 照片異機複查結果待回報。
