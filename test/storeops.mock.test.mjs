@@ -340,7 +340,8 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(has(sm, 'DZY001'), '3 店長名單含自己');
   ok(has(sm, 'DZY002') && has(sm, 'DZY003'), '3 店長名單含同店正職與計時');
   ok(!has(sm, 'DZY004') && !has(sm, 'DZY005') && !has(sm, 'DZY006') && !has(sm, 'DZY007'), '3 別店（含央廚）的人不出現');
-  ok(!has(sm, 'DZY008'), '3 店長不能核同店另一位店長（店長只核自己）');
+  ok(has(sm, 'DZY008'), '3 核定工時：店長核同店所有打卡的人（含同店另一位店長；2026-10-21）');
+  ok(!has(app.ident('DZY001').att.req_people.map((x) => x.sub), 'DZY008') && !has(app.ident('DZY001').att.req_people.map((x) => x.sub), 'DZY001'), '3 申請：店長不能核同店另一位店長、也不能核自己');
   ok(!has(sm, 'DZY030') && !has(sm, 'DZY031'), '3 已離職、待審的人不出現');
   ok(!has(sm, 'DZY010') && !has(sm, 'DZY020'), '3 店長看不到品牌辦公室／總部的人');
   ok(app.people('DZY001').every((x) => x.clock === 'mztgf'), '3 店長名單只有本店打卡店別');
@@ -386,7 +387,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // attNeedOf_／attApproverOf_ 直接驗
   const need = (t) => app.sb.attNeedOf_(t, org);
   ok(need({ unit: 'mzt-hq', title: 'odir' }) === null && need({ unit: 'dzy-hq', dept: 'hr', title: 'hm' }) === null && need({ unit: 'dzy-hq', dept: 'mgmt', title: 'chair' }) === null, '3 attNeedOf_：責任制職稱回 null');
-  ok(need({ unit: 'mzt-gf', title: 'sm' }).kind === 'self' && need({ unit: 'mzt-gf', title: 'pt' }).kind === 'store' && need({ unit: 'mzt-hq', title: 'osv' }).kind === 'office' && need({ unit: 'dzy-hq', dept: 'fin', title: 'hs' }).kind === 'dept' && need({ unit: 'dzy-hq', dept: 'mgmt', title: 'hs' }).kind === 'mgmt', '3 attNeedOf_：五種被核者');
+  ok(need({ unit: 'mzt-gf', title: 'sm' }).kind === 'unit' && need({ unit: 'mzt-gf', title: 'pt' }).kind === 'unit' && need({ unit: 'mzt-hq', title: 'osv' }).kind === 'office' && need({ unit: 'dzy-hq', dept: 'fin', title: 'hs' }).kind === 'dept' && need({ unit: 'dzy-hq', dept: 'mgmt', title: 'hs' }).kind === 'mgmt', '3 attNeedOf_：五種被核者');
   ok(need({ unit: 'mzt-gf', title: 'odir' }) === null && need({ unit: 'nope', title: 'pt' }) === null && need({ unit: 'mzt-wx', title: 'pt' }) === null, '3 attNeedOf_：職稱與階梯不合、單位不存在、單位停用 → null');
   const ap = (a, t) => app.sb.attApproverOf_(a, t, org);
   ok(ap(mk('DZY011', 'mzt-hq', '', 'oam'), mk('DZY013', 'mzt-hq', '', 'ofs')) === false && ap(mk('DZY011', 'mzt-hq', '', 'oam'), mk('DZY012', 'mzt-hq', '', 'osv')) === false, '3 attApproverOf_：區經理核行政／督導 → false');
@@ -395,17 +396,19 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(ap({ emp: 'DZY030', status: 'disabled', unit: 'mzt-gf', title: 'sm' }, mk('DZY003', 'mzt-gf', '', 'pt')) === false, '3 attApproverOf_：核定人已離職 → false');
   // 2026-10-20 職稱調整（docs/org/spec.md 第 15 節）：區經理 am、中央工廠廠長 fm／研發總監 rdd
   const am = mk('DZY090', 'mzt-gf', '', 'am'), fm = mk('DZY091', 'ck', '', 'fm'), rdd = mk('DZY092', 'ck', '', 'rdd');
-  ok(need({ unit: 'mzt-gf', title: 'am' }).kind === 'self' && need({ unit: 'ck', title: 'fm' }).kind === 'self' && need({ unit: 'ck', title: 'rdd' }).kind === 'self', '15 attNeedOf_：區經理、廠長、研發總監都要考勤（自己核自己，同店長）');
+  ok(['am', 'sm', 'pt'].every((t) => need({ unit: 'mzt-gf', title: t }).kind === 'unit') && ['fm', 'rdd'].every((t) => need({ unit: 'ck', title: t }).kind === 'unit'), '15 attNeedOf_ 核定工時：區經理、廠長、研發總監都要考勤，由本單位店長／廠長核（2026-10-21）');
   ok(need({ unit: 'ck', title: 'sm' }) === null && need({ unit: 'ck', title: 'am' }) === null && need({ unit: 'mzt-gf', title: 'fm' }) === null && need({ unit: 'mzt-gf', title: 'rdd' }) === null, '15 attNeedOf_：中央工廠店長／區經理、門市廠長／研發總監 → 不合規（null）');
-  ok(ap(am, mk('DZY003', 'mzt-gf', '', 'pt')) && ap(am, mk('DZY002', 'mzt-gf', '', 'ft')) && ap(am, am), '15 區經理核同店計時、正職與自己（同店長）');
-  ok(ap(am, mk('DZY001', 'mzt-gf', '', 'sm')) === false && ap(am, mk('DZY005', 'mzt-js', '', 'pt')) === false, '15 區經理不核同店店長（店長照舊自己核）、不核別店');
-  ok(ap(fm, mk('DZY007', 'ck', '', 'pt')) && ap(fm, fm) && ap(fm, rdd) === false, '15 廠長＝央廚店長：核央廚同仁與自己，不能核研發總監');
-  ok(ap(rdd, mk('DZY007', 'ck', '', 'pt')) && ap(rdd, fm) && ap(rdd, rdd), '15 研發總監核央廚全部（含廠長）與自己');
+  ok(ap(am, mk('DZY003', 'mzt-gf', '', 'pt')) === false && ap(am, mk('DZY002', 'mzt-gf', '', 'ft')) === false && ap(am, am) === false && ap(am, mk('DZY001', 'mzt-gf', '', 'sm')) === false, '15 核定工時：區經理不核任何人的工時（含自己、同店店長）');
+  ok(ap(mk('DZY001', 'mzt-gf', '', 'sm'), am) === true && ap(mk('DZY004', 'mzt-js', '', 'sm'), am) === false, '15 核定工時：區經理的工時由同店店長核、別店店長不行');
+  ok(ap(fm, mk('DZY007', 'ck', '', 'pt')) && ap(fm, fm) && ap(fm, rdd), '15 核定工時：廠長核央廚同仁、自己與研發總監');
+  ok(ap(rdd, mk('DZY007', 'ck', '', 'pt')) === false && ap(rdd, fm) === false && ap(rdd, rdd) === false, '15 核定工時：研發總監不核任何人的工時（含廠長、自己）');
   ok(ap(rdd, mk('DZY003', 'mzt-gf', '', 'pt')) === false, '15 研發總監不核門市');
   ok(ap(mk('DZY006', 'ck', '', 'sm'), mk('DZY007', 'ck', '', 'pt')) === false, '15 切換後還掛中央工廠的店長 → 不能核（要改廠長）');
-  ok(['fm', 'am', 'rdd'].every((t) => app.sb.STORE_ATT_GATE_TITLES.indexOf(t) !== -1 && app.sb.STORE_NO_ATT_TITLES.indexOf(t) === -1), '15 廠長／區經理／研發總監有考勤管理選單、且要打卡（不是責任制）');
+  ok(['fm', 'am', 'rdd', 'osv'].every((t) => app.sb.STORE_ATT_GATE_TITLES.indexOf(t) !== -1) && ['fm', 'am', 'rdd'].every((t) => app.sb.STORE_NO_ATT_TITLES.indexOf(t) === -1), '15 廠長／區經理／研發總監／區督導有考勤管理選單；前三者要打卡（不是責任制）');
   const tAm = app.sb.storeAttTargets_(am, { admin: true }, [am], org).map((x) => x.emp);
-  ok(eq(tAm, ['DZY090']), '15 兼 admin 的區經理 → 名單含自己（同店長）', tAm);
+  ok(eq(tAm, []), '15 兼 admin 的區經理 → 名單不含自己（區經理不再核自己的工時）', tAm);
+  const tSmA = app.sb.storeAttTargets_(smAdmin, { admin: true }, [smAdmin], org, null, 'req').map((x) => x.emp);
+  ok(eq(tSmA, []), '15 兼 admin 的店長：申請名單不含自己', tSmA);
   // 打卡對照條件
   app.sheets.staff_clock._data.push(['DZY002', 'mztgf', 'MZTGF002B', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
   const idx = (e) => app.sheets.staff_clock._data.findIndex((r, i) => i > 0 && r[0] === e && r[2].indexOf('B') === -1);
@@ -429,6 +432,96 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(!ex1.includes('DZY040'), '3 att.extra 名單不含自己');
   post(app.sb, 'permExSave', { emp_no: 'DZY040', perm: 'att.extra', mode: 'remove', until: '', note: '測試拿掉' }, app.adminTok);
   ok(app.subs('DZY040').length === 0, '3 att.extra 被拿掉後名單回空');
+})();
+
+// ============================================================
+// 3b. 核定工時 vs 申請（Eason 2026-10-21，docs/org/spec.md 第 15.1 節）：att.people＝工時、att.req_people＝加班單／請假單／忘刷單
+// ============================================================
+(() => {
+  const cast = [
+    ['DZY101', '甲店長', 'mzt-gf', '', 'sm', 'active', '2026-01-01'],
+    ['DZY102', '甲區經理', 'mzt-gf', '', 'am', 'active', '2026-01-01'],
+    ['DZY103', '甲正職', 'mzt-gf', '', 'ft', 'active', '2026-01-01'],
+    ['DZY104', '甲計時', 'mzt-gf', '', 'pt', 'active', '2026-01-01'],
+    ['DZY105', '乙店長', 'mzt-js', '', 'sm', 'active', '2026-01-01'],
+    ['DZY106', '乙區經理', 'mzt-js', '', 'am', 'active', '2026-01-01'],
+    ['DZY107', '乙計時', 'mzt-js', '', 'pt', 'active', '2026-01-01'],
+    ['DZY108', '丙店長', 'mala-gf', '', 'sm', 'active', '2026-01-01'],
+    ['DZY110', '央廚廠長', 'ck', '', 'fm', 'active', '2026-01-01'],
+    ['DZY111', '研發總監', 'ck', '', 'rdd', 'active', '2026-01-01'],
+    ['DZY112', '央廚計時', 'ck', '', 'pt', 'active', '2026-01-01'],
+    ['DZY120', '墨竹亭總監', 'mzt-hq', '', 'odir', 'active', '2026-01-01'],
+    ['DZY121', '墨竹亭區督導', 'mzt-hq', '', 'osv', 'active', '2026-01-01'],
+    ['DZY122', '墨竹亭行政', 'mzt-hq', '', 'ofs', 'active', '2026-01-01'],
+    ['DZY123', '小辛辣區督導', 'mala-hq', '', 'osv', 'active', '2026-01-01'],
+    ['DZY124', '小辛辣總監', 'mala-hq', '', 'odir', 'active', '2026-01-01'],
+    ['DZY130', '人資主管', 'dzy-hq', 'hr', 'hm', 'active', '2026-01-01'],
+    ['DZY131', '財務主管', 'dzy-hq', 'fin', 'hm', 'active', '2026-01-01'],
+    ['DZY132', '財務同仁', 'dzy-hq', 'fin', 'hs', 'active', '2026-01-01'],
+    ['DZY133', '管理部同仁', 'dzy-hq', 'mgmt', 'hs', 'active', '2026-01-01'],
+    ['DZY134', '執行長', 'dzy-hq', 'mgmt', 'ceo', 'active', '2026-01-01'],
+    ['DZY135', '總經理', 'dzy-hq', 'mgmt', 'gm', 'active', '2026-01-01'],
+    ['DZY136', '董事長', 'dzy-hq', 'mgmt', 'chair', 'active', '2026-01-01']
+  ];
+  const app = world(cast);
+  const H = (s) => app.ident(s).att.people.map((x) => x.sub).sort();
+  const R = (s) => app.ident(s).att.req_people.map((x) => x.sub).sort();
+  const g = (label, got, want) => ok(eq(got, want), label, { got, want });
+  // 契約形狀：兩份名單同一種項目、各自排序
+  const id1 = app.ident('DZY101');
+  ok(eq(Object.keys(id1.att), ['people', 'req_people']) && id1.att.req_people.every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name'])), '3b att 有 people 與 req_people，項目欄位相同');
+  // 核定工時
+  g('3b 工時：店長核本店所有打卡的人（計時、正職、區經理、自己）', H('DZY101'), ['DZY101', 'DZY102', 'DZY103', 'DZY104']);
+  g('3b 工時：別店店長只核別店（不含甲店區經理）', H('DZY105'), ['DZY105', 'DZY106', 'DZY107']);
+  g('3b 工時：區經理不核任何人的工時（含自己）', H('DZY102'), []);
+  g('3b 工時：廠長核央廚所有人（含研發總監、自己）', H('DZY110'), ['DZY110', 'DZY111', 'DZY112']);
+  g('3b 工時：研發總監不核工時（不再核廠長）', H('DZY111'), []);
+  g('3b 工時：區督導不核工時', H('DZY121'), []);
+  g('3b 工時：總監核同辦公室行政、督導（不變）', H('DZY120'), ['DZY121', 'DZY122']);
+  g('3b 工時：部門主管核同部門同仁（不變）', H('DZY131'), ['DZY132']);
+  g('3b 工時：管理部同仁由執行長以上核（不變）', H('DZY134'), ['DZY133']);
+  // 申請
+  g('3b 申請：店長核本店計時、正職；不含自己、不含區經理', R('DZY101'), ['DZY103', 'DZY104']);
+  g('3b 申請：區經理核同店店長；不核別店店長、不核計時正職、不核自己', R('DZY102'), ['DZY101']);
+  g('3b 申請：另一店區經理只核自己那店的店長', R('DZY106'), ['DZY105']);
+  g('3b 申請：區督導核品牌內所有店長與區經理；不核別品牌、不核辦公室同仁', R('DZY121'), ['DZY101', 'DZY102', 'DZY105', 'DZY106']);
+  g('3b 申請：別品牌區督導只核自己品牌的店長', R('DZY123'), ['DZY108']);
+  g('3b 申請：總監核區經理（預設）與同辦公室行政、督導；不核店長', R('DZY120'), ['DZY102', 'DZY106', 'DZY121', 'DZY122']);
+  g('3b 申請：小辛辣總監只核自己辦公室', R('DZY124'), ['DZY123']);
+  g('3b 申請：廠長核央廚計時正職；不含自己、不含研發總監', R('DZY110'), ['DZY112']);
+  g('3b 申請：研發總監核廠長；不核央廚計時、不核自己', R('DZY111'), ['DZY110']);
+  g('3b 申請：執行長核研發總監（預設）與管理部同仁', R('DZY134'), ['DZY111', 'DZY133']);
+  ok(eq(R('DZY135'), ['DZY111', 'DZY133']) && eq(R('DZY136'), ['DZY111', 'DZY133']), '3b 申請：總經理、董事長同執行長');
+  g('3b 申請：部門主管核同部門同仁（同工時）', R('DZY131'), ['DZY132']);
+  g('3b 申請：一般同仁名單空', R('DZY104'), []);
+  // 人資主管與 admin：兩份都是全部要考勤的人、不含自己（工時含不含自己同既有規則，申請一律不含）
+  const ALL = cast.map((p) => p[0]).filter((e) => ['DZY120', 'DZY124', 'DZY130', 'DZY131', 'DZY134', 'DZY135', 'DZY136'].indexOf(e) === -1).sort();
+  g('3b 人資主管：申請名單＝全部要考勤的人', R('DZY130'), ALL);
+  g('3b 人資主管：工時名單＝全部要考勤的人', H('DZY130'), ALL);
+  g('3b admin：申請名單＝全部要考勤的人', R('U:a001'), ALL);
+  // 純函式：各規則正反例
+  const org = app.sb.stfReadOrg_();
+  const P = Object.fromEntries(cast.map((c) => [c[0], { emp: c[0], status: 'active', unit: c[2], dept: c[3], title: c[4], name: c[1] }]));
+  const hrs = (a, t) => app.sb.attApproverOf_(P[a], P[t], org, 'hours');
+  const req = (a, t) => app.sb.attApproverOf_(P[a], P[t], org, 'req');
+  ok(hrs('DZY101', 'DZY101') === true && req('DZY101', 'DZY101') === false, '3b 店長：可核自己的工時、不能核自己的申請');
+  ok(hrs('DZY110', 'DZY110') === true && req('DZY110', 'DZY110') === false, '3b 廠長：可核自己的工時、不能核自己的申請');
+  ok(req('DZY102', 'DZY101') === true && req('DZY102', 'DZY105') === false && hrs('DZY102', 'DZY101') === false && hrs('DZY102', 'DZY104') === false, '3b 區經理：核同店店長申請、不核別店；不核任何工時');
+  ok(req('DZY121', 'DZY101') === true && req('DZY121', 'DZY108') === false && hrs('DZY121', 'DZY101') === false, '3b 區督導：核本品牌店長申請、不核別品牌；不核工時');
+  ok(req('DZY111', 'DZY110') === true && hrs('DZY111', 'DZY110') === false && hrs('DZY110', 'DZY111') === true, '3b 研發總監核廠長申請、不核廠長工時；廠長核研發總監工時');
+  ok(req('DZY121', 'DZY102') === true && req('DZY120', 'DZY102') === true && req('DZY123', 'DZY102') === false && req('DZY101', 'DZY102') === false, '3b 區經理本人的申請：本品牌區督導／總監可、別品牌與同店店長不行');
+  ok(req('DZY134', 'DZY111') === true && req('DZY110', 'DZY111') === false && req('DZY120', 'DZY111') === false && hrs('DZY134', 'DZY111') === false, '3b 研發總監本人的申請：執行長以上可、廠長與品牌總監不行；執行長不核工時');
+  ok(req('DZY101', 'DZY104') === true && req('DZY105', 'DZY104') === false && req('DZY102', 'DZY104') === false, '3b 計時申請：同店店長可、別店店長與區經理不行');
+  ok(req('DZY120', 'DZY122') === true && req('DZY121', 'DZY122') === false && req('DZY131', 'DZY132') === true && req('DZY130', 'DZY132') === false && req('DZY134', 'DZY133') === true, '3b 品牌辦公室／部門／管理部的申請同工時規則');
+  ok(app.sb.attApproverOf_(P.DZY101, P.DZY104, org) === true && app.sb.attApproverOf_(P.DZY102, P.DZY101, org) === false, '3b mode 省略＝核定工時');
+  ok(app.sb.attNeedOf_(P.DZY101, org, 'req').kind === 'head' && app.sb.attNeedOf_(P.DZY102, org, 'req').kind === 'brand_office' && app.sb.attNeedOf_(P.DZY111, org, 'req').kind === 'hq_exec' && app.sb.attNeedOf_(P.DZY104, org, 'req').kind === 'unit', '3b attNeedOf_ req：店長 head、區經理 brand_office、研發總監 hq_exec、計時 unit');
+  // att.extra：兩份名單都是本單位要考勤的人、不含自己
+  post(app.sb, 'permExSave', { emp_no: 'DZY103', perm: 'att.extra', mode: 'add', until: '', note: '測試額外核定' }, app.adminTok);
+  g('3b att.extra 工時：本單位、不含自己', H('DZY103'), ['DZY101', 'DZY102', 'DZY104']);
+  g('3b att.extra 申請：本單位、不含自己', R('DZY103'), ['DZY101', 'DZY102', 'DZY104']);
+  // 區督導有考勤管理選單
+  const r = post(app.sb, 'login', { username: 'DZY121', password: PW });
+  ok(r.ok && has(r.data.perms, 'platform.att'), '3b 區督導登入有 platform.att');
 })();
 
 // ============================================================
@@ -581,7 +674,8 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(att('DZY010'), '7 總監（odir）有');
   ok(att('DZY020') && att('DZY022'), '7 人資主管、部門主管（hm）有');
   ok(att('DZY025') && att('DZY026') && att('DZY027'), '7 ceo／gm／chair 有');
-  ok(!att('DZY002') && !att('DZY003') && !att('DZY011') && !att('DZY012') && !att('DZY013') && !att('DZY021') && !att('DZY023'), '7 正職、計時、區經理、督導、行政、人資同仁、部門同仁沒有');
+  ok(!att('DZY002') && !att('DZY003') && !att('DZY011') && !att('DZY013') && !att('DZY021') && !att('DZY023'), '7 正職、計時、停用的品牌辦公室區經理、行政、人資同仁、部門同仁沒有');
+  ok(att('DZY012'), '7 區督導（osv）有（2026-10-21 起核品牌內店長的申請）');
   ok(has(perms('BOSS'), '*'), '7 admin 本來就是 *（前端 can 全過）');
   ok(!att('DZY040'), '7 有 att.extra 之前沒有');
   post(sb, 'permExSave', { emp_no: 'DZY040', perm: 'att.extra', mode: 'add', until: '', note: '額外核定' }, app.adminTok);

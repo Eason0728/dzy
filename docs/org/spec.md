@@ -218,7 +218,7 @@
 
 **表單簽核（請購請款）**：單位主管 head＝店長 sm／廠長 fm（`STF_STORE_HEAD_TITLES`），**區經理不進請購請款**；brand_dir＝品牌辦公室總監，中央工廠＝研發總監（`ApprovalRoute.gs APV_UNIT_DIR_TITLE`）。中央工廠預設門檻＝廠長 0–5,000 → 研發總監 5,001–10,000 → 總經理／董事長照門檻。人事單「直屬主管」照上面審核表。
 
-**考勤（出勤核定，StoreOps.gs）**：區經理、廠長、研發總監＝店長同等（核同店計時正職與自己、要打卡、有考勤管理選單、營運系統管理單位）；研發總監另可核同單位職級較低的廠長。**判斷：區經理不核同店店長**（店長照舊自己核，要改再說）。
+**考勤（出勤核定，StoreOps.gs）**：~~區經理、廠長、研發總監＝店長同等（核同店計時正職與自己）；研發總監另可核廠長~~ → **2026-10-21 改由第 15.1 節取代**。區經理、廠長、研發總監仍要打卡、有考勤管理選單、是營運系統管理單位（units_managed）。
 
 **權限預設**：am／fm／rdd 與店長同一套（audit.read.own、store.void；PERM_DEFAULT_RULES 第 21–26 條）。研發總監沒有另外加碼（spec 沒提，照店長）。
 
@@ -227,3 +227,22 @@
 - 備份：`org_bak2610_*`（org 整份）、`stf_bak2610_*`（emp_no／欄位／原值／新值）、快照 `org_upg2610_*`；狀態在 Script Property `ORG_UPGRADE_202610_STATE`（含補的規則編號）。
 - 退回：org 切換後被改過、或受影響同仁那一格被改過 → 拒絕並列差異，什麼都不改；否則 org 蓋回、職稱還原、補的規則 active＝FALSE；切換後才設成 am／fm／rdd 的人列孤兒（只列不改）。
 - 這次沒退回前 `orgRollback2026` 拒絕；`orgUpgrade2026` 重跑不會把 am／oam 改回去。
+
+### 15.1 考勤誰核誰分兩張表（Eason 2026-10-21；覆蓋上面「考勤」段與 approver spec §12 表格）
+營運系統「出勤核定」的**核定工時**與**申請審核（加班單／請假單／忘刷單）**分開算。實作 `StoreOps.gs attNeedOf_(target, org, mode)`／`attApproverOf_(approver, target, org, mode)`／`storeAttTargets_(…, mode)`，mode＝`'hours'`（省略＝hours）或 `'req'`；可調的對象都是檔頭常數（`STORE_HOURS_UNIT_HEAD_TITLES`、`STORE_REQ_*`、`STORE_EXEC_TITLES`）。
+
+| 被核的人 | 核定工時（att.people） | 申請（att.req_people） |
+|---|---|---|
+| 門市計時／正職 | 同店店長 | 同店店長 |
+| 門市店長 | 同店店長（含**自己**） | 同店區經理、或該品牌辦公室區督導 osv（**不能自己核**） |
+| 門市區經理 | 同店店長 | 該品牌辦公室區督導或總監（預設，`STORE_REQ_AM_OFFICE_TITLES`） |
+| 中央工廠計時／正職 | 廠長 | 廠長 |
+| 中央工廠廠長 | 廠長（含**自己**） | 研發總監（不能自己核） |
+| 中央工廠研發總監 | 廠長 | 執行長／總經理／董事長（預設，`STORE_REQ_RDD_HQ_TITLES`） |
+| 品牌辦公室行政／區督導 | 同辦公室總監 | 同左 |
+| 總部部門同仁 | 同部門主管 | 同左 |
+| 管理部同仁 | 執行長以上 | 同左 |
+- 區經理、研發總監**不再核工時**；同店有兩位店長時，工時互相都能核（照「所有打卡的人由店長核」字面），申請互相不能核。
+- 人資主管、admin：兩張表都是全部要考勤的人、不含自己；工時的例外照舊（本人是店長／廠長才含自己），申請一律不含自己。att.extra：兩張表都是本單位要考勤的人、不含自己。
+- 區督導 osv 加進考勤管理選單（`STORE_ATT_GATE_TITLES`），區經理、研發總監保留。
+- 契約 `dzy-store-contract-v2.json` 的 ident 加 `att.req_people`（與 people 同形狀、同排序）；營運系統收到沒有 req_people 的舊 ident 時申請審核沿用 people，所以部署順序不會壞（先管理系統後營運系統）。

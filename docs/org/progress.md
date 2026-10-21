@@ -22,6 +22,7 @@
 | 2026-10-16 | 上線後修正 | 對話框捲動 | 修前 e2e 重現失敗、修後通過；e2e 十支 exit 0 | 1 | main 1c3c355 |
 | 2026-10-16 | ⑤ mini 換後端 | minikit 13fadc5 | 通過：備份 app.db、pid 57257→83214、health 綠、orgUpgrade2026 無 token 回「登入已失效」、log 錯誤 0 | 1 | mini 回報（經對話整理代轉） |
 | 2026-10-20 | 追加 第 15 節 職稱調整 | 區經理移回門市、中央工廠廠長／研發總監、單位限定職稱、orgUpgrade202610／orgRollback202610 | node 全綠、e2e exit 0；**未部署**（待 Eason 審、後端 sync-gas 上 mini 後再推前端，再由 BOSS 按「職稱調整（10/20）」） | 1 | 分支 org-titles-2610 |
+| 2026-10-21 | 追加 第 15.1 節 考勤分工時／申請兩張表 | attNeedOf_／attApproverOf_ 加 mode（hours／req）、ident 加 att.req_people、區督導進考勤管理選單；契約 fixture 兩邊同步 | node 全綠、e2e 見回報；**未部署**（先 sync-gas 上 mini，再更新營運系統 req-approvers） | 1 | 分支 org-titles-2610 |
 | 2026-10-14 | ④ 整套關 | main eda8380 | node 全綠、e2e 十支 exit 0、佈告欄 staffdzy 168/168、minikit 312/312 | 1 | 本對話 |
 
 ## 落地清單

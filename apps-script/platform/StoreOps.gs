@@ -5,7 +5,7 @@
  * 內容：
  *  1. ssoTicket aud 'store' 的 sub 判斷（storeSubForUser_；StaffClock.gs handleSsoTicket_ 呼叫）
  *  2. svcStoreRedeem／svcStoreWho／svcStoreRoster（憑 Script Property STORE_SVC_KEY）
- *  3. 誰核誰：attNeedOf_／attApproverOf_（純函式）＋ storeAttPeople_
+ *  3. 誰核誰：attNeedOf_／attApproverOf_（純函式，分核定工時 hours／申請 req 兩張表）＋ storeAttPeople_
  *  4. 身分 ident 計算（storeIdent_）、試點開關 STORE_SSO_UNITS
  *  5. 衍生權限 platform.att／platform.storeops 的閘門（storeAttGate_／storeOpsGate_；Staff.gs stfLoginGate_ 呼叫）
  *  6. 人資主管判斷 stfIsHrHead_、perm_map 補預設規則 storeopsPermSeed_
@@ -25,12 +25,27 @@ var STORE_LOCK_WAIT_MS = 10000;
 
 // 責任制職稱（spec §12）：不打卡、不列入任何人的可核名單；仍可以當核定人
 var STORE_NO_ATT_TITLES = ['odir', 'hm', 'ceo', 'gm', 'chair'];
-// 門市／中央工廠「核自己＋核同店計時正職」的職稱（spec §12＋docs/org/spec.md 第 15 節）：店長 sm、廠長 fm、區經理 am、研發總監 rdd
+// 門市／中央工廠的單位主管同等職稱（spec §12＋docs/org/spec.md 第 15 節）：店長 sm、廠長 fm、區經理 am、研發總監 rdd
+//   用途：營運系統「管理單位」units_managed（本店同仁權限、整店功能）。誰核誰改看下面兩張表（Eason 2026-10-21）。
 var STORE_ATT_HEAD_TITLES = ['sm', 'fm', 'am', 'rdd'];
-// 另外可以核「同單位、職級較低的主管」的職稱：研發總監核中央工廠廠長
-var STORE_ATT_OVER_HEAD_TITLES = ['rdd'];
-// 考勤管理選單（platform.att）：上面那些＋責任制職稱
-var STORE_ATT_GATE_TITLES = ['sm', 'fm', 'am', 'rdd', 'odir', 'hm', 'ceo', 'gm', 'chair'];
+
+// ── 誰核誰（Eason 2026-10-21，docs/org/spec.md 第 15.1 節）：分「核定工時 hours」與「加班單／請假單／忘刷單 req」兩張表 ──
+// 核定工時：門市／中央工廠所有打卡的人（pt ft sm fm am rdd）都由本單位店長／廠長核；店長／廠長可核自己的工時
+var STORE_HOURS_UNIT_HEAD_TITLES = ['sm', 'fm'];
+// 申請：門市／中央工廠計時、正職 → 本單位店長／廠長（同上）
+var STORE_REQ_UNIT_HEAD_TITLES = ['sm', 'fm'];
+// 申請：店長／廠長本人的申請 → 同單位這些職稱（門市＝區經理 am；中央工廠＝研發總監 rdd，職稱只能掛在各自單位）
+var STORE_REQ_HEAD_BY_UNIT = ['am', 'rdd'];
+// 申請：門市店長本人的申請也可以由該品牌辦公室的這些職稱核（區督導 osv）
+var STORE_REQ_HEAD_BY_OFFICE = ['osv'];
+// 申請：區經理本人的申請 → 該品牌辦公室的這些職稱（預設區督導、總監；要改只改這裡）
+var STORE_REQ_AM_OFFICE_TITLES = ['osv', 'odir'];
+// 申請：研發總監本人的申請 → 總部這些職稱（預設執行長、總經理、董事長；要改只改這裡）
+var STORE_REQ_RDD_HQ_TITLES = ['ceo', 'gm', 'chair'];
+// 管理部同仁 → 執行長以上（兩張表相同）
+var STORE_EXEC_TITLES = ['ceo', 'gm', 'chair'];
+// 考勤管理選單（platform.att）：會核人的職稱＋責任制職稱（區督導 2026-10-21 起核品牌內店長的申請）
+var STORE_ATT_GATE_TITLES = ['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo', 'gm', 'chair'];
 // 人資主管（不是 admin）可以設個別例外的兩個權限碼（spec §13.1）
 var STORE_HR_GRANTABLE = ['store.void', 'att.extra'];
 var STORE_PERM_VOID = 'store.void';
@@ -100,24 +115,33 @@ function storeOrgOf_(p, org) {
   return { unit: u, title: t, ladder: ladder };
 }
 
+/** mode 只認 'req'，其他（含省略）一律當 'hours' */
+function storeAttMode_(mode) { return mode === 'req' ? 'req' : 'hours'; }
+
 /**
- * 被核者需要什麼樣的核定人（spec §12 表格）。回 null＝不考勤（責任制職稱、資料不合規）。
- * 回 {kind, unit?, dept?}：
- *   'self'   門市店長／區經理、中央工廠廠長／研發總監（自己核自己；廠長另可由研發總監核）
- *   'store'  門市／央廚計時、正職（同店店長、區經理；中央工廠為廠長、研發總監）
- *   'office' 品牌辦公室行政／督導／區經理（同辦公室總監）
- *   'dept'   總部部門同仁（同主要部門的部門主管）　'mgmt' 管理部同仁（執行長以上）
- * target＝{unit, dept, title}。
+ * 被核者需要什麼樣的核定人（spec §12＋docs/org/spec.md 第 15.1 節）。回 null＝不考勤（責任制職稱、資料不合規）。
+ * mode：'hours' 核定工時（預設）／'req' 加班單、請假單、忘刷單。target＝{unit, dept, title}。回 {kind, unit?, brand?, dept?}：
+ *   'unit'         本單位店長／廠長（hours：門市／中央工廠所有打卡的人；req：計時、正職）
+ *   'head'         req 店長／廠長本人：同單位區經理（中央工廠＝研發總監），門市另可由該品牌辦公室區督導
+ *   'brand_office' req 區經理本人：該品牌辦公室區督導、總監
+ *   'hq_exec'      req 研發總監本人：總部執行長、總經理、董事長
+ *   'office'       品牌辦公室行政／督導（同辦公室總監）
+ *   'dept'         總部部門同仁（同主要部門的部門主管）　'mgmt' 管理部同仁（執行長以上）
  */
-function attNeedOf_(target, org) {
+function attNeedOf_(target, org, mode) {
+  mode = storeAttMode_(mode);
   var o = storeOrgOf_(target, org);
   if (!o) return null;
   var title = stfStr_(target.title);
   if (STORE_NO_ATT_TITLES.indexOf(title) !== -1) return null;
   var unit = stfStr_(target.unit);
   if (o.ladder === 'store') {
-    if (STORE_ATT_HEAD_TITLES.indexOf(title) !== -1) return { kind: 'self', unit: unit, rank: o.title.rank };
-    if (title === 'pt' || title === 'ft') return { kind: 'store', unit: unit };
+    var clocks = title === 'pt' || title === 'ft' || STORE_ATT_HEAD_TITLES.indexOf(title) !== -1;
+    if (!clocks) return null;
+    if (mode === 'hours' || title === 'pt' || title === 'ft') return { kind: 'unit', unit: unit };
+    if (STORE_REQ_UNIT_HEAD_TITLES.indexOf(title) !== -1) return { kind: 'head', unit: unit, brand: o.unit.parent };
+    if (title === 'am') return { kind: 'brand_office', brand: o.unit.parent };
+    if (title === 'rdd') return { kind: 'hq_exec' };
     return null;
   }
   if (o.ladder === 'office') {
@@ -136,28 +160,36 @@ function attNeedOf_(target, org) {
 }
 
 /**
- * approver 能不能核 target（只算 §12 表格；人資主管、admin、att.extra 在 storeAttPeople_ 另外處理）。
- * approver／target＝{emp, status, unit, dept, title}。任何人都不能核自己，唯一例外是店長核自己（'self'）。
+ * approver 能不能核 target（只算表格；人資主管、admin、att.extra 在 storeAttTargets_ 另外處理）。
+ * approver／target＝{emp, status, unit, dept, title}；mode 同 attNeedOf_。
+ * 任何人都不能核自己，唯一例外是核定工時的店長／廠長核自己（申請一律不能自己核）。
  */
-function attApproverOf_(approver, target, org) {
+function attApproverOf_(approver, target, org, mode) {
+  mode = storeAttMode_(mode);
   if (!approver || !target) return false;
   if (stfStr_(approver.status) !== 'active' || stfStr_(target.status) !== 'active') return false;
-  var need = attNeedOf_(target, org);
+  var need = attNeedOf_(target, org, mode);
   if (!need) return false;
   var ao = storeOrgOf_(approver, org);
   if (!ao) return false;
   var title = stfStr_(approver.title);
+  var aUnit = stfStr_(approver.unit);
   var sameMan = stfStr_(approver.emp) !== '' && stfStr_(approver.emp) === stfStr_(target.emp);
-  if (need.kind === 'self') {
-    if (sameMan) return STORE_ATT_HEAD_TITLES.indexOf(title) !== -1 && ao.ladder === 'store';
-    // 研發總監核同單位職級較低的主管（中央工廠廠長）
-    return STORE_ATT_OVER_HEAD_TITLES.indexOf(title) !== -1 && ao.ladder === 'store' && stfStr_(approver.unit) === need.unit && ao.title.rank > need.rank;
+  var heads = mode === 'hours' ? STORE_HOURS_UNIT_HEAD_TITLES : STORE_REQ_UNIT_HEAD_TITLES;
+  if (need.kind === 'unit') {
+    if (sameMan && mode !== 'hours') return false;
+    return ao.ladder === 'store' && heads.indexOf(title) !== -1 && aUnit === need.unit;
   }
   if (sameMan) return false;
-  if (need.kind === 'store') return ao.ladder === 'store' && STORE_ATT_HEAD_TITLES.indexOf(title) !== -1 && stfStr_(approver.unit) === need.unit;
-  if (need.kind === 'office') return ao.ladder === 'office' && title === 'odir' && stfStr_(approver.unit) === need.unit;
+  if (need.kind === 'head') {
+    if (ao.ladder === 'store') return STORE_REQ_HEAD_BY_UNIT.indexOf(title) !== -1 && aUnit === need.unit;
+    return ao.ladder === 'office' && STORE_REQ_HEAD_BY_OFFICE.indexOf(title) !== -1 && ao.unit.parent === need.brand;
+  }
+  if (need.kind === 'brand_office') return ao.ladder === 'office' && STORE_REQ_AM_OFFICE_TITLES.indexOf(title) !== -1 && ao.unit.parent === need.brand;
+  if (need.kind === 'hq_exec') return ao.ladder === 'hq' && STORE_REQ_RDD_HQ_TITLES.indexOf(title) !== -1;
+  if (need.kind === 'office') return ao.ladder === 'office' && title === 'odir' && aUnit === need.unit;
   if (need.kind === 'dept') return ao.ladder === 'hq' && title === 'hm' && stfStr_(approver.dept) === need.dept;
-  if (need.kind === 'mgmt') return ao.ladder === 'hq' && (title === 'ceo' || title === 'gm' || title === 'chair');
+  if (need.kind === 'mgmt') return ao.ladder === 'hq' && STORE_EXEC_TITLES.indexOf(title) !== -1;
   return false;
 }
 
@@ -217,22 +249,24 @@ function storeEffectiveTarget_(t0, org, home) {
 /**
  * 這個人能核的人（尚未換成打卡帳號）。
  * me＝{emp, status, unit, dept, title}（admin 沒有同仁編號時 emp 為空）；flags＝{admin, hrHead, attExtra}；
- * people＝全部同仁物件陣列；home＝選填，emp → {units}（主店打卡推算用，見 storeInferFromHome_）。回符合的 target 陣列。
+ * people＝全部同仁物件陣列；home＝選填，emp → {units}（主店打卡推算用，見 storeInferFromHome_）；mode 同 attNeedOf_。回符合的 target 陣列。
  * 推算出來的人當作單位 rank 1 一般同仁；推算不出的 orphan 只有 admin／人資主管看得到。
  */
-function storeAttTargets_(me, flags, people, org, home) {
+function storeAttTargets_(me, flags, people, org, home, mode) {
+  mode = storeAttMode_(mode);
   var out = [];
+  // admin／人資主管：全部要考勤的人、不含自己；核定工時的店長／廠長例外（含自己，同 attApproverOf_）；申請一律不含自己
+  var selfOk = mode === 'hours' && STORE_HOURS_UNIT_HEAD_TITLES.indexOf(stfStr_(me.title)) !== -1;
   people.forEach(function (t0) {
     var t = storeEffectiveTarget_(t0, org, home);
     if (!t) return;
-    if (!t.orphan && !attNeedOf_(t, org)) return;
+    if (!t.orphan && !attNeedOf_(t, org, mode)) return;
     var notSelf = !(stfStr_(me.emp) && stfStr_(me.emp) === stfStr_(t.emp));
     var ok = false;
-    // 店長核自己：本人是店長同等職稱（STORE_ATT_HEAD_TITLES）且要考勤（上面 attNeedOf_ 已判定）時，admin／人資主管名單仍含自己
-    if (flags.admin || flags.hrHead) ok = notSelf || STORE_ATT_HEAD_TITLES.indexOf(stfStr_(me.title)) !== -1;
+    if (flags.admin || flags.hrHead) ok = notSelf || selfOk;
     else if (t.orphan) ok = false;
     else {
-      ok = attApproverOf_(me, t, org);
+      ok = attApproverOf_(me, t, org, mode);
       if (!ok && flags.attExtra && notSelf && stfStr_(me.unit) && stfStr_(me.unit) === stfStr_(t.unit)) ok = true;
     }
     if (ok) out.push(t);
@@ -390,7 +424,9 @@ function storeIdent_(sub) {
     if (valid && perms.indexOf(STORE_PERM_VOID) !== -1 && pilot.indexOf(p.unit) !== -1) voidUnits = [p.unit];
   }
 
-  var targets = storeAttTargets_(me, flags, people, org, storeHomeFn_());
+  var home = storeHomeFn_();
+  var targets = storeAttTargets_(me, flags, people, org, home, 'hours');
+  var reqTargets = storeAttTargets_(me, flags, people, org, home, 'req');
   return {
     sub: sub, active: true,
     emp_no: p ? p.emp : '',
@@ -404,7 +440,7 @@ function storeIdent_(sub) {
     pilot_units: pilot,
     units_managed: storeUniqSorted_(managed),
     void_units: storeUniqSorted_(voidUnits),
-    att: { people: storeAttPeople_(targets, pilot) }
+    att: { people: storeAttPeople_(targets, pilot), req_people: storeAttPeople_(reqTargets, pilot) }   // people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）
   };
 }
 
@@ -486,7 +522,7 @@ function handleSvcStoreRoster_(payload) {
 
 /**
  * 總開關（STORE_SSO_UNITS）空 → 一律 false（考勤管理選單不顯示）。
- * 否則：在職且（職稱 STORE_ATT_GATE_TITLES：sm／fm／am／rdd／odir／hm／ceo／gm／chair、或人資主管、或有 att.extra）→ true。
+ * 否則：在職且（職稱 STORE_ATT_GATE_TITLES：sm／fm／am／rdd／osv／odir／hm／ceo／gm／chair、或人資主管、或有 att.extra）→ true。
  * admin 本來就是 '*'，不在這裡判斷。values＝staff 分頁一列。
  */
 function storeAttGate_(values) {
