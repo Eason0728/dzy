@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { parseCall, toPageResult, pnlTarget, PNL_ORIGIN, PNL_PAGES, PNL_ACTIONS, navMessage, currentMonth, buildAlerts } from '../modules/pnl/bridge.js';
+import { parseCall, toPageResult, pnlTarget, PNL_ORIGIN, PNL_PAGES, PNL_ACTIONS, navMessage, atPage, currentMonth, buildAlerts } from '../modules/pnl/bridge.js';
 import manifest from '../modules/pnl/manifest.js';
 import { validateManifest } from '../platform/manifest-check.js';
 import { READ_ACTIONS, WRITE_ACTIONS } from '../platform/dryrun.js';
@@ -84,5 +84,11 @@ t('首頁提醒：只列有待補的店，文字含店名與月份', () => {
   assert.equal(currentMonth(Date.UTC(2026, 9, 31, 17, 0)), '2026-11');   // 台北 11/1 01:00
   assert.deepEqual(buildAlerts([{ store_id: 'S01', name: '新竹光復', count: 2 }, { store_id: 'S02', name: '台中美村', count: 0 }], '2026-10'),
     [{ level: 'warn', text: '新竹光復 10 月損益還有 2 項待補', view: 'pending', params: { store: 'S01' } }]);
+});
+t('損益頁回報所在頁：只認合格訊息與已知頁名', () => {
+  assert.equal(atPage({ type: 'dzy-pnl-at', v: 1, p: 'labor' }), 'labor');
+  for (const bad of [null, { type: 'dzy-pnl-at', v: 2, p: 'labor' }, { type: 'dzy-pnl-at', v: 1, p: 'evil' }, { type: 'x', v: 1, p: 'labor' }, { type: 'dzy-pnl-at', v: 1 }]) {
+    assert.equal(atPage(bad), null, JSON.stringify(bad));
+  }
 });
 console.log(`pnl-module：${n} 項全部通過`);

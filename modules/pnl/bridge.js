@@ -71,6 +71,12 @@ export function navMessage(viewId) {
   return { type: 'dzy-pnl-nav', v: 1, p: ok ? viewId : 'dashboard' };
 }
 
+/** 損益頁回報「我現在在哪一頁」（dzy-pnl-at）；不認得的回 null */
+export function atPage(data) {
+  if (!data || typeof data !== 'object' || data.type !== 'dzy-pnl-at' || data.v !== 1 || typeof data.p !== 'string') return null;
+  return PNL_PAGES.some((x) => x[0] === data.p) ? data.p : null;
+}
+
 /** 本月（台北時間）'YYYY-MM' */
 export function currentMonth(now) {
   const d = new Date((now === undefined ? Date.now() : now) + 8 * 3600 * 1000);

@@ -4,7 +4,7 @@
  */
 'use strict';
 
-import { pnlTarget, parseCall, toPageResult, navMessage, currentMonth, buildAlerts } from './bridge.js';
+import { pnlTarget, parseCall, toPageResult, navMessage, atPage, currentMonth, buildAlerts } from './bridge.js';
 
 const LOAD_TIMEOUT_MS = 20000;
 const ALERT_CACHE_MS = 10 * 60 * 1000;
@@ -37,6 +37,9 @@ async function onMessage(e) {
   if (!state || e.origin !== state.target.origin || e.source !== state.frame.contentWindow) return;
   const d = e.data;
   if (d && d.type === 'dzy-pnl-ready' && d.v === 1) { clearDown(); state.ready = true; sendNav(); return; }
+  // 損益頁自己切頁（填資料頁裡的類別膠囊、「前往填資料」）→ 頁頂分頁跟著換（ctx.nav 只在本模組在畫面上時才換網址）
+  const at = atPage(d);
+  if (at) { if (at !== state.ctx.viewId) state.ctx.nav(at); return; }
   const call = parseCall(d);
   if (!call) return;
   const frame = state.frame, origin = state.target.origin, ctx = state.ctx;
