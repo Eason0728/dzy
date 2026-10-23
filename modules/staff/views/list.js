@@ -312,15 +312,17 @@ export function mountList(el, ctx) {
   }
 
   // 2026-10-23 名稱調整（docs/org/spec.md 第 16 節）：只改 org 四格顯示名稱（加盟部、總監、廚藝總監、品牌研發部），不動權限與審核
+  const KIND_ZH = { dept: '部門', title: '職稱', brand: '品牌', role: '系統角色' };
+  const kindZh = (k) => KIND_ZH[k] || k;
   function rename2610nHtml(d, done) {
-    const rows = (d.changes || []).map((c) => `${c.kind === 'dept' ? '部門' : '職稱'} ${c.code}：${c.from} → ${c.to}`);
-    const skipped = (d.skipped || []).map((c) => `${c.kind === 'dept' ? '部門' : '職稱'} ${c.code}：已經是「${c.name}」`);
+    const rows = (d.changes || []).map((c) => `${kindZh(c.kind)} ${c.code}：${c.from} → ${c.to}`);
+    const skipped = (d.skipped || []).map((c) => `${kindZh(c.kind)} ${c.code}：已經是「${c.name}」`);
     return `<p><b>名稱${done ? '已改' : '會改'}（${rows.length} 筆）</b></p>${li(rows)}
       <p><b>不用改（${skipped.length} 筆）</b></p>${li(skipped)}`;
   }
   const badOf = (r) => (r.data && (r.data.bad || (r.data.data && r.data.data.bad))) || [];
   async function renameBadDialog(r) {
-    const bad = badOf(r).map((x) => `${x.kind === 'dept' ? '部門' : '職稱'} ${x.code}：應為「${x.expected}」，目前是「${x.actual}」`);
+    const bad = badOf(r).map((x) => `${kindZh(x.kind)} ${x.code}：應為「${x.expected}」，目前是「${x.actual}」`);
     await ctx.ui.dialog({ title: '名稱調整被拒絕', body: domOf(`<p>${esc(r.error)}</p>${li(bad)}`), actions: OK_ONLY });
   }
   async function rename2610nFlow() {
@@ -341,7 +343,7 @@ export function mountList(el, ctx) {
     if (alive) load();
   }
   async function renameRollback2610nFlow() {
-    if (!(await ctx.ui.confirm('退回名稱調整？加盟部、總監、廚藝總監、研發部（品牌）改回加盟招商部、部門主管、研發總監、中央工廠。若這些名稱調整後又被改過，系統會拒絕。'))) return;
+    if (!(await ctx.ui.confirm('退回名稱調整？加盟部、總監、廚藝總監、研發部（品牌）、總監（系統角色）改回加盟招商部、部門主管、研發總監、中央工廠、部門主管。若這些名稱調整後又被改過，系統會拒絕。'))) return;
     ctx.ui.loading(true);
     let r;
     try { r = await ctx.api.call('staff', 'orgRenameRollback202610', {}); } finally { ctx.ui.loading(false); }

@@ -2382,8 +2382,9 @@ function handleOrgRollback202610_(token) {
 
 // ============================================================
 // 12. 2026-10-23 名稱調整一次性改名／退回（docs/org/spec.md 第 16 節；只有 role admin）
-//   只改 org 分頁四列的「名稱」那一格（顯示用；代碼、職級、審核、權限全都不動）：
-//   加盟招商部 franchise → 加盟部、部門主管 hm → 總監、研發總監 rdd → 廚藝總監、品牌 中央工廠 ck → 研發部（單位名稱不動）。
+//   只改 org 分頁四列的「名稱」那一格＋roles 分頁一列的中文名（顯示用；代碼、職級、審核、權限全都不動）：
+//   加盟招商部 franchise → 加盟部、部門主管 hm → 總監、研發總監 rdd → 廚藝總監、品牌 中央工廠 ck → 研發部（單位名稱不動）、
+//   系統角色 manager 部門主管 → 總監（roles 分頁 name_zh；2026-10-24 追加）。
 //   不另建備份：舊名、新名就是下面的常數；每列「現在＝舊名才改、已是新名就略過、其他一律整批拒絕」，所以重跑安全、
 //   退回只還原「現在還是新名」的格子（被人改成別的就拒絕）。
 // ============================================================
@@ -2392,23 +2393,29 @@ var STF_2610N_RENAMES = [
   { kind: 'dept', code: 'franchise', from: '加盟招商部', to: '加盟部' },
   { kind: 'title', code: 'hm', from: '部門主管', to: '總監' },
   { kind: 'title', code: 'rdd', from: '研發總監', to: '廚藝總監' },
-  { kind: 'brand', code: 'ck', from: '中央工廠', to: '研發部' }        // Eason 2026-10-23 追加：品牌欄改叫研發部，單位仍是「中央工廠（央廚）」
+  { kind: 'brand', code: 'ck', from: '中央工廠', to: '研發部' },       // Eason 2026-10-23 追加：品牌欄改叫研發部，單位仍是「中央工廠（央廚）」
+  { kind: 'role', sheet: 'roles', code: 'manager', from: '部門主管', to: '總監' }   // Eason 2026-10-24 追加：人員管理的系統角色 manager（roles 分頁 B 欄）
 ];
 
 /** 計畫（唯讀）。dir＝'apply'（舊→新）或 'rollback'（新→舊）。回 { changes, skipped, bad }；bad 非空＝整批拒絕 */
 function stf2610nPlan_(dir) {
   var rows = stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length);
+  var roleRows = null;   // roles 分頁（A role、B name_zh），有 sheet: 'roles' 的項目才讀
   var changes = [], skipped = [], bad = [];
   STF_2610N_RENAMES.forEach(function (x) {
     var want = dir === 'apply' ? x.to : x.from;     // 做完之後的名稱
     var expect = dir === 'apply' ? x.from : x.to;   // 這次動手前應有的名稱
+    var isRole = x.sheet === 'roles';
+    if (isRole && !roleRows) roleRows = stfReadRows_(USR_SHEET_ROLES, 2);
+    var src = isRole ? roleRows : rows, nameCol = isRole ? 1 : STF_ORG_COL.name;
     var idx = -1;
-    for (var i = 0; i < rows.length; i++) {
-      if (stfStr_(rows[i][STF_ORG_COL.kind]) === x.kind && stfStr_(rows[i][STF_ORG_COL.code]) === x.code) { idx = i; break; }
+    for (var i = 0; i < src.length; i++) {
+      if (isRole ? stfStr_(src[i][0]) === x.code : (stfStr_(src[i][STF_ORG_COL.kind]) === x.kind && stfStr_(src[i][STF_ORG_COL.code]) === x.code)) { idx = i; break; }
     }
+    if (idx === -1 && isRole) { skipped.push({ kind: x.kind, code: x.code, name: '（沒有這個角色，不用改）' }); return; }   // 系統角色沒建就略過，不擋其他名稱
     if (idx === -1) { bad.push({ kind: x.kind, code: x.code, expected: expect, actual: '（找不到這一列）' }); return; }
-    var cur = stfStr_(rows[idx][STF_ORG_COL.name]);
-    if (cur === expect) changes.push({ kind: x.kind, code: x.code, from: cur, to: want, row: idx + 2 });
+    var cur = stfStr_(src[idx][nameCol]);
+    if (cur === expect) changes.push({ kind: x.kind, code: x.code, from: cur, to: want, row: idx + 2, sheet: isRole ? USR_SHEET_ROLES : STF_SHEET_ORG, col: nameCol + 1 });
     else if (cur === want) skipped.push({ kind: x.kind, code: x.code, name: cur });
     else bad.push({ kind: x.kind, code: x.code, expected: expect, actual: cur });
   });
@@ -2429,9 +2436,8 @@ function stf2610nRun_(token, payload, dir) {
   var data = { dryrun: dry, changes: plan.changes.map(function (c) { return { kind: c.kind, code: c.code, from: c.from, to: c.to }; }), skipped: plan.skipped };
   if (dry) return { ok: true, data: data };
   var by = String(auth.user.id);
-  var osh = stfSheet_(STF_SHEET_ORG);
   plan.changes.forEach(function (c) {
-    osh.getRange(c.row, STF_ORG_COL.name + 1, 1, 1).setValue(c.to);   // 只寫名稱那一格
+    stfSheet_(c.sheet).getRange(c.row, c.col, 1, 1).setValue(c.to);   // 只寫名稱那一格（org 的 name、roles 的 name_zh）
     stfLog_('', dir === 'apply' ? 'org_rename_2610' : 'org_rename_2610_rollback', by, c.kind + ':' + c.code + ':' + c.from + '>' + c.to);
   });
   // 後置條件：重算同方向計畫，不該再有要改的格

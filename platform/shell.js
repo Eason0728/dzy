@@ -491,7 +491,7 @@ const navBadgeCache = {};
 /** 側邊欄部門的展開狀態：使用者點過的才記（true／false）；沒點過＝有功能就展開、空的收合 */
 const deptOpenState = new Map();
 
-const ROLE_ZH = { admin: '系統管理者', manager: '部門主管', accountant: '會計', storelead: '店長', staff: '員工' };
+const ROLE_ZH = { admin: '系統管理者', manager: '總監', accountant: '會計', storelead: '店長', staff: '員工' };
 
 /**
  * 左側深色側邊欄（外觀照門市營運系統 ~/mala-store-ops/web/js/shell.js sidebarHtml，2026-10-11）：

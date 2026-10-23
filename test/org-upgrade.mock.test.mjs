@@ -126,7 +126,7 @@ function freshSeed(h) {
       ['u001', 'BOSS', '系統管理者', 'admin', '', salt, h.hashPassword_(ADMIN_PW, salt), 'TRUE', '', ''],
       ['u002', 'HR01', '測試人資', 'hr', '', salt, h.hashPassword_('fake-hr-pw-0001', salt), 'TRUE', '', '']
     ],
-    roles: [['role', 'name_zh', 'perms'], ['admin', '系統管理者', '*'], ['staff', '員工', ''], ['hr', '人資', 'platform.staff,platform.self']],
+    roles: [['role', 'name_zh', 'perms'], ['admin', '系統管理者', '*'], ['staff', '員工', ''], ['hr', '人資', 'platform.staff,platform.self'], ['manager', '部門主管', 'audit.read,dorm.read,dorm.write']],
     module_secrets: [['backend_id', 'level', 'secret']],
     login_log: [['at', 'username', 'ip_hash', 'result']]
   };
@@ -1293,29 +1293,29 @@ function oldNames(app, withRdd) {
   ok(n2610(app, { dryrun: true }, '').ok === false, '16 無 token 被擋');
   const before = sheetDump(app);
   const dr = n2610(app, { dryrun: true });
-  ok(dr.ok && dr.data.dryrun === true && dr.data.changes.length === 4 && dr.data.skipped.length === 0 && sheetDump(app) === before, '16 dryrun 預覽四筆、零寫入（org／staff_log 都沒動）', dr);
-  ok(dr.data.changes.map((c) => c.code + ':' + c.from + '>' + c.to).sort().join() === ['franchise:加盟招商部>加盟部', 'hm:部門主管>總監', 'rdd:研發總監>廚藝總監', 'ck:中央工廠>研發部'].sort().join(), '16 預覽內容正確');
+  ok(dr.ok && dr.data.dryrun === true && dr.data.changes.length === 5 && dr.data.skipped.length === 0 && sheetDump(app) === before, '16 dryrun 預覽五筆、零寫入（org／staff_log 都沒動）', dr);
+  ok(dr.data.changes.map((c) => c.code + ':' + c.from + '>' + c.to).sort().join() === ['franchise:加盟招商部>加盟部', 'hm:部門主管>總監', 'rdd:研發總監>廚藝總監', 'ck:中央工廠>研發部', 'manager:部門主管>總監'].sort().join(), '16 預覽內容正確');
   const orgBefore = JSON.stringify(orgRows(app));
   const run = n2610(app, {});
-  ok(run.ok && run.data.dryrun === false && run.data.changes.length === 4, '16 執行成功', run);
+  ok(run.ok && run.data.dryrun === false && run.data.changes.length === 5 && rowsOf(app, 'roles').find((r) => r.role === 'manager').name_zh === '總監', '16 執行成功', run);
   ok(orgName(app, 'dept', 'franchise') === '加盟部' && orgName(app, 'title', 'hm') === '總監' && orgName(app, 'title', 'rdd') === '廚藝總監' && orgName(app, 'brand', 'ck') === '研發部' && orgName(app, 'unit', 'ck') === '中央工廠（央廚）', '16 四格名稱已改（ck 單位名稱不動）');
   // 只動名稱欄：其他欄逐格相同
   const strip = (rows) => JSON.stringify(rows.map((r) => r.map((v, i) => (i === 2 ? '' : v))));
   ok(strip(JSON.parse(orgBefore)) === strip(orgRows(app)), '16 ★只改名稱那一格（代碼、職級、順序、啟用等其他格逐格相同）');
   const logs = rowsOf(app, 'staff_log').filter((r) => r.event === 'org_rename_2610');
-  ok(logs.length === 4 && logs.every((l) => l.by === 'u001' || String(l.by).length > 0), '16 staff_log 每格一筆', logs);
+  ok(logs.length === 5 && logs.every((l) => l.by === 'u001' || String(l.by).length > 0), '16 staff_log 每格一筆', logs);
   // 重跑：全部略過、沒有新紀錄
   const again = n2610(app, {});
-  ok(again.ok && again.data.changes.length === 0 && again.data.skipped.length === 4 && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_rename_2610').length === 4, '16 重跑冪等：全部略過、不重複寫紀錄', again);
+  ok(again.ok && again.data.changes.length === 0 && again.data.skipped.length === 5 && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_rename_2610').length === 5, '16 重跑冪等：全部略過、不重複寫紀錄', again);
   // 權限與審核不受影響：階梯與職級沒變
   const o3 = app.sb.stfReadOrg_();
   ok(o3.title.hm.rank === 2 && o3.title.hm.parent === 'hq' && o3.title.rdd.rank === 4 && o3.dept.franchise.parent === 'dzy-hq', '16 職級／階梯／父層不變');
   // 退回
   const rb = nr2610(app);
-  ok(rb.ok && rb.data.changes.length === 4 && orgName(app, 'brand', 'ck') === '中央工廠' && orgName(app, 'dept', 'franchise') === '加盟招商部' && orgName(app, 'title', 'hm') === '部門主管' && orgName(app, 'title', 'rdd') === '研發總監', '16 退回：四格改回舊名', rb);
-  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_rename_2610_rollback').length === 4, '16 退回有 staff_log');
+  ok(rb.ok && rb.data.changes.length === 5 && rowsOf(app, 'roles').find((r) => r.role === 'manager').name_zh === '部門主管' && orgName(app, 'brand', 'ck') === '中央工廠' && orgName(app, 'dept', 'franchise') === '加盟招商部' && orgName(app, 'title', 'hm') === '部門主管' && orgName(app, 'title', 'rdd') === '研發總監', '16 退回：四格改回舊名', rb);
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_rename_2610_rollback').length === 5, '16 退回有 staff_log');
   const rb2 = nr2610(app);
-  ok(rb2.ok && rb2.data.changes.length === 0 && rb2.data.skipped.length === 4, '16 退回重跑冪等');
+  ok(rb2.ok && rb2.data.changes.length === 0 && rb2.data.skipped.length === 5, '16 退回重跑冪等');
   // 再改一次、然後某格被人改成別的 → 退回拒絕、整批不動
   ok(n2610(app, {}).ok, '16 退回後可再調整');
   setOrgName(app, 'title', 'hm', '部門經理');
@@ -1339,7 +1339,17 @@ function oldNames(app, withRdd) {
   const app4 = oldNames(app2610(), false);
   ok(u2610(app4, {}).ok && orgName(app4, 'title', 'rdd') === '廚藝總監', '16 orgUpgrade202610 新補的 rdd 直接用廚藝總監');
   const r4 = n2610(app4, {});
-  ok(r4.ok && r4.data.changes.length === 3 && r4.data.skipped.length === 1 && r4.data.skipped[0].code === 'rdd', '16 升級後改名：rdd 略過、其餘三格照改', r4);
+  ok(r4.ok && r4.data.changes.length === 4 && r4.data.skipped.length === 1 && r4.data.skipped[0].code === 'rdd', '16 升級後改名：rdd 略過、其餘四格照改', r4);
+  // 系統角色 manager 沒建（舊環境）→ 那一項略過，不擋其他名稱
+  const app5 = oldNames(app2610(), true);
+  { const rd = app5.sheets.roles._data; rd.splice(rd.findIndex((r) => r[0] === 'manager'), 1); }
+  const r5 = n2610(app5, {});
+  ok(r5.ok && r5.data.skipped.some((x) => x.kind === 'role' && x.code === 'manager') && !r5.data.changes.some((x) => x.kind === 'role') && orgName(app5, 'title', 'hm') === '總監', '16 ★沒有 manager 角色 → 角色那項略過、其他照改', r5);
+  // 系統角色被改成別的名稱 → 整批拒絕
+  const app6 = oldNames(app2610(), true);
+  app6.sheets.roles._data.find((r) => r[0] === 'manager')[1] = '主管';
+  const r6 = n2610(app6, { dryrun: true });
+  ok(r6.ok === false && r6.data.bad.length === 1 && r6.data.bad[0].kind === 'role' && r6.data.bad[0].actual === '主管', '16 ★角色名稱不是預期值 → 整批拒絕', r6);
   // Code.gs 登錄
   const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
   ok(/CODE_ALLOWED_ACTIONS = \[[\s\S]*?'orgRename202610', 'orgRenameRollback202610'[\s\S]*?\];/.test(src) && /orgRename202610: 1, orgRenameRollback202610: 1/.test(src) && /case 'orgRename202610'/.test(src) && /case 'orgRenameRollback202610'/.test(src), '16 兩個 action 在白名單、寫入鎖、分派表');

@@ -380,7 +380,7 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
 {
   const el1 = await mount(makeCtx(baseHandler(), { perms: ['platform.staff'], role: 'hr' }));
   ok(!el1.innerHTML.includes('data-role="org-rename-2610n"') && !el1.innerHTML.includes('data-role="org-rename-rollback-2610n"'), '16 ★非 admin 看不到「名稱調整」「退回名稱調整」');
-  const PV = { ok: true, data: { dryrun: true, changes: [{ kind: 'dept', code: 'franchise', from: '加盟招商部', to: '加盟部' }, { kind: 'title', code: 'hm', from: '部門主管', to: '總監' }], skipped: [{ kind: 'title', code: 'rdd', name: '廚藝總監' }] } };
+  const PV = { ok: true, data: { dryrun: true, changes: [{ kind: 'dept', code: 'franchise', from: '加盟招商部', to: '加盟部' }, { kind: 'title', code: 'hm', from: '部門主管', to: '總監' }, { kind: 'brand', code: 'ck', from: '中央工廠', to: '研發部' }, { kind: 'role', code: 'manager', from: '部門主管', to: '總監' }], skipped: [{ kind: 'title', code: 'rdd', name: '廚藝總監' }] } };
   const ctx = makeCtx(baseHandler((a, p) => (a === 'orgRename202610' ? (p.dryrun ? PV : { ok: true, data: Object.assign({}, PV.data, { dryrun: false }) }) : null)), { perms: ['platform.staff'], role: 'admin' });
   const el = await mount(ctx);
   ok(el.innerHTML.includes('名稱調整（10/23）') && el.innerHTML.includes('退回名稱調整'), '16 admin 看得到兩顆按鈕');
@@ -389,6 +389,7 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ok(ctx.calls.filter((c) => c.action === 'orgRename202610').length === 1 && ctx.calls.find((c) => c.action === 'orgRename202610').payload.dryrun === true, '16 ★先 dryrun:true 預覽，取消就不寫');
   const pv = ctx.dialogs[0].body.innerHTML;
   ok(pv.includes('加盟招商部 → 加盟部') && pv.includes('部門主管 → 總監') && pv.includes('廚藝總監'), '16 預覽列出要改與已是新名的格子', pv);
+  ok(pv.includes('品牌 ck：中央工廠 → 研發部') && pv.includes('系統角色 manager：部門主管 → 總監'), '16 預覽標示品牌、系統角色（不是一律寫職稱）', pv);
   ctx.calls.length = 0; ctx.dialogs.length = 0; ctx.answers.push('go', 'ok');
   el.querySelector('[data-role="org-rename-2610n"]').fire('click'); await flush();
   ok(JSON.stringify(ctx.calls.filter((c) => c.action === 'orgRename202610').map((c) => c.payload.dryrun)) === '[true,false]' && /完成/.test(ctx.dialogs[1].title), '16 按「確定調整」才 dryrun:false');

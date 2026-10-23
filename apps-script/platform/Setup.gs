@@ -22,7 +22,7 @@ const HEADERS = {
 /** 五個角色，權限碼照 spec.md §4.3。之後要調權限改這張表即可，不必動程式 */
 const DEFAULT_ROLES = [
   ['admin', '系統管理者', '*'],
-  ['manager', '部門主管', 'audit.read,dorm.read,dorm.write'],
+  ['manager', '總監', 'audit.read,dorm.read,dorm.write'],
   ['accountant', '會計', 'audit.read,audit.write'],
   ['storelead', '店長', 'audit.read.own'],
   ['staff', '員工', '']
