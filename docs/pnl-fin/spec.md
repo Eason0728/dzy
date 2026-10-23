@@ -99,7 +99,7 @@ dzy 殼 ctx.api.call('pnl', action, payload) → POST <平台>/platform/proxy {t
 
 ## 8. 待決（實作前要問 Eason 或先查清楚）
 
-1. `platform/api.js` 的 PROXY_NS／逾時表要不要允許加一行（§3）。先查有沒有免改的通用機制。
+1. ~~platform/api.js PROXY_NS~~：Eason 2026-10-24 准「代轉模組各在 PROXY_NS／PROXY_TIMEOUT_BY_NS 加自己的名字」（照薪酬前例；收支、調撥同適用）。
 2. ~~殼的 requires 語意~~：已查，任一即可（shell.js:196）。
 3. 財務部門預設開 `pnl.write` 的做法要跟收支、調撥、貨單三個模組一致（同樣走 perm_map 身分預設）。
 4. 附件上傳經代轉的大小上限（mini proxy body 上限、Apps Script 上限），超過要在前端先擋。
