@@ -48,8 +48,8 @@ import { isDryRun, isReadAction, notifyDryRun } from './dryrun.js';
 const PROXY_TIMEOUT_MS = 35000;
 // 薪酬系統（2026-10-19）：重算整月、出勤紀錄表匯出可能超過 30 秒，mini 對薪資後端等 120 秒（app.json backends.payroll.timeoutMs），這裡多留 5 秒
 const PROXY_TIMEOUT_BY_NS = { payroll: 125000 };
-// attendance＝考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）
-const PROXY_NS = { audit: true, dorm: true, payroll: true, attendance: true };
+// attendance＝考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）；cashbook＝收支管理（2026-10-24）
+const PROXY_NS = { audit: true, dorm: true, payroll: true, attendance: true, cashbook: true };
 
 // 45 秒（2026-08-17 由 15 秒放寬，與 auth.js 同一個理由：Apps Script 本來就慢，
 // 稽核 getAll 還要一次讀回五個分頁的整年資料，行動網路上 15 秒不夠用）。

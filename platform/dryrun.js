@@ -33,7 +33,9 @@ export const READ_ACTIONS = {
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
     'payroll_attendance_export'],
   // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：必須與 Auth.gs PROXY_READ_ACTIONS.attendance 一致；只回件數的純讀取
-  attendance: ['attAlerts']
+  attendance: ['attAlerts'],
+  // 收支管理（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.cashbook 一致（test/proxy-authorize.test.mjs 比對）
+  cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet']
 };
 
 /**
@@ -44,7 +46,8 @@ export const WRITE_ACTIONS = {
   audit: ['submitAudit', 'markRest', 'submitOpsAudit', 'addStore', 'setStoreStatus', 'renameStore'],
   dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign'],
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
-    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set']
+    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
+  cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock']
 };
 
 export const DRYRUN_MESSAGE = '試跑模式，未寫入';

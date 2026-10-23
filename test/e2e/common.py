@@ -211,6 +211,9 @@ class MockBackend:
             if getattr(self, 'att_alerts_fail', False):
                 return 502, {'ok': False, 'error': 'UPSTREAM_DOWN'}
             return 200, getattr(self, 'att_alerts', {'ok': True, 'data': {'items': [], 'partial': False, 'pending': False}})
+        if ns == 'cashbook':   # 收支管理（2026-10-24）：有狀態的假現金帳在 cashbook_mock.py
+            import cashbook_mock
+            return cashbook_mock.proxy(self, body)
         if ns not in PROXY_SECRETS:
             return 404, {'ok': False, 'error': 'UNKNOWN_NS'}
         token = body.get('token') or ''

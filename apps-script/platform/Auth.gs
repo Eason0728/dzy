@@ -282,6 +282,8 @@ function pickSecrets_(perms) {
   Object.keys(byBackend).forEach(function (backendId) {
     // 薪酬管理金鑰（2026-10-19）能讀寫全集團薪資：就算有人把過渡旗標 LEGACY_SECRETS 打開，也絕不下發到瀏覽器
     if (backendId === 'payroll') return;
+    // 收支管理金鑰（2026-10-24）同理：會計級通道，絕不下發到瀏覽器
+    if (backendId === 'cashbook') return;
     var s = pickSecretFor_(perms, backendId, byBackend);
     if (s) out[backendId] = s;
   });
@@ -305,7 +307,9 @@ var PROXY_READ_ACTIONS = {
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
     'payroll_attendance_export'],
   // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：與 platform/dryrun.js READ_ACTIONS.attendance 一致
-  attendance: ['attAlerts']
+  attendance: ['attAlerts'],
+  // 收支管理（2026-10-24，Mac mini 現金帳伺服器的管理代轉通道）：只有 cashbook.write，讀寫都要它；分讀寫只為了試跑模式能照常讀
+  cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet']
 };
 
 /**
@@ -317,7 +321,9 @@ var PROXY_WRITE_ACTIONS = {
   dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign'],
   // 薪酬頁（mala-clock-in/payroll.html）實際會呼叫的寫入 action；後端還有 payroll_migrate_store 等維運動作，刻意不列
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
-    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set']
+    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
+  // 收支管理：不含改通行碼（adminSave 帶 newStorePass／newAdminPass 由 mini 現金帳伺服器拒絕）
+  cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock']
 };
 
 /**
@@ -404,12 +410,12 @@ function proxyAuthorize_(token, ns, action) {
 }
 
 /**
- * 薪酬系統的操作人（2026-10-19）：薪資後端的 payroll_audit.operator 原本是呼叫端自填（共用金鑰時無法證明誰做的）。
+ * 薪酬系統、收支管理（2026-10-24 加）的操作人（2026-10-19）：薪資後端的 payroll_audit.operator 原本是呼叫端自填（共用金鑰時無法證明誰做的）。
  * 代轉時由平台依登入身分決定、mini 的 proxy-hook.js 一律覆寫上游 body.operator，瀏覽器送什麼都不採信。
  * 其他 ns 不加（舊後端不認這個欄位）。
  */
 function proxyWithOperator_(res, ns, user) {
-  if (ns !== 'payroll') return res;
+  if (ns !== 'payroll' && ns !== 'cashbook') return res;
   var name = String((user && user.name) || '').trim();
   var uname = String((user && user.username) || '').trim();
   res.operator = (name || uname || '未知') + (uname ? '（' + uname + '）' : '') + '（管理系統）';

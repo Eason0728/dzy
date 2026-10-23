@@ -196,17 +196,17 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
     ok(r.ok === false && r.code === 'not_inited', '1: ' + a + ' 未初始化 → not_inited', r);
   }
   for (const n of ['perm_map', 'perm_ex', 'perm_store_map', 'perm_audit']) ok(!sheets[n], '1: 讀寫都試過之後仍然沒有分頁 ' + n + '（不自動建表）');
-  // permInit：非 admin 擋；admin 建四表、預設 26 條＋對照 5 筆；重跑不重複
+  // permInit：非 admin 擋；admin 建四表、預設 27 條＋對照 5 筆；重跑不重複
   on(app);
   const bad = post(sb, 'permInit', {}, P.hrHm.token);
   ok(bad.ok === false && bad.code === 'no_perm', '1: permInit 非 admin（連人資主管）→ no_perm', bad);
   const lk0 = app.counters.locks;
   const r1 = g('permInit');
-  ok(r1.ok && r1.data.created.length === 4 && r1.data.rules_seeded === 26 && r1.data.stores_seeded === 5, '1: admin permInit 建四表＋26 條＋5 筆對照', r1);
+  ok(r1.ok && r1.data.created.length === 4 && r1.data.rules_seeded === 27 && r1.data.stores_seeded === 5, '1: admin permInit 建四表＋27 條＋5 筆對照', r1);
   ok(app.counters.locks > lk0, '1: permInit 拿了 LockService');
-  ok(sheets.perm_map._rows().length === 27, '1: perm_map 27 列（表頭＋26）');
+  ok(sheets.perm_map._rows().length === 28, '1: perm_map 28 列（表頭＋27）');
   const r2 = g('permInit');
-  ok(r2.ok && r2.data.created.length === 0 && r2.data.rules_seeded === 0 && sheets.perm_map._rows().length === 27, '1: 重跑不重複', r2);
+  ok(r2.ok && r2.data.created.length === 0 && r2.data.rules_seeded === 0 && sheets.perm_map._rows().length === 28, '1: 重跑不重複', r2);
   const log = rowsOf(sheets, 'staff_log').filter((r) => r[2] === 'perm_init');
   ok(log.length === 2 && log.every((r) => /^created:/.test(r[4])), '1: staff_log 寫 perm_init（只有分頁名與數量）', log);
 }
@@ -255,7 +255,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   const { sb, sheets, P, counters } = app;
   const A = sb.__admin;
   const g = post(sb, 'permMapGet', {}, A);
-  ok(g.ok && g.data.inited && g.data.rules.length === 26 && g.data.grantable.length === 12 && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write', '3: permMapGet 回 26 條規則、12 個可給功能、5 個鎖碼', g.data && Object.keys(g.data));
+  ok(g.ok && g.data.inited && g.data.rules.length === 27 && g.data.grantable.length === 13 && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write', '3: permMapGet 回 27 條規則、13 個可給功能、5 個鎖碼', g.data && Object.keys(g.data));
   ok(g.data.titles.some((t) => t.code === 'osv' && t.rank === 2 && t.ladder === 'office') && g.data.depts.some((d) => d.code === 'hr') && g.data.names['audit.read'], '3: permMapGet 的 titles／depts／names 有內容（osv 職級 2）');
   const sav = (tok, add, remove) => post(sb, 'permMapSave', { add: add || [], remove: remove || [] }, tok);
   const R = (ladder, dept, title, perm) => ({ ladder, dept, title, perm });
@@ -433,7 +433,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   ok(sm.enabled && own && own.source === 'title' && /^R\d{3}$/.test(own.rule_id) && own.name_zh === '稽核：我的門市', '6: 店長 audit.read.own 來源=title、有 rule_id 與中文名', own);
   ok(sm.items.some((i) => i.perm === 'platform.self' && i.source === 'role') && JSON.stringify(sm.audit_scope) === '["sxl-gf"]', '6: 角色權限 source=role、audit_scope 陣列', sm);
   const fin = post(sb, 'myPerms', {}, P.fin.token).data;
-  ok(fin.items.filter((i) => i.source === 'dept').map((i) => i.perm).sort().join() === 'audit.read,audit.write' && fin.audit_scope === 'all', '6: 財務同仁 audit.read／write 來源=dept、scope all', fin);
+  ok(fin.items.filter((i) => i.source === 'dept').map((i) => i.perm).sort().join() === 'audit.read,audit.write,cashbook.write' && fin.audit_scope === 'all', '6: 財務同仁 audit.read／write／cashbook.write 來源=dept、scope all', fin);
   const ceo = post(sb, 'myPerms', {}, P.ceo.token).data;
   ok(ceo.items.find((i) => i.perm === 'dorm.read').source === 'title', '6: 執行長 dorm.read 來源=title');
   post(sb, 'permExSave', { emp_no: P.pt.emp, perm: 'dorm.read', mode: 'add', until: dayShift(sb, 3), note: '暫時' }, A);
@@ -580,7 +580,7 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   ok(e.ok, '10: admin 把資訊同仁調去財務部（非 admin 會被鎖碼擋）', e);
   let au = sheets.perm_audit._rows();
   let last = au[au.length - 1];
-  ok(au.length === n0 + 1 && last[5] === 'staff_edit' && last[2] === P.it.emp && last[3] === 'audit.read,audit.write' && last[4] === '' && last[6] === 'FALSE', '10: 權限有差異 → perm_audit 一列 cause=staff_edit、added=audit.read,audit.write', last);
+  ok(au.length === n0 + 1 && last[5] === 'staff_edit' && last[2] === P.it.emp && last[3] === 'audit.read,audit.write,cashbook.write' && last[4] === '' && last[6] === 'FALSE', '10: 權限有差異 → perm_audit 一列 cause=staff_edit、added=audit.read,audit.write,cashbook.write', last);
   ok(last[1] !== '', '10: by 是帳號 id');
   // 只改手機：權限沒差異 → 不寫
   post(sb, 'staffEdit', { emp_no: P.it.emp, phone: '0911000123' }, P.hrHs.token);
@@ -588,7 +588,7 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   // 調成另一個沒規則的部門：removed
   post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'it' }, A);
   au = sheets.perm_audit._rows(); last = au[au.length - 1];
-  ok(last[5] === 'staff_edit' && last[3] === '' && last[4] === 'audit.read,audit.write', '10: 調回資訊部 → removed=audit.read,audit.write', last);
+  ok(last[5] === 'staff_edit' && last[3] === '' && last[4] === 'audit.read,audit.write,cashbook.write', '10: 調回資訊部 → removed=audit.read,audit.write,cashbook.write', last);
   // confirm：新認領的店長，admin 確認 → 從無到有
   const emp = claim(sb, '待確認店長', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
   const n1 = sheets.perm_audit._rows().length;
@@ -655,14 +655,14 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   ok(post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'fin' }, A).ok, '13b: 還原');
   const au = sheets.perm_audit._rows();
   const last = au[au.length - 1];
-  ok(au.length === nAudit1 + 1 && last[5] === 'staff_edit' && last[2] === P.it.emp && last[3] === 'audit.read,audit.write', '13b: 停用中改組織欄也寫 perm_audit（added）', last);
+  ok(au.length === nAudit1 + 1 && last[5] === 'staff_edit' && last[2] === P.it.emp && last[3] === 'audit.read,audit.write,cashbook.write', '13b: 停用中改組織欄也寫 perm_audit（added）', last);
   // (c) 停用有權限的人 → perm_audit removed
   const fin = P.fin;
   const n2 = sheets.perm_audit._rows().length;
   ok(post(sb, 'staffSetActive', { emp_no: fin.emp, active: false }, A).ok, '13c: 停用財務同仁');
   const au2 = sheets.perm_audit._rows();
   const l2 = au2[au2.length - 1];
-  ok(au2.length === n2 + 1 && l2[2] === fin.emp && l2[3] === '' && l2[4] === 'audit.read,audit.write' && l2[5] === 'staff_edit', '13c: 停用收回權限 → perm_audit removed', l2);
+  ok(au2.length === n2 + 1 && l2[2] === fin.emp && l2[3] === '' && l2[4] === 'audit.read,audit.write,cashbook.write' && l2[5] === 'staff_edit', '13c: 停用收回權限 → perm_audit removed', l2);
   // (d) 停用沒有任何規則權限的人 → 不寫
   const n3 = sheets.perm_audit._rows().length;
   ok(post(sb, 'staffSetActive', { emp_no: P.pt.emp, active: false }, A).ok, '13d: 停用計時同仁');

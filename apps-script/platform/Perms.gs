@@ -11,7 +11,8 @@
 // 可給的權限碼白名單（順序即畫面順序）
 var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap',
   'store.void', 'att.extra',   // 2026-10-18 營運系統：收支作廢、額外考勤核定（人資主管也能設這兩碼的個別例外，PermActions.gs）
-  'payroll.write'];             // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
+  'payroll.write',              // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
+  'cashbook.write'];            // 2026-10-24 收支管理（會計跨店查帳、作廢、月結鎖定、改科目；不鎖碼，Eason Q1 B：人資可在權限設定打開）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
 var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write'];   // 2026-10-19 加薪酬系統
@@ -28,7 +29,7 @@ var PERM_AUDIT_HEADERS = ['at', 'by', 'emp_no', 'added', 'removed', 'cause', 'se
 
 var PERM_LADDERS = ['store', 'office', 'hq'];
 
-// 預設規則（spec §3.1）：[ladder, dept, title, perm]；寫入時依序編 R001…（共 26 條）
+// 預設規則（spec §3.1）：[ladder, dept, title, perm]；寫入時依序編 R001…（共 27 條）
 var PERM_DEFAULT_RULES = (function () {
   var out = [];
   var add = function (ladder, dept, title, perms) {
@@ -46,6 +47,7 @@ var PERM_DEFAULT_RULES = (function () {
   // 2026-10-20（docs/org/spec.md 第 15 節；第 21–26 條，接在後面不改既有編號）：區經理 am、中央工廠廠長 fm／廚藝總監 rdd 與店長同一套預設。
   // 正式環境 perm_map 早已初始化，由 orgUpgrade202610 複製「店長的現行規則」（Eason 可能改過店長）；oam 已停用、它的規則保留不影響。
   ['am', 'fm', 'rdd'].forEach(function (t) { add('store', '', t, ['audit.read.own', 'store.void']); });
+  add('hq', 'fin', '*', ['cashbook.write']);   // 2026-10-24 收支管理（第 27 條；正式環境 perm_map 已初始化不會自動補，由 Eason 在權限設定打開）
   return out;
 })();
 
@@ -150,7 +152,7 @@ function permEnsureSheet_(ss, name, headers) {
 
 /**
  * 初始化四張權限分頁。只有 role admin。只補不覆蓋：表頭一致就不動；
- * perm_map 只有表頭（空表）才寫預設規則（PERM_DEFAULT_RULES，目前 26 條）；perm_store_map 空表才寫 5 筆對照。
+ * perm_map 只有表頭（空表）才寫預設規則（PERM_DEFAULT_RULES，目前 27 條）；perm_store_map 空表才寫 5 筆對照。
  * 任一分頁表頭不一致 → 一張都不建，回錯。
  * 回 { ok:true, created:[分頁名], rules_seeded:n, stores_seeded:n } 或 { ok:false, error, message }
  */
@@ -459,7 +461,7 @@ var PERM_NAMES = {
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
   'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.storeops': '門市營運',
-  'payroll.write': '薪酬系統'
+  'payroll.write': '薪酬系統', 'cashbook.write': '收支管理'
 };
 function permName_(code) { return PERM_NAMES[code] || code; }
 
