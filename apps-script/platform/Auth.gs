@@ -293,8 +293,8 @@ function pickSecrets_(perms) {
 // ============================================================
 
 /**
- * 讀取類 action 白名單——**必須與前端 platform/dryrun.js 的 READ_ACTIONS 的 audit／dorm 一致**
- *（test/proxy-authorize.test.mjs 有比對）。沒列到的一律當寫入（要 <ns>.write）。
+ * 讀取類 action 白名單——**每個 ns（audit／dorm／payroll／attendance…）都必須與前端 platform/dryrun.js 的 READ_ACTIONS 逐一相等**
+ *（test/proxy-authorize.test.mjs 有比對；2026-10-24 總審：原註解只寫 audit／dorm，實際所有 ns 都要一致）。沒列到的一律當寫入（要 <ns>.write）。
  */
 var PROXY_READ_ACTIONS = {
   audit: ['getAll'],
@@ -325,7 +325,9 @@ var PROXY_WRITE_ACTIONS = {
  * ⚠ 不准加進 Code.gs 的 CODE_ALLOWED_ACTIONS／dispatchAction_（加了＝任何持 token 的人打 /api 就能拿回通行碼）。
  * ⚠ 純讀：不寫任何分頁（不更新 last_login、不寫 login_log）。
  *
- * 成功：{ ok:true, secret:'<非空字串>', filterNode:null|'<user.node>', isWrite:boolean }
+ * 成功：{ ok:true, secret:'<非空字串>', filterNode:null|'<user.node>', isWrite:boolean, subject?:'<字串>' }
+ *   subject（選填，2026-10-24 總審補註）：只有 ns attendance 會帶——登入身分的 DZY 編號（admin 為 'U:<id>'）；
+ *   執行器（kit/runner/proxy.js）把它交給 hook 覆寫成 body.sub，前端送來的 sub 一律不採信。其他 ns 不帶。
  * 失敗：{ ok:false, code:'NO_TOKEN'|'BAD_TOKEN'|'FORBIDDEN'|'NO_SECRET'|'UNKNOWN_NS', error:'<中文，不含通行碼>' }
  */
 function proxyAuthorize_(token, ns, action) {

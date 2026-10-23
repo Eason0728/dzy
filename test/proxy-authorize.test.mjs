@@ -581,6 +581,14 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   sheets.users.appendRow(['u091', 'sysatt', '假', 'attsys', '', 's9', H('fake-sysatt-pw-01', 's9'), 'TRUE', '', '', '']);
   ok(sb.proxyAuthorize_(tokenOf(sb, 'sysatt', 'fake-sysatt-pw-01'), 'attendance', 'attAlerts').code === 'FORBIDDEN', '14j: 有 platform.att 但沒有 DZY 編號身分（subject 空）→ FORBIDDEN');
 
+  // PERMS_ON 開（第二期權限表）：platform.att 由 authPermsWithGate_ 併入、與開關無關 → 店長照樣 ok＋DZY subject，計時照樣 FORBIDDEN（2026-10-24 總審）
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '14n 前置：permInit_ 建表');
+  turnOn(sb);
+  const rOn = sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts');
+  ok(rOn.ok === true && rOn.secret === ATT && rOn.isWrite === false && rOn.subject === sm.emp && /^DZY\d+$/.test(String(rOn.subject)), '14n: PERMS_ON 開 → 店長仍 ok、subject＝DZY 編號', rOn);
+  ok(sb.proxyAuthorize_(pt.token, 'attendance', 'attAlerts').code === 'FORBIDDEN', '14o: PERMS_ON 開 → 計時同仁仍 FORBIDDEN');
+  ok(sb.proxyAuthorize_(boss, 'attendance', 'attAlerts').subject === 'U:u001', '14p: PERMS_ON 開 → admin 仍 subject＝U:<id>');
+
   // 沒設 attendance/read → NO_SECRET；整個 ns 沒登記 → UNKNOWN_NS
   const n = fresh();
   ok(n.sb.proxyAuthorize_(tokenOf(n.sb, 'BOSS', PW.boss), 'attendance', 'attAlerts').code === 'UNKNOWN_NS', '14k: module_secrets 沒有 attendance → UNKNOWN_NS');
