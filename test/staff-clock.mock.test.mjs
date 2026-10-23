@@ -728,8 +728,11 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   app2.sb.clockOutboxDone_(rj[0].job_id, { ok: true }, nowT(2));
   ok(maps(app2).find((m) => m.emp_id === 'W1').roster_active === 'FALSE', 'B7 deactivate 成功 → roster_active 立刻 FALSE');
   app2.sb.clockRosterApply_('mztgf', [rosterRow('W1', '帳同仁')], undefined, nowT(3));
-  ok(app2.sb.clockDailyApply_(nowT(5).slice(0, 10)).data.reconcile_jobs.length === 0, 'B7 今天剛停用完成、名冊還沒反應 → 同一天不重複補');
-  ok(app2.sb.clockDailyApply_(dayT(1)).data.reconcile_jobs.length === 1, 'B7 隔天名冊仍在職 → 再補一張');
+  const doneDay = nowT(5).slice(0, 10);
+  // 「隔天」要以停用完成那天為準：23:58 之後跑時 nowT(2) 已跨到明天，用 dayT(1) 會跟完成日同一天（測試在午夜邊界會紅）
+  const nextDay = new Date(Date.parse(doneDay + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
+  ok(app2.sb.clockDailyApply_(doneDay).data.reconcile_jobs.length === 0, 'B7 今天剛停用完成、名冊還沒反應 → 同一天不重複補');
+  ok(app2.sb.clockDailyApply_(nextDay).data.reconcile_jobs.length === 1, 'B7 隔天名冊仍在職 → 再補一張');
 
   // 異常：打卡單位在職者沒有 home 對照、也沒有有效待辦
   const app3 = fresh();
