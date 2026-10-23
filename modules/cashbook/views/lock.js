@@ -30,9 +30,10 @@ export function mountLock(el, ctx) {
       const kind = lockKind(rec);
       const who = rec ? `${esc(rec.lockedBy || (kind === 'store' ? '店長' : ''))}　${esc(rec.lockedAt || '')}` : '';
       const tag = kind === 'none' ? '<span class="tag">未鎖</span>' : kind === 'acct' ? `<span class="tag tag-ok">${esc(lockLabel(rec))}</span>` : `<span class="tag tag-warn">${esc(lockLabel(rec))}</span>`;
-      const btn = kind === 'none'
-        ? `<button type="button" class="btn btn-primary" data-act="lock" data-month="${esc(m)}">鎖定</button>`
-        : `<button type="button" class="btn btn-secondary" data-act="unlock" data-month="${esc(m)}">解鎖</button>`;
+      // 店長鎖的月份：會計可「改為會計鎖定」接手（現金帳 adminLock 會把來源改成會計），之後店長解不開
+      const lockBtn = (label) => `<button type="button" class="btn btn-primary" data-act="lock" data-month="${esc(m)}">${label}</button>`;
+      const unlockBtn = `<button type="button" class="btn btn-secondary" data-act="unlock" data-month="${esc(m)}">解鎖</button>`;
+      const btn = kind === 'none' ? lockBtn('鎖定') : kind === 'acct' ? unlockBtn : `${lockBtn('改為會計鎖定')} ${unlockBtn}`;
       return `<tr data-role="cb-lock-row" data-month="${esc(m)}" data-kind="${kind}"><td>${esc(m)}</td><td>${tag}</td><td>${who}</td><td>${btn}</td></tr>`;
     }).join('');
     return `<div class="card stack"><div class="table-wrap"><table class="table" data-role="cb-lock-table">
@@ -60,7 +61,7 @@ export function mountLock(el, ctx) {
     const store = stores.find((s) => s.code === sel.store);
     const name = (store && store.name) || sel.store;
     if (action === 'adminLock') {
-      if (!(await ctx.ui.confirm(`確定要鎖定「${name}」${month} 的帳？鎖定後這個月不能再新增、修改或作廢。`))) return;
+      if (!(await ctx.ui.confirm(`確定要由會計鎖定「${name}」${month} 的帳？鎖定後這個月不能再新增、修改或作廢，店長也不能自己解鎖。`))) return;
     } else {
       if (!(await ctx.ui.confirm(`確定要解鎖「${name}」${month} 的帳？解鎖後店長可以修改這個月的帳。`))) return;
       if (!(await ctx.ui.confirm(`再確認一次：真的要解鎖「${name}」${month} 嗎？這個動作會留下紀錄。`))) return;
