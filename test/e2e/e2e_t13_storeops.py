@@ -41,6 +41,8 @@ class Mock13(MockBackend):
         USERS['plain1'] = mk('同仁乙', ['platform.self', 'platform.storeops'])
         USERS['none1'] = mk('同仁丙', ['platform.self'])  # 總開關關著／不屬於任何營運系統門市：兩個衍生權限都沒有
         self.sso_calls = []
+        # 考勤管理首頁待辦（spec §17.5）：預設三列（核定 3 天／申請 2 筆／新手機 1 支）
+        self.att_alerts = {'ok': True, 'data': {'items': [{'kind': 'approve', 'count': 3}, {'kind': 'request', 'count': 2}, {'kind': 'device', 'count': 1}], 'partial': False, 'asOf': '2026-10-24T00:00:00Z', 'pending': False}}
 
     def platform_action(self, action, body):
         if action == 'ssoTicket':
@@ -214,6 +216,34 @@ def main():
             ids = [c.get_attribute('data-module') for c in at.locator('[data-role="module-card"]').all()]
             check('attendance' in ids and 'storeops' in ids, '有 platform.att：首頁有考勤管理與門市營運，實際：%s' % ids)
             check(at.locator('[data-role="nav-desktop"] [data-nav="attendance"]').count() == 1, '有 platform.att：左側選單有「考勤管理」')
+            # ⑤a 首頁考勤管理組的待辦（2026-10-24，spec §17.5）：只回件數，三列提醒文字逐字
+            ATT = '[data-role="alert-list"][data-module="attendance"] [data-role="alert-row"]'
+            at.wait_for_selector(ATT + ':has-text("支新手機等核准")', timeout=10000)
+            rows = [x.replace('›', '').strip() for x in at.locator(ATT).all_inner_texts()]
+            check(rows == ['本月還有 3 天沒核定', '2 筆加班請假申請待審', '1 支新手機等核准'], '首頁考勤管理組顯示三列提醒（只有件數）：%s' % rows)
+            check(('attendance', 'attAlerts') in getattr(mock, 'proxy_calls', []), '首頁待辦走代轉 ns attendance／action attAlerts')
+            # 點「1 支新手機等核准」→ 網址 #/attendance/device，且 iframe 收到 dzy-store-go device
+            at.click(ATT + ':has-text("支新手機等核准")')
+            at.wait_for_selector('[data-keep="attendance"] iframe[data-role="store-frame"]')
+            check(at.evaluate('location.hash') == '#/attendance/device', '點「1 支新手機等核准」→ 網址 #/attendance/device：%s' % at.evaluate('location.hash'))
+            fa0 = None
+            for _ in range(50):
+                fa0 = store_frame(at)
+                if fa0:
+                    try:
+                        if fa0.evaluate("() => window.__got.length") >= 1:
+                            break
+                    except Exception:
+                        pass
+                at.wait_for_timeout(100)
+            fa0.evaluate("(cur) => parent.postMessage({ type: 'dzy-store-nav', v: 1, cur: cur, items: [{ id: 'approve', label: '核定工時', badge: 0 }, { id: 'request', label: '申請審核', badge: 0 }, { id: 'device', label: '手機核准', badge: 1 }] }, '*')", 'approve')
+            at.wait_for_timeout(500)
+            g0 = [m for m in fa0.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(g0 == [{'type': 'dzy-store-go', 'v': 1, 'id': 'device'}] and at.evaluate('location.hash') == '#/attendance/device',
+                  'iframe 收到 {dzy-store-go, id:device}、網址維持 #/attendance/device：%s %s' % (g0, at.evaluate('location.hash')))
+            at.goto(base + '/index.html')
+            at.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
+
             before = len(mock.sso_calls)
             at.click('[data-role="nav-desktop"] [data-nav="attendance"]')
             at.wait_for_selector('iframe[data-role="store-frame"]')
@@ -309,6 +339,24 @@ def main():
             nl.click('[data-role="submit"]')
             nl.wait_for_url(STORE + '/dzy-store/?s=gf#sso=' + TICKET, timeout=10000)
             check(True, '登入後導回營運系統並帶 #sso=券：%s' % nl.url)
+
+            # ⑩ 代轉失敗／部分門市讀不到：首頁考勤管理組顯示「暫時讀不到」，不出現假的件數
+            mock.att_alerts_fail = True
+            fl = new_page()
+            fl.goto(base + '/index.html')
+            do_login(fl, 'att1')
+            ATT = '[data-role="alert-list"][data-module="attendance"] [data-role="alert-row"]'
+            fl.wait_for_selector(ATT, timeout=10000)
+            rows = [x.replace('›', '').strip() for x in fl.locator(ATT).all_inner_texts()]
+            check(rows == ['暫時讀不到'], '代轉失敗：首頁考勤管理組只顯示「暫時讀不到」：%s' % rows)
+            mock.att_alerts_fail = False
+            mock.att_alerts = {'ok': True, 'data': {'items': [{'kind': 'request', 'count': 2}], 'partial': True, 'asOf': '2026-10-24T00:00:00Z', 'pending': False}}
+            pt = new_page()
+            pt.goto(base + '/index.html')
+            do_login(pt, 'att1')
+            pt.wait_for_selector(ATT + ':has-text("部分門市暫時讀不到")', timeout=10000)
+            rows = [x.replace('›', '').strip() for x in pt.locator(ATT).all_inner_texts()]
+            check(rows == ['2 筆加班請假申請待審', '部分門市暫時讀不到'], '部分門市讀不到：件數照出、另加一列「部分門市暫時讀不到」：%s' % rows)
 
             check(mock.leaked == [], '真實網路零流出：%s' % mock.leaked)
             browser.close()
