@@ -113,15 +113,15 @@ def main():
         with sync_playwright() as p:
             browser = p.chromium.launch()
 
-            def open_as(user, pw, route, width=1280, height=900):
+            def open_as(user, pw, route, width=1280, height=900, q='?orgtools=1'):
                 pg = browser.new_context(viewport={'width': width, 'height': height}).new_page()
                 mock.install(pg)
-                pg.goto(base + '/index.html')
+                pg.goto(base + '/index.html' + q)
                 pg.fill('#login-username', user)
                 pg.fill('#login-password', pw)
                 pg.click('[data-role="submit"]')
                 pg.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
-                pg.goto(base + '/index.html#' + route)
+                pg.goto(base + '/index.html' + q + '#' + route)
                 return pg
 
             # ① 人資看不到按鈕
@@ -129,6 +129,11 @@ def main():
             hr.wait_for_selector('[data-role="rows"] tr:has-text("DZY001")')
             check(hr.locator('[data-role="org-upgrade"]').count() == 0 and hr.locator('[data-role="org-rollback"]').count() == 0, '★人資（非 admin）看不到「切換組織」「退回組織」')
             check(hr.locator('[data-role="add-staff"]').count() == 1, '人資仍有「新增同仁」（其他功能沒被拿掉）')
+
+            # ①-2 沒帶 ?orgtools=1：admin 也看不到八顆一次性按鈕，「新增同仁」仍在
+            nf = open_as('admin', 'e2e-admin', '/staff/list', q='')
+            nf.wait_for_selector('[data-role="rows"] tr:has-text("DZY001")')
+            check(nf.locator('[data-role^="org-"]').count() == 0 and nf.locator('[data-role="add-staff"]').count() == 1, '★admin 沒帶 ?orgtools=1：八顆按鈕都不見、「新增同仁」仍在')
 
             # ② 名單
             ad = open_as('admin', 'e2e-admin', '/staff/list')

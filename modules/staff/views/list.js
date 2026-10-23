@@ -100,13 +100,18 @@ export function mountList(el, ctx) {
     }).join('');
   }
 
+  // 組織一次性按鈕（切換／退回 ×4 組）：遷移已完成，預設隱藏（Eason 2026-10-24）。
+  // 要叫回來：用管理員登入，網址加 ?orgtools=1（例 https://dzy.mozhuting.com/?orgtools=1#/staff），免部署。
+  const showOrgTools = () => isAdmin && typeof location !== 'undefined' && /(?:^|[?&])orgtools=1(?:&|$)/.test(location.search || '');
+
   function drawShell() {
+    const orgTools = showOrgTools();
     const counts = {};
     staff.forEach((p) => { counts[p.status] = (counts[p.status] || 0) + 1; });
     el.innerHTML = `
       <div class="card stack">
         <div class="card-row"><div class="card-title">同仁名單（${staff.length} 位）</div>
-          <span>${isAdmin ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-add-branddev-2610">新增品牌發展部（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-branddev-2610">退回品牌發展部</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
+          <span>${orgTools ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-add-branddev-2610">新增品牌發展部（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-branddev-2610">退回品牌發展部</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
         <div class="card-row"><span class="text-muted">未開通 ${counts.unclaimed || 0}・待確認 ${counts.pending || 0}・已開通 ${counts.active || 0}・已停用 ${counts.disabled || 0}</span></div>
         <div class="form-grid-2">
           <div class="field"><label class="field-label" for="stf-q">搜尋姓名或編號</label><input class="input" id="stf-q" type="search" value="${esc(state.q)}"></div>
@@ -129,7 +134,7 @@ export function mountList(el, ctx) {
     el.querySelector('#stf-priv').addEventListener('change', (e) => { showPrivate = e.target.checked; redraw(); });
     el.querySelector('[data-role="rows"]').addEventListener('click', onAction);
     el.querySelector('[data-role="add-staff"]').addEventListener('click', () => openAddFlow(clockEnv()));
-    if (isAdmin) {
+    if (orgTools) {
       el.querySelector('[data-role="org-upgrade"]').addEventListener('click', upgradeFlow);
       el.querySelector('[data-role="org-rollback"]').addEventListener('click', rollbackFlow);
       el.querySelector('[data-role="org-upgrade-2610"]').addEventListener('click', upgrade2610Flow);

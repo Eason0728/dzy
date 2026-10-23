@@ -4,6 +4,11 @@
 import fs from 'node:fs';
 
 globalThis.localStorage = { getItem() { return null; }, setItem() {}, removeItem() {} };
+// 組織一次性按鈕預設隱藏，要網址帶 ?orgtools=1 才出現；既有流程測試整支在旗標開啟下跑，最後還原
+const hadLocation = Object.prototype.hasOwnProperty.call(globalThis, 'location');
+const origLocation = globalThis.location;
+const setSearch = (q) => { Object.defineProperty(globalThis, 'location', { value: q === null ? undefined : { search: q }, configurable: true, writable: true }); };
+setSearch('?orgtools=1');
 const { esc } = await import('../platform/fmt.js');
 const { mountList, FILTERS } = await import('../modules/staff/views/list.js');
 const { mountProfile } = await import('../modules/me/views/profile.js');
@@ -463,10 +468,32 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ok(titlesForUnit({ titles: O.titles }, { code: 'ck', ladder: 'store' }).length === 6, '15 前端：舊後端沒有 unit_titles → 不限定（相容）');
 }
 
+// ── 2026-10-24：八顆一次性按鈕預設隱藏，admin＋?orgtools=1 才顯示 ──
+{
+  const ROLES = ['org-upgrade', 'org-rollback', 'org-upgrade-2610', 'org-rollback-2610', 'org-rename-2610n', 'org-rename-rollback-2610n', 'org-add-branddev-2610', 'org-rollback-branddev-2610'];
+  const count = (el) => ROLES.filter((r) => el.innerHTML.includes('data-role="' + r + '"')).length;
+  const adm = () => makeCtx(baseHandler(), { perms: ['platform.staff'], role: 'admin' });
+  for (const q of [null, '', '?foo=1', '?orgtools=0', '?orgtools=11', '?xorgtools=1']) {
+    setSearch(q);
+    const el = await mount(adm());
+    ok(count(el) === 0 && el.innerHTML.includes('data-role="add-staff"') && el.innerHTML.includes('新增同仁'), '17 ★admin 無旗標(' + JSON.stringify(q) + ')：八顆都不見、「新增同仁」仍在');
+  }
+  for (const q of ['?orgtools=1', '?a=1&orgtools=1', '?orgtools=1&a=1']) {
+    setSearch(q);
+    const el = await mount(adm());
+    ok(count(el) === 8 && el.innerHTML.includes('data-role="add-staff"'), '17 admin＋旗標(' + q + ')：八顆都在');
+  }
+  setSearch('?orgtools=1');
+  const elh = await mount(makeCtx(baseHandler(), { perms: ['platform.staff'], role: 'hr' }));
+  ok(count(elh) === 0 && elh.innerHTML.includes('data-role="add-staff"'), '17 ★非 admin＋旗標：八顆都不見');
+}
+
 // ── 檢查 ──
 for (const f of ['modules/staff/views/list.js', 'modules/me/views/profile.js']) {
   const s = fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
   ok(!/window\.(confirm|alert|prompt)|\b(?<![.\w])(alert|prompt)\(/.test(s), f + ' 沒有 window.confirm/alert/prompt');
 }
+// 還原 location
+if (hadLocation) Object.defineProperty(globalThis, 'location', { value: origLocation, configurable: true, writable: true }); else delete globalThis.location;
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
