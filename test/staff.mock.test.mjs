@@ -187,7 +187,7 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   ok(v({ title: 'hs' }) !== null, 'A2 門市單位選總部職稱 → 擋');
   ok(v({ unit: 'mzt-hq', title: 'ofs' }) === null, 'A2 品牌辦公室用 office 職稱、不必選部門');
   ok(v({ unit: 'mzt-hq', title: 'ofs', dept: 'x' }) !== null, 'A2 品牌辦公室填了部門 → 擋');
-  ok(org.list.dept.length === 10 && org.list.dept.some((d) => d.code === 'mgmt' && d.name === '管理部') && org.list.dept.every((d) => d.parent === 'dzy-hq'), 'A2 預設十個部門（含管理部）、全部掛鼎兆元總部');
+  ok(org.list.dept.length === 11 && org.list.dept.some((d) => d.code === 'branddev' && d.name === '品牌發展部') && org.list.dept.some((d) => d.code === 'mgmt' && d.name === '管理部') && org.list.dept.every((d) => d.parent === 'dzy-hq'), 'A2 預設十一個部門（含管理部、品牌發展部）、全部掛鼎兆元總部');
   ok(v({ brand: 'dzy', unit: 'dzy-hq', dept: '', title: 'hs' }) !== null, 'A2 鼎兆元總部有部門清單 → 部門必填');
   ok(v({ brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' }) === null, 'A2 鼎兆元總部選對部門通過');
   ok(v({ brand: 'mala', unit: 'mala-hq', dept: '', title: 'osv' }) === null, 'A2 小辛辣品牌辦公室沒有部門 → 不必選');

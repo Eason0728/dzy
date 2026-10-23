@@ -411,7 +411,44 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   const { DEPARTMENTS } = await import('../platform/config.js');
   const ids = DEPARTMENTS.map((d) => d.id);
   ok(DEPARTMENTS[ids.indexOf('eng') + 1].id === 'rd' && DEPARTMENTS[ids.indexOf('eng') + 1].name === '研發部門', '16 選單：研發部門排在工程部門之後');
-  ok(DEPARTMENTS.find((d) => d.id === 'franchise').name === '加盟部門' && DEPARTMENTS.length === 11 && new Set(ids).size === 11 && DEPARTMENTS.every((d) => d.name.length === 4), '16 選單：加盟部門、共 11 個、代碼不重複、名稱四字');
+  ok(DEPARTMENTS.find((d) => d.id === 'franchise').name === '加盟部門' && DEPARTMENTS.length === 12 && new Set(ids).size === 12 && DEPARTMENTS.every((d) => d.name.length === 4), '16 選單：加盟部門、共 12 個、代碼不重複、名稱四字');
+}
+// ── 第 17 節：新增品牌發展部（2026-10-23）前端 ──
+{
+  const el1 = await mount(makeCtx(baseHandler(), { perms: ['platform.staff'], role: 'hr' }));
+  ok(!el1.innerHTML.includes('data-role="org-add-branddev-2610"') && !el1.innerHTML.includes('data-role="org-rollback-branddev-2610"'), '17 ★非 admin 看不到「新增品牌發展部」「退回品牌發展部」');
+  const PV = { ok: true, data: { dryrun: true, action: 'add', dept: { code: 'branddev', name: '品牌發展部', parent: 'dzy-hq', order: 11 } } };
+  const ctx = makeCtx(baseHandler((a, p) => (a === 'orgAddBranddev202610' ? (p.dryrun ? PV : { ok: true, data: Object.assign({}, PV.data, { dryrun: false }) }) : null)), { perms: ['platform.staff'], role: 'admin' });
+  const el = await mount(ctx);
+  ok(el.innerHTML.includes('新增品牌發展部（10/23）') && el.innerHTML.includes('退回品牌發展部'), '17 admin 看得到兩顆按鈕');
+  ctx.answers.push(null);
+  el.querySelector('[data-role="org-add-branddev-2610"]').fire('click'); await flush();
+  const c1 = ctx.calls.filter((c) => c.action === 'orgAddBranddev202610');
+  ok(c1.length === 1 && c1[0].payload.dryrun === true, '17 ★先 dryrun:true 預覽，取消就不寫');
+  ok(ctx.dialogs[0].body.innerHTML.includes('品牌發展部') && ctx.dialogs[0].body.innerHTML.includes('新增一列'), '17 預覽顯示部門與動作', ctx.dialogs[0].body.innerHTML);
+  ctx.calls.length = 0; ctx.dialogs.length = 0; ctx.answers.push('go', 'ok');
+  el.querySelector('[data-role="org-add-branddev-2610"]').fire('click'); await flush();
+  ok(JSON.stringify(ctx.calls.filter((c) => c.action === 'orgAddBranddev202610').map((c) => c.payload.dryrun)) === '[true,false]' && /完成/.test(ctx.dialogs[1].title), '17 按「確定新增」才 dryrun:false');
+  // 退回：先確認；有人在部門 → 只列編號
+  const ctx2 = makeCtx(baseHandler((a) => (a === 'orgAddBranddevRollback202610' ? { ok: false, error: '退回品牌發展部：還有同仁', data: { members: ['DZY007'] } } : null)), { role: 'admin' });
+  const el2 = await mount(ctx2);
+  ctx2.confirmAnswer = false;
+  el2.querySelector('[data-role="org-rollback-branddev-2610"]').fire('click'); await flush();
+  ok(ctx2.confirms.length === 1 && !ctx2.calls.some((c) => c.action === 'orgAddBranddevRollback202610'), '17 退回先確認，取消不呼叫');
+  ctx2.confirmAnswer = true; ctx2.answers.push('ok');
+  el2.querySelector('[data-role="org-rollback-branddev-2610"]').fire('click'); await flush();
+  const rb = ctx2.dialogs[0] && ctx2.dialogs[0].body.innerHTML;
+  ok(rb && rb.includes('DZY007'), '17 退回被拒：列出還在部門的同仁編號', rb);
+}
+{ // 試跑模式：orgAddBranddev202610 dryrun:true 放行，其餘攔
+  const { isReadAction } = await import('../platform/dryrun.js');
+  ok(isReadAction('platform', 'orgAddBranddev202610', { dryrun: true }) && !isReadAction('platform', 'orgAddBranddev202610', { dryrun: false }) && !isReadAction('platform', 'orgAddBranddev202610', {}) && !isReadAction('platform', 'orgAddBranddevRollback202610', {}) && !isReadAction('platform', 'orgAddBranddevRollback202610', { dryrun: true }), '17 dryrun.js：預覽放行、執行與退回攔下');
+}
+{ // 左側選單：品牌發展緊接在行銷部門之後
+  const { DEPARTMENTS } = await import('../platform/config.js');
+  const ids = DEPARTMENTS.map((d) => d.id);
+  const mi = ids.indexOf('marketing');
+  ok(DEPARTMENTS[mi + 1].id === 'branddev' && DEPARTMENTS[mi + 1].name === '品牌發展' && DEPARTMENTS[mi + 2].id === 'it', '17 選單：品牌發展排在行銷部門之後、資訊部門之前');
 }
 { // org-fields titlesForUnit（兩份同一份程式）
   const { titlesForUnit } = await import('../platform/views/org-fields.js');

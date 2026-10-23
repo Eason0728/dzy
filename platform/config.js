@@ -24,10 +24,11 @@
 export const APP_NAME = '鼎兆元餐飲集團｜管理系統';
 
 /**
- * 左側選單的部門分組（2026-10-16 Eason：選單改成部門、十一個部門全列，沒功能的也顯示）。
+ * 左側選單的部門分組（2026-10-16 Eason：選單改成部門、十二個部門全列，沒功能的也顯示）。
  * 代碼＝org 分頁 dept 列（apps-script/platform/Staff.gs）；順序＝選單由上到下。
  * 選單名稱一律四個字（Eason 2026-10-16：加「部門」二字，加盟部門 2026-10-23 起也加「部門」），跟 org 分頁的部門全名分開。
  * rd 研發部門＝org 單位 ck 中央工廠（研發部＝中央工廠；廚藝總監＝研發部總監，docs/org/spec.md 第 16 節），目前沒有模組。
+ * branddev 品牌發展＝org 部門 branddev 品牌發展部（2026-10-23 新增，第 17 節），一般總部部門，目前沒有模組。
  * 模組 manifest 填 dept 掛到該部門底下；沒填 dept（例如「我的資料」）排在首頁下面、不進部門。
  */
 export const DEPARTMENTS = [
@@ -40,6 +41,7 @@ export const DEPARTMENTS = [
   { id: 'rd', name: '研發部門' },
   { id: 'training', name: '訓練部門' },
   { id: 'marketing', name: '行銷部門' },
+  { id: 'branddev', name: '品牌發展' },
   { id: 'it', name: '資訊部門' },
   { id: 'franchise', name: '加盟部門' }
 ];

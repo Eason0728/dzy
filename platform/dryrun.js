@@ -79,6 +79,9 @@ export function isReadAction(backendId, action, payload) {
   // 2026-10-23 名稱調整同一套：dryrun:true 預覽放行；dryrun:false 與 orgRenameRollback202610 仍攔
   if (backendId === 'platform' && action === 'orgRename202610'
     && payload && payload.dryrun === true) return true;
+  // 2026-10-23 新增品牌發展部同一套：dryrun:true 預覽放行；dryrun:false 與 orgAddBranddevRollback202610 仍攔
+  if (backendId === 'platform' && action === 'orgAddBranddev202610'
+    && payload && payload.dryrun === true) return true;
   // 復職先 preview（只回舊對照清單、後端在寫入前就 return）視為讀取
   if (backendId === 'platform' && action === 'staffReinstate'
     && payload && payload.preview === true) return true;

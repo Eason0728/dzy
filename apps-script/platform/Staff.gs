@@ -1529,7 +1529,8 @@ var STF_DEFAULT_ORG = [
   ['dept', 'ops', '營運部', 'dzy-hq', '', '', 7, 'TRUE'],
   ['dept', 'training', '訓練部', 'dzy-hq', '', '', 8, 'TRUE'],
   ['dept', 'marketing', '行銷部', 'dzy-hq', '', '', 9, 'TRUE'],
-  ['dept', 'mgmt', '管理部', 'dzy-hq', '', '', 10, 'TRUE']
+  ['dept', 'mgmt', '管理部', 'dzy-hq', '', '', 10, 'TRUE'],
+  ['dept', 'branddev', '品牌發展部', 'dzy-hq', '', '', 11, 'TRUE']   // 2026-10-23 新增（第 17 節）；正式環境由 orgAddBranddev202610 補，與種子冪等
 ];
 
 function stfEnsureSheet_(ss, name, headers, defaults) {
@@ -2441,3 +2442,89 @@ function stf2610nRun_(token, payload, dir) {
 
 function handleOrgRename202610_(token, payload) { return stf2610nRun_(token, payload, 'apply'); }
 function handleOrgRenameRollback202610_(token, payload) { return stf2610nRun_(token, payload, 'rollback'); }
+
+// ============================================================
+// 13. 2026-10-23 新增品牌發展部一次性新增／退回（docs/org/spec.md 第 17 節；只有 role admin）
+//   鼎兆元總部 dzy-hq 新增部門 branddev「品牌發展部」，order＝現有部門最大值＋1、啟用；像一般總部部門，沒有特例。
+//   apply：沒有 branddev 列→新增；已有同名同父層且啟用→略過（冪等）；已有同名同父層但停用（退回造成）→重新啟用；
+//          其他（名稱／父層不同）→整批拒絕並列出。
+//   rollback：branddev 列設為停用（不刪列）；只有「沒有任何同仁」才行：dept／p_dept／extra_depts 任一含 branddev 就拒絕，
+//             只列 emp_no（不列姓名）；沒有列或已停用→略過；名稱／父層不同→拒絕。
+//   寫 staff_log（org_add_branddev_2610／org_add_branddev_2610_rollback）；不另建備份。
+// ============================================================
+
+var STF_2610B = { code: 'branddev', name: '品牌發展部', parent: 'dzy-hq' };
+
+function stf2610bIsTrue_(v) { return String(v === undefined || v === null ? '' : v).trim().toUpperCase() === 'TRUE'; }
+
+/** 計畫（唯讀）。回 { action: 'add'|'reactivate'|'deactivate'|'skip', row, order, bad, members } */
+function stf2610bPlan_(dir) {
+  var rows = stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length);
+  var idx = -1, maxOrder = 0, i;
+  for (i = 0; i < rows.length; i++) {
+    if (stfStr_(rows[i][STF_ORG_COL.kind]) !== 'dept') continue;
+    var od = Number(rows[i][STF_ORG_COL.order]);
+    if (isFinite(od) && od > maxOrder) maxOrder = od;
+    if (stfStr_(rows[i][STF_ORG_COL.code]) === STF_2610B.code && idx === -1) idx = i;
+  }
+  var plan = { action: 'skip', row: 0, order: maxOrder + 1, bad: [], members: [] };
+  if (idx === -1) {
+    if (dir === 'apply') plan.action = 'add';
+    return plan;
+  }
+  var r = rows[idx];
+  var name = stfStr_(r[STF_ORG_COL.name]), parent = stfStr_(r[STF_ORG_COL.parent]);
+  var active = stf2610bIsTrue_(r[STF_ORG_COL.active]);
+  plan.row = idx + 2;
+  if (name !== STF_2610B.name || parent !== STF_2610B.parent) {
+    plan.bad.push({ kind: 'dept', code: STF_2610B.code, expected: STF_2610B.name + '／' + STF_2610B.parent, actual: name + '／' + parent });
+    return plan;
+  }
+  if (dir === 'apply') { plan.action = active ? 'skip' : 'reactivate'; return plan; }
+  if (!active) return plan;   // rollback：已停用
+  var extra = stfReadExtraMap_();
+  stfAllRows_().forEach(function (x) {
+    var v = x.values, emp = stfStr_(v[STF_COL.emp_no]);
+    var hit = stfStr_(v[STF_COL.dept]) === STF_2610B.code || stfStr_(v[STF_COL.p_dept]) === STF_2610B.code
+      || stfSplitCodes_(extra[stfNormEmp_(emp)]).indexOf(STF_2610B.code) !== -1;
+    if (hit) plan.members.push(emp);
+  });
+  plan.action = 'deactivate';
+  return plan;
+}
+
+function stf2610bRun_(token, payload, dir) {
+  var auth = stfRequireAdmin_(token);
+  if (!auth.ok) return auth;
+  var problem = stfOrgSheetProblem_();
+  if (problem) return { ok: false, error: problem };
+  var dry = !!(payload && payload.dryrun === true);
+  var plan = stf2610bPlan_(dir);
+  var label = dir === 'apply' ? '新增品牌發展部' : '退回品牌發展部';
+  if (plan.bad.length) {
+    return { ok: false, error: label + '：組織表已有 branddev 但名稱或父層不是預期的值（可能被改過），為避免蓋掉別人的修改，什麼都沒有改', data: { bad: plan.bad } };
+  }
+  if (plan.members.length) {
+    return { ok: false, error: label + '：還有同仁的部門（主要、送出待審或兼任）是品牌發展部，請先改掉他們的部門再退回', data: { members: plan.members } };
+  }
+  var data = { dryrun: dry, action: plan.action, dept: { code: STF_2610B.code, name: STF_2610B.name, parent: STF_2610B.parent, order: plan.order } };
+  if (dry || plan.action === 'skip') return { ok: true, data: data };
+  var by = String(auth.user.id);
+  var osh = stfSheet_(STF_SHEET_ORG);
+  if (plan.action === 'add') {
+    osh.getRange(osh.getLastRow() + 1, 1, 1, STF_ORG_HEADERS.length)
+      .setValues([['dept', STF_2610B.code, STF_2610B.name, STF_2610B.parent, '', '', plan.order, 'TRUE']]);
+    stfLog_('', 'org_add_branddev_2610', by, 'dept:branddev:add:order=' + plan.order);
+  } else {
+    var on = plan.action === 'reactivate';
+    osh.getRange(plan.row, STF_ORG_COL.active + 1, 1, 1).setValue(on ? 'TRUE' : 'FALSE');   // 只寫啟用那一格
+    stfLog_('', on ? 'org_add_branddev_2610' : 'org_add_branddev_2610_rollback', by, 'dept:branddev:' + (on ? 'reactivate' : 'deactivate'));
+  }
+  // 後置條件：重算同方向計畫，不該再有要做的事
+  var after = stf2610bPlan_(dir);
+  if (after.action !== 'skip' || after.bad.length) return { ok: false, error: label + '後驗證失敗（資料與目標不一致），請檢查 org 分頁後重跑' };
+  return { ok: true, data: data };
+}
+
+function handleOrgAddBranddev202610_(token, payload) { return stf2610bRun_(token, payload, 'apply'); }
+function handleOrgAddBranddevRollback202610_(token, payload) { return stf2610bRun_(token, payload, 'rollback'); }

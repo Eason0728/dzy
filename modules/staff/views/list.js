@@ -106,7 +106,7 @@ export function mountList(el, ctx) {
     el.innerHTML = `
       <div class="card stack">
         <div class="card-row"><div class="card-title">同仁名單（${staff.length} 位）</div>
-          <span>${isAdmin ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
+          <span>${isAdmin ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-add-branddev-2610">新增品牌發展部（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-branddev-2610">退回品牌發展部</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
         <div class="card-row"><span class="text-muted">未開通 ${counts.unclaimed || 0}・待確認 ${counts.pending || 0}・已開通 ${counts.active || 0}・已停用 ${counts.disabled || 0}</span></div>
         <div class="form-grid-2">
           <div class="field"><label class="field-label" for="stf-q">搜尋姓名或編號</label><input class="input" id="stf-q" type="search" value="${esc(state.q)}"></div>
@@ -136,6 +136,8 @@ export function mountList(el, ctx) {
       el.querySelector('[data-role="org-rollback-2610"]').addEventListener('click', rollback2610Flow);
       el.querySelector('[data-role="org-rename-2610n"]').addEventListener('click', rename2610nFlow);
       el.querySelector('[data-role="org-rename-rollback-2610n"]').addEventListener('click', renameRollback2610nFlow);
+      el.querySelector('[data-role="org-add-branddev-2610"]').addEventListener('click', addBranddev2610Flow);
+      el.querySelector('[data-role="org-rollback-branddev-2610"]').addEventListener('click', branddevRollback2610Flow);
     }
   }
 
@@ -347,6 +349,48 @@ export function mountList(el, ctx) {
     if (!r.ok) { if (badOf(r).length) await renameBadDialog(r); else ctx.ui.toast(r.error || '退回失敗', 'danger'); return; }
     if (r.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
     await ctx.ui.dialog({ title: '名稱調整已退回', body: domOf(rename2610nHtml(r.data, true)), actions: OK_ONLY });
+    if (alive) load();
+  }
+
+  // 2026-10-23 新增品牌發展部（docs/org/spec.md 第 17 節）：鼎兆元總部加一個一般部門 branddev，不動權限與審核
+  const BRANDDEV_ACT = { add: '新增一列', reactivate: '重新啟用', deactivate: '停用', skip: '不用改' };
+  function branddevHtml(d, done) {
+    const dep = d.dept || {};
+    return `<p data-role="bd2610-sum">${done ? '已處理' : '會處理'}：${esc(BRANDDEV_ACT[d.action] || d.action)}（部門 ${esc(dep.code)}「${esc(dep.name)}」，掛在鼎兆元總部，順序 ${esc(dep.order)}）</p>`;
+  }
+  async function branddevRefuseDialog(r) {
+    const dd = r.data || {};
+    const bad = (dd.bad || []).map((x) => `部門 ${x.code}：應為「${x.expected}」，目前是「${x.actual}」`);
+    const members = (dd.members || []).map((e) => `${e}`);
+    await ctx.ui.dialog({ title: '品牌發展部被拒絕', body: domOf(`<p>${esc(r.error)}</p>${li(bad)}${members.length ? '<p><b>還在這個部門的同仁編號</b></p>' + li(members) : ''}`), actions: OK_ONLY });
+  }
+  const branddevRefused = (r) => !!(r.data && ((r.data.bad || []).length || (r.data.members || []).length));
+  async function addBranddev2610Flow() {
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'orgAddBranddev202610', { dryrun: true }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { if (branddevRefused(r)) await branddevRefuseDialog(r); else ctx.ui.toast(r.error || '預覽失敗', 'danger'); return; }
+    const go = await ctx.ui.dialog({ title: '新增品牌發展部：預覽（還沒寫入）', body: domOf(branddevHtml(r.data, false)), actions: [CANCEL, { label: '確定新增', value: 'go', variant: 'danger' }] });
+    if (go !== 'go') return;
+    ctx.ui.loading(true);
+    let w;
+    try { w = await ctx.api.call('staff', 'orgAddBranddev202610', { dryrun: false }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!w.ok) { if (branddevRefused(w)) await branddevRefuseDialog(w); else ctx.ui.toast(w.error || '新增失敗', 'danger'); return; }
+    if (w.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '新增品牌發展部完成', body: domOf(branddevHtml(w.data, true)), actions: OK_ONLY });
+    if (alive) load();
+  }
+  async function branddevRollback2610Flow() {
+    if (!(await ctx.ui.confirm('退回品牌發展部？部門會停用（不刪列）。若還有同仁的部門或兼任部門是品牌發展部，系統會拒絕並列出同仁編號。'))) return;
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'orgAddBranddevRollback202610', {}); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { if (branddevRefused(r)) await branddevRefuseDialog(r); else ctx.ui.toast(r.error || '退回失敗', 'danger'); return; }
+    if (r.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '品牌發展部已退回', body: domOf(branddevHtml(r.data, true)), actions: OK_ONLY });
     if (alive) load();
   }
 

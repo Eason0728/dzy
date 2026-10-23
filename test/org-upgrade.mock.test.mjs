@@ -983,7 +983,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const { sb, tok, hrTok } = app;
   const org = sb.stfReadOrg_();
   ok(org.dept.mgmt && org.dept.mgmt.name === '管理部' && org.dept.mgmt.parent === 'dzy-hq' && org.dept.mgmt.active && org.dept.mgmt.order === 10, 'M1 預設 org 有管理部（dzy-hq、order 10、啟用）');
-  ok(Object.keys(org.dept).length === 10, 'M1 部門共 10 個', Object.keys(org.dept));
+  ok(Object.keys(org.dept).length === 11, 'M1 部門共 11 個（含 2026-10-23 品牌發展部）', Object.keys(org.dept));
   ok(post(sb, 'orgOptions', {}).data.depts.some((d) => d.code === 'mgmt'), 'M1 orgOptions 兼任／部門選單自然多出管理部');
 
   const mgHs = mk(app, '管理甲', { brand: 'dzy', unit: 'dzy-hq', dept: 'mgmt', title: 'hs' });
@@ -1344,6 +1344,94 @@ function oldNames(app, withRdd) {
   const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
   ok(/CODE_ALLOWED_ACTIONS = \[[\s\S]*?'orgRename202610', 'orgRenameRollback202610'[\s\S]*?\];/.test(src) && /orgRename202610: 1, orgRenameRollback202610: 1/.test(src) && /case 'orgRename202610'/.test(src) && /case 'orgRenameRollback202610'/.test(src), '16 兩個 action 在白名單、寫入鎖、分派表');
   ok(!/READ_ACTIONS[^\n]*orgRename/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '16 不在任何讀取清單');
+})();
+
+// ── 第 17 節（2026-10-23）：新增品牌發展部 orgAddBranddev202610／orgAddBranddevRollback202610 ──
+const b2610 = (app, payload, t) => post(app.sb, 'orgAddBranddev202610', payload || {}, t === undefined ? app.tok : t);
+const br2610 = (app, t) => post(app.sb, 'orgAddBranddevRollback202610', {}, t === undefined ? app.tok : t);
+const bdRows = (app) => app.sheets.org._data.filter((r) => r[0] === 'dept' && r[1] === 'branddev');
+/** 模擬 2026-10-23 之前的正式環境：org 沒有 branddev 列 */
+function noBranddev(app) { const d = app.sheets.org._data; for (let i = d.length - 1; i >= 1; i--) if (d[i][0] === 'dept' && d[i][1] === 'branddev') d.splice(i, 1); return app; }
+(() => {
+  // 種子
+  const nn = freshNew();
+  const sd = bdRows(nn);
+  ok(sd.length === 1 && sd[0][2] === '品牌發展部' && sd[0][3] === 'dzy-hq' && Number(sd[0][6]) === 11 && String(sd[0][7]).toUpperCase() === 'TRUE', '17 種子（setupStaff）有 branddev：品牌發展部、dzy-hq、order 11、啟用');
+  const app = noBranddev(fresh());
+  ok(bdRows(app).length === 0, '17 前提：正式環境沒有 branddev 列');
+  ok(b2610(app, { dryrun: true }, app.hrTok).ok === false && br2610(app, app.hrTok).ok === false && b2610(app, {}, app.hrTok).ok === false, '17 ★非 admin（人資）預覽／執行／退回都被擋');
+  ok(b2610(app, { dryrun: true }, '').ok === false, '17 無 token 被擋');
+  const before = sheetDump(app);
+  const dr = b2610(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true && dr.data.action === 'add' && dr.data.dept.order === 11 && sheetDump(app) === before, '17 dryrun 預覽新增一列、零寫入', dr);
+  const run = b2610(app, {});
+  ok(run.ok && run.data.dryrun === false && run.data.action === 'add', '17 執行成功', run);
+  const ro = bdRows(app);
+  ok(ro.length === 1 && ro[0].slice(0, 8).join('|') === 'dept|branddev|品牌發展部|dzy-hq|||11|TRUE', '17 新增的列八欄正確（order＝現有最大 10 + 1）', ro);
+  ok(app.sb.stfReadOrg_().dept.branddev.active === true && post(app.sb, 'orgOptions', {}).data.depts.some((d) => d.code === 'branddev'), '17 orgOptions 部門選單出現品牌發展部');
+  const logs = rowsOf(app, 'staff_log').filter((r) => r.event === 'org_add_branddev_2610');
+  ok(logs.length === 1, '17 staff_log 一筆', logs);
+  // 重跑冪等
+  const again = b2610(app, {});
+  ok(again.ok && again.data.action === 'skip' && bdRows(app).length === 1 && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_add_branddev_2610').length === 1, '17 重跑冪等：略過、不重複列、不重複紀錄', again);
+  // 與種子冪等：種子已有的環境直接略過
+  const seeded = b2610(nn, {});
+  ok(seeded.ok && seeded.data.action === 'skip' && bdRows(nn).length === 1, '17 種子已有 branddev：apply 略過', seeded);
+  // 新增後可當一般總部部門用（部門同仁 hs 在 branddev、審核由 hm）
+  const hs = mk(app, '品發甲', { brand: 'dzy', unit: 'dzy-hq', dept: 'branddev', title: 'hs' });
+  ok(staffOf(app, hs.emp).dept === 'branddev', '17 同仁可選品牌發展部（brand dzy／unit dzy-hq／hs）');
+  // 退回：有人在部門 → 拒絕只列 emp_no
+  const snapR = JSON.stringify(orgRows(app));
+  const rbNo = br2610(app);
+  ok(rbNo.ok === false && rbNo.data.members.join() === hs.emp && JSON.stringify(rbNo.data).indexOf('品發甲') === -1 && JSON.stringify(orgRows(app)) === snapR, '17 ★退回：有人主要部門是 branddev → 拒絕、只列 emp_no（不含姓名）、org 不動', rbNo);
+  // 兼任也算
+  setStaff(app, hs.emp, 'dept', 'it');
+  const ex = post(app.sb, 'staffEdit', { emp_no: hs.emp, extra_depts: ['branddev'] }, app.hrTok);
+  ok(ex.ok, '17 前提：改設兼任品牌發展部', ex);
+  const rbEx = br2610(app);
+  ok(rbEx.ok === false && rbEx.data.members.join() === hs.emp, '17 ★退回：兼任 branddev 也拒絕', rbEx);
+  post(app.sb, 'staffEdit', { emp_no: hs.emp, extra_depts: [] }, app.hrTok);
+  // 送出待審的 p_dept 也算
+  const pend = submitOnly(app, '品發乙', { brand: 'dzy', unit: 'dzy-hq', dept: 'branddev', title: 'hs' });
+  const rbP = br2610(app);
+  ok(rbP.ok === false && rbP.data.members.join() === pend.emp, '17 ★退回：送出待審 p_dept＝branddev 也拒絕', rbP);
+  setStaff(app, pend.emp, 'p_dept', ''); setStaff(app, pend.emp, 'status', 'disabled');
+  // 沒人了 → 退回成功（停用、不刪列、只動啟用那一格）
+  const orgB = JSON.stringify(orgRows(app));
+  const rb = br2610(app);
+  ok(rb.ok && rb.data.action === 'deactivate' && bdRows(app).length === 1 && String(bdRows(app)[0][7]).toUpperCase() === 'FALSE', '17 退回成功：branddev 停用、列還在', rb);
+  const strip = (rows) => JSON.stringify(rows.map((r) => r.map((v, i) => (i === 7 ? '' : v))));
+  ok(strip(JSON.parse(orgB)) === strip(orgRows(app)), '17 ★只改啟用那一格（其他格逐格相同）');
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_add_branddev_2610_rollback').length === 1, '17 退回有 staff_log');
+  ok(!post(app.sb, 'orgOptions', {}).data.depts.some((d) => d.code === 'branddev'), '17 退回後部門選單不再列出');
+  const rb2 = br2610(app);
+  ok(rb2.ok && rb2.data.action === 'skip', '17 退回重跑冪等');
+  // 退回後再新增 → 重新啟用
+  const re = b2610(app, {});
+  ok(re.ok && re.data.action === 'reactivate' && bdRows(app).length === 1 && String(bdRows(app)[0][7]).toUpperCase() === 'TRUE', '17 退回後再新增：重新啟用同一列、不重複', re);
+  // 完全沒有列時退回：略過
+  const app2 = noBranddev(fresh());
+  const rb3 = br2610(app2);
+  ok(rb3.ok && rb3.data.action === 'skip' && bdRows(app2).length === 0, '17 沒有 branddev 列時退回：略過');
+  // 衝突：同代碼但名稱不同／父層不同／兩者 → 整批拒絕並列出
+  const app3 = noBranddev(fresh());
+  app3.sheets.org._data.push(['dept', 'branddev', '別的名字', 'dzy-hq', '', '', 11, 'TRUE']);
+  const snap3 = JSON.stringify(orgRows(app3));
+  const c1 = b2610(app3, {});
+  ok(c1.ok === false && c1.data.bad.length === 1 && c1.data.bad[0].code === 'branddev' && c1.data.bad[0].actual.indexOf('別的名字') === 0 && JSON.stringify(orgRows(app3)) === snap3, '17 ★衝突（名稱不同）：apply 拒絕並列出、org 不動', c1);
+  ok(b2610(app3, { dryrun: true }).ok === false && br2610(app3).ok === false && JSON.stringify(orgRows(app3)) === snap3, '17 衝突：預覽與退回同樣拒絕、org 不動');
+  const app4 = noBranddev(fresh());
+  app4.sheets.org._data.push(['dept', 'branddev', '品牌發展部', 'mala', '', '', 11, 'TRUE']);
+  ok(b2610(app4, {}).ok === false && bdRows(app4)[0][3] === 'mala', '17 衝突（父層不同）：拒絕、不改');
+  // 與種子同名同父層但被別人停用 → 視為退回狀態，apply 重新啟用（不算衝突）
+  // order 取現有最大 + 1（現有 order 若有跳號也接在最後）
+  const app5 = noBranddev(fresh());
+  app5.sheets.org._data.find((r) => r[0] === 'dept' && r[1] === 'mgmt')[6] = 15;
+  ok(b2610(app5, { dryrun: true }).data.dept.order === 16 && b2610(app5, {}).ok && Number(bdRows(app5)[0][6]) === 16, '17 order＝現有部門最大值 + 1');
+  // Code.gs 登錄
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/CODE_ALLOWED_ACTIONS = \[[\s\S]*?'orgAddBranddev202610', 'orgAddBranddevRollback202610'[\s\S]*?\];/.test(src) && /orgAddBranddev202610: 1, orgAddBranddevRollback202610: 1/.test(src) && /case 'orgAddBranddev202610'/.test(src) && /case 'orgAddBranddevRollback202610'/.test(src), '17 兩個 action 在白名單、寫入鎖、分派表');
+  ok(!/READ_ACTIONS[^\n]*orgAddBranddev/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '17 不在任何讀取清單');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);
