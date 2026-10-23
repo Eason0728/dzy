@@ -309,7 +309,7 @@ export function mountList(el, ctx) {
     if (alive) load();
   }
 
-  // 2026-10-23 名稱調整（docs/org/spec.md 第 16 節）：只改 org 三格顯示名稱（加盟部、總監、廚藝總監），不動權限與審核
+  // 2026-10-23 名稱調整（docs/org/spec.md 第 16 節）：只改 org 四格顯示名稱（加盟部、總監、廚藝總監、品牌研發部），不動權限與審核
   function rename2610nHtml(d, done) {
     const rows = (d.changes || []).map((c) => `${c.kind === 'dept' ? '部門' : '職稱'} ${c.code}：${c.from} → ${c.to}`);
     const skipped = (d.skipped || []).map((c) => `${c.kind === 'dept' ? '部門' : '職稱'} ${c.code}：已經是「${c.name}」`);
@@ -339,7 +339,7 @@ export function mountList(el, ctx) {
     if (alive) load();
   }
   async function renameRollback2610nFlow() {
-    if (!(await ctx.ui.confirm('退回名稱調整？加盟部、總監、廚藝總監改回加盟招商部、部門主管、研發總監。若這三個名稱調整後又被改過，系統會拒絕。'))) return;
+    if (!(await ctx.ui.confirm('退回名稱調整？加盟部、總監、廚藝總監、研發部（品牌）改回加盟招商部、部門主管、研發總監、中央工廠。若這些名稱調整後又被改過，系統會拒絕。'))) return;
     ctx.ui.loading(true);
     let r;
     try { r = await ctx.api.call('staff', 'orgRenameRollback202610', {}); } finally { ctx.ui.loading(false); }

@@ -373,7 +373,7 @@ function stfReadExtraMap_() {
 }
 
 function stfExtraDeptName_(org, code) {
-  if (code === STF_EXTRA_CK) return org.brand.ck ? org.brand.ck.name : '中央工廠';
+  if (code === STF_EXTRA_CK) return '中央工廠';   // 兼任的是單位中央工廠；品牌欄 2026-10-23 起叫「研發部」，不跟著品牌名
   return org.dept[code] ? org.dept[code].name : code;
 }
 
@@ -1486,7 +1486,7 @@ var STF_DEFAULT_ORG = [
   ['brand', 'mzt', '墨竹亭', '', '', '', 1, 'TRUE'],
   ['brand', 'mala', '麻的小辛辣', '', '', '', 2, 'TRUE'],
   ['brand', 'yiwu', '一悟燒肉', '', '', '', 3, 'TRUE'],
-  ['brand', 'ck', '中央工廠', '', '', '', 4, 'TRUE'],
+  ['brand', 'ck', '中央工廠', '', '', '', 4, 'TRUE'],   // 2026-10-23 起正式資料改叫「研發部」（名稱調整 STF_2610N_RENAMES）；種子沿用舊名，由名稱調整改
   ['brand', 'dzy', '鼎兆元總部', '', '', '', 5, 'TRUE'],
   ['unit', 'mzt-js', '新竹金山', 'mzt', 'store', '', 1, 'TRUE'],
   ['unit', 'mzt-gf', '新竹光復', 'mzt', 'store', '', 2, 'TRUE'],
@@ -2381,8 +2381,8 @@ function handleOrgRollback202610_(token) {
 
 // ============================================================
 // 12. 2026-10-23 名稱調整一次性改名／退回（docs/org/spec.md 第 16 節；只有 role admin）
-//   只改 org 分頁三列的「名稱」那一格（顯示用；代碼、職級、審核、權限全都不動）：
-//   加盟招商部 franchise → 加盟部、部門主管 hm → 總監、研發總監 rdd → 廚藝總監。
+//   只改 org 分頁四列的「名稱」那一格（顯示用；代碼、職級、審核、權限全都不動）：
+//   加盟招商部 franchise → 加盟部、部門主管 hm → 總監、研發總監 rdd → 廚藝總監、品牌 中央工廠 ck → 研發部（單位名稱不動）。
 //   不另建備份：舊名、新名就是下面的常數；每列「現在＝舊名才改、已是新名就略過、其他一律整批拒絕」，所以重跑安全、
 //   退回只還原「現在還是新名」的格子（被人改成別的就拒絕）。
 // ============================================================
@@ -2390,7 +2390,8 @@ function handleOrgRollback202610_(token) {
 var STF_2610N_RENAMES = [
   { kind: 'dept', code: 'franchise', from: '加盟招商部', to: '加盟部' },
   { kind: 'title', code: 'hm', from: '部門主管', to: '總監' },
-  { kind: 'title', code: 'rdd', from: '研發總監', to: '廚藝總監' }
+  { kind: 'title', code: 'rdd', from: '研發總監', to: '廚藝總監' },
+  { kind: 'brand', code: 'ck', from: '中央工廠', to: '研發部' }        // Eason 2026-10-23 追加：品牌欄改叫研發部，單位仍是「中央工廠（央廚）」
 ];
 
 /** 計畫（唯讀）。dir＝'apply'（舊→新）或 'rollback'（新→舊）。回 { changes, skipped, bad }；bad 非空＝整批拒絕 */
