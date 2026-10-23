@@ -303,7 +303,9 @@ var PROXY_READ_ACTIONS = {
   // 分讀寫只為了試跑模式能照常讀。⚠ payroll_month 在「該月沒有 run」時會自動試算並寫入（mala-payroll skill），仍列讀取＝試跑時翻月份照舊可用
   payroll: ['payroll_month', 'payroll_get', 'payroll_group', 'payroll_trend', 'payroll_inputs', 'payroll_punch',
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
-    'payroll_attendance_export']
+    'payroll_attendance_export'],
+  // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：與 platform/dryrun.js READ_ACTIONS.attendance 一致
+  attendance: ['attAlerts']
 };
 
 /**
@@ -350,6 +352,20 @@ function proxyAuthorize_(token, ns, action) {
 
   // 2／4. 授權
   var perms = sess.perms;
+
+  // 考勤管理首頁待辦（2026-10-24，考勤管理首頁待辦，營運系統 spec §17.5）：
+  // 只認 platform.att（含衍生；admin 的 * 也算），action 只有 attAlerts（上面已把非讀取清單的擋成 FORBIDDEN）。
+  // 用 attendance/read 服務金鑰；subject 由平台依登入身分決定（DZY 編號；admin 為 U:<id>），mini 代轉時覆寫瀏覽器送的 sub。
+  // 不落入下面的通用 <ns>.read 與 staff 第二期分支。
+  if (ns === 'attendance') {
+    if (isWrite || action !== 'attAlerts' || !hasPerm_(perms, 'platform.att')) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+    var attSubject = storeSubForUser_(sess.user);
+    if (!attSubject) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+    var attSecretRaw = byBackend[ns] && byBackend[ns]['read'];
+    var attSecret = (attSecretRaw === undefined || attSecretRaw === null) ? '' : String(attSecretRaw).trim();
+    if (!attSecret) return { ok: false, code: 'NO_SECRET', error: '這個系統尚未設定通行碼，請聯絡管理者' };
+    return { ok: true, secret: attSecret, filterNode: null, isWrite: false, subject: attSubject };
+  }
 
   // 第二期：role staff 且權限開關開（sess.auditScope 非 null）→ 依職稱／部門算出的稽核範圍決定；系統帳號與開關關走下面照舊的路徑
   if (String(sess.user.role) === 'staff' && sess.auditScope !== null && sess.auditScope !== undefined) {
