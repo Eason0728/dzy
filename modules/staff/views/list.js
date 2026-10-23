@@ -106,7 +106,7 @@ export function mountList(el, ctx) {
     el.innerHTML = `
       <div class="card stack">
         <div class="card-row"><div class="card-title">同仁名單（${staff.length} 位）</div>
-          <span>${isAdmin ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
+          <span>${isAdmin ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
         <div class="card-row"><span class="text-muted">未開通 ${counts.unclaimed || 0}・待確認 ${counts.pending || 0}・已開通 ${counts.active || 0}・已停用 ${counts.disabled || 0}</span></div>
         <div class="form-grid-2">
           <div class="field"><label class="field-label" for="stf-q">搜尋姓名或編號</label><input class="input" id="stf-q" type="search" value="${esc(state.q)}"></div>
@@ -134,6 +134,8 @@ export function mountList(el, ctx) {
       el.querySelector('[data-role="org-rollback"]').addEventListener('click', rollbackFlow);
       el.querySelector('[data-role="org-upgrade-2610"]').addEventListener('click', upgrade2610Flow);
       el.querySelector('[data-role="org-rollback-2610"]').addEventListener('click', rollback2610Flow);
+      el.querySelector('[data-role="org-rename-2610n"]').addEventListener('click', rename2610nFlow);
+      el.querySelector('[data-role="org-rename-rollback-2610n"]').addEventListener('click', renameRollback2610nFlow);
     }
   }
 
@@ -245,7 +247,7 @@ export function mountList(el, ctx) {
     if (alive) load();
   }
 
-  // 2026-10-20 職稱調整（docs/org/spec.md 第 15 節）：區經理移回門市、中央工廠廠長／研發總監、央廚店長→廠長、權限規則複製
+  // 2026-10-20 職稱調整（docs/org/spec.md 第 15 節）：區經理移回門市、中央工廠廠長／廚藝總監、央廚店長→廠長、權限規則複製
   const PERM_TEXT = { ok: '', not_inited: '權限設定還沒初始化（初始化時會直接帶預設規則）', header_mismatch: '權限對照表表頭不對' };
   function upgrade2610Html(d, done) {
     const orgRows = (d.org || []).map((o) => `${o.kind} ${o.code}　${o.field === 'row' ? '新增一列' : `${o.field}：${o.from || '（空）'} → ${o.to}`}`);
@@ -304,6 +306,47 @@ export function mountList(el, ctx) {
         <p><b>退回後職稱需重選（只列不改）</b></p>${li(orphans)}`),
       actions: OK_ONLY
     });
+    if (alive) load();
+  }
+
+  // 2026-10-23 名稱調整（docs/org/spec.md 第 16 節）：只改 org 三格顯示名稱（加盟部、總監、廚藝總監），不動權限與審核
+  function rename2610nHtml(d, done) {
+    const rows = (d.changes || []).map((c) => `${c.kind === 'dept' ? '部門' : '職稱'} ${c.code}：${c.from} → ${c.to}`);
+    const skipped = (d.skipped || []).map((c) => `${c.kind === 'dept' ? '部門' : '職稱'} ${c.code}：已經是「${c.name}」`);
+    return `<p><b>名稱${done ? '已改' : '會改'}（${rows.length} 筆）</b></p>${li(rows)}
+      <p><b>不用改（${skipped.length} 筆）</b></p>${li(skipped)}`;
+  }
+  const badOf = (r) => (r.data && (r.data.bad || (r.data.data && r.data.data.bad))) || [];
+  async function renameBadDialog(r) {
+    const bad = badOf(r).map((x) => `${x.kind === 'dept' ? '部門' : '職稱'} ${x.code}：應為「${x.expected}」，目前是「${x.actual}」`);
+    await ctx.ui.dialog({ title: '名稱調整被拒絕', body: domOf(`<p>${esc(r.error)}</p>${li(bad)}`), actions: OK_ONLY });
+  }
+  async function rename2610nFlow() {
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'orgRename202610', { dryrun: true }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { if (badOf(r).length) await renameBadDialog(r); else ctx.ui.toast(r.error || '預覽失敗', 'danger'); return; }
+    const go = await ctx.ui.dialog({ title: '名稱調整：預覽（還沒寫入）', body: domOf(rename2610nHtml(r.data, false)), actions: [CANCEL, { label: '確定調整', value: 'go', variant: 'danger' }] });
+    if (go !== 'go') return;
+    ctx.ui.loading(true);
+    let w;
+    try { w = await ctx.api.call('staff', 'orgRename202610', { dryrun: false }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!w.ok) { if (badOf(w).length) await renameBadDialog(w); else ctx.ui.toast(w.error || '調整失敗', 'danger'); return; }
+    if (w.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '名稱調整完成', body: domOf(rename2610nHtml(w.data, true)), actions: OK_ONLY });
+    if (alive) load();
+  }
+  async function renameRollback2610nFlow() {
+    if (!(await ctx.ui.confirm('退回名稱調整？加盟部、總監、廚藝總監改回加盟招商部、部門主管、研發總監。若這三個名稱調整後又被改過，系統會拒絕。'))) return;
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'orgRenameRollback202610', {}); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { if (badOf(r).length) await renameBadDialog(r); else ctx.ui.toast(r.error || '退回失敗', 'danger'); return; }
+    if (r.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '名稱調整已退回', body: domOf(rename2610nHtml(r.data, true)), actions: OK_ONLY });
     if (alive) load();
   }
 

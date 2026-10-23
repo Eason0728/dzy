@@ -495,7 +495,7 @@ const ROLE_ZH = { admin: '系統管理者', manager: '部門主管', accountant:
 
 /**
  * 左側深色側邊欄（外觀照門市營運系統 ~/mala-store-ops/web/js/shell.js sidebarHtml，2026-10-11）：
- * 品牌 → 首頁 → 我的資料 →「部門」標籤 → 十個部門（可展開，功能依 manifest.dept 掛上）→ 底部使用者區（改密碼／登出）。
+ * 品牌 → 首頁 → 我的資料 →「部門」標籤 → 十一個部門（可展開，功能依 manifest.dept 掛上）→ 底部使用者區（改密碼／登出）。
  * 手機（≤860px）由 CSS 改成「上排品牌＋使用者、下排圖示選單」，同一份 DOM，不另做第二份導覽。
  */
 function renderTopNav() {
@@ -516,7 +516,7 @@ function renderTopNav() {
   // 沒掛部門的模組（我的資料）排在首頁下面
   for (const m of permittedModules) if (!m.dept) sideNavEl.appendChild(moduleItem(m));
 
-  // 部門分組（2026-10-16）：十個部門全列，有功能的預設展開、空的收合；點標題切換，空部門展開顯示「尚無功能」。
+  // 部門分組（2026-10-16）：十一個部門全列，有功能的預設展開、空的收合；點標題切換，空部門展開顯示「尚無功能」。
   // 手機版由 CSS 隱藏部門標題、把功能攤平成下排圖示（同一份 DOM）。
   if (currentModule && currentModule.dept) deptOpenState.set(currentModule.dept, true);
   sideNavEl.appendChild(el('div', { class: 'nav-label', text: '部門' }));

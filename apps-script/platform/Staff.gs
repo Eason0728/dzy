@@ -35,13 +35,13 @@ var STF_EXTRA_DEPTS_HEADER = 'extra_depts';
 var STF_EXTRA_DEPTS_COL_NO = STF_COL_COUNT + 3;   // 1-based 欄號
 var STF_EXTRA_CK = 'ck';
 
-// 門檻（§6.4）：store 職級 rank≥3（店長）、hq 職級 rank≥2（部門主管）可看單位通訊錄
+// 門檻（§6.4）：store 職級 rank≥3（店長）、hq 職級 rank≥2（總監）可看單位通訊錄
 // office（品牌辦公室，自己一套 ofs/oam/osv/odir 職稱）：rank≥2 區經理以上算品牌辦公室主管（規格第 13 節）
 var STF_UNIT_VIEW_MIN_RANK = { store: 3, hq: 2, office: 2 };
 
 // 單位限定職稱（Eason 2026-10-20，docs/org/spec.md 第 15 節）：
-//   STF_UNIT_TITLES：列出的單位「只能」選這些職稱（中央工廠沒有店長、區經理，改設廠長 fm、研發總監 rdd）；
-//   STF_TITLE_UNITS：這些職稱「只能」用在列出的單位（廠長、研發總監只在中央工廠）。
+//   STF_UNIT_TITLES：列出的單位「只能」選這些職稱（中央工廠沒有店長、區經理，改設廠長 fm、廚藝總監 rdd）；
+//   STF_TITLE_UNITS：這些職稱「只能」用在列出的單位（廠長、廚藝總監只在中央工廠）。
 // 生效條件：某單位清單裡的專屬職稱（STF_TITLE_UNITS 的鍵）至少一個在 org 裡存在且啟用，該單位的限定才生效——
 // 後端先上線、還沒按 orgUpgrade202610 之前，org 沒有 fm／rdd 列，中央工廠店長照舊有效（不會在切換前失去審核／權限）。
 // 判斷一律走 stfTitleFitsUnit_／stfTitleUnitOk_（stfValidateOrg_、名單旗標、審核、考勤、Perms.gs permCompute_ 共用）；
@@ -81,7 +81,7 @@ var STF_MSG = {
   REASON_REQUIRED: '請填寫退回原因',
   NAMES_REQUIRED: '請貼上至少一個姓名',
   FULL: '編號已經用到 DZY999，請聯絡系統維護者',
-  UNIT_ONLY_MANAGER: '只有店長（總部為部門主管）以上可以看單位通訊錄',
+  UNIT_ONLY_MANAGER: '只有店長（總部為總監）以上可以看單位通訊錄',
   NEED_CURRENT_PW: '改手機要輸入目前的密碼',
   PW_TOO_LONG: '密碼最多 128 個字元',
   NAME_TOO_LONG: '姓名最多 30 個字',
@@ -402,7 +402,7 @@ function stfFlagDetails_(o, org) {
     if (mg && mg.active && title) {
       // 執行長以上應掛鼎兆元總部／管理部（只標記，不自動搬）
       if (STF_EXEC_TITLES.indexOf(title) !== -1 && (unit !== 'dzy-hq' || execDept !== STF_MGMT_DEPT)) add('exec_misplaced', submitted);
-      // 管理部不設部門主管：hm 職稱需重選
+      // 管理部不設總監：hm 職稱需重選
       if (title === 'hm' && unit === 'dzy-hq' && execDept === STF_MGMT_DEPT) add('title_ladder', submitted);
     }
   };
@@ -856,7 +856,7 @@ function handleMyUnit_(token) {
 
 /**
  * 單位主管的範圍（§6.4 單位通訊錄與 §6.8 認領審核共用同一套判斷）：
- * status＝active、職級達門檻（store rank≥3 店長；hq rank≥2 部門主管）才回
+ * status＝active、職級達門檻（store rank≥3 店長；hq rank≥2 總監）才回
  * {unit, unit_name, dept, sameDept}；總部單位且本人有部門時 sameDept＝true（只管同單位同部門）。
  * 不夠格回 null；總部單位有 active 部門但本人部門空白也回 null（不放大成全總部）。
  */
@@ -911,8 +911,8 @@ function stfLoginGate_(userId) {
  * 審核者範圍（規格第 13 節；組織改版 T3）。回 null＝沒有審核資格；否則
  * {kinds, unit, unit_name, brand, dept, rank, titleLadder}。kinds 可能值：
  *   'store' 同店店長（門市 sm）　　'brand' 品牌辦公室區經理以上（rank≥2，帶 brand）
- *   'ops' 營運部主管（dzy-hq、主要部門 ops、部門主管）　'dept' 部門主管（帶 dept）
- *   'exec' 執行長以上（dzy-hq、hq 職級≥3）　　'ck' 中央工廠主管（單位 ck、rank≥3：廠長 fm、研發總監 rdd）
+ *   'ops' 營運部主管（dzy-hq、主要部門 ops、總監）　'dept' 總監（帶 dept）
+ *   'exec' 執行長以上（dzy-hq、hq 職級≥3）　　'ck' 中央工廠主管（單位 ck、rank≥3：廠長 fm、廚藝總監 rdd）
  *   門市 rank≥3（店長 sm、區經理 am，第 15 節）都是 'store'；能審誰再由 stfScopeMeets_ 的「同階梯職級要更高」決定。
  * 審核者本人必須 status active、單位 active、職稱 active 且屬於該單位的職稱階梯；未知 ladder 一律沒有資格。
  * 人資（platform.staff）與 admin 不在這裡判斷（stfReviewer_ 另外放行）。
@@ -936,7 +936,7 @@ function stfReviewScope_(values, org) {
       kinds.push('exec');
     } else if (title.rank === 2) {
       var d = org.dept[dept];
-      // 管理部（第 14 節）不產生部門主管審核資格：只有執行長以上審管理部同仁
+      // 管理部（第 14 節）不產生總監審核資格：只有執行長以上審管理部同仁
       if (d && d.active && d.parent === unitCode && dept !== STF_MGMT_DEPT) {
         kinds.push('dept');
         if (unitCode === 'dzy-hq' && dept === 'ops') kinds.push('ops');
@@ -952,8 +952,8 @@ function stfReviewScope_(values, org) {
  * need＝{title, kind, unit?, brand?, dept?, alt?}；alt＝其他也可以的審核者種類（[{kind, unit?, brand?, dept?}]，任一符合即可；
  * 「同階梯職級要更高」對每一種都適用）。第 15 節（Eason 2026-10-20）：
  *   門市店長 sm → 該品牌辦公室，或同店職級更高的人（區經理 am）；門市區經理 am（rank 4）→ 該品牌辦公室
- *   中央工廠廠長 fm（rank 3；切換前的央廚店長同此）→ 中央工廠職級更高的人（研發總監 rdd）或執行長以上
- *   中央工廠研發總監 rdd（rank 4）→ 執行長以上
+ *   中央工廠廠長 fm（rank 3；切換前的央廚店長同此）→ 中央工廠職級更高的人（廚藝總監 rdd）或執行長以上
+ *   中央工廠廚藝總監 rdd（rank 4）→ 執行長以上
  */
 function stfReviewNeed_(org, unitCode, dept, titleCode) {
   var u = org.unit[unitCode];
@@ -980,11 +980,11 @@ function stfReviewNeed_(org, unitCode, dept, titleCode) {
   }
   if (ladder === 'hq') {
     if (t.rank >= 3) return null;                    // 執行長以上：只有人資
-    if (t.rank === 2) { need.kind = 'exec'; return need; }   // 部門主管：執行長以上
+    if (t.rank === 2) { need.kind = 'exec'; return need; }   // 總監：執行長以上
     var d = org.dept[dept];
     if (!d || !d.active || d.parent !== unitCode) return null;
-    if (dept === STF_MGMT_DEPT) { need.kind = 'exec'; return need; }   // 管理部同仁：執行長以上（不設部門主管）
-    need.kind = 'dept'; need.dept = dept; return need;       // 部門同仁：同主要部門的部門主管
+    if (dept === STF_MGMT_DEPT) { need.kind = 'exec'; return need; }   // 管理部同仁：執行長以上（不設總監）
+    need.kind = 'dept'; need.dept = dept; return need;       // 部門同仁：同主要部門的總監
   }
   return null;
 }
@@ -1509,13 +1509,13 @@ var STF_DEFAULT_ORG = [
   ['title', 'sv', '督導', 'store', '', 5, 5, 'FALSE'],
   ['title', 'bd', '品牌總監', 'store', '', 6, 6, 'FALSE'],
   ['title', 'fm', '廠長', 'store', '', 3, 7, 'TRUE'],      // 中央工廠專用（STF_TITLE_UNITS），店長同等
-  ['title', 'rdd', '研發總監', 'store', '', 4, 8, 'TRUE'], // 中央工廠專用，廠長之上
+  ['title', 'rdd', '廚藝總監', 'store', '', 4, 8, 'TRUE'], // 中央工廠專用，廠長之上
   ['title', 'ofs', '行政同仁', 'office', '', 1, 1, 'TRUE'],
   ['title', 'oam', '區經理', 'office', '', 2, 2, 'FALSE'],  // 2026-10-20 停用（區經理移回門市）
   ['title', 'osv', '區督導', 'office', '', 2, 3, 'TRUE'],
   ['title', 'odir', '總監', 'office', '', 3, 4, 'TRUE'],
   ['title', 'hs', '部門同仁', 'hq', '', 1, 1, 'TRUE'],
-  ['title', 'hm', '部門主管', 'hq', '', 2, 2, 'TRUE'],
+  ['title', 'hm', '總監', 'hq', '', 2, 2, 'TRUE'],
   ['title', 'ceo', '執行長', 'hq', '', 3, 3, 'TRUE'],
   ['title', 'gm', '總經理', 'hq', '', 4, 4, 'TRUE'],
   ['title', 'chair', '董事長', 'hq', '', 5, 5, 'TRUE'],
@@ -1524,7 +1524,7 @@ var STF_DEFAULT_ORG = [
   ['dept', 'hr', '人資部', 'dzy-hq', '', '', 2, 'TRUE'],
   ['dept', 'it', '資訊部', 'dzy-hq', '', '', 3, 'TRUE'],
   ['dept', 'eng', '工程部', 'dzy-hq', '', '', 4, 'TRUE'],
-  ['dept', 'franchise', '加盟招商部', 'dzy-hq', '', '', 5, 'TRUE'],
+  ['dept', 'franchise', '加盟部', 'dzy-hq', '', '', 5, 'TRUE'],
   ['dept', 'purchase', '採購部', 'dzy-hq', '', '', 6, 'TRUE'],
   ['dept', 'ops', '營運部', 'dzy-hq', '', '', 7, 'TRUE'],
   ['dept', 'training', '訓練部', 'dzy-hq', '', '', 8, 'TRUE'],
@@ -1987,7 +1987,7 @@ function handleOrgRollback_(token) {
   var auth = stfRequireAdmin_(token);
   if (!auth.ok) return auth;
   // 2026-10-20 職稱調整還沒退回 → 先退那一次（不然這次整表蓋回會把職稱調整一起抹掉、留下半套的同仁職稱與權限規則）
-  if (stf2610GetState_()) return { ok: false, error: '已套用 2026-10-20 職稱調整（中央工廠廠長／研發總監、區經理移回門市），請先按「退回職稱調整」再退回組織' };
+  if (stf2610GetState_()) return { ok: false, error: '已套用 2026-10-20 職稱調整（中央工廠廠長／廚藝總監、區經理移回門市），請先按「退回職稱調整」再退回組織' };
   var state = stfGetUpgradeState_();
   if (!state) return { ok: false, error: '找不到升級紀錄，沒有可退回的備份' };
   var bak = stfSheet_(state.org_bak);
@@ -2073,7 +2073,7 @@ function handleOrgRollback_(token) {
 
 // ============================================================
 // 11. 2026-10-20 職稱調整一次性升級／回退（docs/org/spec.md 第 15 節；只有 role admin）
-//   區經理 am 移回門市（啟用）、品牌辦公室區經理 oam 停用、新增中央工廠廠長 fm／研發總監 rdd、
+//   區經理 am 移回門市（啟用）、品牌辦公室區經理 oam 停用、新增中央工廠廠長 fm／廚藝總監 rdd、
 //   中央工廠的店長（title／送出待審的 p_title）改廠長、perm_map 把店長 sm 的現行規則複製給 am／fm／rdd。
 //   做法比照第 10 節：dryrun:true 預覽、備份分頁、切換後雜湊；回退時 org 或受影響同仁被改過就拒絕。
 // ============================================================
@@ -2083,7 +2083,7 @@ var STF_2610_TITLE_SET = [['am', 'active', 'TRUE'], ['oam', 'active', 'FALSE']];
 var STF_2610_AM_ROW = ['title', 'am', '區經理', 'store', '', 4, 4, 'TRUE'];          // am 整列不見才補
 var STF_2610_ADD = [
   ['title', 'fm', '廠長', 'store', '', 3, 7, 'TRUE'],
-  ['title', 'rdd', '研發總監', 'store', '', 4, 8, 'TRUE']
+  ['title', 'rdd', '廚藝總監', 'store', '', 4, 8, 'TRUE']
 ];
 var STF_2610_STAFF_MAP = { unit: 'ck', from: 'sm', to: 'fm' };   // 中央工廠的店長 → 廠長
 var STF_2610_PERM_FROM = 'sm';
@@ -2360,7 +2360,7 @@ function handleOrgRollback202610_(token) {
       if (permOff.length) stfLog_('', 'perm_map_save', by, 'orgRollback202610:' + permOff.map(function (x) { return '-' + x; }).join(';'));
     }
   }
-  // ⑥ 退回後職稱不合規的人（切換後才被設成廠長／研發總監、或門市區經理）：只列不改
+  // ⑥ 退回後職稱不合規的人（切換後才被設成廠長／廚藝總監、或門市區經理）：只列不改
   var org = stfReadOrg_();
   var orphans = [];
   stfAllRows_().forEach(function (r) {
@@ -2378,3 +2378,65 @@ function handleOrgRollback202610_(token) {
   stf2610SetState_(null);   // 備份分頁保留
   return { ok: true, data: { restored: restored, staff_restored: todoStaff.length, perm_disabled: permOff, orphans: orphans, backup: state.org_bak } };
 }
+
+// ============================================================
+// 12. 2026-10-23 名稱調整一次性改名／退回（docs/org/spec.md 第 16 節；只有 role admin）
+//   只改 org 分頁三列的「名稱」那一格（顯示用；代碼、職級、審核、權限全都不動）：
+//   加盟招商部 franchise → 加盟部、部門主管 hm → 總監、研發總監 rdd → 廚藝總監。
+//   不另建備份：舊名、新名就是下面的常數；每列「現在＝舊名才改、已是新名就略過、其他一律整批拒絕」，所以重跑安全、
+//   退回只還原「現在還是新名」的格子（被人改成別的就拒絕）。
+// ============================================================
+
+var STF_2610N_RENAMES = [
+  { kind: 'dept', code: 'franchise', from: '加盟招商部', to: '加盟部' },
+  { kind: 'title', code: 'hm', from: '部門主管', to: '總監' },
+  { kind: 'title', code: 'rdd', from: '研發總監', to: '廚藝總監' }
+];
+
+/** 計畫（唯讀）。dir＝'apply'（舊→新）或 'rollback'（新→舊）。回 { changes, skipped, bad }；bad 非空＝整批拒絕 */
+function stf2610nPlan_(dir) {
+  var rows = stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length);
+  var changes = [], skipped = [], bad = [];
+  STF_2610N_RENAMES.forEach(function (x) {
+    var want = dir === 'apply' ? x.to : x.from;     // 做完之後的名稱
+    var expect = dir === 'apply' ? x.from : x.to;   // 這次動手前應有的名稱
+    var idx = -1;
+    for (var i = 0; i < rows.length; i++) {
+      if (stfStr_(rows[i][STF_ORG_COL.kind]) === x.kind && stfStr_(rows[i][STF_ORG_COL.code]) === x.code) { idx = i; break; }
+    }
+    if (idx === -1) { bad.push({ kind: x.kind, code: x.code, expected: expect, actual: '（找不到這一列）' }); return; }
+    var cur = stfStr_(rows[idx][STF_ORG_COL.name]);
+    if (cur === expect) changes.push({ kind: x.kind, code: x.code, from: cur, to: want, row: idx + 2 });
+    else if (cur === want) skipped.push({ kind: x.kind, code: x.code, name: cur });
+    else bad.push({ kind: x.kind, code: x.code, expected: expect, actual: cur });
+  });
+  return { changes: changes, skipped: skipped, bad: bad };
+}
+
+function stf2610nRun_(token, payload, dir) {
+  var auth = stfRequireAdmin_(token);
+  if (!auth.ok) return auth;
+  var problem = stfOrgSheetProblem_();
+  if (problem) return { ok: false, error: problem };
+  var dry = !!(payload && payload.dryrun === true);
+  var plan = stf2610nPlan_(dir);
+  var label = dir === 'apply' ? '名稱調整' : '退回名稱調整';
+  if (plan.bad.length) {
+    return { ok: false, error: label + '：下列名稱不是預期的值（可能被改過），為避免蓋掉別人的修改，整批拒絕、什麼都沒有改', data: { bad: plan.bad } };
+  }
+  var data = { dryrun: dry, changes: plan.changes.map(function (c) { return { kind: c.kind, code: c.code, from: c.from, to: c.to }; }), skipped: plan.skipped };
+  if (dry) return { ok: true, data: data };
+  var by = String(auth.user.id);
+  var osh = stfSheet_(STF_SHEET_ORG);
+  plan.changes.forEach(function (c) {
+    osh.getRange(c.row, STF_ORG_COL.name + 1, 1, 1).setValue(c.to);   // 只寫名稱那一格
+    stfLog_('', dir === 'apply' ? 'org_rename_2610' : 'org_rename_2610_rollback', by, c.kind + ':' + c.code + ':' + c.from + '>' + c.to);
+  });
+  // 後置條件：重算同方向計畫，不該再有要改的格
+  var after = stf2610nPlan_(dir);
+  if (after.changes.length || after.bad.length) return { ok: false, error: label + '後驗證失敗（資料與目標不一致），請檢查 org 分頁後重跑' };
+  return { ok: true, data: data };
+}
+
+function handleOrgRename202610_(token, payload) { return stf2610nRun_(token, payload, 'apply'); }
+function handleOrgRenameRollback202610_(token, payload) { return stf2610nRun_(token, payload, 'rollback'); }

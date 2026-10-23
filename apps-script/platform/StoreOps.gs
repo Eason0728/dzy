@@ -25,7 +25,7 @@ var STORE_LOCK_WAIT_MS = 10000;
 
 // 責任制職稱（spec §12）：不打卡、不列入任何人的可核名單；仍可以當核定人
 var STORE_NO_ATT_TITLES = ['odir', 'hm', 'ceo', 'gm', 'chair'];
-// 門市／中央工廠的單位主管同等職稱（spec §12＋docs/org/spec.md 第 15 節）：店長 sm、廠長 fm、區經理 am、研發總監 rdd
+// 門市／中央工廠的單位主管同等職稱（spec §12＋docs/org/spec.md 第 15 節）：店長 sm、廠長 fm、區經理 am、廚藝總監 rdd
 //   用途：營運系統「管理單位」units_managed（本店同仁權限、整店功能）。誰核誰改看下面兩張表（Eason 2026-10-21）。
 var STORE_ATT_HEAD_TITLES = ['sm', 'fm', 'am', 'rdd'];
 
@@ -34,13 +34,13 @@ var STORE_ATT_HEAD_TITLES = ['sm', 'fm', 'am', 'rdd'];
 var STORE_HOURS_UNIT_HEAD_TITLES = ['sm', 'fm'];
 // 申請：門市／中央工廠計時、正職 → 本單位店長／廠長（同上）
 var STORE_REQ_UNIT_HEAD_TITLES = ['sm', 'fm'];
-// 申請：店長／廠長本人的申請 → 同單位這些職稱（門市＝區經理 am；中央工廠＝研發總監 rdd，職稱只能掛在各自單位）
+// 申請：店長／廠長本人的申請 → 同單位這些職稱（門市＝區經理 am；中央工廠＝廚藝總監 rdd，職稱只能掛在各自單位）
 var STORE_REQ_HEAD_BY_UNIT = ['am', 'rdd'];
 // 申請：門市店長本人的申請也可以由該品牌辦公室的這些職稱核（區督導 osv）
 var STORE_REQ_HEAD_BY_OFFICE = ['osv'];
 // 申請：區經理本人的申請 → 該品牌辦公室的這些職稱（預設區督導、總監；要改只改這裡）
 var STORE_REQ_AM_OFFICE_TITLES = ['osv', 'odir'];
-// 申請：研發總監本人的申請 → 總部這些職稱（預設執行長、總經理、董事長；要改只改這裡）
+// 申請：廚藝總監本人的申請 → 總部這些職稱（預設執行長、總經理、董事長；要改只改這裡）
 var STORE_REQ_RDD_HQ_TITLES = ['ceo', 'gm', 'chair'];
 // 管理部同仁 → 執行長以上（兩張表相同）
 var STORE_EXEC_TITLES = ['ceo', 'gm', 'chair'];
@@ -98,7 +98,7 @@ function storeKeyOk_(payload) {
 // 2. 人資主管與「誰核誰」（純函式）
 // ============================================================
 
-/** 人資主管＝人資部（主要部門 hr）且職稱部門主管（hm）、在職。p＝{status, dept, title}。不含兼任部門。 */
+/** 人資主管＝人資部（主要部門 hr）且職稱總監（hm）、在職。p＝{status, dept, title}。不含兼任部門。 */
 function stfIsHrHead_(p) {
   if (!p) return false;
   return stfStr_(p.status) === 'active' && stfStr_(p.dept) === 'hr' && stfStr_(p.title) === 'hm';
@@ -122,11 +122,11 @@ function storeAttMode_(mode) { return mode === 'req' ? 'req' : 'hours'; }
  * 被核者需要什麼樣的核定人（spec §12＋docs/org/spec.md 第 15.1 節）。回 null＝不考勤（責任制職稱、資料不合規）。
  * mode：'hours' 核定工時（預設）／'req' 加班單、請假單、忘刷單。target＝{unit, dept, title}。回 {kind, unit?, brand?, dept?}：
  *   'unit'         本單位店長／廠長（hours：門市／中央工廠所有打卡的人；req：計時、正職）
- *   'head'         req 店長／廠長本人：同單位區經理（中央工廠＝研發總監），門市另可由該品牌辦公室區督導
+ *   'head'         req 店長／廠長本人：同單位區經理（中央工廠＝廚藝總監），門市另可由該品牌辦公室區督導
  *   'brand_office' req 區經理本人：該品牌辦公室區督導、總監
- *   'hq_exec'      req 研發總監本人：總部執行長、總經理、董事長
+ *   'hq_exec'      req 廚藝總監本人：總部執行長、總經理、董事長
  *   'office'       品牌辦公室行政／督導（同辦公室總監）
- *   'dept'         總部部門同仁（同主要部門的部門主管）　'mgmt' 管理部同仁（執行長以上）
+ *   'dept'         總部部門同仁（同主要部門的總監）　'mgmt' 管理部同仁（執行長以上）
  */
 function attNeedOf_(target, org, mode) {
   mode = storeAttMode_(mode);

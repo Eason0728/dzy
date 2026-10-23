@@ -43,7 +43,7 @@ var PERM_DEFAULT_RULES = (function () {
   add('hq', 'hr', '*', ['platform.staff', 'dorm.read', 'dorm.write']);
   add('hq', 'hr', 'hm', ['platform.permmap']);
   add('store', '', 'sm', ['store.void']);   // 2026-10-18：店長預設可作廢收支（第 20 條；已初始化的環境不會自動補，見 StoreOps.gs storeopsPermSeed_）
-  // 2026-10-20（docs/org/spec.md 第 15 節；第 21–26 條，接在後面不改既有編號）：區經理 am、中央工廠廠長 fm／研發總監 rdd 與店長同一套預設。
+  // 2026-10-20（docs/org/spec.md 第 15 節；第 21–26 條，接在後面不改既有編號）：區經理 am、中央工廠廠長 fm／廚藝總監 rdd 與店長同一套預設。
   // 正式環境 perm_map 早已初始化，由 orgUpgrade202610 複製「店長的現行規則」（Eason 可能改過店長）；oam 已停用、它的規則保留不影響。
   ['am', 'fm', 'rdd'].forEach(function (t) { add('store', '', t, ['audit.read.own', 'store.void']); });
   return out;

@@ -197,7 +197,7 @@ t('身分清單：分組與順序', () => {
   assert.deepEqual(g.map((x) => x.id), ['store', 'office', 'hq-dept', 'hq-top', 'other']);
   assert.deepEqual(g[0].items.map((x) => x.name), ['計時同仁', '店長']);   // 依職級
   assert.deepEqual(g[2].items.map((x) => x.key), ['hq|hr|*', 'hq|hr|hm', 'hq|ops|*', 'hq|ops|hm']);
-  assert.deepEqual(g[2].items.map((x) => x.name), ['人資部・全部職稱', '人資部・部門主管', '營運部・全部職稱', '營運部・部門主管']);
+  assert.deepEqual(g[2].items.map((x) => x.name), ['人資部・全部職稱', '人資部・總監', '營運部・全部職稱', '營運部・總監']);
   assert.deepEqual(g[3].items.map((x) => x.key), ['hq||gm', 'hq||ceo']);
 });
 t('身分清單：現有規則目標不在清單 → 放「其他」不得隱藏', () => {
@@ -241,9 +241,9 @@ t('變更摘要文字', () => {
   assert.equal(L.changeSummary(DATA_B, one), '店長 多了『看宿舍清單』');
   assert.equal(L.changeSummary(DATA_B, [{ key: 'store||sm', perm: 'audit.read.own', on: false }]), '店長 少了『看自己店稽核』');
   const two = one.concat([{ key: 'hq|hr|hm', perm: 'dorm.write', on: true }]);
-  assert.equal(L.changeSummary(DATA_B, two), '店長 多了『看宿舍清單』、人資部・部門主管 多了『宿舍建約點交』');
+  assert.equal(L.changeSummary(DATA_B, two), '店長 多了『看宿舍清單』、人資部・總監 多了『宿舍建約點交』');
   const many = two.concat([{ key: 'hq||ceo', perm: 'dorm.read', on: true }]);
-  assert.equal(L.changeSummary(DATA_B, many), '店長 多了『看宿舍清單』、人資部・部門主管 多了『宿舍建約點交』 等 3 項');
+  assert.equal(L.changeSummary(DATA_B, many), '店長 多了『看宿舍清單』、人資部・總監 多了『宿舍建約點交』 等 3 項');
   assert.equal(L.changeSummary(DATA_B, []), '');
 });
 t('preview 名單：文字與截斷', () => {

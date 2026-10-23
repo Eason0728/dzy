@@ -204,11 +204,11 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   const sb0 = freshNew().sb;
   const n = sb0.stfReadOrg_();
   ok(['pt', 'ft', 'sm', 'am'].every((c) => n.title[c].parent === 'store' && n.title[c].active) && ['sv', 'bd'].every((c) => n.title[c] && n.title[c].active === false), 'T1/15 預設：門市 pt／ft／sm／am（區經理移回門市、rank 4）；sv／bd 停用不刪');
-  ok(n.title.am.rank === 4 && n.title.fm && n.title.fm.parent === 'store' && n.title.fm.rank === 3 && n.title.fm.name === '廠長' && n.title.rdd && n.title.rdd.rank === 4 && n.title.rdd.name === '研發總監', 'T1/15 預設：廠長 fm rank 3、研發總監 rdd rank 4（store 階梯）');
+  ok(n.title.am.rank === 4 && n.title.fm && n.title.fm.parent === 'store' && n.title.fm.rank === 3 && n.title.fm.name === '廠長' && n.title.rdd && n.title.rdd.rank === 4 && n.title.rdd.name === '廚藝總監', 'T1/15 預設：廠長 fm rank 3、廚藝總監 rdd rank 4（store 階梯）');
   ok(n.title.oam.active === false && [['ofs', 1], ['osv', 2], ['odir', 3]].every(([c, r]) => n.title[c].parent === 'office' && n.title[c].rank === r && n.title[c].active), 'T1/15 預設：品牌辦公室區經理 oam 停用，ofs／osv／odir 照舊');
   const vn = (u, t) => n.unit[u] && sb0.stfValidateOrg_(n, { brand: n.unit[u].parent, unit: u, dept: '', title: t });
   ok(['pt', 'ft', 'fm', 'rdd'].every((t) => vn('ck', t) === null) && ['sm', 'am'].every((t) => vn('ck', t) !== null), 'T1/15 預設：中央工廠可選 pt／ft／fm／rdd，不能選店長、區經理');
-  ok(['pt', 'ft', 'sm', 'am'].every((t) => vn('mala-gf', t) === null) && ['fm', 'rdd'].every((t) => vn('mala-gf', t) !== null && vn('yiwu-js', t) !== null), 'T1/15 預設：門市可選 pt／ft／sm／am，不能選廠長、研發總監');
+  ok(['pt', 'ft', 'sm', 'am'].every((t) => vn('mala-gf', t) === null) && ['fm', 'rdd'].every((t) => vn('mala-gf', t) !== null && vn('yiwu-js', t) !== null), 'T1/15 預設：門市可選 pt／ft／sm／am，不能選廠長、廚藝總監');
   ok(vn('mala-hq', 'oam') !== null, 'T1/15 預設：品牌辦公室不能再選 oam');
 
   // 以下沿用 2026-10-16 那一代的 org（to1016）
@@ -1087,7 +1087,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
 })();
 
 // ============================================================
-// 第 15 節（2026-10-20 Eason）：區經理移回門市、中央工廠廠長 fm／研發總監 rdd、單位限定職稱
+// 第 15 節（2026-10-20 Eason）：區經理移回門市、中央工廠廠長 fm／廚藝總監 rdd、單位限定職稱
 // ============================================================
 (() => {
   const app = freshNew();
@@ -1115,25 +1115,25 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(pendingOf(smGF.token).includes(pPt.emp), '15 店長照舊審同店計時');
   ok(pendingOf(osv.token).includes(pAm.emp) && pendingOf(osv.token).includes(pSm.emp), '15 品牌辦公室（區督導）審區經理、店長');
   ok(!pendingOf(amGF.token).includes(pAm.emp), '15 ★區經理不能審同級區經理');
-  ok(pendingOf(rdd.token).includes(pFm.emp) && pendingOf(rdd.token).includes(pCkPt.emp), '15 研發總監審廠長、央廚計時');
-  ok(!pendingOf(fm.token).includes(pRdd.emp) && !pendingOf(fm.token).includes(pFm.emp) && pendingOf(fm.token).includes(pCkPt.emp), '15 ★廠長不能審研發總監／同級廠長；照舊審央廚計時');
-  ok(pendingOf(ceo.token).includes(pRdd.emp) && pendingOf(ceo.token).includes(pFm.emp) && !pendingOf(ceo.token).includes(pCkPt.emp), '15 執行長以上審研發總監、廠長（不審央廚計時）');
-  ok(!pendingOf(rdd.token).includes(pRdd.emp) && !pendingOf(rdd.token).includes(pSm.emp), '15 ★研發總監不審同級、不審門市');
+  ok(pendingOf(rdd.token).includes(pFm.emp) && pendingOf(rdd.token).includes(pCkPt.emp), '15 廚藝總監審廠長、央廚計時');
+  ok(!pendingOf(fm.token).includes(pRdd.emp) && !pendingOf(fm.token).includes(pFm.emp) && pendingOf(fm.token).includes(pCkPt.emp), '15 ★廠長不能審廚藝總監／同級廠長；照舊審央廚計時');
+  ok(pendingOf(ceo.token).includes(pRdd.emp) && pendingOf(ceo.token).includes(pFm.emp) && !pendingOf(ceo.token).includes(pCkPt.emp), '15 執行長以上審廚藝總監、廠長（不審央廚計時）');
+  ok(!pendingOf(rdd.token).includes(pRdd.emp) && !pendingOf(rdd.token).includes(pSm.emp), '15 ★廚藝總監不審同級、不審門市');
   const ap = post(sb, 'unitApprove', { emp_no: pSm.emp }, amGF.token);
   ok(ap.ok && staffOf(app, pSm.emp).status === 'active' && staffOf(app, pSm.emp).title === 'sm', '15 區經理核准同店店長（unitApprove）', ap);
   ok(post(sb, 'unitApprove', { emp_no: pAm.emp }, smGF.token).ok === false, '15 ★店長呼叫核准區經理被擋');
-  ok(post(sb, 'unitApprove', { emp_no: pRdd.emp }, fm.token).ok === false && post(sb, 'unitApprove', { emp_no: pFm.emp }, rdd.token).ok, '15 廠長核准研發總監被擋；研發總監核准廠長成功');
-  // 衍生權限 platform.review、單位通訊錄：廠長／區經理／研發總監與店長相同
+  ok(post(sb, 'unitApprove', { emp_no: pRdd.emp }, fm.token).ok === false && post(sb, 'unitApprove', { emp_no: pFm.emp }, rdd.token).ok, '15 廠長核准廚藝總監被擋；廚藝總監核准廠長成功');
+  // 衍生權限 platform.review、單位通訊錄：廠長／區經理／廚藝總監與店長相同
   [amGF, fm, rdd].forEach((m) => {
     const me = post(sb, 'me', {}, m.token);
     ok(me.ok && me.data.perms.includes('platform.review') && post(sb, 'myUnit', {}, m.token).ok, '15 ' + m.name + '：有待審核分頁與單位通訊錄');
   });
-  // 驗證：中央工廠不能選店長／區經理，門市不能選廠長／研發總監（認領送出、後台改都擋）
+  // 驗證：中央工廠不能選店長／區經理，門市不能選廠長／廚藝總監（認領送出、後台改都擋）
   const claimErr = (o) => { const n = '十五驗' + (++pwSeq); post(sb, 'staffImport', { names: [n] }, tok); const lk = post(sb, 'claimLookup', { name: n }); return post(sb, 'claimSubmit', Object.assign({ name: n, emp_no: lk.data.emp_no, password: 'fake-staff-pw-x' + pwSeq }, PROF(o))); };
   ok(claimErr({ brand: 'ck', unit: 'ck', title: 'sm' }).ok === false && claimErr({ brand: 'ck', unit: 'ck', title: 'am' }).ok === false, '15 ★認領：中央工廠選店長／區經理 → 擋');
-  ok(claimErr({ brand: 'mala', unit: 'mala-gf', title: 'fm' }).ok === false && claimErr({ brand: 'mala', unit: 'mala-gf', title: 'rdd' }).ok === false, '15 ★認領：門市選廠長／研發總監 → 擋');
+  ok(claimErr({ brand: 'mala', unit: 'mala-gf', title: 'fm' }).ok === false && claimErr({ brand: 'mala', unit: 'mala-gf', title: 'rdd' }).ok === false, '15 ★認領：門市選廠長／廚藝總監 → 擋');
   ok(post(sb, 'staffEdit', { emp_no: smGF.emp, brand: 'ck', unit: 'ck', title: 'sm' }, tok).ok === false && post(sb, 'staffEdit', { emp_no: smGF.emp, brand: 'mala', unit: 'mala-gf', title: 'fm' }, tok).ok === false, '15 ★後台改資料：ck 店長、門市廠長 → 擋');
-  ok(post(sb, 'staffEdit', { emp_no: amJS.emp, brand: 'ck', unit: 'ck', title: 'rdd' }, tok).ok, '15 後台改資料：改到中央工廠研發總監可以');
+  ok(post(sb, 'staffEdit', { emp_no: amJS.emp, brand: 'ck', unit: 'ck', title: 'rdd' }, tok).ok, '15 後台改資料：改到中央工廠廚藝總監可以');
   // 名單旗標：還掛中央工廠的店長 → title_ladder
   setStaff(app, smGF.emp, 'unit', 'ck'); setStaff(app, smGF.emp, 'brand', 'ck');
   const org = sb.stfReadOrg_();
@@ -1149,7 +1149,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const ctx = sb.permLoadCtx_(false);
   const permsOf = (emp) => sb.permComputeRow_(ctx, sb.stfFindByEmp_(emp).values, []).perms.join();
   const smPerms = permsOf(smGF.emp);
-  ok(smPerms === 'audit.read.own,store.void' && permsOf(amGF.emp) === smPerms && permsOf(fm.emp) === smPerms && permsOf(rdd.emp) === smPerms, '15 權限：區經理／廠長／研發總監 ≡ 店長（稽核自己店、收支作廢）', [smPerms, permsOf(fm.emp)]);
+  ok(smPerms === 'audit.read.own,store.void' && permsOf(amGF.emp) === smPerms && permsOf(fm.emp) === smPerms && permsOf(rdd.emp) === smPerms, '15 權限：區經理／廠長／廚藝總監 ≡ 店長（稽核自己店、收支作廢）', [smPerms, permsOf(fm.emp)]);
   const ckSm = sb.stfFindByEmp_(fm.emp).values.slice(); ckSm[sb.STF_COL.title] = 'sm';
   ok(sb.permComputeRow_(ctx, ckSm, []).perms.length === 0, '15 ★權限：中央工廠的店長（切換後的舊資料）→ 空權限（fail closed）');
   const auditOwn = sb.permComputeRow_(ctx, sb.stfFindByEmp_(fm.emp).values, []).auditScope;
@@ -1242,13 +1242,13 @@ const sheetDump = (app) => JSON.stringify(Object.keys(app.sheets).sort().map((k)
   const rbStf = r2610(app);
   ok(rbStf.ok === false && rbStf.data.staff_diff.some((d) => d.emp_no === P.ckSm.emp && d.actual === 'pt') && sb.stfReadOrg_().title.fm, '2610 ★退回：受影響同仁被改過 → 拒絕、org 沒動', rbStf);
   setStaff(app, P.ckSm.emp, 'title', 'fm');
-  // 切換後才被設成研發總監的人 → 退回後列孤兒
+  // 切換後才被設成廚藝總監的人 → 退回後列孤兒
   const later = mk(app, '調庚', { brand: 'ck', unit: 'ck', title: 'rdd' });
   const rb = r2610(app);
   ok(rb.ok && rb.data.staff_restored === 2 && rb.data.perm_disabled.length === 9, '2610 退回成功：同仁 2 格、停用 9 條規則', rb);
   ok(orgSnap(app).join() === nonBlank(app.sheets[state.org_bak]._rows().slice(1)).join(), '2610 退回後 org 與備份逐格相同');
   ok(staffOf(app, P.ckSm.emp).title === 'sm' && staffOf(app, P.ckPend.emp).p_title === 'sm', '2610 退回：廠長→店長、待審 p_title→店長');
-  ok(rb.data.orphans.some((o) => o.emp_no === later.emp && o.title === 'rdd'), '2610 退回：之後才設的研發總監列孤兒（只列不改）', rb.data.orphans);
+  ok(rb.data.orphans.some((o) => o.emp_no === later.emp && o.title === 'rdd'), '2610 退回：之後才設的廚藝總監列孤兒（只列不改）', rb.data.orphans);
   ok(app.sheets.perm_map._rows().filter((r) => state.perm_added.includes(r[0])).every((r) => r[5] === 'FALSE'), '2610 退回：補的規則 active＝FALSE');
   ok(!app.props.ORG_UPGRADE_202610_STATE && app.sheets[state.org_bak], '2610 退回：state 清掉、備份分頁保留');
   const ctx2 = sb.permLoadCtx_(false);
@@ -1269,6 +1269,81 @@ const sheetDump = (app) => JSON.stringify(Object.keys(app.sheets).sort().map((k)
   // Code.gs 登錄
   const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
   ok(/CODE_ALLOWED_ACTIONS = \[[\s\S]*?'orgUpgrade202610', 'orgRollback202610'[\s\S]*?\];/.test(src) && /orgUpgrade202610: 1, orgRollback202610: 1/.test(src) && /case 'orgUpgrade202610'/.test(src) && /case 'orgRollback202610'/.test(src), '2610 兩個 action 在白名單、寫入鎖、分派表');
+})();
+
+// ── 第 16 節（2026-10-23）：名稱調整 orgRename202610／orgRenameRollback202610 ──
+const n2610 = (app, payload, t) => post(app.sb, 'orgRename202610', payload || {}, t === undefined ? app.tok : t);
+const nr2610 = (app, t) => post(app.sb, 'orgRenameRollback202610', {}, t === undefined ? app.tok : t);
+const orgName = (app, kind, code) => orgRow(app, kind, code)[2];
+function setOrgName(app, kind, code, v) { const d = app.sheets.org._data; d.find((r) => r[0] === kind && r[1] === code)[2] = v; }
+/** 模擬 2026-10-23 之前的正式環境：加盟招商部、部門主管（rdd 列依需要由呼叫端補，名稱研發總監） */
+function oldNames(app, withRdd) {
+  setOrgName(app, 'dept', 'franchise', '加盟招商部'); setOrgName(app, 'title', 'hm', '部門主管');
+  if (withRdd && !app.sheets.org._data.some((r) => r[1] === 'rdd')) app.sheets.org._data.push(['title', 'rdd', '研發總監', 'store', '', 4, 8, 'TRUE']);
+  return app;
+}
+(() => {
+  // 新預設（setupStaff）：三個名稱已是新名
+  const nn = freshNew();
+  ok(orgName(nn, 'dept', 'franchise') === '加盟部' && orgName(nn, 'title', 'hm') === '總監' && orgName(nn, 'title', 'rdd') === '廚藝總監', '16 新預設：加盟部／總監／廚藝總監');
+  // 模擬正式環境：舊名（rdd 是 10/20 升級時補的，名稱研發總監）
+  const app = oldNames(fresh(), true);
+  ok(orgName(app, 'dept', 'franchise') === '加盟招商部' && orgName(app, 'title', 'hm') === '部門主管', '16 前提：舊名');
+  ok(n2610(app, { dryrun: true }, app.hrTok).ok === false && nr2610(app, app.hrTok).ok === false && n2610(app, {}, app.hrTok).ok === false, '16 ★非 admin（人資）預覽／執行／退回都被擋');
+  ok(n2610(app, { dryrun: true }, '').ok === false, '16 無 token 被擋');
+  const before = sheetDump(app);
+  const dr = n2610(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true && dr.data.changes.length === 3 && dr.data.skipped.length === 0 && sheetDump(app) === before, '16 dryrun 預覽三筆、零寫入（org／staff_log 都沒動）', dr);
+  ok(dr.data.changes.map((c) => c.code + ':' + c.from + '>' + c.to).sort().join() === ['franchise:加盟招商部>加盟部', 'hm:部門主管>總監', 'rdd:研發總監>廚藝總監'].sort().join(), '16 預覽內容正確');
+  const orgBefore = JSON.stringify(orgRows(app));
+  const run = n2610(app, {});
+  ok(run.ok && run.data.dryrun === false && run.data.changes.length === 3, '16 執行成功', run);
+  ok(orgName(app, 'dept', 'franchise') === '加盟部' && orgName(app, 'title', 'hm') === '總監' && orgName(app, 'title', 'rdd') === '廚藝總監', '16 三格名稱已改');
+  // 只動名稱欄：其他欄逐格相同
+  const strip = (rows) => JSON.stringify(rows.map((r) => r.map((v, i) => (i === 2 ? '' : v))));
+  ok(strip(JSON.parse(orgBefore)) === strip(orgRows(app)), '16 ★只改名稱那一格（代碼、職級、順序、啟用等其他格逐格相同）');
+  const logs = rowsOf(app, 'staff_log').filter((r) => r.event === 'org_rename_2610');
+  ok(logs.length === 3 && logs.every((l) => l.by === 'u001' || String(l.by).length > 0), '16 staff_log 每格一筆', logs);
+  // 重跑：全部略過、沒有新紀錄
+  const again = n2610(app, {});
+  ok(again.ok && again.data.changes.length === 0 && again.data.skipped.length === 3 && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_rename_2610').length === 3, '16 重跑冪等：全部略過、不重複寫紀錄', again);
+  // 權限與審核不受影響：階梯與職級沒變
+  const o3 = app.sb.stfReadOrg_();
+  ok(o3.title.hm.rank === 2 && o3.title.hm.parent === 'hq' && o3.title.rdd.rank === 4 && o3.dept.franchise.parent === 'dzy-hq', '16 職級／階梯／父層不變');
+  // 退回
+  const rb = nr2610(app);
+  ok(rb.ok && rb.data.changes.length === 3 && orgName(app, 'dept', 'franchise') === '加盟招商部' && orgName(app, 'title', 'hm') === '部門主管' && orgName(app, 'title', 'rdd') === '研發總監', '16 退回：三格改回舊名', rb);
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_rename_2610_rollback').length === 3, '16 退回有 staff_log');
+  const rb2 = nr2610(app);
+  ok(rb2.ok && rb2.data.changes.length === 0 && rb2.data.skipped.length === 3, '16 退回重跑冪等');
+  // 再改一次、然後某格被人改成別的 → 退回拒絕、整批不動
+  ok(n2610(app, {}).ok, '16 退回後可再調整');
+  setOrgName(app, 'title', 'hm', '部門經理');
+  const snap = JSON.stringify(orgRows(app));
+  const rbBad = nr2610(app);
+  ok(rbBad.ok === false && rbBad.data && rbBad.data.bad.length === 1 && rbBad.data.bad[0].code === 'hm' && rbBad.data.bad[0].actual === '部門經理' && JSON.stringify(orgRows(app)) === snap, '16 ★退回：調整後又被改成別的名稱 → 整批拒絕、什麼都沒動', rbBad);
+  // 執行時遇到非預期名稱 → 整批拒絕（包含另外兩列也不改）
+  const app2 = oldNames(fresh(), true);
+  setOrgName(app2, 'title', 'hm', '某某主管');
+  const snap2 = JSON.stringify(orgRows(app2));
+  const bad = n2610(app2, {});
+  ok(bad.ok === false && bad.data.bad.length === 1 && bad.data.bad[0].code === 'hm' && JSON.stringify(orgRows(app2)) === snap2, '16 ★遇到非預期名稱 → 整批拒絕、其他兩列也沒改', bad);
+  ok(n2610(app2, { dryrun: true }).ok === false, '16 預覽同樣列出拒絕原因');
+  // 找不到 rdd 列（沒做過 10/20 職稱調整）→ 拒絕
+  const app3 = oldNames(fresh(), false);
+  const ri3 = app3.sheets.org._data.findIndex((r) => r[1] === 'rdd');
+  if (ri3 >= 0) app3.sheets.org._data.splice(ri3, 1);
+  const miss = n2610(app3, {});
+  ok(miss.ok === false && miss.data.bad.some((b) => b.code === 'rdd'), '16 org 沒有 rdd 列 → 拒絕', miss);
+  // 10/20 升級常數已用新名：新補的 rdd 直接是廚藝總監，之後改名是冪等略過
+  const app4 = oldNames(app2610(), false);
+  ok(u2610(app4, {}).ok && orgName(app4, 'title', 'rdd') === '廚藝總監', '16 orgUpgrade202610 新補的 rdd 直接用廚藝總監');
+  const r4 = n2610(app4, {});
+  ok(r4.ok && r4.data.changes.length === 2 && r4.data.skipped.length === 1 && r4.data.skipped[0].code === 'rdd', '16 升級後改名：rdd 略過、其餘兩格照改', r4);
+  // Code.gs 登錄
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/CODE_ALLOWED_ACTIONS = \[[\s\S]*?'orgRename202610', 'orgRenameRollback202610'[\s\S]*?\];/.test(src) && /orgRename202610: 1, orgRenameRollback202610: 1/.test(src) && /case 'orgRename202610'/.test(src) && /case 'orgRenameRollback202610'/.test(src), '16 兩個 action 在白名單、寫入鎖、分派表');
+  ok(!/READ_ACTIONS[^\n]*orgRename/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '16 不在任何讀取清單');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

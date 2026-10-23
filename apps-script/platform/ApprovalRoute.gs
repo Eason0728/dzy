@@ -10,9 +10,9 @@
 var APV_ROLES = ['head', 'brand_dir', 'ceo', 'gm', 'chair'];   // 權限人代碼，由低到高（往上順序）
 var APV_TYPES = ['purchase', 'expense', 'personnel'];
 var APV_HANDLER_DEPT = { purchase: 'purchase', expense: 'fin', personnel: 'hr' };   // 承辦部門代碼（org 正本，spec §14.8）
-// 單位自己的 brand_dir（沒有品牌辦公室的單位）：中央工廠＝研發總監 rdd（docs/org/spec.md 第 15 節）
+// 單位自己的 brand_dir（沒有品牌辦公室的單位）：中央工廠＝廚藝總監 rdd（docs/org/spec.md 第 15 節）
 var APV_UNIT_DIR_TITLE = { ck: 'rdd' };
-var APV_ROLE_LABEL = { head: '單位主管', brand_dir: '營運主管（品牌總監／研發總監）', ceo: '執行長', gm: '總經理', chair: '董事長', direct: '直屬主管', self_sign: '本人簽名' };
+var APV_ROLE_LABEL = { head: '單位主管', brand_dir: '營運主管（品牌總監／廚藝總監）', ceo: '執行長', gm: '總經理', chair: '董事長', direct: '直屬主管', self_sign: '本人簽名' };
 var APV_AMOUNT_MAX = 10000000;
 var APV_TABLE_MAX_ROWS = 20;
 var APV_STUCK_MS = 72 * 60 * 60 * 1000;
@@ -147,7 +147,7 @@ function apvIsHandler_(person, dept) {
 /**
  * 某一種權限人的成員。of＝組織脈絡人（請購請款＝送件人；人事＝對象同仁）。
  * head：門市＝同單位店長 sm（中央工廠＝廠長 fm；STF_STORE_HEAD_TITLES，區經理 am 不算）；總部＝同單位同主要部門 hm；品牌辦公室＝同辦公室區經理／區督導（rank 2）。
- * brand_dir：同品牌辦公室的總監 odir；中央工廠＝研發總監 rdd（APV_UNIT_DIR_TITLE）；總部沒有 → 空。ceo／gm／chair：全集團該職稱。
+ * brand_dir：同品牌辦公室的總監 odir；中央工廠＝廚藝總監 rdd（APV_UNIT_DIR_TITLE）；總部沒有 → 空。ceo／gm／chair：全集團該職稱。
  * 預設要求「比 of 高」：同一個職稱階梯內，職級要大於 of（同級、較低一律不算）。opts.noRank＝改派用，不比職級。
  */
 function apvRoleMembers_(role, of, ctx, opts) {
@@ -238,7 +238,7 @@ function apvChainAbove_(sender, subject, ctx) {
   if (subject.ladder === sender.ladder && sender.rank <= subject.rank) return false;
   if (sender.title === 'ceo' || sender.title === 'gm' || sender.title === 'chair') return true;
   if (sender.ladder === 'office' && sender.rank >= 2 && sender.brand !== '' && sender.brand === subject.brand) return true;
-  // 同店主管（店長／廠長，及其上的區經理、研發總監；職級已在上面比過）
+  // 同店主管（店長／廠長，及其上的區經理、廚藝總監；職級已在上面比過）
   if (sender.ladder === 'store' && sender.rank >= 3 && sender.unit !== '' && sender.unit === subject.unit) return true;
   if (sender.title === 'hm' && sender.unit === subject.unit && sender.dept !== '' && sender.dept === subject.dept) return true;
   var direct = apvDirectMembers_(subject, { org: ctx.org, people: ctx.people, byEmp: ctx.byEmp, exclude: [] });

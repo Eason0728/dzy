@@ -294,7 +294,7 @@ def main():
             check(gtitles == ['門市（含中央工廠）', '品牌辦公室', '總部（依部門）', '總部（高層，不分部門）'], '分組標題：%s' % gtitles)
             check(ad.locator('.pm-role').count() == 16, '身分共 16 列（門市 2、辦公室 3、總部 8、高層 3），實際 %d' % ad.locator('.pm-role').count())
             hq_names = ad.locator('[data-group="hq-dept"] .pm-role span').all_inner_texts()
-            check('人資部・全部職稱' in hq_names and '人資部・部門主管' in hq_names, '總部依部門兩列：%s' % hq_names)
+            check('人資部・全部職稱' in hq_names and '人資部・總監' in hq_names, '總部依部門兩列：%s' % hq_names)
             role = lambda name: ad.locator('.pm-role', has=ad.locator('span', has_text=name)).first
             check('3 人' in role('店長').inner_text(), '身分顯示人數（店長 3 人）：%s' % role('店長').inner_text().replace('\n', ' '))
             role('店長').click()
@@ -309,8 +309,8 @@ def main():
                   '鎖碼五列標記（含薪酬管理）；admin 的開關不灰掉')
             check(ad.inner_text('[data-role="bar-msg"]').strip() == '沒有未儲存的變更' and ad.locator('[data-act="save"][disabled]').count() == 1, '沒有變更：儲存鈕 disabled')
             # 「也從…拿到」：人資主管同時命中「人資部・全部職稱」
-            role('人資部・部門主管').click()
-            check('也從『人資部・全部職稱』拿到' in ad.inner_text('[data-perm="dorm.read"]'), '★人資部・部門主管：看宿舍清單「也從『人資部・全部職稱』拿到」')
+            role('人資部・總監').click()
+            check('也從『人資部・全部職稱』拿到' in ad.inner_text('[data-perm="dorm.read"]'), '★人資部・總監：看宿舍清單「也從『人資部・全部職稱』拿到」')
             check(ad.locator('[data-perm="platform.permmap"] [data-role="also"]').count() == 0, '自己的規則（改權限對照表）不顯示「也從」')
             n_perm_calls = len(mock.perm_calls)
 
@@ -508,7 +508,7 @@ def main():
             # 自改 → perm_self 中文
             hr.evaluate("() => { window.location.hash = '#/perms/map'; }")
             hr.wait_for_selector('[data-role="feature-row"]')
-            hr.locator('.pm-role', has=hr.locator('span', has_text='人資部・部門主管')).first.click()
+            hr.locator('.pm-role', has=hr.locator('span', has_text='人資部・總監')).first.click()
             hr.locator('[data-perm="audit.read"] [data-act="toggle"]').click()
             hr.click('[data-act="save"]')
             check(has_toast(hr, '這個改動會改到你自己的權限，請系統管理員處理'), '★改到自己 → perm_self 中文提示')

@@ -376,6 +376,43 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   const { isReadAction } = await import('../platform/dryrun.js');
   ok(isReadAction('platform', 'orgUpgrade202610', { dryrun: true }) && !isReadAction('platform', 'orgUpgrade202610', { dryrun: false }) && !isReadAction('platform', 'orgUpgrade202610', {}) && !isReadAction('platform', 'orgRollback202610', {}), '15 dryrun.js：預覽放行、執行與退回攔下');
 }
+// ── 第 16 節：名稱調整（2026-10-23）前端 ──
+{
+  const el1 = await mount(makeCtx(baseHandler(), { perms: ['platform.staff'], role: 'hr' }));
+  ok(!el1.innerHTML.includes('data-role="org-rename-2610n"') && !el1.innerHTML.includes('data-role="org-rename-rollback-2610n"'), '16 ★非 admin 看不到「名稱調整」「退回名稱調整」');
+  const PV = { ok: true, data: { dryrun: true, changes: [{ kind: 'dept', code: 'franchise', from: '加盟招商部', to: '加盟部' }, { kind: 'title', code: 'hm', from: '部門主管', to: '總監' }], skipped: [{ kind: 'title', code: 'rdd', name: '廚藝總監' }] } };
+  const ctx = makeCtx(baseHandler((a, p) => (a === 'orgRename202610' ? (p.dryrun ? PV : { ok: true, data: Object.assign({}, PV.data, { dryrun: false }) }) : null)), { perms: ['platform.staff'], role: 'admin' });
+  const el = await mount(ctx);
+  ok(el.innerHTML.includes('名稱調整（10/23）') && el.innerHTML.includes('退回名稱調整'), '16 admin 看得到兩顆按鈕');
+  ctx.answers.push(null);
+  el.querySelector('[data-role="org-rename-2610n"]').fire('click'); await flush();
+  ok(ctx.calls.filter((c) => c.action === 'orgRename202610').length === 1 && ctx.calls.find((c) => c.action === 'orgRename202610').payload.dryrun === true, '16 ★先 dryrun:true 預覽，取消就不寫');
+  const pv = ctx.dialogs[0].body.innerHTML;
+  ok(pv.includes('加盟招商部 → 加盟部') && pv.includes('部門主管 → 總監') && pv.includes('廚藝總監'), '16 預覽列出要改與已是新名的格子', pv);
+  ctx.calls.length = 0; ctx.dialogs.length = 0; ctx.answers.push('go', 'ok');
+  el.querySelector('[data-role="org-rename-2610n"]').fire('click'); await flush();
+  ok(JSON.stringify(ctx.calls.filter((c) => c.action === 'orgRename202610').map((c) => c.payload.dryrun)) === '[true,false]' && /完成/.test(ctx.dialogs[1].title), '16 按「確定調整」才 dryrun:false');
+  // 退回：先確認；被拒顯示清單
+  const ctx2 = makeCtx(baseHandler((a) => (a === 'orgRenameRollback202610' ? { ok: false, error: '退回名稱調整：名稱不是預期的值', data: { bad: [{ kind: 'title', code: 'hm', expected: '總監', actual: '部門經理' }] } } : null)), { role: 'admin' });
+  const el2 = await mount(ctx2);
+  ctx2.confirmAnswer = false;
+  el2.querySelector('[data-role="org-rename-rollback-2610n"]').fire('click'); await flush();
+  ok(ctx2.confirms.length === 1 && !ctx2.calls.some((c) => c.action === 'orgRenameRollback202610'), '16 退回先確認，取消不呼叫');
+  ctx2.confirmAnswer = true; ctx2.answers.push('ok');
+  el2.querySelector('[data-role="org-rename-rollback-2610n"]').fire('click'); await flush();
+  const rb = ctx2.dialogs[0] && ctx2.dialogs[0].body.innerHTML;
+  ok(rb && rb.includes('部門經理') && rb.includes('hm'), '16 退回被拒：列出不符的名稱', rb);
+}
+{ // 試跑模式：orgRename202610 dryrun:true 放行，其餘攔
+  const { isReadAction } = await import('../platform/dryrun.js');
+  ok(isReadAction('platform', 'orgRename202610', { dryrun: true }) && !isReadAction('platform', 'orgRename202610', { dryrun: false }) && !isReadAction('platform', 'orgRename202610', {}) && !isReadAction('platform', 'orgRenameRollback202610', {}) && !isReadAction('platform', 'orgRenameRollback202610', { dryrun: true }), '16 dryrun.js：預覽放行、執行與退回攔下');
+}
+{ // 左側選單部門（platform/config.js）
+  const { DEPARTMENTS } = await import('../platform/config.js');
+  const ids = DEPARTMENTS.map((d) => d.id);
+  ok(DEPARTMENTS[ids.indexOf('eng') + 1].id === 'rd' && DEPARTMENTS[ids.indexOf('eng') + 1].name === '研發部門', '16 選單：研發部門排在工程部門之後');
+  ok(DEPARTMENTS.find((d) => d.id === 'franchise').name === '加盟部門' && DEPARTMENTS.length === 11 && new Set(ids).size === 11 && DEPARTMENTS.every((d) => d.name.length === 4), '16 選單：加盟部門、共 11 個、代碼不重複、名稱四字');
+}
 { // org-fields titlesForUnit（兩份同一份程式）
   const { titlesForUnit } = await import('../platform/views/org-fields.js');
   const { titlesForUnit: t2 } = await import('../modules/staff-shared/org-fields.js');
@@ -383,7 +420,7 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
     unit_titles: { ck: ['pt', 'ft', 'fm', 'rdd'] }, title_units: { fm: ['ck'], rdd: ['ck'] } };
   const codes = (f, u) => f(O, u).map((t) => t.code).join();
   ok(codes(titlesForUnit, { code: 'ck', ladder: 'store' }) === 'pt,ft,fm,rdd' && codes(t2, { code: 'ck', ladder: 'store' }) === 'pt,ft,fm,rdd', '15 前端：中央工廠只列 pt／ft／fm／rdd（不列店長、區經理）');
-  ok(codes(titlesForUnit, { code: 'mala-gf', ladder: 'store' }) === 'pt,ft,sm,am', '15 前端：門市列 pt／ft／sm／am（不列廠長、研發總監）');
+  ok(codes(titlesForUnit, { code: 'mala-gf', ladder: 'store' }) === 'pt,ft,sm,am', '15 前端：門市列 pt／ft／sm／am（不列廠長、廚藝總監）');
   ok(codes(titlesForUnit, { code: 'mala-hq', ladder: 'office' }) === 'ofs', '15 前端：品牌辦公室照階梯');
   ok(titlesForUnit({ titles: O.titles }, { code: 'ck', ladder: 'store' }).length === 6, '15 前端：舊後端沒有 unit_titles → 不限定（相容）');
 }

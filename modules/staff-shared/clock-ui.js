@@ -228,7 +228,7 @@ export async function openAddFlow(env) {
   const { ctx, mod, viewer, org } = env;
   const today = ymd(new Date());
   const val = { name: '', hire_date: today, phone: '', title: '', brand: '', unit: '', dept: '' };
-  // 店長新增：單位固定是自己的單位 → 職稱依該單位過濾（單位限定職稱，例如中央工廠只有計時／正職／廠長／研發總監）
+  // 店長新增：單位固定是自己的單位 → 職稱依該單位過濾（單位限定職稱，例如中央工廠只有計時／正職／廠長／廚藝總監）
   const myUnitObj = (org.units || []).find((u) => u.code === env.myUnit);
   const myTitles = myUnitObj ? titlesForUnit(org, myUnitObj) : (org.titles || []).filter((t) => t.parent === 'store');
   for (;;) {

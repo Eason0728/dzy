@@ -507,7 +507,7 @@ function clkEnqueue_(fields, d, used) {
 
 /**
  * 呼叫者身分：總部＝platform.staff；店長＝門市單位（org ladder＝store）、職級店長以上（rank≥3）、同單位——
- * 沿用 Staff.gs stfManagerScope_ 的判斷，再多擋一層「總部單位的部門主管不能走店長路徑」。
+ * 沿用 Staff.gs stfManagerScope_ 的判斷，再多擋一層「總部單位的總監不能走店長路徑」。
  */
 function clkActor_(token) {
   var me = handleMe_(token);

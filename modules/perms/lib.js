@@ -239,7 +239,7 @@ export const FEATURE_DESC = {
 
 /** 總部高層（不分部門）的職稱代碼 */
 const HQ_TOP_TITLES = ['ceo', 'gm', 'chair'];
-/** 部門主管的職稱代碼 */
+/** 總監的職稱代碼 */
 const HQ_HEAD_TITLE = 'hm';
 
 export function keyOf(ladder, dept, title) {
@@ -256,7 +256,7 @@ function titleList(data, ladder) {
 
 /**
  * 左側身分清單：[{ id, title, items:[{ key, ladder, dept, title, name }] }]
- * 分組：門市、品牌辦公室、總部（依部門：每部門「全部職稱」＋「部門主管」）、總部（高層）、其他（現有規則的目標不在以上清單，不得隱藏）。
+ * 分組：門市、品牌辦公室、總部（依部門：每部門「全部職稱」＋「總監」）、總部（高層）、其他（現有規則的目標不在以上清單，不得隱藏）。
  */
 export function identityGroups(data) {
   data = data || {};
@@ -270,7 +270,7 @@ export function identityGroups(data) {
   const hqItems = [];
   (data.depts || []).forEach((d) => {
     hqItems.push(mk('hq', d.code, '*', `${d.name}・全部職稱`));
-    hqItems.push(mk('hq', d.code, HQ_HEAD_TITLE, `${d.name}・部門主管`));
+    hqItems.push(mk('hq', d.code, HQ_HEAD_TITLE, `${d.name}・總監`));
   });
   if (hqItems.length) groups.push({ id: 'hq-dept', title: '總部（依部門）', items: hqItems });
   const tops = titleList(data, 'hq').filter((t) => HQ_TOP_TITLES.indexOf(t.code) !== -1).map((t) => mk('hq', '', t.code, t.name));
