@@ -1,0 +1,55 @@
+/**
+ * modules/attendance/alerts.js — 考勤管理首頁待辦的純函式（2026-10-24，營運系統 spec §17.5）
+ * 資料來源：營運系統 POST /store/api/svc/att-alerts，信封 {ok,data:{items:[{kind,count}],partial,asOf,pending}}。
+ * 只有件數，沒有人名（§17.4）。
+ */
+'use strict';
+
+const TEXT = {
+  approve: (n) => `本月還有 ${n} 天沒核定`,
+  request: (n) => `${n} 筆加班請假申請待審`,
+  device: (n) => `${n} 支新手機等核准`
+};
+const ORDER = ['approve', 'request', 'device'];
+
+/**
+ * ctx.api.call('attendance', …) 的結果 → 上游 data。
+ * attendance 是代轉 ns，api.js transformResponse_ 走「扁平物件」分支：ok 以外整包塞進 data，
+ * 所以上游的 {ok,data:{items…}} 會變成 r.data.data.items。這裡剝掉那一層；
+ * 若哪天 api.js 改成直接給 {items…} 也照樣認得。ok:false／形狀不對回 null。
+ */
+export function unwrap(r) {
+  if (!r || r.ok !== true || !r.data || typeof r.data !== 'object') return null;
+  const d = r.data;
+  if (Array.isArray(d.items)) return d;
+  if (d.data && typeof d.data === 'object' && Array.isArray(d.data.items)) return d.data;
+  return null;
+}
+
+function countOf(items, kind) {
+  let sum = 0;
+  for (const it of items) {
+    if (it && it.kind === kind && Number.isFinite(it.count) && it.count > 0) sum += it.count;
+  }
+  return sum;
+}
+
+/** 上游 data → alerts() 的陣列；形狀不對回 null */
+export function toAlerts(data) {
+  if (!data || typeof data !== 'object' || !Array.isArray(data.items)) return null;
+  if (data.pending === true) return [{ level: 'info', text: '出勤待辦統計中，稍後回首頁就會看到' }];
+  const out = [];
+  for (const kind of ORDER) {
+    const c = countOf(data.items, kind);
+    if (c > 0) out.push({ level: 'warn', text: TEXT[kind](c), view: kind });
+  }
+  if (data.partial === true) out.push({ level: 'warn', text: '部分門市暫時讀不到' });
+  return out;
+}
+
+/** 上游 data → 側邊欄／卡片數字（核定＋申請）；統計中或形狀不對回 null */
+export function toBadge(data) {
+  if (!data || typeof data !== 'object' || !Array.isArray(data.items)) return null;
+  if (data.pending === true) return null;
+  return countOf(data.items, 'approve') + countOf(data.items, 'request');
+}
