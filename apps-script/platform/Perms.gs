@@ -11,10 +11,11 @@
 // 可給的權限碼白名單（順序即畫面順序）
 var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap',
   'store.void', 'att.extra',   // 2026-10-18 營運系統：收支作廢、額外考勤核定（人資主管也能設這兩碼的個別例外，PermActions.gs）
-  'payroll.write'];             // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
+  'payroll.write',              // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
+  'pnl.read', 'pnl.write', 'pnl.admin'];   // 2026-10-24 損益系統：看／填（財務部門預設）／管（定稿與設定，鎖碼）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
-var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write'];   // 2026-10-19 加薪酬系統
+var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin'];   // 2026-10-19 加薪酬系統；2026-10-24 加損益系統（管）
 
 var PERM_SHEET_MAP = 'perm_map';
 var PERM_SHEET_EX = 'perm_ex';
@@ -459,7 +460,8 @@ var PERM_NAMES = {
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
   'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.storeops': '門市營運',
-  'payroll.write': '薪酬系統'
+  'payroll.write': '薪酬系統',
+  'pnl.read': '損益系統：看', 'pnl.write': '損益系統：填', 'pnl.admin': '損益系統：管'
 };
 function permName_(code) { return PERM_NAMES[code] || code; }
 
@@ -545,7 +547,7 @@ function permSessionCompute_(base, staffValues) {
 
 var PERM_MSG_ADMIN_ONLY = '人資主管要請系統管理員設定';
 // 非 admin 的調動改變了對方的鎖碼：依實際變動的碼組出中文訊息（含 platform.permmap 沿用原句）
-var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理', 'payroll.write': '薪酬系統' };
+var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理', 'payroll.write': '薪酬系統', 'pnl.admin': '損益系統定稿與設定' };
 function permLockedMsg_(changedCodes) {
   if (changedCodes.indexOf('platform.permmap') !== -1) return PERM_MSG_ADMIN_ONLY;
   var ph = [];

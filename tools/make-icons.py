@@ -18,6 +18,7 @@ ICONS = {
     'approvals': ('#8a5a2b', f'<path {S} d="M56 44 H104 L128 68 V136 H56 Z"/><path {S} d="M104 44 V68 H128"/><path {S} d="M70 100 L82 112 L106 88"/><path {S} d="M70 126 H114"/>'),
     'storeops': ('#d4a017', f'<path {S} d="M44 70 L54 46 H126 L136 70"/><path {S} d="M44 70 C44 80 58 80 58 70 C58 80 76 80 76 70 C76 80 94 80 94 70 C94 80 112 80 112 70 C112 80 130 80 130 70 H136 C136 80 130 84 124 82"/><path {S} d="M52 84 V134 H128 V84"/><path {S} d="M76 134 V104 H104 V134"/>'),
     'payroll': ('#b5462f', f'<rect {S} x="40" y="56" width="100" height="68" rx="10"/><circle {S} cx="90" cy="90" r="16"/><path {S} d="M56 74 V106 M124 74 V106"/><path {S} d="M52 138 H128"/>'),
+    'pnl': ('#2b6e4f', f'<path {S} d="M44 136 H140"/><path {S} d="M56 136 V104 M82 136 V84 M108 136 V96 M134 136 V64"/><path {S} d="M52 86 L80 62 L104 76 L136 44"/><path {S} d="M118 44 H136 V62"/>'),
     'attendance': ('#1f8a5b', f'<circle {S} cx="90" cy="88" r="42"/><path {S} d="M90 62 V90 L108 102"/><path {S} d="M70 140 H110"/>'),
 }
 

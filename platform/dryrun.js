@@ -31,7 +31,9 @@ export const READ_ACTIONS = {
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）
   payroll: ['payroll_month', 'payroll_get', 'payroll_group', 'payroll_trend', 'payroll_inputs', 'payroll_punch',
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
-    'payroll_attendance_export']
+    'payroll_attendance_export'],
+  // 損益系統（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.pnl 一致
+  pnl: ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment']
 };
 
 /**
@@ -42,7 +44,9 @@ export const WRITE_ACTIONS = {
   audit: ['submitAudit', 'markRest', 'submitOpsAudit', 'addStore', 'setStoreStatus', 'renameStore'],
   dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign'],
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
-    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set']
+    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
+  pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
+    'refreshConnectors', 'refreshFixed', 'loadGroupUnits']
 };
 
 export const DRYRUN_MESSAGE = '試跑模式，未寫入';

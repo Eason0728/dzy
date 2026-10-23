@@ -255,7 +255,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   const { sb, sheets, P, counters } = app;
   const A = sb.__admin;
   const g = post(sb, 'permMapGet', {}, A);
-  ok(g.ok && g.data.inited && g.data.rules.length === 26 && g.data.grantable.length === 12 && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write', '3: permMapGet 回 26 條規則、12 個可給功能、5 個鎖碼', g.data && Object.keys(g.data));
+  ok(g.ok && g.data.inited && g.data.rules.length === 26 && g.data.grantable.length === 15 && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write,pnl.admin', '3: permMapGet 回 26 條規則、15 個可給功能、6 個鎖碼', g.data && Object.keys(g.data));
   ok(g.data.titles.some((t) => t.code === 'osv' && t.rank === 2 && t.ladder === 'office') && g.data.depts.some((d) => d.code === 'hr') && g.data.names['audit.read'], '3: permMapGet 的 titles／depts／names 有內容（osv 職級 2）');
   const sav = (tok, add, remove) => post(sb, 'permMapSave', { add: add || [], remove: remove || [] }, tok);
   const R = (ladder, dept, title, perm) => ({ ladder, dept, title, perm });

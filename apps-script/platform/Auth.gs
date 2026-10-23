@@ -281,7 +281,7 @@ function pickSecrets_(perms) {
   var out = {};
   Object.keys(byBackend).forEach(function (backendId) {
     // 薪酬管理金鑰（2026-10-19）能讀寫全集團薪資：就算有人把過渡旗標 LEGACY_SECRETS 打開，也絕不下發到瀏覽器
-    if (backendId === 'payroll') return;
+    if (backendId === 'payroll' || backendId === 'pnl') return;   // 損益系統（2026-10-24）同理：只在代轉時給
     var s = pickSecretFor_(perms, backendId, byBackend);
     if (s) out[backendId] = s;
   });
@@ -303,7 +303,9 @@ var PROXY_READ_ACTIONS = {
   // 分讀寫只為了試跑模式能照常讀。⚠ payroll_month 在「該月沒有 run」時會自動試算並寫入（mala-payroll skill），仍列讀取＝試跑時翻月份照舊可用
   payroll: ['payroll_month', 'payroll_get', 'payroll_group', 'payroll_trend', 'payroll_inputs', 'payroll_punch',
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
-    'payroll_attendance_export']
+    'payroll_attendance_export'],
+  // 損益系統（2026-10-24，損益 Apps Script 的 dzyProxy 入口；損益後端 gas/dzyProxy.js DZY_PROXY_ACTIONS_ 另有一份第二道白名單）
+  pnl: ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment']
 };
 
 /**
@@ -315,7 +317,10 @@ var PROXY_WRITE_ACTIONS = {
   dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign'],
   // 薪酬頁（mala-clock-in/payroll.html）實際會呼叫的寫入 action；後端還有 payroll_migrate_store 等維運動作，刻意不列
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
-    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set']
+    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
+  // 損益系統：「管」級動作（finalize／unlock／saveSettings／createDraft／refresh*／loadGroupUnits）由損益後端依角色擋，平台只看 pnl.write
+  pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
+    'refreshConnectors', 'refreshFixed', 'loadGroupUnits']
 };
 
 /**
@@ -350,6 +355,7 @@ function proxyAuthorize_(token, ns, action) {
 
   // 2／4. 授權
   var perms = sess.perms;
+  if (ns === 'pnl') perms = proxyPnlPerms_(perms);
 
   // 第二期：role staff 且權限開關開（sess.auditScope 非 null）→ 依職稱／部門算出的稽核範圍決定；系統帳號與開關關走下面照舊的路徑
   if (String(sess.user.role) === 'staff' && sess.auditScope !== null && sess.auditScope !== undefined) {
@@ -365,7 +371,7 @@ function proxyAuthorize_(token, ns, action) {
     }
     var sSecret = proxyPickSecret_(perms, ns, byBackend);
     if (!sSecret) return { ok: false, code: 'NO_SECRET', error: '這個系統尚未設定通行碼，請聯絡管理者' };
-    return proxyWithOperator_({ ok: true, secret: sSecret, filterNode: sNode, isWrite: isWrite }, ns, sess.user);
+    return proxyWithOperator_({ ok: true, secret: sSecret, filterNode: sNode, isWrite: isWrite }, ns, sess.user, perms);
   }
 
   var canWrite = hasPerm_(perms, ns + '.write');
@@ -382,7 +388,7 @@ function proxyAuthorize_(token, ns, action) {
   // 6. 店長裁切：沒有 <ns>.read 但有 <ns>.read.own → 只給自己節點（.write 不豁免）；'' ＝沒節點→空列
   var filterNode = (!canRead && canOwn) ? String(sess.user.node || '') : null;
 
-  return proxyWithOperator_({ ok: true, secret: secret, filterNode: filterNode, isWrite: isWrite }, ns, sess.user);
+  return proxyWithOperator_({ ok: true, secret: secret, filterNode: filterNode, isWrite: isWrite }, ns, sess.user, perms);
 }
 
 /**
@@ -390,12 +396,30 @@ function proxyAuthorize_(token, ns, action) {
  * 代轉時由平台依登入身分決定、mini 的 proxy-hook.js 一律覆寫上游 body.operator，瀏覽器送什麼都不採信。
  * 其他 ns 不加（舊後端不認這個欄位）。
  */
-function proxyWithOperator_(res, ns, user) {
-  if (ns !== 'payroll') return res;
+function proxyWithOperator_(res, ns, user, perms) {
+  if (ns !== 'payroll' && ns !== 'pnl') return res;
   var name = String((user && user.name) || '').trim();
   var uname = String((user && user.username) || '').trim();
   res.operator = (name || uname || '未知') + (uname ? '（' + uname + '）' : '') + '（管理系統）';
+  // 損益系統（2026-10-24）：損益後端用 level 決定影子帳號的角色（read→檢視者、write→填寫者、admin→管理者），
+  // 用帳號（operator 括號內）當影子帳號鍵；mini proxy-hook.js 一律覆寫，瀏覽器送什麼都不採信
+  if (ns === 'pnl') res.level = proxyPnlLevel_(perms);
   return res;
+}
+
+/** 損益系統：pnl.admin 隱含 pnl.write（讀寫閘門與挑金鑰沿用 <ns>.write／<ns>.read 的既有規則） */
+function proxyPnlPerms_(perms) {
+  var p = Array.isArray(perms) ? perms.slice() : [];
+  if (hasPerm_(p, 'pnl.admin') && !hasPerm_(p, 'pnl.write')) p.push('pnl.write');
+  return p;
+}
+
+/** 損益系統等級＝三碼中最高者；都沒有回 ''（proxyAuthorize_ 前面已擋，理論上到不了） */
+function proxyPnlLevel_(perms) {
+  if (hasPerm_(perms, 'pnl.admin')) return 'admin';
+  if (hasPerm_(perms, 'pnl.write')) return 'write';
+  if (hasPerm_(perms, 'pnl.read')) return 'read';
+  return '';
 }
 
 // ============================================================
