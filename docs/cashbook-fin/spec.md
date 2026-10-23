@@ -41,6 +41,7 @@
 |---|---|---|---|
 | `adminStores` | 讀 | — | `{stores:[{code,name}]}` |
 | `adminList` | 讀 | `store, month` | `{store,name,month,rows,locked,lockedBy}`（rows 含作廢列、`voidedBy`） |
+| `adminLocks` | 讀 | `store` | `{store, locks:[{month,status,lockedAt,lockedBy,lockedVia}]}`（月結鎖定分頁用；只列有紀錄的月份） |
 | `adminGet` | 讀 | — | `{expenseSubjects, incomeSubjects}` |
 | `adminSave` | 寫 | `expenseSubjects, incomeSubjects` | `{ok}`；**代轉通道不接受改通行碼欄位**（`newStorePass/newAdminPass` 一律 BAD_INPUT） |
 | `adminVoid` | 寫 | `store, id, reason(1–200字)` | `{ok}`；月份已鎖 → LOCKED |
@@ -54,11 +55,11 @@
 
 ## 5. 現金帳伺服器改動（~/mala-cashbook/server，全部純新增）
 
-1. **管理代轉通道**：config `ADMIN_SVC_KEY`（未設＝關）。dispatch 新分支：body 帶 `adminKey` → `checkKey`（沿用失敗計數）→ 只放行上表 7 個動作；`operator` 必填（≤60 字）。舊管理通行碼路徑照舊。
+1. **管理代轉通道**：config `ADMIN_SVC_KEY`（未設＝關）。dispatch 新分支：body 帶 `adminKey` → `checkKey`（沿用失敗計數）→ 只放行上表 8 個動作；`operator` 必填（≤60 字）。舊管理通行碼路徑照舊。
 2. **舊管理通行碼退場開關**：config `ADMIN_LOGIN_OFF=1` → 以管理通行碼呼叫 `admin*` 一律回 `MOVED_TO_DZY`（Q2：並行兩週後才開）。前端設定頁看到這個碼顯示「會計功能已搬到管理系統 → 財務部門 → 收支管理」。
 3. **欄位**（ALTER TABLE ADD COLUMN，舊資料為空）：`rows.voided_by`、`locks.locked_by`、`locks.locked_via`（`store`／`acct`）。新表 `admin_log(at, operator, action, store, month, row_id, detail)`，只追加；解鎖、作廢、改科目都寫一列。
 4. **S2＝A 時**：店長通道 `unlock` 遇到 `locked_via='acct'` 回 `LOCKED_BY_ACCT`（門市營運畫面顯示「這個月是會計鎖的，請找會計解鎖」）。店長自己鎖的照舊。
-5. 測試：`node --test server/test/` 新增 admin-proxy.test.js（通道只放 7 動作、無 operator 拒絕、改通行碼拒絕、作廢/鎖/解鎖寫 admin_log、LOCKED_BY_ACCT）。
+5. 測試：`node --test server/test/` 新增 admin-proxy.test.js（通道只放 8 動作、無 operator 拒絕、改通行碼拒絕、作廢/鎖/解鎖寫 admin_log、LOCKED_BY_ACCT）。
 
 ## 6. 門市營運改動（~/mala-store-ops，S2＝A 時才有）
 
@@ -90,3 +91,11 @@
 - e2e：新增 t-cashbook（mock 平台代轉）：四分頁點得到、作廢流程、鎖定後作廢鈕消失、匯出檔可解開且列數／合計正確、沒權限的人看不到選單。
 - 分層：`git diff --stat platform/` 只有 registry.js、api.js（PROXY_NS／PROXY_TIMEOUT_BY_NS 各一行，Eason 2026-10-24 在損益對話准了）、dryrun.js（S4）。
 - 真瀏覽器點一次（本機整套）。
+
+## 10. 介面契約補充（實作依據）
+
+- 現金帳管理通道請求本文：`{action, adminKey, operator, ...參數}`；回應沿用現有 `{ok:true,...}`／`{ok:false,error}`。錯誤碼新增 `MOVED_TO_DZY`、`LOCKED_BY_ACCT`、`FORBIDDEN`（通道不放行的動作）、`BAD_INPUT`（缺 operator、帶通行碼欄位）。
+- `adminList.rows[]` 多 `voidedBy`；回應多 `lockedBy`、`lockedVia`。
+- 店長通道 `lock` 寫 `locked_via='store'`、`locked_by='店長'`；`adminLock` 寫 `'acct'`＋operator。已鎖時再鎖：照現狀（冪等不報錯）。
+- `adminUnlock` 刪除鎖定列並寫 admin_log；`adminVoid` 對已作廢列回 `BAD_INPUT`。
+- 平台 operator 字串格式沿用薪酬：`姓名（帳號）（管理系統）`。
