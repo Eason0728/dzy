@@ -45,7 +45,7 @@ import { loadManifests } from './registry.js';
 import { DEPARTMENTS } from './config.js';
 import { reportManifest } from './manifest-check.js';
 import { render as renderLogin } from './views/login.js';
-import { sanitizeTabs, pickDynamicView } from './tabs.js';
+import { sanitizeTabs, pickDynamicView, TAB_ID_RE } from './tabs.js';
 
 /** spec §4.6：badge() 逾時上限 5 秒，逾時視同 null（不得讓首頁壞掉）。 */
 const BADGE_TIMEOUT_MS = 5000;
@@ -315,6 +315,11 @@ function alertRow(level, text, target) {
 
 /** 把模組 alerts() 的一項轉成路由字串；分頁不存在或沒權限 → 退回模組第一個有權限的分頁。 */
 function alertTarget(manifest, item) {
+  // （2026-10-24，考勤管理首頁提醒，營運系統 spec §17.10）動態分頁模組：分頁 id 合格且進得了模組（views[0] 有權限）→ 直接導到該分頁
+  if (manifest.dynamicTabs && typeof item.view === 'string' && TAB_ID_RE.test(item.view) && manifest.views[0] && isViewPermitted(manifest.views[0])) {
+    const dparams = item.params && typeof item.params === 'object' ? item.params : null;
+    return `#/${manifest.id}/${item.view}${buildQueryString(dparams)}`;
+  }
   const view = manifest.views.find((v) => v.id === item.view && isViewPermitted(v)) || manifest.views.find(isViewPermitted);
   if (!view) return null;
   const params = item.params && typeof item.params === 'object' ? item.params : null;

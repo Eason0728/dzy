@@ -441,8 +441,9 @@ async function freshShellImport() {
   return import(`../platform/shell.js?case=${caseCounter}`);
 }
 
-function makeManifest({ id, ns, name, desc, requires, views, body }) {
+function makeManifest({ id, ns, name, desc, requires, views, body, dynamicTabs }) {
   return {
+    ...(dynamicTabs ? { dynamicTabs: true } : {}),
     id,
     ns,
     backend: ns,
@@ -1239,6 +1240,35 @@ await at('alerts() 畫成首頁提醒列；拋錯只壞自己那組', async () =
   rowsA[0].dispatchEvent({ type: 'click', target: rowsA[0], bubbles: true });
   await flush();
   assert.equal(fakeWindow.location.hash, '#/demo-al/fill?store=a&month=2026-10', '點提醒列導到該列的路由');
+});
+
+await at('動態分頁模組的提醒可導到動態分頁；view 格式不合退回 views[0]；非動態模組行為不變（spec §17.10）', async () => {
+  await resetGlobalState();
+  const alerts = async () => [
+    { level: 'warn', text: '新手機', view: 'device' },
+    { level: 'warn', text: '壞格式', view: 'Bad!' },
+    { level: 'warn', text: '路徑', view: 'a/b' }
+  ];
+  const mD = makeManifest({
+    id: 'demo-dyn', ns: 'demodyn', requires: ['demodyn.read'], dynamicTabs: true,
+    views: [{ id: 'main', name: '主頁', requires: [] }],
+    body: { mount: async () => undefined, alerts }
+  });
+  const mS = makeManifest({
+    id: 'demo-static', ns: 'demostatic', requires: ['demostatic.read'],
+    views: [{ id: 'main', name: '主頁', requires: [] }],
+    body: { mount: async () => undefined, alerts }
+  });
+  MODULES.push({ load: () => Promise.resolve({ default: mD }) }, { load: () => Promise.resolve({ default: mS }) });
+  seedSession({ id: 'u116', name: '測試員', role: 'manager', node: '' }, ['demodyn.read', 'demostatic.read']);
+  await freshShellImport();
+  await flush();
+  const appEl = getAppEl();
+  const rowsOf = (id) => findAllDescendants(
+    findDescendant(appEl, (n) => n.getAttribute && n.getAttribute('data-role') === 'alert-list' && n.getAttribute('data-module') === id),
+    (n) => n.getAttribute && n.getAttribute('data-role') === 'alert-row').map((r) => r.getAttribute('data-target'));
+  assert.deepEqual(rowsOf('demo-dyn'), ['#/demo-dyn/device', '#/demo-dyn/main', '#/demo-dyn/main'], '動態：合格導 device，壞格式退回 views[0]');
+  assert.deepEqual(rowsOf('demo-static'), ['#/demo-static/main', '#/demo-static/main', '#/demo-static/main'], '非動態：照舊退回 views[0]');
 });
 
 // ============================================================
