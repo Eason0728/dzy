@@ -547,7 +547,8 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
 // ============================================================
 // 14. 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：ns attendance／action attAlerts
 //     只認 platform.att（含衍生）；用 attendance/read 服務金鑰；subject＝登入身分的 DZY 編號（admin 為 U:<id>）
-// ====================================================={
+// ============================================================
+{
   const ATT = 'FAKE-ATT-ALERT-KEY-31';
   const extra = { module_secrets: seed().module_secrets.concat([['attendance', 'read', ATT]]) };
   const { sb, sheets } = fresh(extra);
@@ -555,47 +556,49 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   const props = sb.PropertiesService.getScriptProperties();
   props.setProperty('STORE_SSO_UNITS', 'mala-gf');
 
-  ok(JSON.stringify(sb.PROXY_READ_ACTIONS.attendance) === JSON.stringify(READ_ACTIONS.attendance) && READ_ACTIONS.attendance[0] === 'attAlerts', '15a: attendance 讀清單兩邊（Auth.gs／dryrun.js）一致且含 attAlerts', [sb.PROXY_READ_ACTIONS.attendance, READ_ACTIONS.attendance]);
+  ok(JSON.stringify(sb.PROXY_READ_ACTIONS.attendance) === JSON.stringify(READ_ACTIONS.attendance) && READ_ACTIONS.attendance[0] === 'attAlerts', '14a: attendance 讀清單兩邊（Auth.gs／dryrun.js）一致且含 attAlerts', [sb.PROXY_READ_ACTIONS.attendance, READ_ACTIONS.attendance]);
 
   const a = sb.proxyAuthorize_(boss, 'attendance', 'attAlerts');
-  ok(a.ok === true && a.secret === ATT && a.filterNode === null && a.isWrite === false && a.subject === 'U:u001', '15b: admin → 服務金鑰、讀、subject＝U:<id>', a);
-  ok(sb.proxyAuthorize_(boss, 'attendance', 'attSetSomething').code === 'FORBIDDEN', '15c: action 不是 attAlerts（admin 也）→ FORBIDDEN');
+  ok(a.ok === true && a.secret === ATT && a.filterNode === null && a.isWrite === false && a.subject === 'U:u001', '14b: admin → 服務金鑰、讀、subject＝U:<id>', a);
+  ok(sb.proxyAuthorize_(boss, 'attendance', 'attSetSomething').code === 'FORBIDDEN', '14c: action 不是 attAlerts（admin 也）→ FORBIDDEN');
 
   const sm = mkStaff(sb, boss, '考勤店長', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
   const r = sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts');
-  ok(r.ok === true && r.secret === ATT && r.isWrite === false && r.subject === sm.emp && /^DZY\d+$/.test(String(r.subject)), '15d: 有 platform.att 的店長 → subject＝DZY 編號', r);
-  ok(sb.proxyAuthorize_(sm.token, 'attendance', 'attWrite').code === 'FORBIDDEN', '15e: 店長打非 attAlerts → FORBIDDEN');
-  ok(sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts').secret !== undefined && JSON.stringify(post(sb, 'me', {}, sm.token)).indexOf(ATT) === -1, '15f: me 回應不含服務金鑰');
+  ok(r.ok === true && r.secret === ATT && r.isWrite === false && r.subject === sm.emp && /^DZY\d+$/.test(String(r.subject)), '14d: 有 platform.att 的店長 → subject＝DZY 編號', r);
+  ok(sb.proxyAuthorize_(sm.token, 'attendance', 'attWrite').code === 'FORBIDDEN', '14e: 店長打非 attAlerts → FORBIDDEN');
+  ok(sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts').secret !== undefined && JSON.stringify(post(sb, 'me', {}, sm.token)).indexOf(ATT) === -1, '14f: me 回應不含服務金鑰');
 
   const pt = mkStaff(sb, boss, '考勤計時', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
-  ok(sb.proxyAuthorize_(pt.token, 'attendance', 'attAlerts').code === 'FORBIDDEN', '15g: 沒有 platform.att 的計時同仁 → FORBIDDEN');
-  ok(sb.proxyAuthorize_(tokenOf(sb, 'acc1', PW.acc), 'attendance', 'attAlerts').code === 'FORBIDDEN', '15h: 會計（非 staff、無 platform.att）→ FORBIDDEN');
+  ok(sb.proxyAuthorize_(pt.token, 'attendance', 'attAlerts').code === 'FORBIDDEN', '14g: 沒有 platform.att 的計時同仁 → FORBIDDEN');
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'acc1', PW.acc), 'attendance', 'attAlerts').code === 'FORBIDDEN', '14h: 會計（非 staff、無 platform.att）→ FORBIDDEN');
   // 即使有 attendance.read 之類的通用權限也不走通用邏輯
   sheets.roles.appendRow(['attrole', '假', 'attendance.read,attendance.write']);
   sheets.users.appendRow(['u090', 'attx', '假', 'attrole', '', 's9', H('fake-attx-pw-01', 's9'), 'TRUE', '', '', '']);
-  ok(sb.proxyAuthorize_(tokenOf(sb, 'attx', 'fake-attx-pw-01'), 'attendance', 'attAlerts').code === 'FORBIDDEN', '15i: 只有 attendance.read 通用權限、沒有 platform.att → FORBIDDEN（不走通用邏輯）');
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'attx', 'fake-attx-pw-01'), 'attendance', 'attAlerts').code === 'FORBIDDEN', '14i: 只有 attendance.read 通用權限、沒有 platform.att → FORBIDDEN（不走通用邏輯）');
 
   // 有 platform.att 但 storeSubForUser_ 回空（非 DZY 編號的系統帳號）→ FORBIDDEN
   sheets.roles.appendRow(['attsys', '假', 'platform.att']);
   sheets.users.appendRow(['u091', 'sysatt', '假', 'attsys', '', 's9', H('fake-sysatt-pw-01', 's9'), 'TRUE', '', '', '']);
-  ok(sb.proxyAuthorize_(tokenOf(sb, 'sysatt', 'fake-sysatt-pw-01'), 'attendance', 'attAlerts').code === 'FORBIDDEN', '15j: 有 platform.att 但沒有 DZY 編號身分（subject 空）→ FORBIDDEN');
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'sysatt', 'fake-sysatt-pw-01'), 'attendance', 'attAlerts').code === 'FORBIDDEN', '14j: 有 platform.att 但沒有 DZY 編號身分（subject 空）→ FORBIDDEN');
 
   // PERMS_ON 開（第二期權限表）：platform.att 由 authPermsWithGate_ 併入、與開關無關 → 店長照樣 ok＋DZY subject，計時照樣 FORBIDDEN（2026-10-24 總審）
-  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '15n 前置：permInit_ 建表');
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '14n 前置：permInit_ 建表');
   turnOn(sb);
   const rOn = sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts');
-  ok(rOn.ok === true && rOn.secret === ATT && rOn.isWrite === false && rOn.subject === sm.emp && /^DZY\d+$/.test(String(rOn.subject)), '15n: PERMS_ON 開 → 店長仍 ok、subject＝DZY 編號', rOn);
-  ok(sb.proxyAuthorize_(pt.token, 'attendance', 'attAlerts').code === 'FORBIDDEN', '15o: PERMS_ON 開 → 計時同仁仍 FORBIDDEN');
-  ok(sb.proxyAuthorize_(boss, 'attendance', 'attAlerts').subject === 'U:u001', '15p: PERMS_ON 開 → admin 仍 subject＝U:<id>');
+  ok(rOn.ok === true && rOn.secret === ATT && rOn.isWrite === false && rOn.subject === sm.emp && /^DZY\d+$/.test(String(rOn.subject)), '14n: PERMS_ON 開 → 店長仍 ok、subject＝DZY 編號', rOn);
+  ok(sb.proxyAuthorize_(pt.token, 'attendance', 'attAlerts').code === 'FORBIDDEN', '14o: PERMS_ON 開 → 計時同仁仍 FORBIDDEN');
+  ok(sb.proxyAuthorize_(boss, 'attendance', 'attAlerts').subject === 'U:u001', '14p: PERMS_ON 開 → admin 仍 subject＝U:<id>');
 
   // 沒設 attendance/read → NO_SECRET；整個 ns 沒登記 → UNKNOWN_NS
   const n = fresh();
-  ok(n.sb.proxyAuthorize_(tokenOf(n.sb, 'BOSS', PW.boss), 'attendance', 'attAlerts').code === 'UNKNOWN_NS', '15k: module_secrets 沒有 attendance → UNKNOWN_NS');
+  ok(n.sb.proxyAuthorize_(tokenOf(n.sb, 'BOSS', PW.boss), 'attendance', 'attAlerts').code === 'UNKNOWN_NS', '14k: module_secrets 沒有 attendance → UNKNOWN_NS');
   const w = fresh({ module_secrets: seed().module_secrets.concat([['attendance', 'write', 'FAKE-ONLY-WRITE']]) });
-  ok(w.sb.proxyAuthorize_(tokenOf(w.sb, 'BOSS', PW.boss), 'attendance', 'attAlerts').code === 'NO_SECRET', '15l: 只有 attendance/write、沒有 read → NO_SECRET（不拿寫入碼頂替）');
+  ok(w.sb.proxyAuthorize_(tokenOf(w.sb, 'BOSS', PW.boss), 'attendance', 'attAlerts').code === 'NO_SECRET', '14l: 只有 attendance/write、沒有 read → NO_SECRET（不拿寫入碼頂替）');
   const num = fresh({ module_secrets: seed().module_secrets.concat([['attendance', 'read', 123456]]) });
-  ok(String(num.sb.proxyAuthorize_(tokenOf(num.sb, 'BOSS', PW.boss), 'attendance', 'attAlerts').secret) === '123456', '15m: 純數字金鑰被試算表轉成 number 也回字串');
-=======
+  ok(String(num.sb.proxyAuthorize_(tokenOf(num.sb, 'BOSS', PW.boss), 'attendance', 'attAlerts').secret) === '123456', '14m: 純數字金鑰被試算表轉成 number 也回字串');
+}
+
+// ============================================================
 // 15. 收支管理（2026-10-24）：cashbook.write 一個開關（不是鎖碼）、財務部門預設有、管理金鑰只在代轉時給、操作人由平台決定
 // ============================================================
 {
@@ -653,7 +656,7 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   const hrStaff = mkStaff(sb, boss, '人資同仁丙', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
   const opsStaff = mkStaff(sb, boss, '營運同仁丁', { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs' });
   const store = mkStaff(sb, boss, '店長戊', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
-  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '14 前置：permInit_');
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '15 前置：permInit_');
   turnOn(sb);
   for (const who of [finStaff, finHead]) {
     const r = sb.proxyAuthorize_(who.token, 'cashbook', 'adminVoid');
