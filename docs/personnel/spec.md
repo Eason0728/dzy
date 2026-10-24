@@ -182,7 +182,10 @@ pending／rejected／active --unclaim（後台，冒用時用）--> unclaimed（
 ### 6.4 單位通訊錄（需 token＋`platform.self`）
 `myUnit` → 呼叫者 status＝active 且職級達門檻（store 職級 rank≥3 店長；hq 職級 rank≥2 部門主管）才回
 同單位（總部單位且有部門時＝同單位同部門）、status＝active 的同仁：`emp_no,name,title,phone`；其他人回「只有店長以上可以看」。
-**不回生日、地址。** 區經理以上第一期也只看自己單位（跨店範圍第二期定）。
+~~**不回生日、地址。**~~ **2026-10-25 Eason 改：** 單位是門市或中央工廠（store 階梯）的主管（店長、區經理、廠長、廚藝總監）
+另回 `birthday`（完整日期）、`address`，回應帶 `private:true`；品牌辦公室、總部單位的主管照舊不回（`private:false`）。
+前端一人一張卡，空值顯示「—」。測試：org-upgrade.mock 第 18 節、me-unit-front、e2e t12 ⑤。
+區經理以上第一期也只看自己單位（跨店範圍第二期定）。
 
 ### 6.8 認領後主管審核（2026-10-12，需 token）
 **誰能審**：
