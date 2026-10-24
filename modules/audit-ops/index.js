@@ -66,6 +66,12 @@ function renderView(el, ctx) {
   teardownCurrentView();
   while (el.firstChild) el.removeChild(el.firstChild);
 
+  // 區督導沒負責任何區（auditScope＝[]）：顯示「目前沒有負責的門市」，不是空白清單
+  if (sharedApi.noAssignedStores(ctx) && sharedApi.NO_STORES_VIEWS.indexOf(ctx.viewId) !== -1) {
+    sharedApi.renderNoStores(el);
+    return;
+  }
+
   const mounter = VIEW_MOUNTERS[ctx.viewId];
   if (!mounter) {
     const card = document.createElement('div');

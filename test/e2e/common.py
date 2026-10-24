@@ -412,7 +412,13 @@ class MockBackend:
             if r is None:
                 return {'ok': True, 'data': {'none': True}} if action == 'myProfile' else {'ok': False, 'error': '只有店長以上可以看'}
             if action == 'myUnit':
-                return {'ok': False, 'error': '只有店長（總部為總監）以上可以看單位通訊錄'}
+                # 簡化版：只模擬門市店長（store 階梯 → 回生日、地址，2026-10-25）；正本 Staff.gs handleMyUnit_
+                if r.get('title') != 'sm' or r.get('status') != 'active':
+                    return {'ok': False, 'error': '只有店長（總部為總監）以上可以看單位通訊錄'}
+                people = [{'emp_no': x['emp_no'], 'name': x['name'], 'title': x.get('title', ''), 'title_name': self._org_name('title', x.get('title', '')),
+                           'phone': x.get('phone', ''), 'birthday': x.get('birthday', ''), 'address': x.get('address', '')}
+                          for x in self.staff if x.get('status') == 'active' and x.get('unit') == r.get('unit')]
+                return {'ok': True, 'data': {'unit_name': self._org_name('unit', r.get('unit')), 'private': True, 'people': people}}
             return {'ok': True, 'data': self._staff_obj(r)}
         if action == 'staffConfirm':
             r = next((x for x in self.staff if x['emp_no'] == p.get('emp_no')), None)

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Perms.gs', 'PermActions.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'Perms.gs', 'PermActions.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 
 let passed = 0;
 let failed = 0;
@@ -285,7 +285,8 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   ok(post(sb, 'myUnit', {}, me).error.indexOf('只有店長') === 0, 'A5 計時同仁看不到單位通訊錄');
   post(sb, 'staffEdit', { emp_no: 'DZY001', title: 'sm' }, tok);
   const u = post(sb, 'myUnit', {}, me);
-  ok(u.ok && u.data.people.length === 1 && !('birthday' in u.data.people[0]) && !('address' in u.data.people[0]), 'A5 店長看得到同單位，不含生日地址', u);
+  ok(u.ok && u.data.people.length === 1 && u.data.people[0].birthday === '1995-05-05' && u.data.people[0].address === '新竹市測試路一段1號' && u.data.private === true, 'A5 門市店長看得到同單位，含生日地址（2026-10-25 Eason）', u);
+  ok(Object.keys(u.data.people[0]).sort().join() === 'address,birthday,emp_no,name,phone,title,title_name', 'A5 通訊錄只回這七欄（不含 reset／認領時間等）', u.data.people[0]);
   const logs = sheets.staff_log._rows().map((r) => r.join('|')).join('\n');
   ok(logs.indexOf('0999888777') === -1 && logs.indexOf('1995-05-05') === -1 && logs.indexOf('測試路') === -1, 'A5 staff_log 不含個資');
 })();

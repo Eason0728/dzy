@@ -6,6 +6,7 @@
  *  1. ssoTicket aud 'store' 的 sub 判斷（storeSubForUser_；StaffClock.gs handleSsoTicket_ 呼叫）
  *  2. svcStoreRedeem／svcStoreWho／svcStoreRoster（憑 Script Property STORE_SVC_KEY）
  *  3. 誰核誰：attNeedOf_／attApproverOf_（純函式，分核定工時 hours／申請 req 兩張表）＋ storeAttPeople_
+ *     ＋ 督導／總監「只看」名單：attViewUnitsOf_／storeAttViewTargets_（ident att.view_people；掛 REGIONS_ON，docs/att-view/spec.md）
  *  4. 身分 ident 計算（storeIdent_）、試點開關 STORE_SSO_UNITS
  *  5. 衍生權限 platform.att／platform.storeops 的閘門（storeAttGate_／storeOpsGate_；Staff.gs stfLoginGate_ 呼叫）
  *  6. 人資主管判斷 stfIsHrHead_、perm_map 補預設規則 storeopsPermSeed_
@@ -38,6 +39,8 @@ var STORE_REQ_UNIT_HEAD_TITLES = ['sm', 'fm'];
 var STORE_REQ_HEAD_BY_UNIT = ['am', 'rdd'];
 // 申請：門市店長本人的申請也可以由該品牌辦公室的這些職稱核（區督導 osv）
 var STORE_REQ_HEAD_BY_OFFICE = ['osv'];
+// 區域開關開、且這家店沒有有效督導（沒劃區或區沒督導）時，店長本人的申請另外放行同品牌辦公室的這些職稱（docs/regions/spec.md 第 0 節 Q4）
+var STORE_REQ_HEAD_NO_SUP_OFFICE = ['odir'];
 // 申請：區經理本人的申請 → 該品牌辦公室的這些職稱（預設區督導、總監；要改只改這裡）
 var STORE_REQ_AM_OFFICE_TITLES = ['osv', 'odir'];
 // 申請：廚藝總監本人的申請 → 總部這些職稱（預設執行長、總經理、董事長；要改只改這裡）
@@ -140,7 +143,7 @@ function attNeedOf_(target, org, mode) {
     if (!clocks) return null;
     if (mode === 'hours' || title === 'pt' || title === 'ft') return { kind: 'unit', unit: unit };
     if (STORE_REQ_UNIT_HEAD_TITLES.indexOf(title) !== -1) return { kind: 'head', unit: unit, brand: o.unit.parent };
-    if (title === 'am') return { kind: 'brand_office', brand: o.unit.parent };
+    if (title === 'am') return { kind: 'brand_office', brand: o.unit.parent, unit: unit };   // unit：區域限區用
     if (title === 'rdd') return { kind: 'hq_exec' };
     return null;
   }
@@ -163,8 +166,12 @@ function attNeedOf_(target, org, mode) {
  * approver 能不能核 target（只算表格；人資主管、admin、att.extra 在 storeAttTargets_ 另外處理）。
  * approver／target＝{emp, status, unit, dept, title}；mode 同 attNeedOf_。
  * 任何人都不能核自己，唯一例外是核定工時的店長／廠長核自己（申請一律不能自己核）。
+ * rctx＝區域 {on, idx}（選填，省略＝開關關）：品牌辦公室核門市店長／區經理申請時，區督導只限負責該店的區（docs/regions/spec.md 第 5 節）。
+ *   head／brand_office 只在 req 模式出現，核定工時 hours 不受影響。
+ *   Q4：開關開、且這家店沒有有效督導（Regions.gs regionStoreHasSupervisor_）→ head 另外放行同品牌總監（STORE_REQ_HEAD_NO_SUP_OFFICE）；
+ *   開關關、或該店有有效督導 → 總監照舊不核店長。
  */
-function attApproverOf_(approver, target, org, mode) {
+function attApproverOf_(approver, target, org, mode, rctx) {
   mode = storeAttMode_(mode);
   if (!approver || !target) return false;
   if (stfStr_(approver.status) !== 'active' || stfStr_(target.status) !== 'active') return false;
@@ -183,14 +190,24 @@ function attApproverOf_(approver, target, org, mode) {
   if (sameMan) return false;
   if (need.kind === 'head') {
     if (ao.ladder === 'store') return STORE_REQ_HEAD_BY_UNIT.indexOf(title) !== -1 && aUnit === need.unit;
-    return ao.ladder === 'office' && STORE_REQ_HEAD_BY_OFFICE.indexOf(title) !== -1 && ao.unit.parent === need.brand;
+    if (ao.ladder !== 'office' || ao.unit.parent !== need.brand) return false;
+    if (STORE_REQ_HEAD_BY_OFFICE.indexOf(title) !== -1) return storeRegionCovers_(approver, title, need.unit, rctx);
+    return STORE_REQ_HEAD_NO_SUP_OFFICE.indexOf(title) !== -1 && !!rctx && !!rctx.on &&
+      !regionStoreHasSupervisor_(rctx.idx, need.unit);
   }
-  if (need.kind === 'brand_office') return ao.ladder === 'office' && STORE_REQ_AM_OFFICE_TITLES.indexOf(title) !== -1 && ao.unit.parent === need.brand;
+  if (need.kind === 'brand_office') return ao.ladder === 'office' && STORE_REQ_AM_OFFICE_TITLES.indexOf(title) !== -1 && ao.unit.parent === need.brand &&
+    storeRegionCovers_(approver, title, need.unit, rctx);
   if (need.kind === 'hq_exec') return ao.ladder === 'hq' && STORE_REQ_RDD_HQ_TITLES.indexOf(title) !== -1;
   if (need.kind === 'office') return ao.ladder === 'office' && title === 'odir' && aUnit === need.unit;
   if (need.kind === 'dept') return ao.ladder === 'hq' && title === 'hm' && stfStr_(approver.dept) === need.dept;
   if (need.kind === 'mgmt') return ao.ladder === 'hq' && STORE_EXEC_TITLES.indexOf(title) !== -1;
   return false;
+}
+
+/** 區域限區（Regions.gs regionOfficeCovers_）；沒給 rctx 或開關關 → true */
+function storeRegionCovers_(approver, title, unit, rctx) {
+  if (!rctx || !rctx.on) return true;
+  return regionOfficeCovers_({ emp: approver.emp, title: title }, unit, rctx);
 }
 
 /** 單位或職稱是空的、或代碼不存在／已停用 → true（正式資料不完整，才輪得到主店推算） */
@@ -249,10 +266,10 @@ function storeEffectiveTarget_(t0, org, home) {
 /**
  * 這個人能核的人（尚未換成打卡帳號）。
  * me＝{emp, status, unit, dept, title}（admin 沒有同仁編號時 emp 為空）；flags＝{admin, hrHead, attExtra}；
- * people＝全部同仁物件陣列；home＝選填，emp → {units}（主店打卡推算用，見 storeInferFromHome_）；mode 同 attNeedOf_。回符合的 target 陣列。
+ * people＝全部同仁物件陣列；home＝選填，emp → {units}（主店打卡推算用，見 storeInferFromHome_）；mode 同 attNeedOf_；rctx 同 attApproverOf_。回符合的 target 陣列。
  * 推算出來的人當作單位 rank 1 一般同仁；推算不出的 orphan 只有 admin／人資主管看得到。
  */
-function storeAttTargets_(me, flags, people, org, home, mode) {
+function storeAttTargets_(me, flags, people, org, home, mode, rctx) {
   mode = storeAttMode_(mode);
   var out = [];
   // admin／人資主管：全部要考勤的人、不含自己；核定工時的店長／廠長例外（含自己，同 attApproverOf_）；申請一律不含自己
@@ -266,10 +283,59 @@ function storeAttTargets_(me, flags, people, org, home, mode) {
     if (flags.admin || flags.hrHead) ok = notSelf || selfOk;
     else if (t.orphan) ok = false;
     else {
-      ok = attApproverOf_(me, t, org, mode);
+      ok = attApproverOf_(me, t, org, mode, rctx);
       if (!ok && flags.attExtra && notSelf && stfStr_(me.unit) && stfStr_(me.unit) === stfStr_(t.unit)) ok = true;
     }
     if (ok) out.push(t);
+  });
+  return out;
+}
+
+/** 「只看」可看的門市單位：org 裡存在且 active、ladder store、屬於督導／總監所在辦公室的品牌、不是央廚（osv 與 odir 共用） */
+function storeViewUnitOk_(code, org, brand) {
+  var u = code ? org.unit[code] : null;
+  return !!(u && u.active && (u.ladder || 'store') === 'store' && brand && u.parent === brand && code !== STF_EXTRA_CK && brand !== STF_EXTRA_CK);
+}
+
+/**
+ * 督導／總監「只看」考勤的門市單位代碼（純函式；docs/att-view/spec.md §2）。
+ * osv（品牌辦公室區督導）→ regionIdx.bySupervisor[本人 emp] 各區的 stores 聯集（regionIdx 為 null／沒有本人＝[]）；
+ * odir（品牌辦公室總監）→ 所屬品牌底下 active、ladder store、非 ck 的門市；其他職稱、非 active＝[]。回排序去重陣列。
+ */
+function attViewUnitsOf_(me, org, regionIdx) {
+  if (!me || stfStr_(me.status) !== 'active') return [];
+  var title = stfStr_(me.title);
+  var o = storeOrgOf_(me, org);
+  if (!o || o.ladder !== 'office') return [];
+  var out = [];
+  var brand = o.unit.parent;
+  if (!brand || brand === STF_EXTRA_CK) return [];
+  if (title === 'osv') {
+    var codes = regionIdx && regionIdx.bySupervisor ? regionIdx.bySupervisor[stfStr_(me.emp)] : null;
+    if (!codes || !codes.length) return [];
+    codes.forEach(function (c) {
+      var r = regionIdx.byRegion ? regionIdx.byRegion[c] : null;
+      if (r && r.stores) r.stores.forEach(function (u) { if (storeViewUnitOk_(stfStr_(u), org, brand)) out.push(stfStr_(u)); });
+    });
+  } else if (title === 'odir') {
+    org.list.unit.forEach(function (u) { if (storeViewUnitOk_(u.code, org, brand)) out.push(u.code); });
+  } else {
+    return [];
+  }
+  return storeUniqSorted_(out.filter(function (x) { return x; }));
+}
+
+/** 「只看」名單的被看者（尚未換成打卡帳號）：units 內、需要核定工時、非 orphan、非本人（與 storeAttTargets_ 分開，不把看混進核） */
+function storeAttViewTargets_(me, people, org, home, units) {
+  var out = [];
+  if (!units || !units.length) return out;
+  people.forEach(function (t0) {
+    var t = storeEffectiveTarget_(t0, org, home);
+    if (!t || t.orphan) return;
+    if (!attNeedOf_(t, org, 'hours')) return;
+    if (units.indexOf(stfStr_(t.unit)) === -1) return;
+    if (stfStr_(me.emp) && stfStr_(me.emp) === stfStr_(t.emp)) return;
+    out.push(t);
   });
   return out;
 }
@@ -425,8 +491,19 @@ function storeIdent_(sub) {
   }
 
   var home = storeHomeFn_();
-  var targets = storeAttTargets_(me, flags, people, org, home, 'hours');
-  var reqTargets = storeAttTargets_(me, flags, people, org, home, 'req');
+  var rctx = typeof regionCtx_ === 'function' ? regionCtx_() : null;   // 區域：入口只讀一次
+  var targets = storeAttTargets_(me, flags, people, org, home, 'hours', rctx);
+  var reqTargets = storeAttTargets_(me, flags, people, org, home, 'req', rctx);
+  var viewTargets = [];
+  var viewOn = false;
+  try { viewOn = PropertiesService.getScriptProperties().getProperty('REGIONS_ON') === '1'; } catch (e) { viewOn = false; }
+  if (viewOn && p && !admin && !hrHead) {
+    var vIdx = null;
+    if (p.title === 'osv' && typeof regionIndexLive_ === 'function') {
+      try { vIdx = regionIndexLive_(); } catch (e2) { vIdx = null; }
+    }
+    viewTargets = storeAttViewTargets_(me, people, org, home, attViewUnitsOf_(me, org, vIdx));
+  }
   return {
     sub: sub, active: true,
     emp_no: p ? p.emp : '',
@@ -440,7 +517,7 @@ function storeIdent_(sub) {
     pilot_units: pilot,
     units_managed: storeUniqSorted_(managed),
     void_units: storeUniqSorted_(voidUnits),
-    att: { people: storeAttPeople_(targets, pilot), req_people: storeAttPeople_(reqTargets, pilot) }   // people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）
+    att: { people: storeAttPeople_(targets, pilot), req_people: storeAttPeople_(reqTargets, pilot), view_people: storeAttPeople_(viewTargets, pilot) }   // view_people＝督導／總監只看（REGIONS_ON='1' 才有，2026-10-25）； people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）
   };
 }
 

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const FILES = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Perms.gs', 'PermActions.gs', 'ApprovalRoute.gs', 'Approvals.gs', 'Code.gs'];
+const FILES = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'Perms.gs', 'PermActions.gs', 'ApprovalRoute.gs', 'Approvals.gs', 'Code.gs'];
 const SRC = FILES.map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 
 let passed = 0;

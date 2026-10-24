@@ -201,7 +201,8 @@ function permInit_(auth) {
  * input = { staff:{status,brand,unit,dept,title,extra_depts:[...],emp_no?},
  *           org:{units:{code:{ladder,parent}}, titles:{code:{parent,rank}}},
  *           rules:[{rule_id,ladder,dept,title,perm}], exs:[{ex_id,emp_no?,perm,mode,until}],
- *           storeMap:{unit:audit_store}, today:'YYYY-MM-DD' }
+ *           storeMap:{unit:audit_store}, today:'YYYY-MM-DD', regionCtx?:{on, idx} }
+ * regionCtx（區域，Regions.gs regionCtx_；由呼叫端讀好傳入）：開著時 osv／oam 的 audit.read.brand 只回負責區域的門市
  * 回 { perms:[…], auditScope:'all'|'none'|[codes], sources:[{perm,source,rule_id?,ex_id?,until?}] }
  * rules／exs 預期已只含 active 的列；exs 只採用 emp_no 非空且等於本人的列（本人無工號＝全部不採用）。
  */
@@ -307,11 +308,25 @@ function permCompute_(input) {
   } else if (has('audit.read.brand')) {
     var list = [];
     var units = org.units || {};
-    Object.keys(units).forEach(function (code) {
-      if (!brand || units[code].active === false || permStr_(units[code].parent) !== brand) return;
-      var st = permStr_(storeMap[code]);
-      if (st) list.push(st);
-    });
+    var rc = input.regionCtx;
+    if (rc && rc.on && (title === 'osv' || title === 'oam')) {
+      // 區域（docs/regions/spec.md 第 6 節）：區督導只看自己負責區域的門市；沒有區域＝[]
+      var idx = rc.idx || {};
+      ((idx.bySupervisor || {})[empNo] || []).forEach(function (c) {
+        var reg = (idx.byRegion || {})[c];
+        (reg ? reg.stores : []).forEach(function (u) {
+          if (!units[u] || units[u].active === false) return;
+          var st = permStr_(storeMap[u]);
+          if (st) list.push(st);
+        });
+      });
+    } else {
+      Object.keys(units).forEach(function (code) {
+        if (!brand || units[code].active === false || permStr_(units[code].parent) !== brand) return;
+        var st = permStr_(storeMap[code]);
+        if (st) list.push(st);
+      });
+    }
     scope = permUniqSorted_(list);
   } else if (has('audit.read.own')) {
     var own = permStr_(storeMap[permStr_(staff.unit)]);
@@ -455,7 +470,7 @@ function permOrgIndex_() {
 
 // 權限碼中文名（myPerms 與畫面用；沒列到的顯示代碼本身）
 var PERM_NAMES = {
-  'audit.read.own': '稽核：我的門市', 'audit.read.brand': '稽核：自己品牌的店', 'audit.read': '稽核：全部店',
+  'audit.read.own': '稽核：我的門市', 'audit.read.brand': '稽核：自己品牌的店（區督導只看自己區）', 'audit.read': '稽核：全部店',
   'audit.write': '稽核：填單與門市管理', 'dorm.read': '宿舍：查看', 'dorm.write': '宿舍：建約與點交',
   'platform.staff': '同仁名單', 'platform.users': '人員管理', 'platform.permmap': '權限設定',
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
@@ -492,7 +507,8 @@ function permLoadCtx_(useDefaults) {
     exs: inited ? t.exs : [],
     storeMap: inited ? t.storeMap : {},
     org: permOrgIndex_(),
-    today: permTodayTaipei_()
+    today: permTodayTaipei_(),
+    regionCtx: typeof regionCtx_ === 'function' ? regionCtx_() : null
   };
 }
 
@@ -506,7 +522,7 @@ function permStaffObj_(values, extraCodes) {
 function permComputeRow_(ctx, values, extraCodes, rulesOverride) {
   return permCompute_({
     staff: permStaffObj_(values, extraCodes), org: ctx.org,
-    rules: rulesOverride || ctx.rules, exs: ctx.exs, storeMap: ctx.storeMap, today: ctx.today
+    rules: rulesOverride || ctx.rules, exs: ctx.exs, storeMap: ctx.storeMap, today: ctx.today, regionCtx: ctx.regionCtx || null
   });
 }
 
