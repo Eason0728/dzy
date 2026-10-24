@@ -227,13 +227,28 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const got = app.ident('DZY023');
   const { pilot_units: fxPilot, ...fxRest } = fx;
   const { pilot_units: gotPilot, ...gotRest } = got;
-  // view_people 的內容是督導／總監專屬（下面 3c 驗）；這裡只驗欄位位置與項目形狀，內容比其餘欄位
-  ok(eq(Object.keys(got.att), Object.keys(fx.att)) && Array.isArray(got.att.view_people) && fx.att.view_people.every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name'])), '1 契約 ident_active：att.view_people 欄位在、項目形狀同 people');
-  gotRest.att = { ...gotRest.att, view_people: fxRest.att.view_people };
-  ok(eq(gotRest, fxRest), '1 契約 ident_active：除了 pilot_units 外逐欄相同（含欄位順序、att.people）', { got: gotRest, want: fxRest });
+  ok(eq(gotRest, fxRest), '1 契約 ident_active：除了 pilot_units 外逐欄相同（含欄位順序、att.people、att.view_people＝[]）', { got: gotRest, want: fxRest });
   ok(eq(keysOf(got), keysOf(fx)), '1 契約 ident_active：欄位名與順序逐字相同');
   ok(Array.isArray(gotPilot) && eq(gotPilot, ['mzt-gf']), '1 契約 ident_active：pilot_units 是陣列（本情境試點＝mzt-gf）');
   ok(FIX.responses.ident_active.ok === true && eq(Object.keys(FIX.responses.ident_active), ['ok', 'data']), '1 契約信封 {ok:true,data}');
+
+  // 1a2. ident_osv_view：假督導（osv，REGIONS_ON=1、負責 A 區＝mzt-gf）逐欄相同（view_people 兩人、req_people 一位店長）
+  const cast2 = [
+    ['DZY061', '周督導', 'mzt-hq', '', 'osv', 'active', '2026-01-01'],
+    ['DZY023', '陳小明', 'mzt-gf', '', 'sm', 'active', '2026-03-01'],
+    ['DZY031', '李計時', 'mzt-gf', '', 'pt', 'active', '2026-05-01']
+  ];
+  const app2 = world(cast2, { pilot: 'mzt-gf,mzt-hq', admins: [['u_admin01', 'BOSS', '系統管理員']] });
+  app2.sheets.staff_clock._data.length = 1;
+  app2.sheets.staff_clock._data.push(['DZY061', 'hq', 'HQ01', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app2.sheets.staff_clock._data.push(['DZY023', 'mztgf', 'MZTGF03', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app2.sheets.staff_clock._data.push(['DZY031', 'mztgf', 'MZTGF07', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app2.props.REGIONS_ON = '1';
+  app2.sb.regionIndexLive_ = () => ({ byRegion: { A: { stores: ['mzt-gf'] } }, bySupervisor: { DZY061: ['A'] } });
+  const fxO = FIX.responses.ident_osv_view.data;
+  const gotO = app2.ident('DZY061');
+  ok(eq(gotO, fxO), '1 契約 ident_osv_view：整份逐欄相同（含 pilot_units、att.req_people、att.view_people）', { got: gotO, want: fxO });
+  ok(eq(keysOf(gotO), keysOf(fxO)) && FIX.responses.ident_osv_view.ok === true, '1 契約 ident_osv_view：欄位名與順序逐字相同');
 
   // 1b. admin 沒有同仁編號：整份逐欄相同（試點 mala-gf，那邊沒有人 → att.people 空）
   app.props.STORE_SSO_UNITS = 'mala-gf';
@@ -565,6 +580,10 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   g('3c units：督導負責兩區 → 聯集排序去重', app.sb.attViewUnitsOf_(P('DZY201'), O, mkIdx({ DZY201: ['B', 'A', 'A'] })), ['mzt-gf', 'mzt-js', 'mzt-lzl']);
   g('3c units：未劃區督導 → []', app.sb.attViewUnitsOf_(P('DZY202'), O, idxA), []);
   g('3c units：regionIdx=null → []', app.sb.attViewUnitsOf_(P('DZY201'), O, null), []);
+  // 區域索引被污染：別品牌店、ck、品牌辦公室、停用店、不存在的店 → 全被濾掉，只剩同品牌 active 門市
+  const dirtyIdx = { byRegion: { A: { stores: ['mzt-gf', 'mala-gf', 'ck', 'mzt-hq', 'mzt-wx', 'no-such', ''] } }, bySupervisor: { DZY201: ['A'], DZY231: ['A'], DZY260: ['A'] } };
+  g('3c units：索引塞別品牌店／ck／品牌辦公室／停用店／不存在店 → 都被濾掉', app.sb.attViewUnitsOf_(P('DZY201'), O, dirtyIdx), ['mzt-gf']);
+  g('3c units：督導已調到別品牌辦公室但索引仍掛舊品牌區 → []', app.sb.attViewUnitsOf_(P('DZY231'), O, mkIdx({ DZY231: ['A', 'B'] })), []);
   const dirUnits = app.sb.attViewUnitsOf_(P('DZY203'), O, null);
   ok(dirUnits.indexOf('mzt-gf') !== -1 && dirUnits.indexOf('mzt-js') !== -1 && dirUnits.indexOf('mzt-lzl') !== -1 && dirUnits.every((u) => u.indexOf('mzt-') === 0 && u !== 'mzt-hq' && u !== 'mzt-wx'), '3c units：總監＝全品牌 active 門市，不含辦公室、停用店、別品牌、ck', { dirUnits });
   g('3c units：一般同仁／店長 → []', [app.sb.attViewUnitsOf_(P('DZY210'), O, idxA), app.sb.attViewUnitsOf_(P('DZY211'), O, idxA), app.sb.attViewUnitsOf_(P('DZY250'), O, idxA)], [[], [], []]);

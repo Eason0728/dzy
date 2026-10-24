@@ -115,12 +115,51 @@
               "name": "李計時"
             }
           ],
+          "view_people": []
+        }
+      }
+    },
+    "ident_osv_view": {
+      "ok": true,
+      "data": {
+        "sub": "DZY061",
+        "active": true,
+        "emp_no": "DZY061",
+        "name": "周督導",
+        "admin": false,
+        "hr_head": false,
+        "unit": "mzt-hq",
+        "title": "osv",
+        "epoch": "2026-01-01",
+        "token_after": 0,
+        "pilot_units": [
+          "mzt-gf",
+          "mzt-hq"
+        ],
+        "units_managed": [],
+        "void_units": [],
+        "att": {
+          "people": [],
+          "req_people": [
+            {
+              "clock": "mztgf",
+              "emp_id": "MZTGF03",
+              "sub": "DZY023",
+              "name": "陳小明"
+            }
+          ],
           "view_people": [
             {
               "clock": "mztgf",
-              "emp_id": "MZTGF09",
-              "sub": "DZY040",
-              "name": "王唯讀"
+              "emp_id": "MZTGF03",
+              "sub": "DZY023",
+              "name": "陳小明"
+            },
+            {
+              "clock": "mztgf",
+              "emp_id": "MZTGF07",
+              "sub": "DZY031",
+              "name": "李計時"
             }
           ]
         }

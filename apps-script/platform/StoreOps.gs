@@ -291,6 +291,12 @@ function storeAttTargets_(me, flags, people, org, home, mode, rctx) {
   return out;
 }
 
+/** 「只看」可看的門市單位：org 裡存在且 active、ladder store、屬於督導／總監所在辦公室的品牌、不是央廚（osv 與 odir 共用） */
+function storeViewUnitOk_(code, org, brand) {
+  var u = code ? org.unit[code] : null;
+  return !!(u && u.active && (u.ladder || 'store') === 'store' && brand && u.parent === brand && code !== STF_EXTRA_CK && brand !== STF_EXTRA_CK);
+}
+
 /**
  * 督導／總監「只看」考勤的門市單位代碼（純函式；docs/att-view/spec.md §2）。
  * osv（品牌辦公室區督導）→ regionIdx.bySupervisor[本人 emp] 各區的 stores 聯集（regionIdx 為 null／沒有本人＝[]）；
@@ -302,19 +308,17 @@ function attViewUnitsOf_(me, org, regionIdx) {
   var o = storeOrgOf_(me, org);
   if (!o || o.ladder !== 'office') return [];
   var out = [];
+  var brand = o.unit.parent;
+  if (!brand || brand === STF_EXTRA_CK) return [];
   if (title === 'osv') {
     var codes = regionIdx && regionIdx.bySupervisor ? regionIdx.bySupervisor[stfStr_(me.emp)] : null;
     if (!codes || !codes.length) return [];
     codes.forEach(function (c) {
       var r = regionIdx.byRegion ? regionIdx.byRegion[c] : null;
-      if (r && r.stores) r.stores.forEach(function (u) { out.push(stfStr_(u)); });
+      if (r && r.stores) r.stores.forEach(function (u) { if (storeViewUnitOk_(stfStr_(u), org, brand)) out.push(stfStr_(u)); });
     });
   } else if (title === 'odir') {
-    var brand = o.unit.parent;
-    if (!brand) return [];
-    org.list.unit.forEach(function (u) {
-      if (u.active && (u.ladder || 'store') === 'store' && u.parent === brand && u.code !== STF_EXTRA_CK && brand !== STF_EXTRA_CK) out.push(u.code);
-    });
+    org.list.unit.forEach(function (u) { if (storeViewUnitOk_(u.code, org, brand)) out.push(u.code); });
   } else {
     return [];
   }
