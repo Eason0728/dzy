@@ -19,6 +19,7 @@ ICONS = {
     'storeops': ('#d4a017', f'<path {S} d="M44 70 L54 46 H126 L136 70"/><path {S} d="M44 70 C44 80 58 80 58 70 C58 80 76 80 76 70 C76 80 94 80 94 70 C94 80 112 80 112 70 C112 80 130 80 130 70 H136 C136 80 130 84 124 82"/><path {S} d="M52 84 V134 H128 V84"/><path {S} d="M76 134 V104 H104 V134"/>'),
     'payroll': ('#b5462f', f'<rect {S} x="40" y="56" width="100" height="68" rx="10"/><circle {S} cx="90" cy="90" r="16"/><path {S} d="M56 74 V106 M124 74 V106"/><path {S} d="M52 138 H128"/>'),
     'cashbook': ('#2f7d5b', f'<rect {S} x="46" y="46" width="88" height="88" rx="12"/><path {S} d="M62 74 H118 M62 94 H118 M62 114 H98"/><path {S} d="M108 106 L118 116 L132 98"/>'),
+    'schedule': ('#6a4fc0', f'<rect {S} x="42" y="52" width="96" height="84" rx="10"/><path {S} d="M42 76 H138 M70 42 V60 M110 42 V60"/><path {S} d="M62 96 H74 M84 96 H96 M106 96 H118 M62 116 H74 M84 116 H96"/>'),
     'attendance': ('#1f8a5b', f'<circle {S} cx="90" cy="88" r="42"/><path {S} d="M90 62 V90 L108 102"/><path {S} d="M70 140 H110"/>'),
 }
 

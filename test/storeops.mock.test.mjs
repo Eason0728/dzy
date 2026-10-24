@@ -729,6 +729,46 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
 })();
 
 // ============================================================
+// 7c. platform.sched 衍生權限（排班管理，2026-10-24 Eason：只給能排班的人）
+// ============================================================
+(() => {
+  const app = world(BIG);
+  const { sb } = app;
+  const perms = (u) => { const r = post(sb, 'login', { username: u, password: PW }); return r.ok ? r.data.perms : null; };
+  const att_has = (s2, u) => { const r = post(s2, 'login', { username: u, password: PW }); return r.ok && has(r.data.perms, 'platform.att'); };
+  const sched = (u) => { const p = perms(u); return !!p && has(p, 'platform.sched'); };
+  ok(sb.STORE_SCHED_GATE_TITLES.slice().sort().join() === 'am,fm,sm', '7c STORE_SCHED_GATE_TITLES＝sm／fm／am');
+  ok(sched('DZY001') && sched('DZY004') && sched('DZY008') && sched('DZY042'), '7c 店長（sm）有 platform.sched');
+  ok(sched('DZY006'), '7c 廠長（fm）有');
+  ok(sched('DZY020'), '7c 人資主管有');
+  ok(!sched('DZY010') && !sched('DZY014'), '7c 總監（odir）沒有');
+  ok(!sched('DZY012'), '7c 區督導（osv）沒有');
+  ok(!sched('DZY022'), '7c 非人資的部門主管（hm）沒有');
+  ok(!sched('DZY025') && !sched('DZY026') && !sched('DZY027'), '7c ceo／gm／chair 沒有');
+  ok(!sched('DZY002') && !sched('DZY003') && !sched('DZY007') && !sched('DZY013') && !sched('DZY021') && !sched('DZY023'), '7c 正職、計時、行政、人資同仁、部門同仁沒有');
+  ok(sched('DZY001') && att_has(sb, 'DZY010'), '7c 對照：總監有 platform.att 但沒有 platform.sched');
+  ok(perms('DZY030') === null, '7c 停用（離職）者登入被擋、拿不到');
+  ok(has(perms('BOSS'), '*'), '7c admin 靠 * 全過');
+  ok(!sched('DZY040'), '7c 有 att.extra 之前沒有');
+  post(sb, 'permExSave', { emp_no: 'DZY040', perm: 'att.extra', mode: 'add', until: '', note: '額外核定' }, app.adminTok);
+  ok(!sched('DZY040') && att_has(sb, 'DZY040'), '7c att.extra 例外不給 platform.sched（只給 platform.att）');
+  const me = post(sb, 'me', {}, app.login('DZY001'));
+  ok(me.ok && has(me.data.perms, 'platform.sched'), '7c me 也回 platform.sched', me.data && me.data.perms);
+  ok(!app.sheets.roles._rows().some((r) => String(r[2]).indexOf('platform.sched') !== -1), '7c platform.sched 沒有寫進 roles 分頁');
+  ok(typeof sb.storeSchedGate_ === 'function', '7c storeSchedGate_ 存在');
+  // 停用 → 閘門直接 false（不經登入）
+  const row = BIG.find((p) => p[0] === 'DZY001');
+  const dead = staffRow(['DZY001', row[1], row[2], row[3], 'sm', 'disabled', row[6]], 0);
+  ok(sb.storeSchedGate_(dead) === false && sb.storeSchedGate_(null) === false, '7c 停用的店長、空列 → false');
+  // 總開關空 → 沒有
+  app.props.STORE_SSO_UNITS = '';
+  ok(!sched('DZY001') && !sched('DZY020') && !sched('DZY006'), '7c 試點空：店長、人資主管、廠長都沒有');
+  ok(has(perms('BOSS'), '*'), '7c 試點空：admin 仍是 *');
+  app.props.STORE_SSO_UNITS = 'mzt-gf';
+  ok(sched('DZY001'), '7c 試點開回來：店長又有');
+})();
+
+// ============================================================
 // 7c. 主店打卡推算（2026-10-18 Eason 選 A）：沒單位職稱的同仁，用 staff_clock 的主店（role=home）推算單位
 // ============================================================
 (() => {

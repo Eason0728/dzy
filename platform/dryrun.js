@@ -35,7 +35,9 @@ export const READ_ACTIONS = {
   // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：必須與 Auth.gs PROXY_READ_ACTIONS.attendance 一致；只回件數的純讀取
   attendance: ['attAlerts'],
   // 收支管理（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.cashbook 一致（test/proxy-authorize.test.mjs 比對）
-  cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet']
+  cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet'],
+  // 排班管理首頁待辦（2026-10-24，hr-move-spec §5）：必須與 Auth.gs PROXY_READ_ACTIONS.schedule 一致；只回店名與期別的純讀取
+  schedule: ['schedAlerts']
 };
 
 /**
