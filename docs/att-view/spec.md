@@ -9,6 +9,7 @@
 2. **分頁**：核定工時（核定狀況）、申請審核（申請紀錄）、員工名冊。**不給**：裝置（新手機核准）、公告。
 3. **總監（odir）看整個品牌**的門市；區督導只看自己負責區域的門市。
 4. **區域還沒劃好之前，督導什麼都看不到**（跟現在一樣只有店長申請可審）；人資在「區域」設定頁把店劃給他之後才出現。
+5. **2026-10-25 晚上替 Eason 決定（他已睡，選保守、可改）**：整個「只看」功能（督導與總監）掛在區域審核開關 `REGIONS_ON === '1'` 底下；開關關著＝沒有人多看到任何東西。Eason 指示 REGIONS_ON 上線後維持關著、看過切換檢查再自己按，所以按下那一刻督導的審核縮到該區、同時開始看得到該區考勤。要讓總監先看、不等區域，改一行即可。
 
 ## 1. 名詞
 - **看得到名單（view）**：新的第三份名單，只用來「讀」。和現有兩份並列：
@@ -25,7 +26,8 @@
 | 其他人 | 不新增 | — |
 
 - 「看得到的同仁」＝上面那些門市裡、`attNeedOf_(t, org, 'hours')` 需要核定工時的人（含店長、區經理），經 `storeEffectiveTarget_` 推算主店的也算；orphan（推算不出單位）不給。
-- **與審核開關 `REGIONS_ON` 無關**（同 regions spec §4 通訊錄）：區域一劃好督導就看得到；開關只管「審核只給該區」。
+- **掛在 `REGIONS_ON` 底下**（第 0 節第 5 條）：本案直接讀 Script Property，只有值恰好 `'1'` 才算開；關著 `view_people` 一律 `[]`。
+- 區域索引用 regions 提供的無參數 `regionIndexLive_()`（不存在＝regions 還沒合併＝督導沒有區，回 `[]`；所以兩案合併先後都不會壞）。
 - 結果同樣過 `storeAttPeople_(…, pilot)`：只列已接上營運系統出勤核定的門市（pilot）。⚠ 目前營運系統 duty 轉送只接了 6 套打卡（麻的小辛辣只有光復；墨竹亭光復／金山／六張犁；央廚；總部），沒接上的店督導照樣看不到，**這不是本案要補的**。
 - 寫法：新增純函式 `attViewUnitsOf_(me, org, regionIdx)` → 門市代碼陣列；`storeAttTargets_` 不動，另寫 `storeAttViewTargets_` 篩人（避免把「看」混進「核」的判斷）。admin／人資主管本來就看全部，不必再給 view。
 - ident（`storeIdentFor_` 回傳）：`att: { people, req_people, view_people }`。形狀與 `people` 完全相同。
@@ -55,13 +57,13 @@
 | 步驟 | 內容 | 依賴 |
 |---|---|---|
 | R1 | regions 後端：`regions` 分頁、`regionIndex_`、`Regions.gs` 進 minikit app.json（regions spec §12 第 1 步） | — |
-| V1 | 本案管理系統後端：`view_people`（osv 用 regionIndex_、odir 用 org） | **R1 先合併**（`regionIndex_` 是 R1 的函式）；`attApproverOf_`／`attNeedOf_` 若 regions 也在改，後合併的 rebase |
+| V1 | 本案管理系統後端：`view_people`（osv 用 regionIndex_、odir 用 org） | 不必等 R1（沒有 `regionIndexLive_` 時督導看不到）；`attApproverOf_`／`attNeedOf_` 若 regions 也在改，後合併的 rebase |
 | V2 | `sync-gas.sh dzy-platform --i-know` → minikit commit push → mini pull、重啟（可與 R1 同一次） | V1 |
 | V3 | 營運系統 server＋web（viewKeys、view 標記、唯讀畫面），網站 dzy-store-pages 發布 | V2（先上也不壞，只是沒資料） |
 | R2–R5 | regions 前端、人資劃區、開「依區域審核」 | 與本案無關；**人資劃區（R3）之後督導才看得到** |
 
-- 總監那一半不靠區域，V2＋V3 上完總監當天就看得到全品牌。
-- 本案不需要任何開關：督導看不看得到完全由「有沒有被劃進區域」決定。
+- 總監那一半不靠區域資料，但同樣要等 `REGIONS_ON` 打開。
+- 本案沒有自己的開關，跟著 `REGIONS_ON`：關著時兩邊程式都上線也沒有人多看到東西。
 
 ## 6. 測試與驗收
 - dzy node：`test/store-att*.test.mjs` 加：督導 A（負責 A 區）view_people＝A 區門市全員、不含 B 區；未劃區督導＝[]；失效督導（停用／調品牌）＝[]；總監＝全品牌門市；ck、品牌辦公室、總部同仁不出現；admin／人資主管不多回 view（或回了也不影響）。
