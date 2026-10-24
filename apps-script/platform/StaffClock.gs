@@ -2209,6 +2209,7 @@ function handleSvcDirectory_(payload) {
     var unit = clkStaffUnit_(s);
     return {
       emp_no: s.emp, name: clkStaffName_(s), unit: unit, unit_name: org.unit[unit] ? org.unit[unit].name : '',
+      title: stfStr_(s.values[STF_COL.title]),   // 職稱代碼（2026-10-25）：佈告欄依職稱決定總監級以上看得到全部品牌
       active: clkStaffStatus_(s) !== 'disabled',
       clocks: maps.filter(function (m) { return m.emp_no === s.emp; }).map(function (m) { return { store_code: m.store_code, emp_id: m.emp_id, role: m.role }; })
     };
