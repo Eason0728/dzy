@@ -355,7 +355,11 @@ function proxyAuthorize_(token, ns, action) {
 
   // 2／4. 授權
   var perms = sess.perms;
-  if (ns === 'pnl') perms = proxyPnlPerms_(perms);
+  if (ns === 'pnl') {
+    perms = proxyPnlPerms_(perms);
+    // 「管」級動作平台也要求 pnl.admin（2026-10-24 Fable 審查建議 8：不只靠損益後端擋）
+    if (PROXY_PNL_ADMIN_ACTIONS.indexOf(action) !== -1 && !hasPerm_(perms, 'pnl.admin')) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+  }
 
   // 第二期：role staff 且權限開關開（sess.auditScope 非 null）→ 依職稱／部門算出的稽核範圍決定；系統帳號與開關關走下面照舊的路徑
   if (String(sess.user.role) === 'staff' && sess.auditScope !== null && sess.auditScope !== undefined) {
@@ -403,9 +407,13 @@ function proxyWithOperator_(res, ns, user, perms) {
   res.operator = (name || uname || '未知') + (uname ? '（' + uname + '）' : '') + '（管理系統）';
   // 損益系統（2026-10-24）：損益後端用 level 決定影子帳號的角色（read→檢視者、write→填寫者、admin→管理者），
   // 用帳號（operator 括號內）當影子帳號鍵；mini proxy-hook.js 一律覆寫，瀏覽器送什麼都不採信
-  if (ns === 'pnl') res.level = proxyPnlLevel_(perms);
+  // 2026-10-24 Fable 審查必修 1：影子帳號鍵不從人看的 operator 字串反解（姓名／帳號可含括號被注入），另回帳號本身
+  if (ns === 'pnl') { res.level = proxyPnlLevel_(perms); res.account = uname; }
   return res;
 }
+
+/** 損益系統「管」級動作（定稿、解除定稿、設定、建草稿、重拉連接器、重帶固定值、載入集團單位） */
+var PROXY_PNL_ADMIN_ACTIONS = ['finalize', 'unlock', 'saveSettings', 'createDraft', 'refreshConnectors', 'refreshFixed', 'loadGroupUnits'];
 
 /** 損益系統：pnl.admin 隱含 pnl.write（讀寫閘門與挑金鑰沿用 <ns>.write／<ns>.read 的既有規則） */
 function proxyPnlPerms_(perms) {

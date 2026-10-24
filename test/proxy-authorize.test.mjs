@@ -560,7 +560,7 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   ok(sb.PERM_LOCKED.indexOf('pnl.admin') !== -1 && sb.PERM_LOCKED.indexOf('pnl.write') === -1 && sb.PERM_LOCKED.indexOf('pnl.read') === -1, '14d: 只有 pnl.admin 是鎖碼（Q1 改判：財務部門自動有＝不鎖）');
 
   const a = sb.proxyAuthorize_(boss, 'pnl', 'getSettings');
-  ok(a.ok && a.secret === PNLK && a.isWrite === false && a.level === 'admin' && a.operator === '系統管理者（BOSS）（管理系統）', '14e: admin（*）讀 → level admin、帶操作人', a);
+  ok(a.ok && a.secret === PNLK && a.isWrite === false && a.level === 'admin' && a.account === 'BOSS' && a.operator === '系統管理者（BOSS）（管理系統）', '14e: admin（*）讀 → level admin、帶帳號與操作人', a);
   ok(sb.proxyAuthorize_(boss, 'pnl', 'finalize').isWrite === true, '14f: finalize 是寫入');
   for (const bad of ['login', 'createInvite', 'logout', 'changeMyPasscode', 'revokeSessions', 'dzyProxy', 'listInvites']) {
     ok(sb.proxyAuthorize_(boss, 'pnl', bad).code === 'FORBIDDEN', '14g: 不代轉的 ' + bad + ' → FORBIDDEN');
@@ -588,6 +588,10 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   const o = sb.proxyAuthorize_(ops.token, 'pnl', 'getMonth');
   ok(o.ok && o.level === 'read' && o.secret === PNLK, '14o: 個別例外給 pnl.read → 可讀、level read', o);
   ok(sb.proxyAuthorize_(ops.token, 'pnl', 'addEntry').code === 'FORBIDDEN', '14p: 只有看的人寫入 → FORBIDDEN');
+  for (const adm of ['finalize', 'unlock', 'saveSettings', 'createDraft', 'refreshConnectors', 'refreshFixed', 'loadGroupUnits']) {
+    ok(sb.proxyAuthorize_(fin.token, 'pnl', adm).code === 'FORBIDDEN', '14p2: 只有 pnl.write 打「管」級 ' + adm + ' → 平台就擋');
+  }
+  ok(/^DZY\d+$/.test(f.account), '14m2: 同仁的 account＝同仁編號', f.account);
   sheets.perm_ex.appendRow(['X912', fin.emp, 'pnl.admin', 'add', '', 'Eason 開', 'TRUE', '', 'u001', '', '']);
   const fa = sb.proxyAuthorize_(fin.token, 'pnl', 'saveSettings');
   ok(fa.ok && fa.level === 'admin' && fa.isWrite === true, '14q: 再給 pnl.admin → level admin', fa);
