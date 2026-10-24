@@ -244,7 +244,9 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   app2.sheets.staff_clock._data.push(['DZY023', 'mztgf', 'MZTGF03', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
   app2.sheets.staff_clock._data.push(['DZY031', 'mztgf', 'MZTGF07', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
   app2.props.REGIONS_ON = '1';
-  app2.sb.regionIndexLive_ = () => ({ byRegion: { A: { stores: ['mzt-gf'] } }, bySupervisor: { DZY061: ['A'] } });
+  // 真資料：往 regions 分頁推一列 A 區（mzt-gf、督導 DZY061、active）；mock sandbox 的區域快取跨呼叫持久，改分頁後要 reset
+  app2.sheets.regions._data.push(['r-mzt-a', 'A區', 'mzt', 'mzt-gf', 'DZY061', 'TRUE', '2026-10-25 09:00:00', 'tester']);
+  app2.sb.regionCtxReset_();
   const fxO = FIX.responses.ident_osv_view.data;
   const gotO = app2.ident('DZY061');
   ok(eq(gotO, fxO), '1 契約 ident_osv_view：整份逐欄相同（含 pilot_units、att.req_people、att.view_people）', { got: gotO, want: fxO });
@@ -615,12 +617,18 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(vp.length === 4 && vp.every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name'])), '3c view_people 項目形狀同 people');
 
   // 現有 people／req_people 不受影響：同一組資料，開關 0 與 1 逐欄相同
-  const snap = () => cast.map((c) => { const i = app.ident(c[0]); return i.att ? JSON.stringify([i.att.people, i.att.req_people]) : ''; });
+  // （regions 設計下 REGIONS_ON=1 時督導的 req_people 本來就縮到該區，所以這裡只釘 people；req_people 另斷言）
+  const snap = () => cast.map((c) => { const i = app.ident(c[0]); return i.att ? JSON.stringify([i.att.people]) : ''; });
+  app.sheets.regions._data.push(['r-mzt-a', 'A區', 'mzt', 'mzt-gf,mzt-js', 'DZY201', 'TRUE', '2026-10-25 09:00:00', 'tester']);
   app.props.REGIONS_ON = '0';
+  app.sb.regionCtxReset_();
   const before = snap();
   app.props.REGIONS_ON = '1';
+  app.sb.regionCtxReset_();
   const after = snap();
-  ok(eq(before, after), '3c 開關 0／1：每個人的 people、req_people 完全相同');
+  ok(eq(before, after), '3c 開關 0／1：每個人的 people 完全相同');
+  const reqOf = (e) => app.ident(e).att.req_people.map((x) => x.sub).sort();
+  g('3c REGIONS_ON=1：督導甲 req_people 只剩 A 區店長（DZY210、DZY212），不含 B 區店長', reqOf('DZY201'), ['DZY210', 'DZY212']);
 })();
 
 // ============================================================

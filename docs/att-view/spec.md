@@ -62,11 +62,12 @@
 | V3 | 營運系統 server＋web（viewKeys、view 標記、唯讀畫面），網站 dzy-store-pages 發布 | V2（先上也不壞，只是沒資料） |
 | R2–R5 | regions 前端、人資劃區、開「依區域審核」 | 與本案無關；**人資劃區（R3）之後督導才看得到** |
 
+- **本分支（PR #18）已 rebase 在 regions（PR #19）上，#19 先合**；合併後 `storeIdent_` 與 regions 共用 `storeAttTargets_(…, rctx)`，且 REGIONS_ON=1 時督導的 req_people 會縮到該區。
 - 總監那一半不靠區域資料，但同樣要等 `REGIONS_ON` 打開。
 - 本案沒有自己的開關，跟著 `REGIONS_ON`：關著時兩邊程式都上線也沒有人多看到東西。
 
 ## 6. 測試與驗收
-- dzy node：`test/store-att*.test.mjs` 加：督導 A（負責 A 區）view_people＝A 區門市全員、不含 B 區；未劃區督導＝[]；失效督導（停用／調品牌）＝[]；總監＝全品牌門市；ck、品牌辦公室、總部同仁不出現；admin／人資主管不多回 view（或回了也不影響）。
+- dzy node：`test/storeops.mock.test.mjs` 3c（另 1a2 對 fixture `ident_osv_view`，用真 regions 分頁資料）：督導 A（負責 A 區）view_people＝A 區門市全員、不含 B 區；未劃區督導＝[]；失效督導（停用／調品牌）＝[]；總監＝全品牌門市；ck、品牌辦公室、總部同仁不出現；admin／人資主管不多回 view（或回了也不影響）。
 - 營運系統：
   - duty proxy：只有 viewKeys 時 `mgr_day`／`mgr_pending_approvals`／`mgr_req_pending`／`mgr_roster` 讀得到該員；`mgr_approve`、`mgr_req_decide`、`mgr_req_decide_batch`、`mgr_device_decision`、`mgr_set_active`、`mgr_line_unbind` 全部 FORBIDDEN；`mgr_pending_devices` 讀不到。
   - att-alerts：只有 viewKeys 的人待辦＝0。
