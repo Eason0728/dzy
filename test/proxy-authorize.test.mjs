@@ -678,6 +678,54 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   ok(sb.proxyAuthorize_(finHead.token, 'cashbook', 'adminList').code === 'BAD_TOKEN', '15u: 帳號停用後立刻 BAD_TOKEN');
 }
 
+// ============================================================
+// 16. 排班管理首頁待辦（2026-10-24，營運系統 hr-move-spec §5）：ns schedule／action schedAlerts
+//     與 attendance 同一組規則（platform.att、subject＝DZY 編號），用 schedule/read 服務金鑰（與 attendance 的是兩列、同值）
+// ============================================================
+{
+  const SCH = 'FAKE-SCHED-ALERT-KEY-41';
+  const extra = { module_secrets: seed().module_secrets.concat([['schedule', 'read', SCH], ['attendance', 'read', 'FAKE-ATT-OTHER']]) };
+  const { sb, sheets } = fresh(extra);
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  sb.PropertiesService.getScriptProperties().setProperty('STORE_SSO_UNITS', 'mala-gf');
+
+  ok(JSON.stringify(sb.PROXY_READ_ACTIONS.schedule) === JSON.stringify(READ_ACTIONS.schedule) && READ_ACTIONS.schedule[0] === 'schedAlerts', '16a: schedule 讀清單兩邊（Auth.gs／dryrun.js）一致且含 schedAlerts', [sb.PROXY_READ_ACTIONS.schedule, READ_ACTIONS.schedule]);
+
+  const a = sb.proxyAuthorize_(boss, 'schedule', 'schedAlerts');
+  ok(a.ok === true && a.secret === SCH && a.filterNode === null && a.isWrite === false && a.subject === 'U:u001', '16b: admin → schedule 金鑰（不是 attendance 那列）、讀、subject＝U:<id>', a);
+  ok(sb.proxyAuthorize_(boss, 'schedule', 'schedSetSomething').code === 'FORBIDDEN', '16c: action 不是 schedAlerts（admin 也）→ FORBIDDEN');
+  ok(sb.proxyAuthorize_(boss, 'schedule', 'attAlerts').code === 'FORBIDDEN' && sb.proxyAuthorize_(boss, 'attendance', 'schedAlerts').code === 'FORBIDDEN', '16d: schedule／attendance 的 action 不能互換');
+
+  const sm = mkStaff(sb, boss, '排班店長', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+  const r = sb.proxyAuthorize_(sm.token, 'schedule', 'schedAlerts');
+  ok(r.ok === true && r.secret === SCH && r.isWrite === false && r.subject === sm.emp && /^DZY\d+$/.test(String(r.subject)), '16e: 有 platform.att 的店長 → subject＝DZY 編號', r);
+  ok(sb.proxyAuthorize_(sm.token, 'schedule', 'schedWrite').code === 'FORBIDDEN', '16f: 店長打非 schedAlerts → FORBIDDEN');
+  ok(JSON.stringify(post(sb, 'me', {}, sm.token)).indexOf(SCH) === -1, '16g: me 回應不含服務金鑰');
+
+  const pt = mkStaff(sb, boss, '排班計時', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+  ok(sb.proxyAuthorize_(pt.token, 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16h: 沒有 platform.att 的計時同仁 → FORBIDDEN（403）');
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'acc1', PW.acc), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16i: 會計（無 platform.att）→ FORBIDDEN');
+  sheets.roles.appendRow(['schrole', '假', 'schedule.read,schedule.write']);
+  sheets.users.appendRow(['u092', 'schx', '假', 'schrole', '', 's9', H('fake-schx-pw-01', 's9'), 'TRUE', '', '', '']);
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'schx', 'fake-schx-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16j: 只有 schedule.read 通用權限、沒有 platform.att → FORBIDDEN');
+  sheets.roles.appendRow(['schsys', '假', 'platform.att']);
+  sheets.users.appendRow(['u093', 'syssch', '假', 'schsys', '', 's9', H('fake-syssch-pw-01', 's9'), 'TRUE', '', '', '']);
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'syssch', 'fake-syssch-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16k: 有 platform.att 但沒有 DZY 編號身分 → FORBIDDEN');
+
+  // PERMS_ON 開：同 14n～14p
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '16l 前置：permInit_ 建表');
+  turnOn(sb);
+  const rOn = sb.proxyAuthorize_(sm.token, 'schedule', 'schedAlerts');
+  ok(rOn.ok === true && rOn.secret === SCH && rOn.subject === sm.emp, '16l: PERMS_ON 開 → 店長仍 ok、subject＝DZY 編號', rOn);
+  ok(sb.proxyAuthorize_(pt.token, 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16m: PERMS_ON 開 → 計時同仁仍 FORBIDDEN');
+  ok(sb.proxyAuthorize_(boss, 'schedule', 'schedAlerts').subject === 'U:u001', '16n: PERMS_ON 開 → admin 仍 subject＝U:<id>');
+
+  const n = fresh();
+  ok(n.sb.proxyAuthorize_(tokenOf(n.sb, 'BOSS', PW.boss), 'schedule', 'schedAlerts').code === 'UNKNOWN_NS', '16o: module_secrets 沒有 schedule → UNKNOWN_NS');
+  const w = fresh({ module_secrets: seed().module_secrets.concat([['schedule', 'write', 'FAKE-ONLY-WRITE'], ['attendance', 'read', 'FAKE-ATT-OTHER']]) });
+  ok(w.sb.proxyAuthorize_(tokenOf(w.sb, 'BOSS', PW.boss), 'schedule', 'schedAlerts').code === 'NO_SECRET', '16p: 只有 schedule/write、沒有 read → NO_SECRET（不拿寫入碼、也不拿 attendance/read 頂替）');
+}
+
 if (failed > 0) {
   console.error('\n' + failed + ' 項測試失敗（共 ' + (passed + failed) + ' 項）');
   process.exit(1);

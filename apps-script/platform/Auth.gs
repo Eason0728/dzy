@@ -309,7 +309,9 @@ var PROXY_READ_ACTIONS = {
   // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：與 platform/dryrun.js READ_ACTIONS.attendance 一致
   attendance: ['attAlerts'],
   // 收支管理（2026-10-24，Mac mini 現金帳伺服器的管理代轉通道）：只有 cashbook.write，讀寫都要它；分讀寫只為了試跑模式能照常讀
-  cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet']
+  cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet'],
+  // 排班管理首頁待辦（2026-10-24，營運系統 docs/autoschedule/hr-move-spec.md §5）：與 platform/dryrun.js READ_ACTIONS.schedule 一致
+  schedule: ['schedAlerts']
 };
 
 /**
@@ -332,7 +334,7 @@ var PROXY_WRITE_ACTIONS = {
  * ⚠ 純讀：不寫任何分頁（不更新 last_login、不寫 login_log）。
  *
  * 成功：{ ok:true, secret:'<非空字串>', filterNode:null|'<user.node>', isWrite:boolean, subject?:'<字串>' }
- *   subject（選填，2026-10-24 總審補註）：只有 ns attendance 會帶——登入身分的 DZY 編號（admin 為 'U:<id>'）；
+ *   subject（選填，2026-10-24 總審補註）：只有 ns attendance／schedule 會帶——登入身分的 DZY 編號（admin 為 'U:<id>'）；
  *   執行器（kit/runner/proxy.js）把它交給 hook 覆寫成 body.sub，前端送來的 sub 一律不採信。其他 ns 不帶。
  * 失敗：{ ok:false, code:'NO_TOKEN'|'BAD_TOKEN'|'FORBIDDEN'|'NO_SECRET'|'UNKNOWN_NS', error:'<中文，不含通行碼>' }
  */
@@ -365,8 +367,9 @@ function proxyAuthorize_(token, ns, action) {
   // 只認 platform.att（含衍生；admin 的 * 也算），action 只有 attAlerts（上面已把非讀取清單的擋成 FORBIDDEN）。
   // 用 attendance/read 服務金鑰；subject 由平台依登入身分決定（DZY 編號；admin 為 U:<id>），mini 代轉時覆寫瀏覽器送的 sub。
   // 不落入下面的通用 <ns>.read 與 staff 第二期分支。
-  if (ns === 'attendance') {
-    if (isWrite || action !== 'attAlerts' || !hasPerm_(perms, 'platform.att')) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+  // 排班管理（ns schedule，action 只有 schedAlerts）同規則、用 schedule/read 金鑰。
+  if (ns === 'attendance' || ns === 'schedule') {
+    if (isWrite || action !== (ns === 'attendance' ? 'attAlerts' : 'schedAlerts') || !hasPerm_(perms, 'platform.att')) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
     var attSubject = storeSubForUser_(sess.user);
     if (!attSubject) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
     var attSecretRaw = byBackend[ns] && byBackend[ns]['read'];
