@@ -90,6 +90,7 @@ var STF_MSG = {
   LOGIN_PENDING: '帳號還在等主管審核',
   LOGIN_REJECTED: '帳號資料被退回，請找人資重新開通',
   NOT_REVIEWER: '只有單位主管可以審核',
+  NOT_IN_REGION: '這家店不在你負責的區域',
   NO_EXTRA_PERM: '沒有權限修改兼任部門',
   NO_BULLETIN_PERM: '沒有權限設定公告管理',
   REVIEW_SELF: '不能審核自己',
@@ -1075,6 +1076,16 @@ function handleUnitPending_(token) {
   return { ok: true, data: { people: people, scope_name: rv.scope ? rv.scope.unit_name : '', all_units: rv.isHr } };
 }
 
+/**
+ * 被擋的原因是不是「只因區域不符」：區域開關開、審核者是限區職稱（區督導），而開關關時本來審得到 → true。
+ * 只用來挑錯誤訊息（docs/regions/spec.md 第 5 節），不改任何審核結果。
+ */
+function stfRegionBlocked_(rv, values) {
+  if (!rv || rv.isHr || !rv.scope || !rv.rctx || !rv.rctx.on) return false;
+  if (typeof REG_LIMITED_TITLES === 'undefined' || REG_LIMITED_TITLES.indexOf(rv.scope.title) === -1) return false;
+  return stfCanReview_(rv.scope, values, rv.org, { on: false, idx: rv.rctx.idx });
+}
+
 /** 審核單筆共用：資格、找列、不能審自己、狀態要是認領待審、範圍要對 */
 function stfReviewTarget_(token, payload) {
   var rv = stfReviewer_(token);
@@ -1083,7 +1094,7 @@ function stfReviewTarget_(token, payload) {
   if (!hit) return { ok: false, error: STF_MSG.NOT_FOUND };
   if (stfStr_(hit.values[STF_COL.user_id]) === String(rv.user.id)) return { ok: false, error: STF_MSG.REVIEW_SELF };
   if (stfStr_(hit.values[STF_COL.status]) !== 'pending') return { ok: false, error: STF_MSG.NOT_PENDING_REVIEW };
-  if (!stfCanReviewRow_(rv, hit.values)) return { ok: false, error: STF_MSG.NOT_REVIEWER };
+  if (!stfCanReviewRow_(rv, hit.values)) return { ok: false, error: stfRegionBlocked_(rv, hit.values) ? STF_MSG.NOT_IN_REGION : STF_MSG.NOT_REVIEWER };
   return { ok: true, rv: rv, hit: hit, v: hit.values.slice(), emp: stfNormEmp_(hit.values[STF_COL.emp_no]) };
 }
 

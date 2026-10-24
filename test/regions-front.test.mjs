@@ -119,6 +119,7 @@ const chk = {
 const ci = M.checkItems(chk, org.brands);
 ok(eq(ci.items.map((x) => x.key), ['stores_no_region', 'regions_no_supervisor', 'no_director', 'pending_moves']), '2 切換檢查四項、順序同規格第 7 節');
 ok(eq(ci.items[0].lines, ['墨竹亭：墨竹乙店']) && eq(ci.items[1].lines, ['麻的小辛辣 中區（督導已離職或調職）', '麻的小辛辣 南區（還沒指定督導）']), '2 第 1、2 項文字（品牌＋店名／區名＋原因）', ci.items.slice(0, 2));
+ok(ci.items[2].title.indexOf('打開後店長申請與認領只剩人資能審') !== -1, '2 第 3 項標題：店長申請與認領只剩人資');
 ok(ci.items[2].bad === false && eq(ci.items[3].lines, ['小辛甲店：2 位']) && ci.items[3].lines[0].indexOf('DZY') === -1, '2 第 3 項空；第 4 項只列店名與人數');
 ok(ci.note === chk.att_pending_note && ci.warn === true && ci.on === false, '2 att_pending_note 原文、warn、開關狀態');
 ok(M.checkItems({}, []).items.every((x) => !x.bad) && M.checkItems({}, []).warn === false, '2 空資料不壞');
@@ -129,6 +130,13 @@ ok(eq(M.regionAlertRows(list), [{ level: 'warn', text: '1 個區域沒有督導'
 const on = Object.assign({}, list, { on: true });
 ok(M.regionAlertRows(on).length === 3 && M.regionAlertRows(on)[2].text === '2 家門市還沒劃進區域' && M.regionAlertRows(on)[2].view === 'regions', '3 開關開：多「門市還沒劃進區域」');
 ok(eq(M.regionAlertRows({ flags: { region_no_supervisor: [], region_store_inactive: [], store_no_region: [{ unit: 'a' }] }, on: false }), []) && eq(M.regionAlertRows(null), []), '3 沒事 → 空');
+// 同店兩區（手改試算表）：region_store_dup 獨立一行提醒；區域卡片標籤也分開
+const dupList = { flags: { region_no_supervisor: [], region_store_inactive: [], region_store_dup: [{ code: 'r-mzt-1', name: '北區', brand: 'mzt', stores: ['mzt-b'] }, { code: 'r-mzt-2', name: '舊區', brand: 'mzt', stores: ['mzt-b'] }], store_no_region: [] }, on: false };
+ok(eq(M.regionAlertRows(dupList), [{ level: 'warn', text: '2 個區域有重複劃入的門市', view: 'regions', count: 2 }]), '3 ★region_store_dup → 「N 個區域有重複劃入的門市」', M.regionAlertRows(dupList));
+const dupBlocks = M.buildBlocks(Object.assign({}, list, { flags: Object.assign({}, list.flags, { region_store_dup: [{ code: 'r-mzt-1', name: '北區', brand: 'mzt', stores: ['mzt-b'] }] }) }), org);
+ok(eq(dupBlocks[0].regions[0].store_dup, ['mzt-b']) && eq(dupBlocks[0].regions[0].store_inactive, ['mzt-old']) && eq(dupBlocks[1].regions[0].store_dup, []), '3 buildBlocks 每區帶 store_dup（與 store_inactive 分開）');
+const rgView = fs.readFileSync(path.join(ROOT, 'modules/staff/views/regions.js'), 'utf8');
+ok(/data-role="tag-store-dup">有重複劃入的門市</.test(rgView) && /data-role="tag-store-inactive">有停用的門市</.test(rgView), '3 區域卡片：重複劃入、停用門市兩種標籤文字');
 // 快取 10 分鐘、要 platform.staff
 let calls = 0;
 const actx = (can, id) => ({ user: { id }, can: (p) => can && p === 'platform.staff', api: { call: async (m, a) => { calls++; return { ok: true, data: on }; } } });

@@ -38,6 +38,8 @@ var STORE_REQ_UNIT_HEAD_TITLES = ['sm', 'fm'];
 var STORE_REQ_HEAD_BY_UNIT = ['am', 'rdd'];
 // 申請：門市店長本人的申請也可以由該品牌辦公室的這些職稱核（區督導 osv）
 var STORE_REQ_HEAD_BY_OFFICE = ['osv'];
+// 區域開關開、且這家店沒有有效督導（沒劃區或區沒督導）時，店長本人的申請另外放行同品牌辦公室的這些職稱（docs/regions/spec.md 第 0 節 Q4）
+var STORE_REQ_HEAD_NO_SUP_OFFICE = ['odir'];
 // 申請：區經理本人的申請 → 該品牌辦公室的這些職稱（預設區督導、總監；要改只改這裡）
 var STORE_REQ_AM_OFFICE_TITLES = ['osv', 'odir'];
 // 申請：廚藝總監本人的申請 → 總部這些職稱（預設執行長、總經理、董事長；要改只改這裡）
@@ -165,6 +167,8 @@ function attNeedOf_(target, org, mode) {
  * 任何人都不能核自己，唯一例外是核定工時的店長／廠長核自己（申請一律不能自己核）。
  * rctx＝區域 {on, idx}（選填，省略＝開關關）：品牌辦公室核門市店長／區經理申請時，區督導只限負責該店的區（docs/regions/spec.md 第 5 節）。
  *   head／brand_office 只在 req 模式出現，核定工時 hours 不受影響。
+ *   Q4：開關開、且這家店沒有有效督導（Regions.gs regionStoreHasSupervisor_）→ head 另外放行同品牌總監（STORE_REQ_HEAD_NO_SUP_OFFICE）；
+ *   開關關、或該店有有效督導 → 總監照舊不核店長。
  */
 function attApproverOf_(approver, target, org, mode, rctx) {
   mode = storeAttMode_(mode);
@@ -185,8 +189,10 @@ function attApproverOf_(approver, target, org, mode, rctx) {
   if (sameMan) return false;
   if (need.kind === 'head') {
     if (ao.ladder === 'store') return STORE_REQ_HEAD_BY_UNIT.indexOf(title) !== -1 && aUnit === need.unit;
-    return ao.ladder === 'office' && STORE_REQ_HEAD_BY_OFFICE.indexOf(title) !== -1 && ao.unit.parent === need.brand &&
-      storeRegionCovers_(approver, title, need.unit, rctx);
+    if (ao.ladder !== 'office' || ao.unit.parent !== need.brand) return false;
+    if (STORE_REQ_HEAD_BY_OFFICE.indexOf(title) !== -1) return storeRegionCovers_(approver, title, need.unit, rctx);
+    return STORE_REQ_HEAD_NO_SUP_OFFICE.indexOf(title) !== -1 && !!rctx && !!rctx.on &&
+      !regionStoreHasSupervisor_(rctx.idx, need.unit);
   }
   if (need.kind === 'brand_office') return ao.ladder === 'office' && STORE_REQ_AM_OFFICE_TITLES.indexOf(title) !== -1 && ao.unit.parent === need.brand &&
     storeRegionCovers_(approver, title, need.unit, rctx);

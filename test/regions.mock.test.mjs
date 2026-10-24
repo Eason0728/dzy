@@ -419,6 +419,92 @@ const { sb } = app;
 })();
 
 // ============================================================
+// 7. 審查修正（2026-10-25）
+// ============================================================
+(() => {
+  const org = sb.stfReadOrg_();
+  const staff = sb.stfAllRows_();
+  const R = (code, name, stores, sup, active) => [code, name, 'mzt', stores, sup, active === false ? 'FALSE' : 'TRUE', '', ''];
+
+  // ── 7.1 Q4：店沒劃區／區沒督導 → 同品牌總監可核店長的加班／請假／忘刷（attApproverOf_ head）──
+  // 光復＝A 區（督導甲）；金山＝B 區但沒督導；六張犁沒劃區
+  const idx = sb.regionIndex_([R('r-mzt-1', '甲', 'mzt-gf', 'DZY101'), R('r-mzt-2', '乙', 'mzt-js', '')], org, staff);
+  const hs = sb.regionStoreHasSupervisor_;
+  ok(typeof hs === 'function' && hs(idx, 'mzt-gf') === true && hs(idx, 'mzt-js') === false && hs(idx, 'mzt-lzl') === false && hs(null, 'mzt-gf') === false && hs(idx, '') === false,
+    '7.1 regionStoreHasSupervisor_：有效督導 true；區沒督導、沒劃區、沒索引 → false');
+  const P = (emp, unit, title) => ({ emp, status: 'active', unit, dept: '', title });
+  const AP = {
+    osv: P('DZY101', 'mzt-hq', 'osv'), odir: P('DZY103', 'mzt-hq', 'odir'), malaOdir: P('DZY139', 'mala-hq', 'odir'),
+    am: { 'mzt-gf': P('DZY191', 'mzt-gf', 'am'), 'mzt-js': P('DZY192', 'mzt-js', 'am'), 'mzt-lzl': P('DZY193', 'mzt-lzl', 'am') }
+  };
+  const SM = { 'mzt-gf': P('DZY111', 'mzt-gf', 'sm'), 'mzt-js': P('DZY112', 'mzt-js', 'sm'), 'mzt-lzl': P('DZY113', 'mzt-lzl', 'sm') };
+  const onC = { on: true, idx }, offC = { on: false, idx };
+  const ap = (a, t, mode, rc) => sb.attApproverOf_(a, t, org, mode, rc);
+  const CASES = [['mzt-gf', '有督導'], ['mzt-js', '區沒督導'], ['mzt-lzl', '沒劃區']];
+  CASES.forEach(([u, lb]) => {
+    // 開關關：完全照舊（odir 不核店長；osv 全品牌；同店區經理）
+    ok(ap(AP.odir, SM[u], 'req', offC) === false && ap(AP.odir, SM[u], 'req') === false, `7.1 關×${lb}：總監不核店長申請（照舊）`);
+    ok(ap(AP.osv, SM[u], 'req', offC) === true && ap(AP.am[u], SM[u], 'req', offC) === true, `7.1 關×${lb}：督導、同店區經理照舊能核`);
+    // hours 一律不變
+    ok(ap(AP.odir, SM[u], 'hours', onC) === false && ap(AP.osv, SM[u], 'hours', onC) === false && ap(AP.odir, SM[u], 'hours', offC) === false, `7.1 開／關×${lb}：核定工時不變（總監、督導都不核店長工時）`);
+    ok(ap(AP.am[u], SM[u], 'req', onC) === true, `7.1 開×${lb}：同店區經理照舊能核`);
+    ok(ap(AP.malaOdir, SM[u], 'req', onC) === false, `7.1 開×${lb}：別品牌總監不能核`);
+  });
+  ok(ap(AP.odir, SM['mzt-gf'], 'req', onC) === false && ap(AP.osv, SM['mzt-gf'], 'req', onC) === true, '7.1 開×有督導：總監照舊不核店長、該區督導核');
+  ok(ap(AP.odir, SM['mzt-js'], 'req', onC) === true && ap(AP.osv, SM['mzt-js'], 'req', onC) === false, '7.1 ★開×區沒督導：總監可核店長申請、別區督導不行');
+  ok(ap(AP.odir, SM['mzt-lzl'], 'req', onC) === true && ap(AP.osv, SM['mzt-lzl'], 'req', onC) === false, '7.1 ★開×沒劃區：總監可核店長申請、督導不行');
+  ok(ap(AP.odir, P('DZY114', 'mzt-gf', 'am'), 'req', onC) === true && ap(AP.odir, P('DZY114', 'mzt-gf', 'am'), 'req', offC) === true, '7.1 區經理申請：總監照舊能核');
+  // 走 svcStoreWho 實測（app 的區：光復＝督導甲、金山＝督導乙、六張犁沒劃區）
+  ok(!has(app.req('DZY103'), 'DZY113') && !has(app.req('DZY103'), 'DZY111'), '7.1 關：總監 req 不含店長（照舊）');
+  const hoursOff = app.hours('DZY103');
+  app.setOn(true);
+  ok(has(app.req('DZY103'), 'DZY113') && !has(app.req('DZY103'), 'DZY111') && !has(app.req('DZY103'), 'DZY112'), '7.1 ★開：總監 req 多了沒劃區的六張犁店長、有督導的店照舊不含', app.req('DZY103'));
+  ok(eq(app.hours('DZY103'), hoursOff), '7.1 開：總監核定工時名單不變');
+  const supB = app.sheets.staff._data.find((r) => r[0] === 'DZY102');
+  supB[sb.STF_COL.status] = 'disabled';
+  ok(has(app.req('DZY103'), 'DZY112'), '7.1 ★開：B 區督導離職 → 總監可核金山店長申請');
+  supB[sb.STF_COL.status] = 'active';
+  ok(!has(app.req('DZY103'), 'DZY112'), '7.1 督導復職 → 總監又不核金山店長');
+
+  // ── 7.2 regionCheck 第 3 項與 Q4 對得上：品牌沒有在職總監 → 沒有有效督導的店，打開後店長申請與認領只剩人資 ──
+  const dir = app.sheets.staff._data.find((r) => r[0] === 'DZY103');
+  dir[sb.STF_COL.status] = 'disabled';
+  const nd = post(sb, 'regionCheck', {}, app.hrTok).data.no_director.find((g) => g.brand === 'mzt');
+  ok(nd && eq(nd.stores.map((x) => x.unit), ['mzt-lzl']), '7.2 總監離職 → 第 3 項列出墨竹亭沒劃區的六張犁（有督導的店不列）', nd);
+  ok(['DZY101', 'DZY102', 'DZY105', 'DZY114'].every((e) => !has(app.req(e), 'DZY113')), '7.2 ★開：六張犁店長申請，品牌辦公室與別店都沒人能核（只剩人資）');
+  ok(['DZY101', 'DZY102'].every((e) => !has(app.pending(e), 'DZY123')), '7.2 ★開：六張犁店長認領，督導都審不到（只剩人資）');
+  dir[sb.STF_COL.status] = 'active';
+  // ── 7.5 督導對別區店長按核准／退回：「這家店不在你負責的區域」──
+  const approve = (emp, target) => post(sb, 'unitApprove', { emp_no: target }, app.login(emp));
+  const reject = (emp, target) => post(sb, 'unitReject', { emp_no: target, reason: '測試退回' }, app.login(emp));
+  ok(approve('DZY102', 'DZY121').error === '這家店不在你負責的區域', '7.5 ★開：督導乙核准 A 區店長 → 不在你負責的區域', approve('DZY102', 'DZY121'));
+  ok(reject('DZY102', 'DZY121').error === '這家店不在你負責的區域', '7.5 ★開：督導乙退回 A 區店長 → 不在你負責的區域');
+  ok(approve('DZY101', 'DZY123').error === '這家店不在你負責的區域', '7.5 開：督導甲核准沒劃區的店長 → 不在你負責的區域');
+  ok(approve('DZY112', 'DZY121').error === '只有單位主管可以審核', '7.5 別店店長核准 → 訊息照舊', approve('DZY112', 'DZY121'));
+  ok(app.sheets.staff._data.filter((r) => r[sb.STF_COL.status] === 'pending').length === 3, '7.5 被擋的都沒寫入');
+  app.setOn(false);
+  ok(approve('DZY112', 'DZY121').error === '只有單位主管可以審核', '7.5 關：別店店長核准 → 訊息照舊');
+
+  // ── 7.3 regionSave 品牌必須有啟用中的品牌辦公室 ──
+  const pv = (region) => app.save(region, { preview: true });
+  ok(pv({ name: '東區', brand: 'ck', stores: [] }).code === 'bad_input', '7.3 ★品牌 ck（沒有品牌辦公室）→ bad_input', pv({ name: '東區', brand: 'ck', stores: [] }));
+  ok(pv({ name: '東區', brand: 'dzy', stores: [] }).code === 'bad_input', '7.3 ★品牌 dzy（總部）→ bad_input');
+  ok(pv({ name: '東區', brand: 'yiwu', stores: [] }).ok === true, '7.3 一悟燒肉（有品牌辦公室）→ 可以');
+
+  // ── 7.4 重名只比 active 的區 ──
+  ok(pv({ name: '試驗區', brand: 'mzt', stores: [] }).ok === true, '7.4 ★停用區的名稱可以重用', pv({ name: '試驗區', brand: 'mzt', stores: [] }));
+  ok(pv({ code: 'r-mzt-3', name: '北區', brand: 'mzt', stores: [], active: true }).code === 'name_dup', '7.4 重新啟用並改成 active 區的名稱 → name_dup');
+  ok(pv({ name: '北區', brand: 'mzt', stores: [] }).code === 'name_dup', '7.4 與 active 區重名照擋');
+
+  // ── 7.6 同店兩區 → region_store_dup（不歸到 region_store_inactive）──
+  const rows = [R('r-mzt-1', '甲', 'mzt-gf,mzt-lzl,mzt-wx', 'DZY101'), R('r-mzt-2', '乙', 'mzt-lzl', 'DZY102')];
+  const fl = sb.regionFlags_(rows, org, sb.regionIndex_(rows, org, staff));
+  ok(eq(fl.region_store_dup, [{ code: 'r-mzt-1', name: '甲', brand: 'mzt', stores: ['mzt-lzl'] }, { code: 'r-mzt-2', name: '乙', brand: 'mzt', stores: ['mzt-lzl'] }]), '7.6 ★region_store_dup 列出兩區', fl);
+  ok(eq(fl.region_store_inactive, [{ code: 'r-mzt-1', name: '甲', brand: 'mzt', stores: ['mzt-wx'] }]), '7.6 region_store_inactive 只剩停用門市', fl.region_store_inactive);
+  ok(eq(app.list().flags.region_store_dup, []), '7.6 regionList 帶 region_store_dup（目前空）');
+})();
+
+// ============================================================
 // 6. dryrun 清單（platform/dryrun.js）
 // ============================================================
 (async () => {

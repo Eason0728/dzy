@@ -64,7 +64,7 @@ export function unassignedStores(list, org, brand) {
 
 /**
  * regionList＋orgOptions → 畫面資料：依品牌一塊（只列有可劃區門市或已有區域的品牌，依 orgOptions 順序）
- * [{brand, brand_name, regions:[{…region, no_supervisor, store_inactive:[unit]}], unassigned:[{unit,unit_name}]}]
+ * [{brand, brand_name, regions:[{…region, no_supervisor, store_inactive:[unit], store_dup:[unit]}], unassigned:[{unit,unit_name}]}]
  */
 export function buildBlocks(list, org) {
   const regions = (list && list.regions) || [];
@@ -73,12 +73,14 @@ export function buildBlocks(list, org) {
   (flags.region_no_supervisor || []).forEach((x) => { noSup[x.code] = x.reason || 'empty'; });
   const inact = {};
   (flags.region_store_inactive || []).forEach((x) => { inact[x.code] = x.stores || []; });
+  const dup = {};
+  (flags.region_store_dup || []).forEach((x) => { dup[x.code] = x.stores || []; });
   return ((org && org.brands) || []).filter((b) => assignableStores(org, b.code).length || regions.some((g) => g.brand === b.code)).map((b) => ({
     brand: b.code,
     brand_name: b.name,
     regions: regions.filter((g) => g.brand === b.code)
       .slice().sort((x, y) => (x.active === y.active ? 0 : x.active ? -1 : 1))
-      .map((g) => Object.assign({}, g, { no_supervisor: noSup[g.code] || '', store_inactive: inact[g.code] || [] })),
+      .map((g) => Object.assign({}, g, { no_supervisor: noSup[g.code] || '', store_inactive: inact[g.code] || [], store_dup: dup[g.code] || [] })),
     unassigned: unassignedStores(list, org, b.code)
   }));
 }
@@ -115,7 +117,7 @@ export function checkItems(chk, brands) {
   const items = [
     { key: 'stores_no_region', title: '還沒劃進任何區域的門市', lines: byBrand(c.stores_no_region) },
     { key: 'regions_no_supervisor', title: '沒有督導的區域', lines: (c.regions_no_supervisor || []).map((r) => `${bn[r.brand] || ''} ${r.name}（${reason[r.reason] || reason.empty}）`) },
-    { key: 'no_director', title: '品牌沒有在職總監、又有上面兩項的店（打開後店長申請只剩人資能審）', lines: byBrand(c.no_director) },
+    { key: 'no_director', title: '品牌沒有在職總監、又有上面兩項的店（打開後店長申請與認領只剩人資能審）', lines: byBrand(c.no_director) },
     { key: 'pending_moves', title: '目前還沒審的認領，打開後會從督導清單移走', lines: (c.pending_moves || []).map((m) => `${m.unit_name || '已停用的門市'}：${m.count} 位`) }
   ];
   items.forEach((it) => { it.bad = it.lines.length > 0; });
@@ -128,7 +130,7 @@ export const SWITCH_OFF_TEXT = '停止後，督導立即回到審得到整個品
 
 /**
  * 首頁提醒（spec §4.6 alerts）：regionList → [{level, text, view, count}]
- * 區沒有督導、區裡有停用門市：一律提醒；門市沒劃區：只有開關開著才提醒（關著時沒劃區不影響任何審核）
+ * 區沒有督導、區裡有停用門市、同店重複劃入兩區（手改試算表）：一律提醒；門市沒劃區：只有開關開著才提醒（關著時沒劃區不影響任何審核）
  */
 export function regionAlertRows(list) {
   if (!list || !list.flags) return [];
@@ -136,9 +138,11 @@ export function regionAlertRows(list) {
   const out = [];
   const ns = (f.region_no_supervisor || []).length;
   const si = (f.region_store_inactive || []).length;
+  const sd = (f.region_store_dup || []).length;
   const nr = (f.store_no_region || []).length;
   if (ns) out.push({ level: 'warn', text: `${ns} 個區域沒有督導`, view: 'regions', count: ns });
   if (si) out.push({ level: 'warn', text: `${si} 個區域裡有停用的門市`, view: 'regions', count: si });
+  if (sd) out.push({ level: 'warn', text: `${sd} 個區域有重複劃入的門市`, view: 'regions', count: sd });
   if (nr && list.on === true) out.push({ level: 'warn', text: `${nr} 家門市還沒劃進區域`, view: 'regions', count: nr });
   return out;
 }

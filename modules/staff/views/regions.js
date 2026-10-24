@@ -75,6 +75,7 @@ export function mountRegions(el, ctx) {
     if (!isNew && !region.active) tags.push('<span class="tag">已停用</span>');
     if (!isNew && region.active && region.no_supervisor) tags.push(`<span class="tag tag-warn" data-role="tag-no-sup">${region.no_supervisor === 'invalid' ? '督導已離職或調職' : '沒有督導'}</span>`);
     if (!isNew && region.active && (region.store_inactive || []).length) tags.push('<span class="tag tag-warn" data-role="tag-store-inactive">有停用的門市</span>');
+    if (!isNew && region.active && (region.store_dup || []).length) tags.push('<span class="tag tag-warn" data-role="tag-store-dup">有重複劃入的門市</span>');
     const supSel = `<select class="input" id="rg-sup-${k}" data-f="supervisor">
         <option value="">（暫時沒有督導）</option>
         ${sup.list.map((c) => `<option value="${esc(c.emp_no)}"${c.emp_no === region.supervisor ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}

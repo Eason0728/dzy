@@ -31,7 +31,7 @@ var REG_MSG = {
   NAME_REQUIRED: '請填區域名稱',
   NAME_TOO_LONG: '區域名稱最多 12 個字',
   NAME_DUP: '同一個品牌已經有同名的區域',
-  BAD_BRAND: '品牌代碼不正確',
+  BAD_BRAND: '品牌代碼不正確（只有設了品牌辦公室的品牌可以劃區）',
   BRAND_LOCKED: '區域建立後不能改品牌，請停用後另建',
   BAD_STORE: '門市不正確（必須是該品牌啟用中的門市，不含中央工廠）：',
   STORE_TAKEN: '這家門市已經在別的區域：',
@@ -138,6 +138,23 @@ function regionOfficeCovers_(approver, storeUnit, rctx) {
   return !!reg && reg.supervisorEmp === emp;
 }
 
+/**
+ * 這家店目前有沒有「有效督導」（規格第 0 節 Q4、第 5 節）：有劃進 active 區域、且該區 supervisorEmp 不是空（失效督導已在 regionIndex_ 清成 ''）。
+ * 沒劃區、區沒督導、沒給索引 → false。純函式；給 StoreOps.gs attApproverOf_ 決定要不要放行同品牌總監核店長申請。
+ */
+function regionStoreHasSupervisor_(idx, unit) {
+  if (!idx || !idx.byStore) return false;
+  var code = idx.byStore[regStr_(unit)];
+  var reg = code && idx.byRegion ? idx.byRegion[code] : null;
+  return !!reg && regStr_(reg.supervisorEmp) !== '';
+}
+
+/** 這個品牌能不能劃區：品牌存在、且有啟用中的品牌辦公室（ladder office、parent＝該品牌）；ck、dzy 等沒有品牌辦公室 → false */
+function regBrandOk_(org, brand) {
+  if (!brand || !org.brand[brand]) return false;
+  return org.list.unit.some(function (u) { return u.active && u.ladder === 'office' && u.parent === brand; });
+}
+
 /** 某督導負責的門市（排序去重；沒有＝[]） */
 function regionStoresOf_(idx, emp) {
   var out = [];
@@ -157,18 +174,23 @@ function regAssignableStores_(org, brand) {
 /**
  * 旗標（規格第 3 節「事後失效」）：
  *   region_no_supervisor：[{code,name,brand,reason:'empty'|'invalid'}]（active 區域）
- *   region_store_inactive：[{code,name,brand,stores:[unit]}]（active 區域裡被濾掉的店：停用、不合格、或同店兩區）
+ *   region_store_inactive：[{code,name,brand,stores:[unit]}]（active 區域裡被濾掉的店：停用或不合格）
+ *   region_store_dup：[{code,name,brand,stores:[unit]}]（合格門市同時出現在兩個以上 active 區域，只有手改試算表才會；兩邊都不算）
  *   store_no_region：[{unit,unit_name,brand}]（active 門市沒劃進任何 active 區域）
  */
 function regionFlags_(rows, org, idx) {
-  var flags = { region_no_supervisor: [], region_store_inactive: [], store_no_region: [] };
+  var flags = { region_no_supervisor: [], region_store_inactive: [], region_store_dup: [], store_no_region: [] };
   regParseRows_(rows).forEach(function (g) {
     if (!g.active) return;
     var r = idx.byRegion[g.code];
     if (!r) return;
     if (!r.supervisorEmp) flags.region_no_supervisor.push({ code: g.code, name: g.name, brand: g.brand, reason: g.supervisor ? 'invalid' : 'empty' });
     var dropped = g.stores.filter(function (s) { return r.stores.indexOf(s) === -1; });
-    if (dropped.length) flags.region_store_inactive.push({ code: g.code, name: g.name, brand: g.brand, stores: dropped });
+    // 合格卻被濾掉＝同店兩區（regionIndex_ 只會因為這個原因濾掉合格門市）
+    var dup = dropped.filter(function (s) { return regStoreOk_(org, s, g.brand); });
+    var inactive = dropped.filter(function (s) { return dup.indexOf(s) === -1; });
+    if (inactive.length) flags.region_store_inactive.push({ code: g.code, name: g.name, brand: g.brand, stores: inactive });
+    if (dup.length) flags.region_store_dup.push({ code: g.code, name: g.name, brand: g.brand, stores: dup });
   });
   regAssignableStores_(org).forEach(function (u) {
     if (!idx.byStore[u.code]) flags.store_no_region.push({ unit: u.code, unit_name: u.name, brand: u.parent });
@@ -338,7 +360,7 @@ function regNextCode_(regs, brand) {
 
 /**
  * 新增／修改／停用一區。payload＝{region:{code?,name,brand,stores[],supervisor,active}, expected_ver, preview?}
- * 檢查（規格第 3 節）：名稱 1–12 字、同品牌不重名；品牌存在（建立後不能改）；門市合格（停用的區只檢查代碼存在且屬該品牌）；
+ * 檢查（規格第 3 節）：名稱 1–12 字、同品牌 active 區不重名；品牌要有啟用中的品牌辦公室（建立後不能改）；門市合格（停用的區只檢查代碼存在且屬該品牌）；
  * active 區域一店一區；督導空或合格；expected_ver 要等於目前 ver。preview=true 只回差異不寫。
  */
 function handleRegionSave_(token, payload) {
@@ -367,7 +389,7 @@ function handleRegionSave_(token, payload) {
   if (Array.from(name).length > REG_NAME_MAX) return regFail_(REG_MSG.NAME_TOO_LONG, 'bad_input');
   if (/^[=+\-@]/.test(name)) return regFail_(REG_MSG.BAD_INPUT, 'bad_input');   // 防試算表公式
   var brand = regStr_(src.brand);
-  if (!brand || !org.brand[brand] || !/^[a-z0-9]+$/.test(brand)) return regFail_(REG_MSG.BAD_BRAND, 'bad_input');
+  if (!brand || !/^[a-z0-9]+$/.test(brand) || !regBrandOk_(org, brand)) return regFail_(REG_MSG.BAD_BRAND, 'bad_input');
   if (cur && cur.brand !== brand) return regFail_(REG_MSG.BRAND_LOCKED, 'bad_input');
   var active = !(src.active === false || regStr_(src.active).toUpperCase() === 'FALSE');
   var stores = [];
@@ -381,7 +403,8 @@ function handleRegionSave_(token, payload) {
     stores.push(s);
   });
   if (badStores.length) return regFail_(REG_MSG.BAD_STORE + badStores.join(','), 'bad_store');
-  if (regs.some(function (g) { return g.code !== code && g.brand === brand && g.name === name; })) return regFail_(REG_MSG.NAME_DUP, 'name_dup');
+  // 重名只比 active 的區（停用的區名稱可以重用）；存成停用的區也不擋
+  if (active && regs.some(function (g) { return g.code !== code && g.active && g.brand === brand && g.name === name; })) return regFail_(REG_MSG.NAME_DUP, 'name_dup');
   if (active) {
     var taken = [];
     regs.forEach(function (g) {
