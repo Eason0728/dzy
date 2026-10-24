@@ -2196,7 +2196,7 @@ function handleClockAlerts_(token) {
 
 /**
  * 佈告欄名單（spec §4.6）。不靠登入 token：payload.svc_key 要等於 Script Property BULLETIN_SVC_KEY（未設＝全拒，常數時間比對）。
- * 回 data＝[{emp_no,name,unit,unit_name,active,clocks:[{store_code,emp_id,role}]}]，只含 confirmed 對照，不含手機／生日／地址。
+ * 回 data＝[{emp_no,name,unit,unit_name,title,active,clocks:[{store_code,emp_id,role}]}]（title＝職稱代碼，2026-10-25），只含 confirmed 對照，不含手機／生日／地址。
  */
 function handleSvcDirectory_(payload) {
   var want = PropertiesService.getScriptProperties().getProperty(CLK_PROP_SVC_KEY);
