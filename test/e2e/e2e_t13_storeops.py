@@ -37,7 +37,8 @@ class Mock13(MockBackend):
         super().__init__(base)
         mk = lambda name, perms: {'password': 'e2e-pw', 'perms': perms,
                                   'user': {'id': 'u-' + name, 'name': name, 'role': 'staff', 'node': ''}}
-        USERS['att1'] = mk('督導甲', ['platform.self', 'platform.att', 'platform.storeops'])
+        USERS['att1'] = mk('督導甲', ['platform.self', 'platform.att', 'platform.sched', 'platform.storeops'])   # 店長同等職：考勤管理＋排班管理
+        USERS['att2'] = mk('督導乙', ['platform.self', 'platform.att', 'platform.storeops'])   # 區督導／總監類：有考勤管理、沒有排班管理（2026-10-24）
         USERS['plain1'] = mk('同仁乙', ['platform.self', 'platform.storeops'])
         USERS['none1'] = mk('同仁丙', ['platform.self'])  # 總開關關著／不屬於任何營運系統門市：兩個衍生權限都沒有
         self.sso_calls = []
@@ -218,6 +219,15 @@ def main():
             ids = [c.get_attribute('data-module') for c in at.locator('[data-role="module-card"]').all()]
             check('attendance' in ids and 'storeops' in ids, '有 platform.att：首頁有考勤管理與門市營運，實際：%s' % ids)
             check(at.locator('[data-role="nav-desktop"] [data-nav="attendance"]').count() == 1, '有 platform.att：左側選單有「考勤管理」')
+            # ⑤0 有 platform.att 沒有 platform.sched（區督導、總監類）：有考勤管理、沒有排班管理（卡片與左側選單都沒有）
+            ao = new_page()
+            ao.goto(base + '/index.html')
+            do_login(ao, 'att2')
+            ids2 = [c.get_attribute('data-module') for c in ao.locator('[data-role="module-card"]').all()]
+            check('attendance' in ids2 and 'schedule' not in ids2, '有 platform.att 沒有 platform.sched：有考勤管理、沒有排班管理，實際：%s' % ids2)
+            check(ao.locator('[data-role="nav-desktop"] [data-nav="schedule"]').count() == 0, '沒有 platform.sched：左側選單沒有「排班管理」')
+            check(at.locator('[data-role="nav-desktop"] [data-nav="schedule"]').count() == 1, '有 platform.sched：左側選單有「排班管理」')
+            ao.close()
             # ⑤a 首頁考勤管理組的待辦（2026-10-24，spec §17.5）：只回件數，三列提醒文字逐字
             ATT = '[data-role="alert-list"][data-module="attendance"] [data-role="alert-row"]'
             at.wait_for_selector(ATT + ':has-text("支新手機等核准")', timeout=10000)

@@ -284,6 +284,8 @@ function pickSecrets_(perms) {
     if (backendId === 'payroll') return;
     // 收支管理金鑰（2026-10-24）同理：會計級通道，絕不下發到瀏覽器
     if (backendId === 'cashbook') return;
+    // 考勤／排班（2026-10-24）：只走代轉的首頁待辦，金鑰同樣絕不下發到瀏覽器（日後補 write 列也一樣）
+    if (backendId === 'attendance' || backendId === 'schedule') return;
     var s = pickSecretFor_(perms, backendId, byBackend);
     if (s) out[backendId] = s;
   });
@@ -367,9 +369,10 @@ function proxyAuthorize_(token, ns, action) {
   // 只認 platform.att（含衍生；admin 的 * 也算），action 只有 attAlerts（上面已把非讀取清單的擋成 FORBIDDEN）。
   // 用 attendance/read 服務金鑰；subject 由平台依登入身分決定（DZY 編號；admin 為 U:<id>），mini 代轉時覆寫瀏覽器送的 sub。
   // 不落入下面的通用 <ns>.read 與 staff 第二期分支。
-  // 排班管理（ns schedule，action 只有 schedAlerts）同規則、用 schedule/read 金鑰。
+  // 排班管理（ns schedule，action 只有 schedAlerts）同規則、用 schedule/read 金鑰，但只認 platform.sched（只給能排班的人；有 platform.att 沒有 sched → 403）。
   if (ns === 'attendance' || ns === 'schedule') {
-    if (isWrite || action !== (ns === 'attendance' ? 'attAlerts' : 'schedAlerts') || !hasPerm_(perms, 'platform.att')) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+    var altCfg = { attendance: { action: 'attAlerts', perm: 'platform.att' }, schedule: { action: 'schedAlerts', perm: 'platform.sched' } }[ns];
+    if (isWrite || action !== altCfg.action || !hasPerm_(perms, altCfg.perm)) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
     var attSubject = storeSubForUser_(sess.user);
     if (!attSubject) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
     var attSecretRaw = byBackend[ns] && byBackend[ns]['read'];
@@ -872,6 +875,10 @@ function authPermsWithGate_(role, gate) {
   // 考勤管理選單（StoreOps.gs storeAttGate_）：衍生權限，不寫進 roles
   if (gate && gate.att && perms.indexOf('platform.att') === -1 && perms.indexOf('*') === -1) {
     perms = perms.concat(['platform.att']);
+  }
+  // 排班管理選單（StoreOps.gs storeSchedGate_）：衍生權限，不寫進 roles
+  if (gate && gate.sched && perms.indexOf('platform.sched') === -1 && perms.indexOf('*') === -1) {
+    perms = perms.concat(['platform.sched']);
   }
   // 門市營運選單（StoreOps.gs storeOpsGate_）：衍生權限，不寫進 roles
   if (gate && gate.storeops && perms.indexOf('platform.storeops') === -1 && perms.indexOf('*') === -1) {

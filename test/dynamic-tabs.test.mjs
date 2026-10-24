@@ -46,7 +46,7 @@ t('manifest：門市營運、考勤管理、排班管理都 dynamicTabs（考勤
   assert.equal(storeops.dynamicTabs, true);
   assert.equal(attendance.dynamicTabs, true);
   assert.equal(schedule.dynamicTabs, true);
-  assert.equal(schedule.dept, 'hr'); assert.deepEqual(schedule.requires, ['platform.att']);
+  assert.equal(schedule.dept, 'hr'); assert.deepEqual(schedule.requires, ['platform.sched']);
   for (const m of [storeops, attendance, schedule]) { const r = validateManifest(m); assert.ok(r.ok !== false && !(r.errors && r.errors.length), JSON.stringify(r)); }
 });
 t('門市營運、考勤管理、排班管理都開 tabs', () => {

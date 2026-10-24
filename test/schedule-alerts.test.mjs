@@ -63,8 +63,8 @@ await t('代轉 403／網路錯誤 → null', async () => {
   globalThis.fetch = async () => { throw new Error('boom'); };
   assert.equal(await mod.alerts(ctx), null); assert.equal(await mod.badge(ctx), null);
 });
-await t('manifest ns／backend＝schedule，requires 不變', () => {
+await t('manifest ns／backend＝schedule，requires＝platform.sched', () => {
   assert.equal(manifest.ns, 'schedule'); assert.equal(manifest.backend, 'schedule');
-  assert.deepEqual(manifest.requires, ['platform.att']);
+  assert.deepEqual(manifest.requires, ['platform.sched']);
 });
 console.log(`schedule-alerts: ${n} passed`);

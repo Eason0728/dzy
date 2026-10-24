@@ -680,7 +680,7 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
 
 // ============================================================
 // 16. 排班管理首頁待辦（2026-10-24，營運系統 hr-move-spec §5）：ns schedule／action schedAlerts
-//     與 attendance 同一組規則（platform.att、subject＝DZY 編號），用 schedule/read 服務金鑰（與 attendance 的是兩列、同值）
+//     與 attendance 同規則但權限改認 platform.sched（只給能排班的人；有 att 沒 sched → 403），subject＝DZY 編號，用 schedule/read 服務金鑰（與 attendance 的是兩列、同值）
 // ============================================================
 {
   const SCH = 'FAKE-SCHED-ALERT-KEY-41';
@@ -698,19 +698,28 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
 
   const sm = mkStaff(sb, boss, '排班店長', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
   const r = sb.proxyAuthorize_(sm.token, 'schedule', 'schedAlerts');
-  ok(r.ok === true && r.secret === SCH && r.isWrite === false && r.subject === sm.emp && /^DZY\d+$/.test(String(r.subject)), '16e: 有 platform.att 的店長 → subject＝DZY 編號', r);
+  ok(r.ok === true && r.secret === SCH && r.isWrite === false && r.subject === sm.emp && /^DZY\d+$/.test(String(r.subject)), '16e: 有 platform.sched 的店長 → subject＝DZY 編號', r);
   ok(sb.proxyAuthorize_(sm.token, 'schedule', 'schedWrite').code === 'FORBIDDEN', '16f: 店長打非 schedAlerts → FORBIDDEN');
   ok(JSON.stringify(post(sb, 'me', {}, sm.token)).indexOf(SCH) === -1, '16g: me 回應不含服務金鑰');
 
   const pt = mkStaff(sb, boss, '排班計時', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
-  ok(sb.proxyAuthorize_(pt.token, 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16h: 沒有 platform.att 的計時同仁 → FORBIDDEN（403）');
-  ok(sb.proxyAuthorize_(tokenOf(sb, 'acc1', PW.acc), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16i: 會計（無 platform.att）→ FORBIDDEN');
+  ok(sb.proxyAuthorize_(pt.token, 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16h: 沒有 platform.sched 的計時同仁 → FORBIDDEN（403）');
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'acc1', PW.acc), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16i: 會計（無 platform.sched）→ FORBIDDEN');
   sheets.roles.appendRow(['schrole', '假', 'schedule.read,schedule.write']);
   sheets.users.appendRow(['u092', 'schx', '假', 'schrole', '', 's9', H('fake-schx-pw-01', 's9'), 'TRUE', '', '', '']);
-  ok(sb.proxyAuthorize_(tokenOf(sb, 'schx', 'fake-schx-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16j: 只有 schedule.read 通用權限、沒有 platform.att → FORBIDDEN');
-  sheets.roles.appendRow(['schsys', '假', 'platform.att']);
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'schx', 'fake-schx-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16j: 只有 schedule.read 通用權限、沒有 platform.sched → FORBIDDEN');
+  sheets.roles.appendRow(['schsys', '假', 'platform.sched']);
   sheets.users.appendRow(['u093', 'syssch', '假', 'schsys', '', 's9', H('fake-syssch-pw-01', 's9'), 'TRUE', '', '', '']);
-  ok(sb.proxyAuthorize_(tokenOf(sb, 'syssch', 'fake-syssch-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16k: 有 platform.att 但沒有 DZY 編號身分 → FORBIDDEN');
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'syssch', 'fake-syssch-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16k: 有 platform.sched 但沒有 DZY 編號身分 → FORBIDDEN');
+
+  // 有 platform.att 沒有 platform.sched（區督導、總監、ceo…）→ 排班待辦 403；考勤待辦照舊 ok
+  const osv = mkStaff(sb, boss, '排班督導', { brand: 'mala', unit: 'mala-hq', title: 'osv' });
+  ok(sb.proxyAuthorize_(osv.token, 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16q: 區督導（有 platform.att、沒有 platform.sched）→ schedule 403');
+  ok(sb.proxyAuthorize_(osv.token, 'attendance', 'attAlerts').code !== 'FORBIDDEN', '16r: 同一個人打 attendance 仍過（platform.att）');
+  ok(sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts').code !== 'FORBIDDEN', '16s: 店長 attendance 也過');
+  sheets.roles.appendRow(['attonly', '假', 'platform.att']);
+  sheets.users.appendRow(['u094', 'attonly', '假', 'attonly', '', 's9', H('fake-attonly-pw-01', 's9'), 'TRUE', '', '', '']);
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'attonly', 'fake-attonly-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16t: roles 只給 platform.att 的帳號 → schedule 403（platform.att 不能頂替 platform.sched）');
 
   // PERMS_ON 開：同 14n～14p
   ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '16l 前置：permInit_ 建表');
@@ -724,6 +733,29 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   ok(n.sb.proxyAuthorize_(tokenOf(n.sb, 'BOSS', PW.boss), 'schedule', 'schedAlerts').code === 'UNKNOWN_NS', '16o: module_secrets 沒有 schedule → UNKNOWN_NS');
   const w = fresh({ module_secrets: seed().module_secrets.concat([['schedule', 'write', 'FAKE-ONLY-WRITE'], ['attendance', 'read', 'FAKE-ATT-OTHER']]) });
   ok(w.sb.proxyAuthorize_(tokenOf(w.sb, 'BOSS', PW.boss), 'schedule', 'schedAlerts').code === 'NO_SECRET', '16p: 只有 schedule/write、沒有 read → NO_SECRET（不拿寫入碼、也不拿 attendance/read 頂替）');
+}
+
+// ============================================================
+// 17. pickSecrets_ 明文排除 attendance／schedule／payroll（2026-10-24 Fable 驗證 B：日後補 write 列也不准漏）
+// ============================================================
+{
+  const mk = (n) => 'FAKE-PICK-' + n;
+  const extra = { module_secrets: seed().module_secrets.concat([
+    ['attendance', 'read', mk('ATT-R')], ['attendance', 'write', mk('ATT-W')],
+    ['schedule', 'read', mk('SCH-R')], ['schedule', 'write', mk('SCH-W')],
+    ['payroll', 'read', mk('PAY-R')], ['payroll', 'write', mk('PAY-W')]
+  ]) };
+  const { sb } = fresh(extra);
+  const picked = sb.pickSecrets_(['*']);
+  ok(!('attendance' in picked) && !('schedule' in picked) && !('payroll' in picked), '17a: pickSecrets_([*]) 不含 attendance／schedule／payroll（連 write 列都有也不下發）', Object.keys(picked));
+  ok(Object.keys(picked).length > 0 && JSON.stringify(picked).indexOf('FAKE-PICK-') === -1, '17b: 其他後端（audit／dorm）照舊會有，且不含這三個的金鑰值', Object.keys(picked));
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '1');
+  const lg = post(sb, 'login', { username: 'BOSS', password: PW.boss });
+  const me = post(sb, 'me', {}, lg.data.token);
+  const noThree = (r) => { const t = JSON.stringify(r); const sec = (r.data && r.data.secrets) || {}; return t.indexOf('FAKE-PICK-') === -1 && !('attendance' in sec) && !('schedule' in sec) && !('payroll' in sec); };
+  ok(lg.ok && me.ok && noThree(lg) && noThree(me), '17c: LEGACY_SECRETS=1 的 admin login／me 不含 attendance、schedule、payroll 金鑰', lg.data && lg.data.secrets);
+  ok(lg.data.secrets !== undefined, '17d: 對照：LEGACY_SECRETS=1 的 admin 仍照舊有 secrets 物件（其他後端）');
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '');
 }
 
 if (failed > 0) {
