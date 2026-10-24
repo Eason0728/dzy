@@ -48,6 +48,7 @@
 
 純函式 `regionIndex_(rows, org, staffRows)` → `{ byStore: {unit→regionCode}, byRegion: {code→{brand, stores[], supervisorEmp|''}}, bySupervisor: {emp→[code…]} }`，
 已失效的督導在這裡就被清成 ''。其他地方一律只問這個索引，不自己讀 regions 分頁。
+**回傳形狀是對外契約**：「督導看負責門市考勤」（branch osv-att-view，`docs/att-view/spec.md`）會用 `bySupervisor[emp]` → `byRegion[code].stores`，改形狀要先通知那邊。
 
 ## 4. 督導看得到什麼（單位通訊錄）
 - `handleMyUnit_` 回傳多一段 `regions: [{code, name, stores: [{unit, unit_name, people: [...] }]}]`：督導本人負責的區域、每家店的 active 同仁。
