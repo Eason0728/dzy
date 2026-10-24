@@ -186,6 +186,32 @@ export function isDryRun() {
 }
 
 /**
+ * 後端給的稽核範圍是空陣列＝這個人有稽核權限但目前沒有負責任何門市（例：區督導還沒被劃任何區，docs/regions/spec.md 第 6 節）。
+ * 'all'／'none'／null（舊後端）／有店的陣列 → false。純函式。
+ */
+export function noAssignedStores(ctx) {
+  const sc = ctx && ctx.auditScope;
+  return Array.isArray(sc) && sc.length === 0;
+}
+
+/** 範圍是空陣列時，總覽／報告／異常分析不掛分頁、改顯示這張卡（不打後端） */
+export const NO_STORES_VIEWS = ['overview', 'report', 'analysis'];
+export const NO_STORES_TEXT = '目前沒有負責的門市';
+export function renderNoStores(el) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const title = document.createElement('div');
+  title.className = 'card-title';
+  title.textContent = NO_STORES_TEXT;
+  card.appendChild(title);
+  const hint = document.createElement('p');
+  hint.className = 'text-muted';
+  hint.textContent = '人資劃好你負責的區域後，這裡就會出現區內門市的資料。';
+  card.appendChild(hint);
+  el.appendChild(card);
+}
+
+/**
  * 「我的門市」要看哪幾家店：
  *  - ctx.auditScope 是陣列 → 用陣列（可能多店）
  *  - 'all' → config.stores 全部代碼
