@@ -103,3 +103,27 @@ dzy 殼 ctx.api.call('pnl', action, payload) → POST <平台>/platform/proxy {t
 2. ~~殼的 requires 語意~~：已查，任一即可（shell.js:196）。
 3. 財務部門預設開 `pnl.write` 的做法要跟收支、調撥、貨單三個模組一致（同樣走 perm_map 身分預設）。
 4. 附件上傳經代轉的大小上限（mini proxy body 上限、Apps Script 上限），超過要在前端先擋。
+
+## 9. 實作後的差異（2026-10-24，以本節為準）
+
+- **影子帳號鍵＝`account`**（平台 proxyAuthorize_ 回的登入帳號，mini 驗 `^[A-Za-z0-9_.-]{1,40}$`，損益轉大寫）——不從 operator 反解
+  （Fable 審查必修 1：姓名／帳號可含全形括號注入，冒用別人的影子帳號）。operator 只寫進損益異動紀錄。
+  帳號含中文或其他符號的系統帳號進不了損益（同仁編號 DZY### 與一般英數系統帳號都可以）。
+- **設定頁對影子列**：只能改可看門市；不能新增、刪除、改角色、設通行碼（Fable 必修 2：刪了會以「全部門市」重建）。
+  要收回某人 → 管理系統權限設定關掉。已離職同仁的影子列會留在使用者表（無法登入、不影響存檔）。
+- **「管」級動作平台也擋**：`PROXY_PNL_ADMIN_ACTIONS`（finalize、unlock、saveSettings、createDraft、refreshConnectors、refreshFixed、loadGroupUnits）要 pnl.admin。
+- **金鑰錯誤不鎖**：錯一次睡 200ms（全域鎖會被任何人觸發、讓全部同仁進不了）。
+- **本機上層**：只有損益頁本身跑在 localhost 時才放行 `http://localhost:任意埠`；正式網址只認 `https://dzy.mozhuting.com`。
+- **mini 本文上限**：`backends.pnl.maxBodyBytes=4MB`（照片）；其他 ns 解析後仍 256KB，但讀取階段先以 4MB 收（maxInflight 10 限制總量，Fable 判可接受）。
+- **頁頂同步**：損益頁自己切頁（填資料頁的類別膠囊、「前往填資料」）會送 `dzy-pnl-at`，管理系統頁頂跟著換。
+- **財務部門預設**：不改 perm_map 種子；上線時在權限設定對照表加一列（總部／財務部／全部職稱／填損益）。
+- **已知限制**：
+  - 「填」級（財務部門）看不到「全部門市合計」——損益既有規則「填寫者不看合計」；要改屬損益商業邏輯，待 Eason 決定。
+  - `pnl.admin`＝損益完整管理者（含替舊網址帳號重設通行碼、改角色）；`*` 角色（系統管理者）自動有。
+  - 新增的 e2e 只改了既有支數；損益模組本身的 e2e 由本機整合測試（三台伺服器、四種身分）代替，見 §10。
+
+## 10. 本機整合測試（2026-10-24 做過）
+
+損益假後端（mala-pnl-auto tools/dev-embed-server.js，8912）＋ mini 平台複本（kit/runner/server.js，8798，假帳號）＋ 管理系統複本（devserver，8787，config 指 8798）。
+四種身分：系統管理者（管）、會計角色加 pnl.write（填）、總監角色加 pnl.read（看）、店長（無）。結果：管＝九分頁含設定、可定稿；
+填＝八分頁、確認為 0 寫入成功（記成影子帳號）、定稿被平台擋；看＝只有儀表板、可看全部合計；店長＝選單沒有、硬打網址回首頁。
