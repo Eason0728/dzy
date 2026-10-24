@@ -6,9 +6,11 @@
 import { mountList } from './views/list.js';
 import { mountImport } from './views/import.js';
 import { mountClockmap } from './views/clockmap.js';
+import { mountRegions } from './views/regions.js';
+import { regionAlerts } from './views/regions-alerts.js';
 import { alertRows, staleSyncStores } from '../staff-shared/clock-lib.js';
 
-const VIEW_MOUNTERS = { list: mountList, import: mountImport, clockmap: mountClockmap };
+const VIEW_MOUNTERS = { list: mountList, import: mountImport, clockmap: mountClockmap, regions: mountRegions };
 
 // 首頁 badge() 與 alerts() 同時跑，只共用「還在路上的那一次」staffList；回來就丟掉，
 // 不留時間快取——留 3 秒快取時，後台剛匯入／確認完回首頁會看到舊數字（e2e ⑧ 抓到）
@@ -52,9 +54,9 @@ export default {
   }
 };
 
-/** 首頁：待確認開通、資料變更待確認、忘記密碼被鎖住 */
+/** 首頁：待確認開通、資料變更待確認、忘記密碼被鎖住；區域（沒督導、有停用門市、開關開時沒劃區，快取 10 分鐘） */
 async function alertsOf(ctx) {
-  const [res, ca] = await Promise.all([loadList(ctx), ctx.api.call('staff', 'clockAlerts', {}).catch(() => null)]);
+  const [res, ca, reg] = await Promise.all([loadList(ctx), ctx.api.call('staff', 'clockAlerts', {}).catch(() => null), regionAlerts(ctx).catch(() => [])]);
   if (!res || !res.ok) return null;
   const s = res.data.staff || [];
   const pending = s.filter((x) => x.status === 'pending').length;
@@ -70,5 +72,6 @@ async function alertsOf(ctx) {
     const stale = staleSyncStores(ca.data.last_sync, new Date());
     if (stale.length) out.push({ level: 'warn', text: `${stale.length} 家店的打卡名冊超過 26 小時沒同步（${stale.join('、')}）`, view: 'clockmap', params: { t: 'jobs' }, count: stale.length });
   }
+  (reg || []).forEach((r) => out.push(r));
   return out;
 }

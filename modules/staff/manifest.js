@@ -15,7 +15,9 @@ export default {
   views: [
     { id: 'list', name: '名單', requires: ['platform.staff'] },
     { id: 'import', name: '匯入', requires: ['platform.staff'] },
-    { id: 'clockmap', name: '打卡對照', requires: ['platform.staff'] }
+    { id: 'clockmap', name: '打卡對照', requires: ['platform.staff'] },
+    // 區域（督導負責區，docs/regions/spec.md 第 8 節）：看、改＝platform.staff；開關只有 role admin（畫面內判斷）
+    { id: 'regions', name: '區域', requires: ['platform.staff'] }
   ],
   entry: () => import('./index.js')
 };
