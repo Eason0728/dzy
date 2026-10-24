@@ -1479,6 +1479,19 @@ function noBranddev(app) { const d = app.sheets.org._data; for (let i = d.length
     ok(r.ok && r.data.people.length >= 2 && r.data.private === false && !r.data.people.some(PRIV) && JSON.stringify(r).indexOf('測試路') === -1, '18 ★' + m.name + '（品牌辦公室／總部）：通訊錄照舊、不含生日地址', r);
   });
   ok(post(sb, 'myUnit', {}, pt.token).ok === false && post(sb, 'myUnit', {}, ckPt.token).ok === false, '18 ★計時同仁仍看不到通訊錄');
+  // 審查（Fable 兩位都抓到）：資料不正常的「主管」不給生日地址（通訊錄本身維持舊行為，只收緊這兩欄）
+  const odd = (label, field, val, over) => {
+    const m = mk(app, '十八' + label, Object.assign({ brand: 'mala', unit: 'mala-gf', title: 'sm' }, over || {}));
+    setStaff(app, m.emp, field, val);
+    const r = post(sb, 'myUnit', {}, m.token);
+    ok(!r.ok || (r.data.private === false && !r.data.people.some(PRIV)), '18 ★' + label + '：不給生日地址', r);
+  };
+  odd('停用職稱督導', 'title', 'sv');
+  odd('停用職稱品牌總監', 'title', 'bd');
+  odd('門市掛辦公室總監', 'title', 'odir');
+  odd('門市掛執行長', 'title', 'ceo');
+  odd('停用門市', 'unit', 'mzt-mc', { brand: 'mzt', unit: 'mzt-gf' });
+  odd('不存在單位', 'unit', 'zz-none');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

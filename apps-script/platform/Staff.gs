@@ -846,8 +846,13 @@ function handleMyUnit_(token) {
   var org = stfReadOrg_();
   var scope = hit ? stfManagerScope_(hit.values, org) : null;
   if (!scope) return { ok: false, error: STF_MSG.UNIT_ONLY_MANAGER };
-  // 生日、地址（Eason 2026-10-25）：只給門市與央廚（store 階梯）的單位主管；品牌辦公室、總部照舊不給
-  var priv = scope.ladder === 'store';
+  // 生日、地址（Eason 2026-10-25）：只給門市與央廚（store 階梯）的單位主管；品牌辦公室、總部照舊不給。
+  // 審查（兩位 Fable）：單位要存在且啟用、職稱要啟用且是門市職稱才給——stfManagerScope_ 本身只比職級，
+  // 通訊錄與打卡共用，不在這裡收緊它（舊行為照舊），只收緊這兩欄。
+  var myUnit = org.unit[scope.unit];
+  var myTitle = org.title[stfStr_(hit.values[STF_COL.title])];
+  var priv = scope.ladder === 'store' && !!myUnit && myUnit.active !== false && (myUnit.ladder || 'store') === 'store' &&
+    !!myTitle && myTitle.active !== false && myTitle.parent === 'store';
   var people = stfAllRows_().map(function (r) { return stfToObj_(r.values, org, priv); }).filter(function (p) {
     return p.status === 'active' && p.unit === scope.unit && (!scope.sameDept || p.dept === scope.dept);
   }).map(function (p) {
