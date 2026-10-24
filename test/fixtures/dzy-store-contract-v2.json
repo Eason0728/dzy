@@ -114,6 +114,14 @@
               "sub": "DZY031",
               "name": "李計時"
             }
+          ],
+          "view_people": [
+            {
+              "clock": "mztgf",
+              "emp_id": "MZTGF09",
+              "sub": "DZY040",
+              "name": "王唯讀"
+            }
           ]
         }
       }
@@ -142,7 +150,8 @@
         ],
         "att": {
           "people": [],
-          "req_people": []
+          "req_people": [],
+          "view_people": []
         }
       }
     },
@@ -183,13 +192,14 @@
     }
   },
   "rules": {
-    "arrays": "units_managed、void_units、pilot_units 一律排序去重；att.people、att.req_people 依 clock、emp_id 排序去重",
+    "arrays": "units_managed、void_units、pilot_units 一律排序去重；att.people、att.req_people、att.view_people 依 clock、emp_id 排序去重",
     "pilot": "STORE_SSO_UNITS（逗號單位碼，空＝全關）。ident 一律照發；units_managed、void_units 只留試點內單位；att.people 只留『被核的人』單位在試點內的",
     "admin": "admin=true 時 units_managed、void_units＝試點內全部 store 階梯單位（含 ck）；att.people＝試點內所有要考勤的人（不含自己）",
     "epoch": "同仁最近一次在職起日（到職或復職）YYYY-MM-DD；admin 無同仁編號為空字串",
     "token_after": "營運系統 session 記兌券當下的 token_after；之後重查回來的值變大（使用者在管理系統登出全部裝置、改密碼、被重設）就刪除該 session",
     "att": "spec §12：門市與央廚店長核自己與同店；品牌辦公室行政／督導／區經理→同辦公室總監；總部部門同仁→同部門主管；管理部同仁→執行長以上；odir hm ceo gm chair 不列；人資主管＝dept hr 且 title hm 看全部要考勤的人（不含自己）；att.extra 個別例外＝本人單位內要考勤的人（不含自己）；只取 staff_clock state=confirmed 且 roster_active 不是 FALSE 的對照",
-    "att_req": "2026-10-21 起 att 分兩份：people＝核定工時（門市／中央工廠所有打卡的人由本單位店長 sm／廠長 fm 核，店長／廠長可核自己；區經理、研發總監不核工時）；req_people＝加班單／請假單／忘刷單（計時正職→本單位店長／廠長；店長→同店區經理或該品牌辦公室區督導；廠長→研發總監；區經理→該品牌辦公室區督導／總監；研發總監→執行長以上；品牌辦公室與總部同 people；任何人不能核自己的申請；人資主管與 admin 為全部要考勤的人、不含自己；att.extra 同單位）。營運系統收到沒有 req_people 的舊 ident 時，申請審核沿用 people"
+    "att_req": "2026-10-21 起 att 分兩份：people＝核定工時（門市／中央工廠所有打卡的人由本單位店長 sm／廠長 fm 核，店長／廠長可核自己；區經理、研發總監不核工時）；req_people＝加班單／請假單／忘刷單（計時正職→本單位店長／廠長；店長→同店區經理或該品牌辦公室區督導；廠長→研發總監；區經理→該品牌辦公室區督導／總監；研發總監→執行長以上；品牌辦公室與總部同 people；任何人不能核自己的申請；人資主管與 admin 為全部要考勤的人、不含自己；att.extra 同單位）。營運系統收到沒有 req_people 的舊 ident 時，申請審核沿用 people",
+    "att_view": "2026-10-25 起 att 多一份 view_people＝只能看、不能寫的名單（docs/att-view/spec.md）：只在 Script Property REGIONS_ON 恰好為 '1' 時有內容；區督導 osv＝自己負責區域門市裡要核定工時的人，總監 odir＝本品牌全部門市裡要核定工時的人；其他人、admin、人資主管為空陣列。營運系統只在標 view 的讀取動作放行這份名單，寫入一律不看它，考勤待辦也不算它。選填：舊版管理系統沒有＝營運系統當成空"
   },
   "postMessage": {
     "embed_origin": "https://dzy.mozhuting.com",
