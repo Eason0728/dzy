@@ -46,7 +46,7 @@ def main():
                 """() => [...document.querySelectorAll('.module-icon')]
                        .map(img => img.complete && img.naturalWidth > 0)"""
             )
-            check(len(icons_ok) == 13 and all(icons_ok), '十三顆模組圖示全部載入成功（naturalWidth > 0）：%s' % icons_ok)
+            check(len(icons_ok) == 14 and all(icons_ok), '十四顆模組圖示全部載入成功（naturalWidth > 0）：%s' % icons_ok)
 
             # 待辦數字：fixture 只到 2026-07，本月（依系統日期）五店皆未稽核 → 盤點 badge = 5
             page.wait_for_function(
