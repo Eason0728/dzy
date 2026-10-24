@@ -293,8 +293,8 @@ function pickSecrets_(perms) {
 // ============================================================
 
 /**
- * 讀取類 action 白名單——**必須與前端 platform/dryrun.js 的 READ_ACTIONS 的 audit／dorm 一致**
- *（test/proxy-authorize.test.mjs 有比對）。沒列到的一律當寫入（要 <ns>.write）。
+ * 讀取類 action 白名單——**每個 ns（audit／dorm／payroll／attendance…）都必須與前端 platform/dryrun.js 的 READ_ACTIONS 逐一相等**
+ *（test/proxy-authorize.test.mjs 有比對；2026-10-24 總審：原註解只寫 audit／dorm，實際所有 ns 都要一致）。沒列到的一律當寫入（要 <ns>.write）。
  */
 var PROXY_READ_ACTIONS = {
   audit: ['getAll'],
@@ -303,7 +303,9 @@ var PROXY_READ_ACTIONS = {
   // 分讀寫只為了試跑模式能照常讀。⚠ payroll_month 在「該月沒有 run」時會自動試算並寫入（mala-payroll skill），仍列讀取＝試跑時翻月份照舊可用
   payroll: ['payroll_month', 'payroll_get', 'payroll_group', 'payroll_trend', 'payroll_inputs', 'payroll_punch',
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
-    'payroll_attendance_export']
+    'payroll_attendance_export'],
+  // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：與 platform/dryrun.js READ_ACTIONS.attendance 一致
+  attendance: ['attAlerts']
 };
 
 /**
@@ -323,7 +325,9 @@ var PROXY_WRITE_ACTIONS = {
  * ⚠ 不准加進 Code.gs 的 CODE_ALLOWED_ACTIONS／dispatchAction_（加了＝任何持 token 的人打 /api 就能拿回通行碼）。
  * ⚠ 純讀：不寫任何分頁（不更新 last_login、不寫 login_log）。
  *
- * 成功：{ ok:true, secret:'<非空字串>', filterNode:null|'<user.node>', isWrite:boolean }
+ * 成功：{ ok:true, secret:'<非空字串>', filterNode:null|'<user.node>', isWrite:boolean, subject?:'<字串>' }
+ *   subject（選填，2026-10-24 總審補註）：只有 ns attendance 會帶——登入身分的 DZY 編號（admin 為 'U:<id>'）；
+ *   執行器（kit/runner/proxy.js）把它交給 hook 覆寫成 body.sub，前端送來的 sub 一律不採信。其他 ns 不帶。
  * 失敗：{ ok:false, code:'NO_TOKEN'|'BAD_TOKEN'|'FORBIDDEN'|'NO_SECRET'|'UNKNOWN_NS', error:'<中文，不含通行碼>' }
  */
 function proxyAuthorize_(token, ns, action) {
@@ -350,6 +354,20 @@ function proxyAuthorize_(token, ns, action) {
 
   // 2／4. 授權
   var perms = sess.perms;
+
+  // 考勤管理首頁待辦（2026-10-24，考勤管理首頁待辦，營運系統 spec §17.5）：
+  // 只認 platform.att（含衍生；admin 的 * 也算），action 只有 attAlerts（上面已把非讀取清單的擋成 FORBIDDEN）。
+  // 用 attendance/read 服務金鑰；subject 由平台依登入身分決定（DZY 編號；admin 為 U:<id>），mini 代轉時覆寫瀏覽器送的 sub。
+  // 不落入下面的通用 <ns>.read 與 staff 第二期分支。
+  if (ns === 'attendance') {
+    if (isWrite || action !== 'attAlerts' || !hasPerm_(perms, 'platform.att')) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+    var attSubject = storeSubForUser_(sess.user);
+    if (!attSubject) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+    var attSecretRaw = byBackend[ns] && byBackend[ns]['read'];
+    var attSecret = (attSecretRaw === undefined || attSecretRaw === null) ? '' : String(attSecretRaw).trim();
+    if (!attSecret) return { ok: false, code: 'NO_SECRET', error: '這個系統尚未設定通行碼，請聯絡管理者' };
+    return { ok: true, secret: attSecret, filterNode: null, isWrite: false, subject: attSubject };
+  }
 
   // 第二期：role staff 且權限開關開（sess.auditScope 非 null）→ 依職稱／部門算出的稽核範圍決定；系統帳號與開關關走下面照舊的路徑
   if (String(sess.user.role) === 'staff' && sess.auditScope !== null && sess.auditScope !== undefined) {

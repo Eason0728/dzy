@@ -6,8 +6,8 @@
 
 export default {
   id: 'attendance',
-  ns: 'platform',
-  backend: 'platform',
+  ns: 'attendance',       // 首頁待辦走代轉通道 attendance（2026-10-24，營運系統 spec §17.5）；embed 換入場券仍依模組 id 走平台後端
+  backend: 'attendance',
   name: '考勤管理',
   desc: '出勤核定、請假加班審核',
   icon: 'attendance',

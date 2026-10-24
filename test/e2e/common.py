@@ -203,6 +203,14 @@ class MockBackend:
             return 400, {'ok': False, 'error': 'BAD_REQUEST'}
         ns, action = body.get('ns', ''), body.get('action', '')
         self.proxy_calls = getattr(self, 'proxy_calls', []) + [(ns, action)]
+        # 考勤管理首頁待辦（2026-10-24，spec §17.5）：mini 代轉到營運系統 att-alerts，只回件數。
+        # 預設「沒有待辦」；測試把 att_alerts 換成 {'ok':True,'data':{...}}，或設 att_alerts_fail=True 模擬代轉失敗。
+        if ns == 'attendance' and action == 'attAlerts':
+            if not body.get('token') or not USERS.get((body.get('token') or '').replace('e2e-token-', '')):
+                return 401, {'ok': False, 'error': '登入已失效', 'code': 'BAD_TOKEN'}
+            if getattr(self, 'att_alerts_fail', False):
+                return 502, {'ok': False, 'error': 'UPSTREAM_DOWN'}
+            return 200, getattr(self, 'att_alerts', {'ok': True, 'data': {'items': [], 'partial': False, 'pending': False}})
         if ns not in PROXY_SECRETS:
             return 404, {'ok': False, 'error': 'UNKNOWN_NS'}
         token = body.get('token') or ''

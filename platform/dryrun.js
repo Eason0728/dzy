@@ -31,7 +31,9 @@ export const READ_ACTIONS = {
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）
   payroll: ['payroll_month', 'payroll_get', 'payroll_group', 'payroll_trend', 'payroll_inputs', 'payroll_punch',
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
-    'payroll_attendance_export']
+    'payroll_attendance_export'],
+  // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：必須與 Auth.gs PROXY_READ_ACTIONS.attendance 一致；只回件數的純讀取
+  attendance: ['attAlerts']
 };
 
 /**
