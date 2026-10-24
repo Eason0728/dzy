@@ -263,6 +263,12 @@ function regionCtx_() {
 // 3. actions
 // ============================================================
 
+/**
+ * 給其他功能用的區域索引（無參數，同一請求內快取；與 REGIONS_ON 開關無關）。
+ * 回傳形狀＝regionIndex_（byStore／byRegion／bySupervisor），是 osv-att-view（督導看負責門市考勤）依賴的契約，改名或改形狀要先通知。
+ */
+function regionIndexLive_() { return regionCtx_().idx; }
+
 function regFail_(error, code) { var o = { ok: false, error: error }; if (code) o.code = code; return o; }
 
 function regRegionView_(g) {

@@ -344,6 +344,7 @@ const { sb } = app;
   sb.regionCtxReset_();
   const rc = sb.regionCtx_();
   ok(rc.on === true && rc.idx.byStore['mzt-gf'] === 'r-mzt-1', '3 regionCtx_ 讀到開關與索引');
+  ok(sb.regionIndexLive_() === rc.idx && Array.isArray(sb.regionIndexLive_().bySupervisor.DZY101), '3 regionIndexLive_＝regionCtx_ 的索引（osv-att-view 契約）');
   ok(eq(direct('DZY111', rc), ['DZY101', 'DZY103', 'DZY114']), '3 ★開：A 區店長直屬主管＝督導甲、總監、同店區經理', direct('DZY111', rc));
   ok(eq(direct('DZY113', rc), ['DZY103']), '3 ★開：沒劃區店長直屬主管只剩總監', direct('DZY113', rc));
   ok(eq(direct('DZY111', { on: false, idx: rc.idx }), ['DZY101', 'DZY102', 'DZY103', 'DZY114']), '3 關：直屬主管照舊（全品牌督導）');
