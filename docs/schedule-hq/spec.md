@@ -106,7 +106,7 @@ CREATE TABLE sch_self_pending (
 
 ## 8. 部署順序（草案）
 1. 管理系統後端 .gs（ident.self）→ minikit 只套這次改動的 gas → mini 更新（舊營運系統讀不到 self 也不壞）。
-2. 營運系統後端（mini）：DB 遷移、HQ mode=self、CF mode=fixed（mode_from 12/1）、svc 回傳加 self。
+2. 營運系統後端（mini）：DB 遷移、HQ mode=self、CF mode=fixed（mode_from 11/1，切換時重產 11 月起、保留請假格）、svc 回傳加 self。
 3. 營運系統網站：self／fixed 畫面。
 4. 管理系統前端：排班管理三分頁、首頁新提醒、`platform.sched` 擴大到總部同仁。
 5. 通知總部同仁與主管（文字給 Eason，由他決定發不發）。
