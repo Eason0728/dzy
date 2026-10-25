@@ -873,6 +873,21 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const hqRow = BIG.find((p) => p[0] === 'DZY023');
   ok(sb.storeSchedGate_(staffRow(hqRow, 0)) === true, '7c 總部同仁（ladder hq）→ true');
   ok(sb.storeSchedGate_(staffRow([hqRow[0], hqRow[1], hqRow[2], hqRow[3], hqRow[4], 'disabled', hqRow[6]], 0)) === false, '7c 停用的總部同仁 → false');
+  // 總部／辦公室同仁還要有 hq 打卡對照（confirmed、roster_active 不是 FALSE、store_code=hq），跟 ident.self 同一套
+  const scd = app.sheets.staff_clock._data;
+  const hqIdx = (e) => scd.findIndex((r, i) => i > 0 && r[0] === e && r[1] === 'hq');
+  const i23 = hqIdx('DZY023');
+  ok(i23 > 0 && sched('DZY023'), '7c 總部同仁有 hq 對照 → 有');
+  scd[i23][6] = 'FALSE';
+  ok(!sched('DZY023') && sb.storeSchedGate_(staffRow(hqRow, 0)) === false, '7c hq 對照 roster_active=FALSE → 沒有');
+  scd[i23][6] = ''; scd[i23][4] = 'pending';
+  ok(!sched('DZY023'), '7c hq 對照還沒確認（pending）→ 沒有');
+  scd[i23][4] = 'confirmed';
+  ok(sched('DZY023'), '7c 對照恢復 → 又有');
+  const keep = scd.splice(i23, 1)[0];
+  ok(!sched('DZY023'), '7c 完全沒有 hq 對照 → 沒有選單');
+  ok(sched('DZY001') && sched('DZY020'), '7c 店長、人資主管不受 hq 對照影響');
+  scd.splice(i23, 0, keep);
   // 總開關空 → 沒有
   app.props.STORE_SSO_UNITS = '';
   ok(!sched('DZY001') && !sched('DZY020') && !sched('DZY006') && !sched('DZY023') && !sched('DZY010'), '7c 試點空：店長、人資主管、廠長、總部同仁、辦公室總監都沒有');

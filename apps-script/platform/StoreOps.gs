@@ -52,7 +52,7 @@ var STORE_ATT_GATE_TITLES = ['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo'
 // 排班管理選單（platform.sched，2026-10-24 Eason）：只給「能排班」的人＝店長同等職（店長、廠長、區經理）；人資主管另算，admin 是 '*'。
 // 不含區督導／總監／執行長以上、廚藝總監，也不含 att.extra 例外。
 var STORE_SCHED_GATE_TITLES = ['sm', 'fm', 'am'];
-// 2026-10-25 起另加：ladder 為 hq（總部）或 office（品牌辦公室）單位的在職同仁（總部自填排班，docs/schedule-hq/spec.md §5）。
+// 2026-10-25 起另加：ladder 為 hq（總部）或 office（品牌辦公室）單位的在職同仁，且有 hq 打卡對照（總部自填排班，docs/schedule-hq/spec.md §5）。
 var STORE_SCHED_GATE_LADDERS = ['hq', 'office'];
 // 總部排班的打卡店別
 var STORE_SELF_CLOCK = 'hq';
@@ -642,7 +642,7 @@ function storeAttGate_(values) {
 /**
  * 衍生權限 platform.sched（「排班管理」選單；不寫進 roles）。
  * 總開關（STORE_SSO_UNITS）空 → false。否則在職且（職稱 STORE_SCHED_GATE_TITLES：sm／fm／am、或人資主管、
- * 或所在單位階梯為 hq／office＝所有總部同仁、品牌辦公室同仁）→ true。不含 att.extra。admin 是 '*'，不在這裡判斷。values＝staff 分頁一列。
+ * 或所在單位階梯為 hq／office 的總部、品牌辦公室同仁，且本人有 confirmed、roster_active 不是 FALSE 的 hq 打卡對照）→ true。不含 att.extra。admin 是 '*'，不在這裡判斷。values＝staff 分頁一列。
  */
 function storeSchedGate_(values) {
   if (!storePilotUnits_().length) return false;
@@ -651,7 +651,21 @@ function storeSchedGate_(values) {
   if (STORE_SCHED_GATE_TITLES.indexOf(p.title) !== -1) return true;
   if (stfIsHrHead_(p)) return true;
   var u = stfReadOrg_().unit[stfStr_(values[STF_COL.unit])];   // 總部／品牌辦公室同仁（單位階梯 hq／office）
-  return !!(u && u.active && STORE_SCHED_GATE_LADDERS.indexOf(u.ladder || 'store') !== -1);
+  if (!(u && u.active && STORE_SCHED_GATE_LADDERS.indexOf(u.ladder || 'store') !== -1)) return false;
+  return storeHasSelfClock_(stfNormEmp_(values[STF_COL.emp_no]));   // 還要有 hq 打卡對照（跟 ident.self／storeSelfClocks_ 同一套判斷），沒有對照的人營運系統沒有入口
+}
+
+/** 本人有沒有 confirmed、roster_active 不是 FALSE 的總部（STORE_SELF_CLOCK）打卡對照；表沒建或讀失敗＝沒有 */
+function storeHasSelfClock_(emp) {
+  if (!emp) return false;
+  try {
+    if (!clkSheetsReady_()) return false;
+    return clkMaps_().some(function (m) {
+      return m.emp_no === emp && m.state === 'confirmed' && m.roster_active !== 'FALSE' && m.store_code === STORE_SELF_CLOCK;
+    });
+  } catch (e) {
+    return false;
+  }
 }
 
 function storeHasAttExtra_(values) {

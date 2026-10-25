@@ -53,7 +53,7 @@ export function safeReturnUrl(raw) {
 }
 
 /**
- * @param {{title:string, query:string, allowReturn:boolean, tabs?:boolean}} cfg
+ * @param {{title:string, query:string, allowReturn:boolean, tabs?:boolean, forceGo?:string[]}} cfg
  *   tabs：營運系統的選單畫在管理系統頁頂（manifest 要有 dynamicTabs: true）
  *   query：接在 ?embed=dzy 後面的字串（例 '&only=duty'）
  */
@@ -117,12 +117,18 @@ export function createEmbed(cfg) {
     const want = state.ctx.viewId;
     if (!state.synced && n.tabs.length) {
       state.synced = true;
-      if (want && want !== n.cur && n.tabs.some((t) => t.id === want)) { sendGo(want); return; }
+      if (want && want !== n.cur && (n.tabs.some((t) => t.id === want) || isForced(want))) { if (isForced(want)) state.forced = want; sendGo(want); return; }
     }
+    // cfg.forceGo 的分頁（目前頁頂沒有，由營運系統收到後自動切店）：等它切好前不要被別的 cur 拉回去
+    if (state.forced && state.forced === want && n.cur !== want && !n.tabs.some((t) => t.id === want)) return;
+    if (n.cur === state.forced) state.forced = '';
     if (!n.cur) return;
     state.cur = n.cur;
     if (n.cur !== want) state.ctx.nav(n.cur);
   }
+
+  /** cfg.forceGo：這些分頁 id 即使目前頁頂沒有也要送 dzy-store-go（例：總部排班 self／approve，在門市時頁頂沒有） */
+  function isForced(id) { return Array.isArray(cfg.forceGo) && cfg.forceGo.includes(id); }
 
   function sendGo(id) {
     if (!state || !state.frame || !state.frame.contentWindow || !NAV_ID_RE.test(id)) return;
@@ -184,7 +190,7 @@ export function createEmbed(cfg) {
       bar.appendChild(tip);
       bar.appendChild(open);
 
-      state = { el, ctx, frame: null, down: null, timer: null, returning: false, noTicket: null, cur: '', synced: false };
+      state = { el, ctx, frame: null, down: null, timer: null, returning: false, noTicket: null, cur: '', synced: false, forced: '' };
       window.addEventListener('message', onMessage);
       el.appendChild(bar);
       enter(ctx);

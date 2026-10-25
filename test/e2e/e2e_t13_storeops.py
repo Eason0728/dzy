@@ -351,11 +351,40 @@ def main():
             at.click(SCH + ':has-text("等你核准")')
             at.wait_for_selector('[data-keep="schedule"] iframe[data-role="store-frame"]')
             check(at.evaluate('location.hash') == '#/schedule/approve', '點「2 位同仁的班表等你核准」→ 網址 #/schedule/approve：%s' % at.evaluate('location.hash'))
+            # 門市狀態（頁頂只有 board／needs／staff／shifts，沒有 approve）：營運系統回報選單後，管理系統仍要送 go approve（營運系統收到會自動切店）
+            fh = None
+            for _ in range(50):
+                fh = store_frame(at)
+                if fh:
+                    try:
+                        if fh.evaluate("() => window.__got.length") >= 1:
+                            break
+                    except Exception:
+                        pass
+                at.wait_for_timeout(100)
+            fh.evaluate(SNAV, 'board')
+            at.wait_for_timeout(500)
+            hgos = [m for m in fh.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(hgos == [{'type': 'dzy-store-go', 'v': 1, 'id': 'approve'}], '從門市狀態點總部提醒「等你核准」→ 送 {dzy-store-go, id:approve}：%s' % hgos)
             at.goto(base + '/index.html')
             at.wait_for_selector(SCH + ':has-text("還沒送出")', timeout=10000)
             at.click(SCH + ':has-text("11 月")')
             at.wait_for_selector('[data-keep="schedule"] iframe[data-role="store-frame"]')
             check(at.evaluate('location.hash') == '#/schedule/self', '點「11 月班表還沒送出」→ 網址 #/schedule/self：%s' % at.evaluate('location.hash'))
+            fh2 = None
+            for _ in range(50):
+                fh2 = store_frame(at)
+                if fh2:
+                    try:
+                        if fh2.evaluate("() => window.__got.length") >= 1:
+                            break
+                    except Exception:
+                        pass
+                at.wait_for_timeout(100)
+            fh2.evaluate(SNAV, 'board')
+            at.wait_for_timeout(500)
+            hgos2 = [m for m in fh2.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(hgos2 == [{'type': 'dzy-store-go', 'v': 1, 'id': 'self'}], '從門市狀態點總部提醒「11 月班表還沒送出」→ 送 {dzy-store-go, id:self}：%s' % hgos2)
 
             # ⑥ 管理員兩個都看得到
             ad = new_page()

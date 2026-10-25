@@ -16,7 +16,7 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'Perms.gs', 'PermActions.gs', 'StoreOps.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'Perms.gs', 'PermActions.gs', 'StoreOps.gs', 'StaffClock.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 
 let passed = 0;
 let failed = 0;
@@ -714,6 +714,10 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
 
   // 2026-10-25 起 platform.sched 含總部／品牌辦公室同仁：區督導（ladder office）也有；沒有 platform.sched 的（只有 platform.att 的帳號）仍 403
   const osv = mkStaff(sb, boss, '排班督導', { brand: 'mala', unit: 'mala-hq', title: 'osv' });
+  // 還要有 hq 打卡對照（confirmed、roster_active 不是 FALSE）才有 platform.sched（2026-10-25 縮小範圍）
+  ok(sb.proxyAuthorize_(osv.token, 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16q0: 區督導沒有 hq 打卡對照 → 沒有 platform.sched → 403');
+  sb.clkSetup_(sb.SpreadsheetApp.getActive());
+  sheets.staff_clock.appendRow([osv.emp, 'hq', 'HQ' + osv.emp.slice(3), 'staff', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
   ok(sb.proxyAuthorize_(osv.token, 'schedule', 'schedAlerts').code !== 'FORBIDDEN', '16q: 區督導（品牌辦公室，2026-10-25 起有 platform.sched）→ schedule 不再 403');
   ok(sb.proxyAuthorize_(osv.token, 'attendance', 'attAlerts').code !== 'FORBIDDEN', '16r: 同一個人打 attendance 仍過（platform.att）');
   ok(sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts').code !== 'FORBIDDEN', '16s: 店長 attendance 也過');
