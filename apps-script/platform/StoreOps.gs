@@ -52,6 +52,10 @@ var STORE_ATT_GATE_TITLES = ['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo'
 // 排班管理選單（platform.sched，2026-10-24 Eason）：只給「能排班」的人＝店長同等職（店長、廠長、區經理）；人資主管另算，admin 是 '*'。
 // 不含區督導／總監／執行長以上、廚藝總監，也不含 att.extra 例外。
 var STORE_SCHED_GATE_TITLES = ['sm', 'fm', 'am'];
+// 2026-10-25 起另加：ladder 為 hq（總部）或 office（品牌辦公室）單位的在職同仁（總部自填排班，docs/schedule-hq/spec.md §5）。
+var STORE_SCHED_GATE_LADDERS = ['hq', 'office'];
+// 總部排班的打卡店別
+var STORE_SELF_CLOCK = 'hq';
 // 人資主管（不是 admin）可以設個別例外的兩個權限碼（spec §13.1）
 var STORE_HR_GRANTABLE = ['store.void', 'att.extra'];
 var STORE_PERM_VOID = 'store.void';
@@ -423,6 +427,26 @@ function storeAttPeople_(targets, pilot) {
   return out;
 }
 
+/**
+ * 總部排班身分（ident.self，2026-10-25 docs/schedule-hq/spec.md §3.1）：本人 staff_clock 中 state=confirmed、roster_active 不是 FALSE、
+ * 打卡店別（store_code）＝'hq' 的對照；不論 role、不受試點限制。approval＝有人核他工時（attNeedOf_ 'hours' 不是 null）；
+ * false（總監、執行長以上）→ 營運系統那邊送出就生效。admin 沒有同仁編號 → []。
+ */
+function storeSelfClocks_(p, org) {
+  if (!p || !p.emp || !clkSheetsReady_()) return [];
+  var approval = attNeedOf_(p, org, 'hours') !== null;
+  var seen = {}, out = [];
+  clkMaps_().forEach(function (m) {
+    if (m.emp_no !== p.emp || m.state !== 'confirmed' || m.roster_active === 'FALSE' || m.store_code !== STORE_SELF_CLOCK) return;
+    var k = m.store_code + '|' + m.emp_id;
+    if (seen[k]) return;
+    seen[k] = true;
+    out.push({ clock: m.store_code, emp_id: m.emp_id, approval: approval });
+  });
+  out.sort(function (a, b) { return a.emp_id < b.emp_id ? -1 : (a.emp_id > b.emp_id ? 1 : 0); });
+  return out;
+}
+
 /** 某位同仁現在的第二期權限（不看 PERMS_ON 開關；perm 表沒建＝沒有規則） */
 function storePermsOf_(p) {
   try {
@@ -520,7 +544,8 @@ function storeIdent_(sub) {
     pilot_units: pilot,
     units_managed: storeUniqSorted_(managed),
     void_units: storeUniqSorted_(voidUnits),
-    att: { people: storeAttPeople_(targets, pilot), req_people: storeAttPeople_(reqTargets, pilot), view_people: storeAttPeople_(viewTargets, pilot) }   // view_people＝督導／總監只看（REGIONS_ON='1' 才有，2026-10-25）； people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）
+    att: { people: storeAttPeople_(targets, pilot), req_people: storeAttPeople_(reqTargets, pilot), view_people: storeAttPeople_(viewTargets, pilot) },   // view_people＝督導／總監只看（REGIONS_ON='1' 才有，2026-10-25）； people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）
+    self: storeSelfClocks_(p, org)   // 總部排班身分（2026-10-25）：只列 clock＝hq，不受試點限制
   };
 }
 
@@ -616,15 +641,17 @@ function storeAttGate_(values) {
 
 /**
  * 衍生權限 platform.sched（「排班管理」選單；不寫進 roles）。
- * 總開關（STORE_SSO_UNITS）空 → false。否則在職且（職稱 STORE_SCHED_GATE_TITLES：sm／fm／am、或人資主管）→ true。
- * 不含 att.extra、區督導、總監、執行長以上、廚藝總監。admin 是 '*'，不在這裡判斷。values＝staff 分頁一列。
+ * 總開關（STORE_SSO_UNITS）空 → false。否則在職且（職稱 STORE_SCHED_GATE_TITLES：sm／fm／am、或人資主管、
+ * 或所在單位階梯為 hq／office＝所有總部同仁、品牌辦公室同仁）→ true。不含 att.extra。admin 是 '*'，不在這裡判斷。values＝staff 分頁一列。
  */
 function storeSchedGate_(values) {
   if (!storePilotUnits_().length) return false;
   if (!values || stfStr_(values[STF_COL.status]) !== 'active') return false;
   var p = { status: 'active', dept: stfStr_(values[STF_COL.dept]), title: stfStr_(values[STF_COL.title]) };
   if (STORE_SCHED_GATE_TITLES.indexOf(p.title) !== -1) return true;
-  return !!stfIsHrHead_(p);
+  if (stfIsHrHead_(p)) return true;
+  var u = stfReadOrg_().unit[stfStr_(values[STF_COL.unit])];   // 總部／品牌辦公室同仁（單位階梯 hq／office）
+  return !!(u && u.active && STORE_SCHED_GATE_LADDERS.indexOf(u.ladder || 'store') !== -1);
 }
 
 function storeHasAttExtra_(values) {

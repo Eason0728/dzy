@@ -712,13 +712,13 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   sheets.users.appendRow(['u093', 'syssch', '假', 'schsys', '', 's9', H('fake-syssch-pw-01', 's9'), 'TRUE', '', '', '']);
   ok(sb.proxyAuthorize_(tokenOf(sb, 'syssch', 'fake-syssch-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16k: 有 platform.sched 但沒有 DZY 編號身分 → FORBIDDEN');
 
-  // 有 platform.att 沒有 platform.sched（區督導、總監、ceo…）→ 排班待辦 403；考勤待辦照舊 ok
+  // 2026-10-25 起 platform.sched 含總部／品牌辦公室同仁：區督導（ladder office）也有；沒有 platform.sched 的（只有 platform.att 的帳號）仍 403
   const osv = mkStaff(sb, boss, '排班督導', { brand: 'mala', unit: 'mala-hq', title: 'osv' });
-  ok(sb.proxyAuthorize_(osv.token, 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16q: 區督導（有 platform.att、沒有 platform.sched）→ schedule 403');
+  ok(sb.proxyAuthorize_(osv.token, 'schedule', 'schedAlerts').code !== 'FORBIDDEN', '16q: 區督導（品牌辦公室，2026-10-25 起有 platform.sched）→ schedule 不再 403');
   ok(sb.proxyAuthorize_(osv.token, 'attendance', 'attAlerts').code !== 'FORBIDDEN', '16r: 同一個人打 attendance 仍過（platform.att）');
   ok(sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts').code !== 'FORBIDDEN', '16s: 店長 attendance 也過');
   sheets.roles.appendRow(['attonly', '假', 'platform.att']);
-  sheets.users.appendRow(['u094', 'attonly', '假', 'attonly', '', 's9', H('fake-attonly-pw-01', 's9'), 'TRUE', '', '', '']);
+  sheets.users.appendRow(['u794', 'attonly', '假', 'attonly', '', 's9', H('fake-attonly-pw-01', 's9'), 'TRUE', '', '', '']);
   ok(sb.proxyAuthorize_(tokenOf(sb, 'attonly', 'fake-attonly-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16t: roles 只給 platform.att 的帳號 → schedule 403（platform.att 不能頂替 platform.sched）');
 
   // PERMS_ON 開：同 14n～14p
