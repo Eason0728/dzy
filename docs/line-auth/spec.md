@@ -1,7 +1,8 @@
 # 規格：管理系統 LINE 認身分（核心＋B 重設密碼＋C 一鍵開通）
-版本：v1.1 / 2026-10-25（v1.0＋GPT 設計審查修正；Eason：開通恢復審核、重設維持只看可信綁定）｜需求正本：requirements.md v1.0
+版本：v1.2 / 2026-10-25（**範圍縮小：只做 B 重設密碼，C 一鍵開通取消**；v1.1 為設計審查修正）｜需求正本：requirements.md v1.0
 
 ## 0. Eason 的決定（2026-10-25）
+- **R3（上線前，最新、優先於下列）：只做 LINE 重設密碼；第一次申請帳號維持原認領流程，不做 LINE 開通。** 實作：前端拿掉開通入口；mini 路由 op／want 為 claim 一律 400 bad_input；GAS lineAuthClaim_ 一律回 off、check want claim 回 off；LineHub 只認「重設密碼」。下文所有 C／claim 相關段落保留作紀錄，但已停用。
 - R1（設計審查後）：**LINE 開通恢復主管審核**——LINE 只代填身分（姓名、編號、主店單位），送出後 status＝pending，照現有 unitPending／unitApprove 流程。推翻需求 v1.0 第 2 題「免審」。
 - R2（設計審查後）：**LINE 重設維持只看可信綁定，不加生日**。已知風險（GPT #1）：同事冒綁＋打一次卡＋等 7 天可重設已開通帳號；Eason 知情接受。緩解＝§3.2 人資停用鈕、§5 總開關、staff_log 紀錄。
 - S1 職稱：LINE 開通只能選 pt／ft；其他職稱導原認領流程（R1 後仍保留，少一個審核時要細看的點）
