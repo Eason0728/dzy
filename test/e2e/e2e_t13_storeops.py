@@ -37,10 +37,13 @@ class Mock13(MockBackend):
         super().__init__(base)
         mk = lambda name, perms: {'password': 'e2e-pw', 'perms': perms,
                                   'user': {'id': 'u-' + name, 'name': name, 'role': 'staff', 'node': ''}}
-        USERS['att1'] = mk('督導甲', ['platform.self', 'platform.att', 'platform.storeops'])
+        USERS['att1'] = mk('督導甲', ['platform.self', 'platform.att', 'platform.sched', 'platform.storeops'])   # 店長同等職：考勤管理＋排班管理
+        USERS['att2'] = mk('督導乙', ['platform.self', 'platform.att', 'platform.storeops'])   # 區督導／總監類：有考勤管理、沒有排班管理（2026-10-24）
         USERS['plain1'] = mk('同仁乙', ['platform.self', 'platform.storeops'])
         USERS['none1'] = mk('同仁丙', ['platform.self'])  # 總開關關著／不屬於任何營運系統門市：兩個衍生權限都沒有
         self.sso_calls = []
+        # 排班管理首頁待辦（hr-move-spec §5）：預設兩列（光復店 T01、T02／美村店 T01）
+        self.sched_alerts = {'ok': True, 'data': {'items': [{'code': 'gf', 'name': '光復店', 'periods': ['T01', 'T02']}, {'code': 'mc', 'name': '美村店', 'periods': ['T01']}], 'asOf': '2026-10-24T00:00:00Z'}}
         # 考勤管理首頁待辦（spec §17.5）：預設三列（核定 3 天／申請 2 筆／新手機 1 支）
         self.att_alerts = {'ok': True, 'data': {'items': [{'kind': 'approve', 'count': 3}, {'kind': 'request', 'count': 2}, {'kind': 'device', 'count': 1}], 'partial': False, 'asOf': '2026-10-24T00:00:00Z', 'pending': False}}
 
@@ -216,6 +219,15 @@ def main():
             ids = [c.get_attribute('data-module') for c in at.locator('[data-role="module-card"]').all()]
             check('attendance' in ids and 'storeops' in ids, '有 platform.att：首頁有考勤管理與門市營運，實際：%s' % ids)
             check(at.locator('[data-role="nav-desktop"] [data-nav="attendance"]').count() == 1, '有 platform.att：左側選單有「考勤管理」')
+            # ⑤0 有 platform.att 沒有 platform.sched（區督導、總監類）：有考勤管理、沒有排班管理（卡片與左側選單都沒有）
+            ao = new_page()
+            ao.goto(base + '/index.html')
+            do_login(ao, 'att2')
+            ids2 = [c.get_attribute('data-module') for c in ao.locator('[data-role="module-card"]').all()]
+            check('attendance' in ids2 and 'schedule' not in ids2, '有 platform.att 沒有 platform.sched：有考勤管理、沒有排班管理，實際：%s' % ids2)
+            check(ao.locator('[data-role="nav-desktop"] [data-nav="schedule"]').count() == 0, '沒有 platform.sched：左側選單沒有「排班管理」')
+            check(at.locator('[data-role="nav-desktop"] [data-nav="schedule"]').count() == 1, '有 platform.sched：左側選單有「排班管理」')
+            ao.close()
             # ⑤a 首頁考勤管理組的待辦（2026-10-24，spec §17.5）：只回件數，三列提醒文字逐字
             ATT = '[data-role="alert-list"][data-module="attendance"] [data-role="alert-row"]'
             at.wait_for_selector(ATT + ':has-text("支新手機等核准")', timeout=10000)
@@ -295,6 +307,39 @@ def main():
             at.wait_for_timeout(500)
             agos = [m for m in fa.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
             check(agos == [{'type': 'dzy-store-go', 'v': 1, 'id': 'request'}] and at.evaluate('location.hash') == '#/attendance/request', '重新整理在申請審核：出勤核定先回報核定工時時，管理系統叫它切回申請審核、網址不變：%s %s' % (agos, at.evaluate('location.hash')))
+
+            # ⑤c 排班管理（hr-move-spec §5）：首頁提醒列、點了導到 #/schedule/board、頁頂四個動態分頁
+            at.goto(base + '/index.html')
+            at.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
+            SCH = '[data-role="alert-list"][data-module="schedule"] [data-role="alert-row"]'
+            at.wait_for_selector(SCH + ':has-text("美村店")', timeout=10000)
+            rows = [x.replace('›', '').strip() for x in at.locator(SCH).all_inner_texts()]
+            check(rows == ['光復店 T01、T02 班表還沒送到 LINE', '美村店 T01 班表還沒送到 LINE'], '首頁排班管理組顯示每家店一列提醒：%s' % rows)
+            check(('schedule', 'schedAlerts') in getattr(mock, 'proxy_calls', []), '首頁待辦走代轉 ns schedule／action schedAlerts')
+            at.click(SCH + ':has-text("光復店")')
+            at.wait_for_selector('[data-keep="schedule"] iframe[data-role="store-frame"]')
+            check(at.evaluate('location.hash') == '#/schedule/board', '點「光復店 T01、T02…」→ 網址 #/schedule/board：%s' % at.evaluate('location.hash'))
+            fs = None
+            for _ in range(50):
+                fs = store_frame(at)
+                if fs:
+                    try:
+                        if fs.evaluate("() => window.__got.length") >= 1:
+                            break
+                    except Exception:
+                        pass
+                at.wait_for_timeout(100)
+            check(fs is not None and fs.url == STORE + '/dzy-store/?embed=dzy&only=schedule', '排班管理 iframe 網址帶 &only=schedule：%s' % (fs.url if fs else None))
+            SNAV = "(cur) => parent.postMessage({ type: 'dzy-store-nav', v: 1, cur: cur, items: [{ id: 'board', label: '班表', badge: 0 }, { id: 'needs', label: '指定與需求', badge: 0 }, { id: 'staff', label: '同仁', badge: 0 }, { id: 'shifts', label: '班別與設定', badge: 0 }] }, '*')"
+            fs.evaluate(SNAV, 'board')
+            at.wait_for_function("() => document.querySelectorAll('[data-role=\"view-nav\"] .nav-item').length === 4")
+            stabs = [x.replace('\n', '') for x in at.locator('[data-role="view-nav"] .nav-item').all_inner_texts()]
+            check(stabs == ['班表', '指定與需求', '同仁', '班別與設定'] and at.evaluate('location.hash') == '#/schedule/board', '排班管理頁頂收到四個動態分頁、網址 #/schedule/board：%s %s' % (stabs, at.evaluate('location.hash')))
+            check({'type': 'dzy-store-tabs', 'v': 1} in fs.evaluate("() => window.__got.map(m => m.data)"), '排班管理：收到選單後回 dzy-store-tabs')
+            at.locator('[data-role="view-nav"] .nav-item', has_text='同仁').click()
+            at.wait_for_timeout(300)
+            sgos = [m for m in fs.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(sgos[-1:] == [{'type': 'dzy-store-go', 'v': 1, 'id': 'staff'}] and at.evaluate('location.hash') == '#/schedule/staff', '點頁頂「同仁」→ 送 {dzy-store-go, id:staff}、網址 #/schedule/staff：%s' % sgos)
 
             # ⑥ 管理員兩個都看得到
             ad = new_page()

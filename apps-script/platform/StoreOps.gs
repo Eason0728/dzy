@@ -7,7 +7,7 @@
  *  2. svcStoreRedeem／svcStoreWho／svcStoreRoster（憑 Script Property STORE_SVC_KEY）
  *  3. 誰核誰：attNeedOf_／attApproverOf_（純函式，分核定工時 hours／申請 req 兩張表）＋ storeAttPeople_
  *  4. 身分 ident 計算（storeIdent_）、試點開關 STORE_SSO_UNITS
- *  5. 衍生權限 platform.att／platform.storeops 的閘門（storeAttGate_／storeOpsGate_；Staff.gs stfLoginGate_ 呼叫）
+ *  5. 衍生權限 platform.att／platform.sched／platform.storeops 的閘門（storeAttGate_／storeSchedGate_／storeOpsGate_；Staff.gs stfLoginGate_ 呼叫）
  *  6. 人資主管判斷 stfIsHrHead_、perm_map 補預設規則 storeopsPermSeed_
  *
  * ⚠ ssoTicket／svcStoreRedeem／svcStoreWho／svcStoreRoster 永遠不可列進 minikit app.json 的 readActions，
@@ -46,6 +46,9 @@ var STORE_REQ_RDD_HQ_TITLES = ['ceo', 'gm', 'chair'];
 var STORE_EXEC_TITLES = ['ceo', 'gm', 'chair'];
 // 考勤管理選單（platform.att）：會核人的職稱＋責任制職稱（區督導 2026-10-21 起核品牌內店長的申請）
 var STORE_ATT_GATE_TITLES = ['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo', 'gm', 'chair'];
+// 排班管理選單（platform.sched，2026-10-24 Eason）：只給「能排班」的人＝店長同等職（店長、廠長、區經理）；人資主管另算，admin 是 '*'。
+// 不含區督導／總監／執行長以上、廚藝總監，也不含 att.extra 例外。
+var STORE_SCHED_GATE_TITLES = ['sm', 'fm', 'am'];
 // 人資主管（不是 admin）可以設個別例外的兩個權限碼（spec §13.1）
 var STORE_HR_GRANTABLE = ['store.void', 'att.extra'];
 var STORE_PERM_VOID = 'store.void';
@@ -532,6 +535,19 @@ function storeAttGate_(values) {
   if (STORE_ATT_GATE_TITLES.indexOf(p.title) !== -1) return true;
   if (stfIsHrHead_(p)) return true;
   return storeHasAttExtra_(values);
+}
+
+/**
+ * 衍生權限 platform.sched（「排班管理」選單；不寫進 roles）。
+ * 總開關（STORE_SSO_UNITS）空 → false。否則在職且（職稱 STORE_SCHED_GATE_TITLES：sm／fm／am、或人資主管）→ true。
+ * 不含 att.extra、區督導、總監、執行長以上、廚藝總監。admin 是 '*'，不在這裡判斷。values＝staff 分頁一列。
+ */
+function storeSchedGate_(values) {
+  if (!storePilotUnits_().length) return false;
+  if (!values || stfStr_(values[STF_COL.status]) !== 'active') return false;
+  var p = { status: 'active', dept: stfStr_(values[STF_COL.dept]), title: stfStr_(values[STF_COL.title]) };
+  if (STORE_SCHED_GATE_TITLES.indexOf(p.title) !== -1) return true;
+  return !!stfIsHrHead_(p);
 }
 
 function storeHasAttExtra_(values) {

@@ -203,14 +203,19 @@ class MockBackend:
             return 400, {'ok': False, 'error': 'BAD_REQUEST'}
         ns, action = body.get('ns', ''), body.get('action', '')
         self.proxy_calls = getattr(self, 'proxy_calls', []) + [(ns, action)]
-        # 考勤管理首頁待辦（2026-10-24，spec §17.5）：mini 代轉到營運系統 att-alerts，只回件數。
-        # 預設「沒有待辦」；測試把 att_alerts 換成 {'ok':True,'data':{...}}，或設 att_alerts_fail=True 模擬代轉失敗。
-        if ns == 'attendance' and action == 'attAlerts':
-            if not body.get('token') or not USERS.get((body.get('token') or '').replace('e2e-token-', '')):
+        # 考勤管理（spec §17.5）／排班管理（hr-move-spec §5）首頁待辦（2026-10-24）：mini 代轉到營運系統 att-alerts／sched-alerts。
+        # 預設「沒有待辦」；測試把 att_alerts／sched_alerts 換成 {'ok':True,'data':{...}}，或設 att_alerts_fail／sched_alerts_fail=True 模擬代轉失敗。
+        if (ns, action) in (('attendance', 'attAlerts'), ('schedule', 'schedAlerts')):
+            pre = 'att' if ns == 'attendance' else 'sched'
+            au = USERS.get((body.get('token') or '').replace('e2e-token-', ''))
+            if not body.get('token') or not au:
                 return 401, {'ok': False, 'error': '登入已失效', 'code': 'BAD_TOKEN'}
-            if getattr(self, 'att_alerts_fail', False):
+            need = 'platform.att' if ns == 'attendance' else 'platform.sched'   # 排班管理只認 platform.sched（2026-10-24）
+            if '*' not in au['perms'] and need not in au['perms']:
+                return 403, {'ok': False, 'error': '沒有權限', 'code': 'FORBIDDEN'}
+            if getattr(self, pre + '_alerts_fail', False):
                 return 502, {'ok': False, 'error': 'UPSTREAM_DOWN'}
-            return 200, getattr(self, 'att_alerts', {'ok': True, 'data': {'items': [], 'partial': False, 'pending': False}})
+            return 200, getattr(self, pre + '_alerts', {'ok': True, 'data': {'items': [], 'partial': False, 'pending': False}})
         if ns == 'cashbook':   # 收支管理（2026-10-24）：有狀態的假現金帳在 cashbook_mock.py
             import cashbook_mock
             return cashbook_mock.proxy(self, body)

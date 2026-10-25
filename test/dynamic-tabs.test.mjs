@@ -7,6 +7,7 @@ import { sanitizeTabs, pickDynamicView, TABS_MAX } from '../platform/tabs.js';
 import { navTabs } from '../modules/storeops/embed.js';
 import storeops from '../modules/storeops/manifest.js';
 import attendance from '../modules/attendance/manifest.js';
+import schedule from '../modules/schedule/manifest.js';
 import { validateManifest } from '../platform/manifest-check.js';
 
 let n = 0;
@@ -41,12 +42,15 @@ t('navTabs：只認 dzy-store-nav v1；cur 要在清單裡', () => {
   assert.equal(navTabs({ ...d, cur: 'admin' }).cur, '');
   for (const bad of [null, { ...d, type: 'x' }, { ...d, v: 2 }, { ...d, items: 'x' }]) assert.equal(navTabs(bad), null);
 });
-t('manifest：門市營運、考勤管理都 dynamicTabs（考勤管理＝出勤核定子分頁，2026-10-20）；兩者都合規', () => {
+t('manifest：門市營運、考勤管理、排班管理都 dynamicTabs（考勤管理＝出勤核定子分頁 2026-10-20；排班管理＝自動排班四個分頁 2026-10-24）；都合規', () => {
   assert.equal(storeops.dynamicTabs, true);
   assert.equal(attendance.dynamicTabs, true);
-  for (const m of [storeops, attendance]) { const r = validateManifest(m); assert.ok(r.ok !== false && !(r.errors && r.errors.length), JSON.stringify(r)); }
+  assert.equal(schedule.dynamicTabs, true);
+  assert.equal(schedule.dept, 'hr'); assert.deepEqual(schedule.requires, ['platform.sched']);
+  for (const m of [storeops, attendance, schedule]) { const r = validateManifest(m); assert.ok(r.ok !== false && !(r.errors && r.errors.length), JSON.stringify(r)); }
 });
-t('門市營運、考勤管理都開 tabs', () => {
+t('門市營運、考勤管理、排班管理都開 tabs', () => {
+  assert.match(fs.readFileSync(new URL('../modules/schedule/index.js', import.meta.url), 'utf8'), /tabs: true/);
   assert.match(fs.readFileSync(new URL('../modules/storeops/index.js', import.meta.url), 'utf8'), /tabs: true/);
   assert.match(fs.readFileSync(new URL('../modules/attendance/index.js', import.meta.url), 'utf8'), /tabs: true/);
 });

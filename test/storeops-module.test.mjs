@@ -44,10 +44,11 @@ const tick = () => new Promise((r) => setImmediate(r));
 
 const storeops = (await import('../modules/storeops/index.js')).default;
 const attendance = (await import('../modules/attendance/index.js')).default;
+const schedule = (await import('../modules/schedule/index.js')).default;
 const embedA = await import('../modules/storeops/embed.js');
 const embedB = await import('../modules/attendance/embed.js');
 
-for (const [label, mod, query] of [['門市營運', storeops, ''], ['考勤管理', attendance, '&only=duty']]) {
+for (const [label, mod, query] of [['門市營運', storeops, ''], ['考勤管理', attendance, '&only=duty'], ['排班管理', schedule, '&only=schedule']]) {
   const root = new El('div');
   sent.length = 0; calls.length = 0;
   const unmount = mod.mount(root, mkCtx());
@@ -104,10 +105,11 @@ for (const [label, mod, query] of [['門市營運', storeops, ''], ['考勤管�
   });
 }
 
-await t('兩份共用檔 embed.js 逐字相同', () => {
+await t('三份共用檔 embed.js 逐字相同（門市營運、考勤管理、排班管理）', () => {
   const a = fs.readFileSync(new URL('../modules/storeops/embed.js', import.meta.url), 'utf8');
   const b = fs.readFileSync(new URL('../modules/attendance/embed.js', import.meta.url), 'utf8');
-  assert.equal(a, b);
+  const c = fs.readFileSync(new URL('../modules/schedule/embed.js', import.meta.url), 'utf8');
+  assert.equal(a, b); assert.equal(a, c);
 });
 
 await t('return 白名單：營運系統網址一律放行；本機網址只在本機開發時放行', () => {
