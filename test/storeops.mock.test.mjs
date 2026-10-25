@@ -630,6 +630,35 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(eq(before, after), '3c 開關 0／1：每個人的 people 完全相同');
   const reqOf = (e) => app.ident(e).att.req_people.map((x) => x.sub).sort();
   g('3c REGIONS_ON=1：督導甲 req_people 只剩 A 區店長（DZY210、DZY212），不含 B 區店長', reqOf('DZY201'), ['DZY210', 'DZY212']);
+
+  // 3d. 只看考勤的人也有排班管理選單（platform.sched，2026-10-25 Eason：總監唯讀看班表，跟只看考勤同一批）
+  //     先拿掉所有 hq 打卡對照（那條是總部自填排班的路），這裡只測「只看名單」這條新路
+  const row = (e) => staffRow(cast.find((c) => c[0] === e), 0);
+  const scd = app.sheets.staff_clock ? app.sheets.staff_clock._data : null;
+  if (scd) for (let i = scd.length - 1; i > 0; i--) if (scd[i][1] === 'hq') scd.splice(i, 1);
+  app.sb.regionIndexLive_ = () => idxA;
+  app.props.REGIONS_ON = '1';
+  app.sb.regionCtxReset_();
+  ok(app.sb.storeSchedGate_(row('DZY201')) === true, '3d 開關 1：負責 A 區的督導 → 有排班管理');
+  ok(app.sb.storeSchedGate_(row('DZY203')) === true, '3d 開關 1：品牌總監 → 有排班管理');
+  ok(app.sb.storeSchedGate_(row('DZY202')) === false, '3d 未劃區督導 → 沒有');
+  ok(app.sb.storeSchedGate_(row('DZY204')) === false, '3d 品牌辦公室行政（ofs，沒有 hq 對照）→ 沒有');
+  ok(app.sb.storeSchedGate_(row('DZY260')) === false, '3d 停用督導 → 沒有');
+  ok(app.sb.storeSchedGate_(row('DZY211')) === false && app.sb.storeSchedGate_(row('DZY251')) === false, '3d 計時同仁、財務同仁 → 沒有');
+  app.props.REGIONS_ON = '0';
+  app.sb.regionCtxReset_();
+  ok(app.sb.storeSchedGate_(row('DZY201')) === false && app.sb.storeSchedGate_(row('DZY203')) === false, '3d 開關 0：督導、總監都沒有（只看名單也是空的）');
+  app.props.REGIONS_ON = '1';
+  app.sb.regionIndexLive_ = () => { throw new Error('boom'); };
+  ok(app.sb.storeSchedGate_(row('DZY201')) === false && app.sb.storeSchedGate_(row('DZY203')) === true, '3d 區域索引壞掉：督導 false（不拖垮登入），總監照常');
+  app.sb.regionIndexLive_ = () => idxA;
+  // 選單與 ident 一致：gate 為真 ⇔ view_people 非空
+  ['DZY201', 'DZY202', 'DZY203', 'DZY204', 'DZY231'].forEach((e) => ok(app.sb.storeSchedViewGate_(row(e)) === (V(e).length > 0), '3d gate ⇔ view_people 非空：' + e, { gate: app.sb.storeSchedViewGate_(row(e)), view: V(e) }));
+  // 區內門市都不在試點 → 只看名單空 → 沒有選單（不會出現點進去是空的）
+  const pilotKeep = app.props.STORE_SSO_UNITS;
+  app.props.STORE_SSO_UNITS = 'mala-gf';
+  ok(app.sb.storeSchedViewGate_(row('DZY201')) === false && V('DZY201').length === 0, '3d 區內門市不在試點 → 督導沒有選單');
+  app.props.STORE_SSO_UNITS = pilotKeep;
 })();
 
 // ============================================================

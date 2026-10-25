@@ -650,9 +650,36 @@ function storeSchedGate_(values) {
   var p = { status: 'active', dept: stfStr_(values[STF_COL.dept]), title: stfStr_(values[STF_COL.title]) };
   if (STORE_SCHED_GATE_TITLES.indexOf(p.title) !== -1) return true;
   if (stfIsHrHead_(p)) return true;
+  if (storeSchedViewGate_(values)) return true;   // 督導／總監「只看」名單非空＝唯讀看班表（2026-10-25 Eason）
   var u = stfReadOrg_().unit[stfStr_(values[STF_COL.unit])];   // 總部／品牌辦公室同仁（單位階梯 hq／office）
   if (!(u && u.active && STORE_SCHED_GATE_LADDERS.indexOf(u.ladder || 'store') !== -1)) return false;
   return storeHasSelfClock_(stfNormEmp_(values[STF_COL.emp_no]));   // 還要有 hq 打卡對照（跟 ident.self／storeSelfClocks_ 同一套判斷），沒有對照的人營運系統沒有入口
+}
+
+/**
+ * 督導／總監唯讀看班表的入口（2026-10-25 Eason：跟「只看考勤」同一批、只看門市）：
+ * REGIONS_ON='1' 且職稱 osv／odir、只看名單（同 ident att.view_people 的算法）非空 → true。營運系統端依 att.view_people 給唯讀排班（scheduleAdmin 仍 false、看不到特休）。
+ * 區域索引讀失敗＝督導沒有（不拖垮登入）；總監不靠索引。
+ */
+function storeSchedViewGate_(values) {
+  var on = false;
+  try { on = PropertiesService.getScriptProperties().getProperty('REGIONS_ON') === '1'; } catch (e) { on = false; }
+  if (!on) return false;
+  var title = stfStr_(values[STF_COL.title]);
+  if (title !== 'osv' && title !== 'odir') return false;
+  var me = { emp: stfNormEmp_(values[STF_COL.emp_no]), status: stfStr_(values[STF_COL.status]), unit: stfStr_(values[STF_COL.unit]), dept: stfStr_(values[STF_COL.dept]), title: title };
+  var idx = null;
+  if (title === 'osv') {
+    if (typeof regionIndexLive_ !== 'function') return false;
+    try { idx = regionIndexLive_(); } catch (e2) { return false; }
+  }
+  try {
+    // 跟 ident 的 att.view_people 走同一條路（Fable QA 第 2 條）：區內要有需核工時、在試點、有打卡對照的同仁，營運系統才會給排班功能
+    var org = stfReadOrg_();
+    var units = attViewUnitsOf_(me, org, idx);
+    if (!units.length) return false;
+    return storeAttPeople_(storeAttViewTargets_(me, storePeople_(), org, storeHomeFn_(), units), storePilotUnits_()).length > 0;
+  } catch (e3) { return false; }
 }
 
 /** 本人有沒有 confirmed、roster_active 不是 FALSE 的總部（STORE_SELF_CLOCK）打卡對照；表沒建或讀失敗＝沒有 */
