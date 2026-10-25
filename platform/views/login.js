@@ -118,13 +118,13 @@ function renderLoginForm(el, app) {
       <div class="login-blur" aria-hidden="true"></div>
       <!-- 單一登入框（Eason 2026-08-17 三改：透明毛玻璃、避開照片中間食材、
            配色跟著背景照片走——見 components.css 的 [data-hero] 主題）。
-           標題字樣是 Eason 指定的「鼎兆元集團｜管理系統」，**刻意不用 APP_NAME**
+           標題字樣是 Eason 指定的「鼎兆元餐飲集團｜管理系統」（2026-10-26 由「鼎兆元集團」改），**刻意不用 APP_NAME**
            （那是「鼎兆元餐飲集團｜管理系統」，登入框上要短一點的版本），
            所以這裡是字面字串，不是打錯。 -->
       <div class="login-card">
         <div class="login-card-form">
       <div class="card">
-        <h1 class="card-title">鼎兆元集團｜管理系統</h1>
+        <h1 class="card-title">鼎兆元餐飲集團｜管理系統</h1>
         <div class="toast toast-danger" data-role="error" hidden></div>
         <form data-role="form" class="stack" novalidate>
           <div class="field">
