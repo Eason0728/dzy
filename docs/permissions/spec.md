@@ -12,7 +12,7 @@
 | 項目 | 位置 | 現況 |
 |---|---|---|
 | 角色權限 | `Auth.gs getRolePerms_` :197-212 | 讀 roles 分頁；staff 角色＝`platform.self` |
-| 衍生權限 | `Auth.gs authPermsWithGate_` :699-711 | role staff 才算：`platform.review`（審核者）、`platform.bulletin`（公告管理）；gate 來自 `Staff.gs stfLoginGate_` :822-833 |
+| 衍生權限 | `Auth.gs authPermsWithGate_` :699-711 | role staff 才算：`platform.review`（審核者）（`platform.bulletin` 公告管理 2026-10-26 起改為可給的功能，見 §13.3）；gate 來自 `Staff.gs stfLoginGate_` :822-833 |
 | 回傳 | `handleLogin_` :600-609、`handleMe_` :667-677 | `{token, user:{id,name,role,node}, perms}`；me 每次開頁都重算 |
 | 前端判斷 | `platform/auth.js can()` :305-315；`platform/shell.js` :191-201 | 精確比對、`*` 萬用、`platform.login` 恆真；模組 requires 任一符合即顯示 |
 | 稽核代轉授權 | `Auth.gs proxyAuthorize_` :298-333 | `filterNode = (!canRead && canOwn) ? user.node : null`（單一店字串） |
@@ -36,7 +36,7 @@
 | `platform.permex` | 設個別例外 | **新**，**只給 role admin，不進對照表** |
 
 - **鎖**＝只有 role `admin` 能在對照表裡新增或刪除含這個碼的規則（需求 3.1 第 1 件）。
-- 對照表、例外**都不能**給 `*`、`platform.self`、`platform.login`、`platform.review`、`platform.bulletin`、`platform.permex`（後兩者另有來源，前兩者人人有）。可給的碼＝上表除 `platform.permex` 以外的 9 個，寫死成白名單 `PERM_GRANTABLE`。
+- 對照表、例外**都不能**給 `*`、`platform.self`、`platform.login`、`platform.review`、`platform.permex`（後兩者另有來源，前兩者人人有；`platform.bulletin` 2026-10-26 起可給，見 §13.3）。可給的碼＝上表除 `platform.permex` 以外的 9 個，寫死成白名單 `PERM_GRANTABLE`。
 - `audit.read.brand` 只在**同仁帳號**出現；系統帳號的角色不給它（roles 分頁不動）。
 
 ## 3. 資料（三張新分頁，在 mini 的平台資料庫）
