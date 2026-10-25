@@ -297,5 +297,24 @@ ok(/開通/.test(LINE_LOG_TEXT.line_claim_ok) && /已停用/.test(LINE_LOG_TEXT.
   for (const k of Object.keys(LINE_LOG_TEXT).filter((x) => x !== 'line_claim_ok')) ok(gs.includes("'" + k + "'"), `後端真的會寫 ${k}`);
 }
 
+// ================= boot()：測試掛勾只在本機網域生效 =================
+{
+  const run = async (hostname) => {
+    let hookUsed = false;
+    const root = new Node('div');
+    const saved = { window: globalThis.window, document: globalThis.document, location: globalThis.location };
+    const hook = { liffId: 'x', liff: { init: async () => { hookUsed = true; throw new Error('stop'); } }, fetch: async () => { hookUsed = true; throw new Error('stop'); }, search: '?m=reset' };
+    globalThis.window = { __LINE_AUTH_TEST__: hook, location: { hostname, search: '' } };
+    globalThis.location = { hostname, search: '' };
+    globalThis.document = { getElementById: () => root, createElement: (t) => new Node(t), createTextNode: (t) => { const n = new Node('#text'); n._text = t; return n; } };
+    try { await LA.boot(); } catch (e) { /* 只看掛勾有沒有被讀 */ }
+    await flush();
+    for (const k of Object.keys(saved)) { if (saved[k] === undefined) delete globalThis[k]; else globalThis[k] = saved[k]; }
+    return hookUsed;
+  };
+  ok((await run('dzy.example.com')) === false, '非本機網域：__LINE_AUTH_TEST__ 掛勾被忽略');
+  ok((await run('localhost')) === true, '本機網域（localhost）：掛勾仍生效');
+}
+
 console.log(`\n${passed} 通過，${failed} 失敗`);
 process.exit(failed ? 1 : 0);

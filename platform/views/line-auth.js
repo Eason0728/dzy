@@ -331,7 +331,10 @@ export function createLineAuth(deps) {
 
 /** line.html 呼叫。瀏覽器端的測試掛勾：window.__LINE_AUTH_TEST__ = { liff, fetch, liffId, url, nav, search } */
 export function boot() {
-  const hook = (typeof window !== 'undefined' && window.__LINE_AUTH_TEST__) || {};
+  // 只有本機網域才讀測試掛勾；正式網域一律忽略（避免被注入假 LIFF／假 fetch）
+  const host = (typeof location !== 'undefined' && location.hostname) || '';
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  const hook = (isLocal && typeof window !== 'undefined' && window.__LINE_AUTH_TEST__) || {};
   const root = document.getElementById('line-app');
   const app = createLineAuth(Object.assign({ doc: document, win: window, root }, hook));
   return app.run();
