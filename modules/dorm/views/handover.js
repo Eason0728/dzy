@@ -101,6 +101,118 @@ function appendPdfLink(ctx, container, rawUrl) {
 }
 
 // ============================================================
+// 現場把點交 PDF 交給同仁（2026-10-26，Eason 選方案 A）
+// 雲端硬碟上的 PDF 沒開分享，同仁用自己手機打不開上面那個連結；這裡改由宿舍後端
+// handoverPdf（只給管理端、只給已完成的點交單）直接回檔案內容，在操作人員的裝置上：
+// 手機／平板 → 系統分享選單（LINE、AirDrop 直接傳給同仁）；電腦或不支援分享 → 直接下載。
+// 檔案在點交完成畫面一出現就先抓好：iOS 要求「按下按鈕當下」呼叫分享，按了才去抓會被擋。
+// ============================================================
+
+/** base64 → Uint8Array；格式不對回 null。 */
+export function b64ToBytes(b64) {
+  if (typeof b64 !== 'string' || !b64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return null;
+  try {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/** 下載檔名：拿掉路徑與控制字元，一律 .pdf 結尾，空的給預設名。 */
+export function safePdfName(name) {
+  let n = String(name || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').trim();
+  if (!n) n = '設備點交單.pdf';
+  if (!/\.pdf$/i.test(n)) n += '.pdf';
+  return n.slice(-120);
+}
+
+/** 檢查後端回的內容真的是 PDF（檔頭 %PDF）。 */
+export function isPdfBytes(bytes) {
+  return !!bytes && bytes.length > 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+}
+
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/**
+ * 畫「下載給同仁」按鈕並立刻預先抓檔。
+ * @param {() => boolean} isDestroyed 分頁已卸載就不再動 DOM
+ */
+function appendGiveCopyButton(ctx, container, token, isDestroyed) {
+  const wrap = el('div', { class: 'field', 'data-role': 'handover-give' });
+  const btn = el('button', { type: 'button', class: 'btn btn-primary', 'data-act': 'handover-give' });
+  const hint = el('p', { class: 'field-hint', text: '手機會跳出分享選單，可直接用 LINE 或 AirDrop 傳給同仁；電腦會直接下載，再轉交同仁。' });
+  wrap.appendChild(btn);
+  wrap.appendChild(hint);
+  container.appendChild(wrap);
+
+  let file = null;   // { blob, name }
+  let loading = false;
+
+  function setBtn(text, disabled) { btn.textContent = text; btn.disabled = !!disabled; }
+
+  async function prefetch() {
+    if (loading) return;
+    loading = true;
+    file = null;
+    setBtn('準備檔案中…', true);
+    let res;
+    try {
+      res = await ctx.api.call(BACKEND_ID, 'handoverPdf', { token });
+    } catch (err) {
+      res = { ok: false, error: (err && err.message) || '' };
+    }
+    loading = false;
+    if (isDestroyed()) return;
+    const data = (res && res.data) || {};
+    if (res && res.dryrun) {
+      setBtn('試跑模式不能下載點交單', true);
+      return;
+    }
+    const bytes = res && res.ok === true ? b64ToBytes(data.pdf_b64) : null;
+    if (!isPdfBytes(bytes)) {
+      setBtn('重新準備檔案', false);
+      hint.textContent = (res && res.ok !== true && res.error) ? ('檔案還沒準備好：' + res.error) : '檔案還沒準備好，請按一下再試。';
+      return;
+    }
+    file = { blob: new Blob([bytes], { type: 'application/pdf' }), name: safePdfName(data.name) };
+    setBtn('下載給同仁（PDF）', false);
+    hint.textContent = '手機會跳出分享選單，可直接用 LINE 或 AirDrop 傳給同仁；電腦會直接下載，再轉交同仁。';
+  }
+
+  btn.addEventListener('click', () => {
+    if (!file) { prefetch(); return; }
+    let shareFile = null;
+    try { shareFile = new File([file.blob], file.name, { type: 'application/pdf' }); } catch { shareFile = null; }
+    const canShare = shareFile && typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+      && typeof navigator.canShare === 'function' && navigator.canShare({ files: [shareFile] });
+    if (canShare) {
+      navigator.share({ files: [shareFile], title: file.name }).catch((err) => {
+        if (err && err.name === 'AbortError') return;   // 使用者自己關掉分享選單
+        downloadBlob(file.blob, file.name);
+      });
+      return;
+    }
+    downloadBlob(file.blob, file.name);
+    ctx.ui.toast('已下載點交單', 'ok');
+  });
+
+  prefetch();
+}
+
+// ============================================================
 // 純函式：賠償金額預覽、送出前驗證（不碰 DOM，可直接單元測試）
 // ============================================================
 
@@ -198,7 +310,7 @@ export function mountHandover(root, ctx) {
     container.appendChild(p);
   }
 
-  function renderSignedSummary(h) {
+  function renderSignedSummary(h, token) {
     clearContainer();
     container.appendChild(el('div', { class: 'card-title', text: '這張點交單已完成' }));
     container.appendChild(escEl(ctx, 'p', {}, (h.name || '') + '　' + (h.room_bed || '')));
@@ -207,6 +319,7 @@ export function mountHandover(root, ctx) {
       document.createTextNode('賠償合計 ' + ctx.fmt.money(h.compensation_total || 0) + ' 元')
     ]));
     if (h.pdf_url) appendPdfLink(ctx, container, h.pdf_url);
+    if (token) appendGiveCopyButton(ctx, container, token, () => destroyed);
   }
 
   // ------------------------------------------------------------
@@ -391,6 +504,7 @@ export function mountHandover(root, ctx) {
       container.appendChild(el('p', {}, [
         document.createTextNode('應賠償金額合計 ' + ctx.fmt.money(data.compensation_total || 0) + ' 元')
       ]));
+      appendGiveCopyButton(ctx, container, token, () => destroyed);
       if (data.pdf_url) appendPdfLink(ctx, container, data.pdf_url);
       ctx.ui.toast('點交已送出', 'ok');
     }
@@ -477,7 +591,7 @@ export function mountHandover(root, ctx) {
 
       const data = dataRes.data || {};
       if (data.state === 'signed') {
-        renderSignedSummary(data.handover || {});
+        renderSignedSummary(data.handover || {}, token);
       } else {
         renderForm(token, Array.isArray(data.equip) ? data.equip : [], Number(data.cleaning_fee) || 0);
       }

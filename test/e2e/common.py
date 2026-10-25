@@ -555,6 +555,18 @@ class MockBackend:
             c['status'] = '已退宿'
             return {'ok': True, 'compensation_total': total, 'pdf_url': ''}
 
+        if action == 'handoverPdf':
+            # 2026-10-26：管理端現場把點交 PDF 交給同仁（Handover.gs getHandoverPdf，要 pass、只給已簽）
+            if body.get('pass') != DORM_SECRET:
+                return {'ok': False, 'error': '通行碼錯誤', 'code': 401}
+            h = self.handover_tokens.get(body.get('token', ''))
+            if not h or not h['signed']:
+                return {'ok': False, 'error': '這張點交單還沒完成，沒有 PDF'}
+            import base64
+            self.pdf_downloads = getattr(self, 'pdf_downloads', 0) + 1
+            return {'ok': True, 'name': '2026-08-17_E2E測試_設備點交.pdf', 'mime': 'application/pdf',
+                    'pdf_b64': base64.b64encode(b'%PDF-1.4 e2e fake').decode()}
+
         return {'ok': False, 'error': '未知的 dorm action（mock）：' + action}
 
 
