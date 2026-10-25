@@ -27,6 +27,7 @@
 | 其他 | 一律 `no_perm` |
 - 任何人都**不能對自己**登記離職；店長也不能撤銷自己的離職（避免推翻總部的決定）。
 - 店長新增同仁時，職稱的職級不得高於自己（`no_perm`）。
+- 店長登記／撤銷離職時，目標的職級必須**低於**自己（同級也擋，`no_perm`；2026-10-25 審查 A-02）。總部不受此限。
 
 ### 0.4 錯誤代碼（`code`）
 `no_perm` 沒權限｜`not_found` 找不到同仁｜`bad_input` 輸入格式不對｜`duplicate_name` 同名｜`emp_conflict` 取號撞到已存在的編號（整筆拒絕、什麼都沒寫）｜`full` 編號用到 DZY999｜`setup_failed` 分頁建立／表頭核對失敗（停下、不寫資料）｜`self_leave` 對自己登記離職｜`already_disabled` 已停用｜`not_disabled` 沒停用（復職用）｜`last_day_past` 超過可往回補的 7 天｜`last_day_far` 離職日太遠｜`no_leave` 沒登記離職｜`leave_passed` 最後上班日已過不能撤銷｜`no_job` 找不到／看不到待辦單｜`not_retryable` 這張單不能重試｜`no_map` 沒有生效的打卡對照｜`dup_confirmed` 同人同店已有生效編號｜`emp_id_taken` 該打卡編號已確認給別人｜`home_exists` 已有主店｜`dead_state` 目前狀態不能做｜`no_change` 沒變｜`unauthorized` 服務金鑰錯｜`precheck_baseline`／`precheck_dup_name`／`precheck_outbox`／`precheck_no_store` 建對照前置檢查沒過｜`not_allowed` 不符 7A 條件｜`conflict` 打卡編號衝突｜`busy` 拿不到鎖｜`disabled` 同仁已停用（clockLink 等需要在職的動作回）｜`use_reinstate` 這個人登記過離職（有 last_day），第一期「啟用」不能用，請改走 staffReinstate（見 §3.9）。

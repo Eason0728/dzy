@@ -80,6 +80,7 @@ var CLK_MSG = {
   FULL: '編號已經用到 DZY999，請聯絡系統維護者',
   EMP_CONFLICT: '編號已被使用，請稍後再試',
   SELF_LEAVE: '不能對自己登記離職',
+  LEAVE_RANK: '不能對職級跟自己一樣或更高的同仁登記離職，請找總部',
   ALREADY_DISABLED: '這位同仁已經停用',
   LAST_DAY_FORMAT: '最後上班日格式要是 YYYY-MM-DD',
   LAST_DAY_PAST: '最後上班日最多只能往回補 7 天',
@@ -726,6 +727,11 @@ function clkLeaveTarget_(token, payload) {
   if (!s) return clkErr_('not_found', CLK_MSG.NOT_FOUND);
   if (a.selfEmp && a.selfEmp === s.emp) return clkErr_('self_leave', CLK_MSG.SELF_LEAVE);
   if (!clkCanManageUnit_(a, clkStaffUnit_(s))) return clkErr_('no_perm', CLK_MSG.NO_PERM);
+  // 2026-10-25 審查 A-02：店長只能對職級比自己低的人登記／撤銷離職（同級也擋，Eason 決定；離職會停帳號，比審核嚴）
+  if (!a.isHq) {
+    var tt = a.org.title[stfStr_(s.values[STF_COL.title])];
+    if ((tt ? tt.rank : 0) >= a.rank) return clkErr_('no_perm', CLK_MSG.LEAVE_RANK);
+  }
   return { ok: true, a: a, s: s, d: new Date() };
 }
 

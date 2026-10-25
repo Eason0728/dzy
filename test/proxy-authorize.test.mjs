@@ -612,7 +612,7 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
 
   ok(JSON.stringify(sb.PROXY_READ_ACTIONS.cashbook) === JSON.stringify(READ) && JSON.stringify(READ_ACTIONS.cashbook) === JSON.stringify(READ), '15a: cashbook 讀清單兩邊（Auth.gs／dryrun.js）一致，且就是 adminStores／adminList／adminLocks／adminGet');
   ok(JSON.stringify(sb.PROXY_WRITE_ACTIONS.cashbook) === JSON.stringify(WRITE) && JSON.stringify(WRITE_ACTIONS.cashbook) === JSON.stringify(WRITE), '15b: cashbook 寫入清單兩邊一致，且就是 adminSave／adminVoid／adminLock／adminUnlock');
-  ok(sb.PERM_GRANTABLE.indexOf('cashbook.write') !== -1 && sb.PERM_LOCKED.indexOf('cashbook.write') === -1, '15c: cashbook.write 可給、且不是鎖碼（人資可在權限設定打開）');
+  ok(sb.PERM_GRANTABLE.indexOf('cashbook.write') !== -1 && sb.PERM_LOCKED.indexOf('cashbook.write') !== -1, '15c: cashbook.write 可給、且是鎖碼（2026-10-25 起只有 admin 能開給人）');
   ok(sb.permName_('cashbook.write') === '收支管理', '15d: 中文名「收支管理」');
   ok(sb.PERM_DEFAULT_RULES.some((r) => r.join('|') === 'hq|fin|*|cashbook.write'), '15e: 財務部門預設規則 hq／fin／*／cashbook.write');
 
