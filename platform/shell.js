@@ -499,8 +499,8 @@ const deptOpenState = new Map();
 const ROLE_ZH = { admin: '系統管理者', manager: '總監', accountant: '會計', storelead: '店長', staff: '員工' };
 
 /**
- * 名字下方的身分文字（2026-10-26 Eason：顯示職稱）：同仁帳號（role staff）顯示自己的職稱，
- * 由 myProfile 的 title_name 取得（每次載入頁面只問一次，回來再補畫）；系統帳號、還沒拿到、沒有職稱 → 照舊顯示角色。
+ * 名字下方的身分文字（2026-10-26 Eason：顯示職稱）：同仁帳號（role staff）顯示「品牌（總部人員＝部門）＋職稱」，
+ * 由 myProfile 的 brand_name／dept_name／title_name 取得（每次載入頁面只問一次，回來再補畫）；系統帳號、還沒拿到、沒有職稱 → 照舊顯示角色。
  */
 const navTitle = { uid: null, text: '' };
 function roleLabel(user) {
@@ -512,10 +512,11 @@ function loadNavTitle(user) {
   navTitle.uid = user.id;
   navTitle.text = '';
   backendCall('platform', 'myProfile', {}).then((res) => {
-    const t = res && res.ok && res.data && res.data.title_name;
+    const d = (res && res.ok && res.data) || {};
     const now = auth.getUser() || {};
-    if (!t || navTitle.uid !== user.id || now.id !== user.id) return;
-    navTitle.text = String(t);
+    if (!d.title_name || navTitle.uid !== user.id || now.id !== user.id) return;
+    // 2026-10-26 Eason：職稱前加品牌名稱；總部人員（有部門）改加部門名稱。例：墨竹亭 店長、資訊部 總監
+    navTitle.text = [d.dept_name || d.brand_name, d.title_name].filter(Boolean).map(String).join(' ');
     const rl = findDescendant(sideUserEl, (n) => n.className === 'rl');
     if (rl) rl.textContent = navTitle.text;
     pageSubEl.textContent = [now.name, navTitle.text].filter(Boolean).join('・');
