@@ -32,6 +32,11 @@
 const TOKEN_STORAGE_KEY = 'dzy.token';
 /** 離線登出沒送到後端時，暫存「那一個」舊 token，下次開頁補送 logout（GPT 複審第 3 條，2026-10-12） */
 export const PENDING_LOGOUT_KEY = 'dzy.pendingLogout';
+/** 認得的手機（2026-10-25 全資料審查 MB-03）：後端登入成功時發的手機憑證，按帳號存 {帳號小寫: 憑證}。
+ *  帶著它登入，別人換來源把帳號整個鎖住時本人照樣進得來（密碼照樣要對）。登出不清（認的是手機，不是這次登入）。
+ *  店裡公用手機多人輪流登入：各帳號各一張，互不覆蓋；最多留 DEVICE_MAX 個帳號，超過丟最舊的。 */
+export const DEVICE_STORAGE_KEY = 'dzy.device';
+const DEVICE_MAX = 20;
 
 // 平台後端網址一律取自 config.js，這裡不留第二份。
 // 2026-08-14 踩過的雷：本檔原本自帶 `const BACKEND_URL = ''`（寫的時候後端還沒部署，
@@ -124,6 +129,36 @@ function writeTokenToStorage(token) {
   }
 }
 
+function readDeviceMap() {
+  try {
+    const m = JSON.parse(localStorage.getItem(DEVICE_STORAGE_KEY) || '{}');
+    return m && typeof m === 'object' && !Array.isArray(m) ? m : {};
+  } catch {
+    return {};
+  }
+}
+
+function readDevice(username) {
+  const v = readDeviceMap()[String(username || '').trim().toLowerCase()];
+  return typeof v === 'string' ? v : '';
+}
+
+function writeDevice(username, device) {
+  if (typeof device !== 'string' || !device) return;
+  const key = String(username || '').trim().toLowerCase();
+  if (!key) return;
+  const m = readDeviceMap();
+  delete m[key];
+  m[key] = device;   // 重新放到最後＝最新
+  const keys = Object.keys(m);
+  keys.slice(0, Math.max(0, keys.length - DEVICE_MAX)).forEach((k) => { delete m[k]; });
+  try {
+    localStorage.setItem(DEVICE_STORAGE_KEY, JSON.stringify(m));
+  } catch {
+    /* 存不了就算了：只是少了「認得的手機」，登入照常 */
+  }
+}
+
 function clearTokenFromStorage() {
   try {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
@@ -169,7 +204,10 @@ export async function login(username, password) {
   await flushPendingLogout();
   let res;
   try {
-    res = await transport({ action: 'login', token: '', payload: { username, password } });
+    const payload = { username, password };
+    const device = readDevice(username);
+    if (device) payload.device = device;
+    res = await transport({ action: 'login', token: '', payload });
   } catch (err) {
     return { ok: false, error: (err && err.message) || '網路連線失敗，請稍後再試' };
   }
@@ -185,6 +223,7 @@ export async function login(username, password) {
 
   applySession(data);
   writeTokenToStorage(data.token);
+  writeDevice(username, data.device);
   return { ok: true };
 }
 

@@ -445,6 +445,53 @@ function flipChar(str, index) {
 })();
 
 // ============================================================
+// E3D. 認得的手機（2026-10-25 全資料審查 MB-03，Eason 定 90 天）：攻擊者換來源湊滿 30 次把帳號整個鎖住時，
+//      本人用曾登入成功的手機（帶 device 憑證）照樣能登入；密碼照樣要對、單一來源鎖照樣有效
+// ============================================================
+(() => {
+  const { sandbox } = freshApp();
+  const LOCKED = { ok: false, error: '嘗試次數過多，請 15 分鐘後再試' };
+  const first = sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, 'myphone00001');
+  const device = first.data && first.data.device;
+  assertTrue(typeof device === 'string' && device.length > 20 && device.length <= 512, 'E3D-a: 登入成功回 device 憑證');
+  const accDevice = sandbox.handleLogin_({ username: 'acc1', password: PW.acc1 }, 'myphone00001').data.device;
+  for (let s = 0; s < 10; s++) {
+    for (let i = 0; i < 3; i++) sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, 'atk' + String(s).padStart(9, '0'));
+  }
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser }, 'newphone0001'), LOCKED, 'E3D-b: 攻擊者錯 30 次後，沒帶憑證的新手機正確密碼被擋');
+  const ok1 = sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser, device }, 'myphone00001');
+  assertTrue(ok1.ok === true, 'E3D-c: ★本人用認得的手機照樣能登入');
+  assertTrue(sandbox.handleLogin_({ username: 'LOCKUSER', password: PW.lockuser, device }, 'myphone00002').ok === true, 'E3D-d: 換網路（來源不同）、帳號大小寫不同，同一支手機仍認得');
+  const wrong = sandbox.handleLogin_({ username: 'lockuser', password: 'wrong-password', device }, 'myphone00003');
+  assertTrue(wrong.ok === false && wrong.error !== LOCKED.error, 'E3D-e: 認得的手機密碼錯照樣失敗（只跳過整個帳號鎖，不跳過密碼）');
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser, device: accDevice }, 'atk000000099'), LOCKED, 'E3D-f: 拿別人帳號的憑證不算');
+  const [pp, sig] = device.split('.');
+  const forged = sandbox.toBase64Url_(sandbox.stringToBytes_(JSON.stringify({ d: 'u999', i: Date.now(), e: Math.floor(Date.now() / 1000) + 9999 }))) + '.' + sig;
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser, device: forged }, 'atk000000098'), LOCKED, 'E3D-g: 竄改內容（簽章對不上）不算');
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser, device: pp + '.' + flipChar(sig, 3) }, 'atk000000097'), LOCKED, 'E3D-h: 竄改簽章不算');
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser, device: 'x'.repeat(600) }, 'atk000000096'), LOCKED, 'E3D-i: 超長字串不算');
+  const expiredPart = sandbox.toBase64Url_(sandbox.stringToBytes_(JSON.stringify({ d: JSON.parse(Buffer.from(pp, 'base64url').toString()).d, i: Date.now(), e: Math.floor(Date.now() / 1000) - 1 })));
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser, device: expiredPart + '.' + sandbox.authDeviceSig_(expiredPart) }, 'atk000000095'), LOCKED, 'E3D-j: 過期（90 天）不算');
+  // 手機憑證不能當登入 token
+  assertTrue(sandbox.verifyToken_(device) === false, 'E3D-k: ★device 憑證拿去 verifyToken_ 驗不過（簽章有 device| 區隔）');
+  assertTrue(sandbox.handleMe_(device).ok === false, 'E3D-l: ★device 憑證不能當登入 token 打 me');
+  // 改密碼／重設／撤回認領（token_after 更新）後舊手機失效
+  sandbox.setTokenAfter_(sandbox.findUserRow_('lockuser').row);
+  assertEqual(sandbox.handleLogin_({ username: 'lockuser', password: PW.lockuser, device }, 'myphone00001'), LOCKED, 'E3D-m: ★token_after 更新後舊憑證失效');
+  // 單一來源鎖照樣有效（有 ipHash 時不跳過）
+  const { sandbox: s2 } = freshApp();
+  const dev2 = s2.handleLogin_({ username: 'lockuser', password: PW.lockuser }, 'srcA00000001').data.device;
+  for (let i = 0; i < 3; i++) s2.handleLogin_({ username: 'lockuser', password: 'wrong-password', device: dev2 }, 'srcA00000001');
+  assertEqual(s2.handleLogin_({ username: 'lockuser', password: PW.lockuser, device: dev2 }, 'srcA00000001'), LOCKED, 'E3D-n: 同一來源錯 3 次的單一來源鎖，認得的手機也照樣擋');
+  // 取不到 ipHash 時以帳號為鍵的鎖＝整個帳號鎖：認得的手機不受影響
+  const { sandbox: s3 } = freshApp();
+  const dev3 = s3.handleLogin_({ username: 'lockuser', password: PW.lockuser }, '').data.device;
+  for (let i = 0; i < 3; i++) s3.handleLogin_({ username: 'lockuser', password: 'wrong-password' }, '');
+  assertEqual(s3.handleLogin_({ username: 'lockuser', password: PW.lockuser }, ''), LOCKED, 'E3D-o: 沒 ipHash 時別人錯 3 次，沒憑證被擋（同舊版）');
+  assertTrue(s3.handleLogin_({ username: 'lockuser', password: PW.lockuser, device: dev3 }, '').ok === true, 'E3D-p: ★沒 ipHash 時認得的手機不受帳號鎖影響');
+})();
+
+// ============================================================
 // F. 停用帳號：login 擋下、me 每次重查 active
 // ============================================================
 (() => {
