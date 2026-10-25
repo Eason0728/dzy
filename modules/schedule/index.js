@@ -12,6 +12,7 @@ const embed = createEmbed({
   query: '&only=schedule',
   allowReturn: false,
   tabs: true,   // 自動排班的四個分頁畫在管理系統頁頂
+  forceGo: ['self', 'approve', 'fixed', 'fixedstaff'],   // 總部／央廚排班分頁：在門市時頁頂沒有，一律送 go，由營運系統自動切店
   tip: '只顯示自動排班；只有本店店長、人資主管、管理員可以排班，其他主管只能查看'
 });
 
