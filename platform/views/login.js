@@ -124,7 +124,7 @@ function renderLoginForm(el, app) {
       <div class="login-card">
         <div class="login-card-form">
       <div class="card">
-        <h1 class="card-title">鼎兆元餐飲集團｜管理系統</h1>
+        <h1 class="card-title"><span class="nowrap">鼎兆元餐飲集團｜</span><span class="nowrap">管理系統</span></h1>
         <div class="toast toast-danger" data-role="error" hidden></div>
         <form data-role="form" class="stack" novalidate>
           <div class="field">
