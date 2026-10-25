@@ -25,6 +25,8 @@ export const FILTERS = [
   ['overdue', '離職日已過未停用'], ['homestopped', '主店打卡被停'], ['flags', '需處理']
 ];
 const FLAG_TEXT = { unit_inactive: '所屬門市已停用', title_ladder: '職稱需重選', dept_inactive: '部門已停用', exec_misplaced: '建議改到鼎兆元總部／管理部' };
+// LINE 開通／重設紀錄（apps-script/platform/LineAuth.gs 寫進 staff_log 的 line_* 事件；docs/line-auth/spec.md §6）
+export const LINE_LOG_TEXT = { line_claim_ok: '用 LINE 送出開通', line_reset_ok: '用 LINE 重設密碼', line_revoke: '停用 LINE', line_fail: '失敗' };
 const CLOCK_TEXT = { updated: '會更新（補上一悟總部）', skipped: '不用更新', custom: '有自訂值，保留不動' };
 
 export function mountList(el, ctx) {
@@ -72,6 +74,7 @@ export function mountList(el, ctx) {
     if (p.reset_locked) a.push(b('unlock', '解鎖忘記密碼'));
     if (['pending', 'rejected', 'active'].indexOf(p.status) !== -1) a.push(b('unclaim', '撤回認領', 'btn-danger'));
     if (p.status === 'unclaimed') a.push(b('rename', '改姓名'));
+    if (canExtra) a.push(b('line', 'LINE 開通／重設'));   // 看紀錄＋停用此人的 LINE 開通／重設（platform.staff）
     a.push(p.status === 'disabled' ? b('enable', '啟用') : b('disable', '停用', 'btn-danger'));
     const extra = clockButtonsHtml(p, viewer); // 員工名單統一：離職／撤銷離職／打卡連結／改名／復職
     return a.join(' ') + (extra ? ' ' + extra : '');
@@ -401,6 +404,32 @@ export function mountList(el, ctx) {
     if (alive) load();
   }
 
+  // LINE 開通／重設：最近紀錄（lineAuthLog）＋「停用此人的 LINE 開通／重設」（lineRevoke，二次確認）
+  async function lineFlow(p) {
+    const who = `${p.emp_no} ${p.name}`;
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'lineAuthLog', { emp_no: p.emp_no }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r || !r.ok) { ctx.ui.toast((r && r.error) || '讀不到 LINE 紀錄', 'danger'); return; }
+    const items = (r.data && r.data.items) || [];
+    const revokedAt = Number(r.data && r.data.line_revoked_at) || 0;
+    const rows = items.map((x) => `<li data-role="line-log-item">${esc(x.at)}　${esc(LINE_LOG_TEXT[x.type] || x.type)}</li>`).join('');
+    const body = domOf(`<p class="text-muted">最近的 LINE 開通／重設紀錄（最多 5 筆）</p>
+      ${rows ? `<ul data-role="line-log">${rows}</ul>` : '<p class="text-muted" data-role="line-log-empty">（沒有 LINE 開通／重設紀錄）</p>'}
+      ${revokedAt ? `<p data-role="line-revoked">已於 ${esc(new Date(revokedAt + 8 * 3600 * 1000).toISOString().slice(0, 16).replace('T', ' '))} 停用；他要重新綁定 LINE、滿 7 天並用 LINE 打過卡才恢復。</p>` : ''}`);
+    const v = await ctx.ui.dialog({ title: `LINE 開通／重設 ${who}`, body, actions: [{ label: '關閉', value: null, variant: 'secondary' }, { label: '停用此人的 LINE 開通／重設', value: 'revoke', variant: 'danger' }] });
+    if (v !== 'revoke') return;
+    if (!(await ctx.ui.confirm(`停用 ${who} 的 LINE 開通／重設？他要重新綁定 LINE、滿 7 天並用 LINE 打過卡，才能再用 LINE 開通或重設密碼。用在懷疑被冒綁時。`))) return;
+    ctx.ui.loading(true);
+    let w;
+    try { w = await ctx.api.call('staff', 'lineRevoke', { emp_no: p.emp_no }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!w || !w.ok) { ctx.ui.toast((w && w.error) || '停用失敗', 'danger'); return; }
+    if (w.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    ctx.ui.toast('已停用此人的 LINE 開通／重設', 'ok');
+  }
+
   async function onAction(e) {
     const btn = e.target.closest ? e.target.closest('[data-act]') : null;
     if (!btn) return;
@@ -409,6 +438,7 @@ export function mountList(el, ctx) {
     const act = btn.getAttribute('data-act');
     const who = `${p.emp_no} ${p.name}`;
     if (isClockAct(act)) { handleClockAct(act, p, clockEnv()); return; }
+    if (act === 'line') { await lineFlow(p); return; }
 
     if (act === 'confirm') {
       const body = domOf(`<p><b>確認前請先打電話給本人核對</b>（手機 ${esc(p.phone)}），確定是他本人填的再按確認。</p>
