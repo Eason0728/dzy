@@ -6,6 +6,7 @@
   ① #/audit-ops/fill（稽核填寫：19 項檢查＋長店名＋未完成說明）
   ② #/staff/clockmap（總部打卡對照：很多筆待確認，姓名／店名很長）
   ③ #/me/clock（店長打卡對照：同上，自己單位）
+  ⑤ #/me/unit（2026-10-25 單位通訊錄多生日、地址：長地址、空值「—」）
 ④（2026-10-18）登入前畫面：375 寬所有輸入框 computed font-size ≥16px（iPhone 不自動放大）、桌機 1280 寬維持 15px；
    #/claim 在 375×812 輸入框頂端 <450px（表單緊接照片下方，不沉到底），375×667 表單與按鈕完整可見、無橫向捲動。
 另外量每個畫面裡所有元素的右緣都不超過視窗寬，抓得出是哪一顆撐出來。
@@ -52,7 +53,8 @@ def main():
         n = 40 + i
         emp = 'DZY%03d' % n
         mock.staff.append({'emp_no': emp, 'name': LONG + str(i), 'status': 'active', 'unit': 'mzt-gf', 'brand': 'mzt', 'title': 'pt',
-                           'hire_date': '2026-01-05', 'last_day': '', 'phone': '0912000%03d' % n})
+                           'hire_date': '2026-01-05', 'last_day': '', 'phone': '0912000%03d' % n,
+                        'birthday': '' if i % 3 == 0 else '1990-02-03', 'address': '' if i % 3 == 0 else '新竹市測試區測試超級長的路名一段一百二十三巷四十五弄六號七樓之八'})
         mock.maps.append({'emp_no': emp, 'store_code': 'mztgf', 'emp_id': 'E%02d' % (30 + i), 'role': 'home', 'state': 'suggested', 'roster_active': True, 'last_punch': '2026-10-12'})
     # 營運稽核：店名加長、多加幾家
     stores = mock.audit_fixture['config']['stores']
@@ -105,6 +107,18 @@ def main():
             lead.wait_for_selector('[data-role="cm-row"]', timeout=10000)
             check(lead.locator('[data-role="cm-row"]').count() >= 14, '③店長打卡對照筆數 ≥14：%d' % lead.locator('[data-role="cm-row"]').count())
             measure(lead, '③ #/me/clock')
+
+            # ⑤（2026-10-25）店長：單位通訊錄多生日、地址兩欄，長地址不撐出橫向捲動（表格只在自己的框內捲）
+            lead.goto(base + '/index.html#/me/unit')
+            rows = lead.locator('[data-keep="me"] [data-role="unit-row"]')
+            rows.first.wait_for(timeout=10000)
+            check(rows.count() >= 18, '⑤單位通訊錄一人一張卡：%d' % rows.count())
+            f = lambda name: lead.locator('[data-keep="me"] [data-role="unit-row"] [data-field="%s"]' % name)
+            check(f('birthday').count() == rows.count() and f('address').count() == rows.count(), '⑤每張卡都有生日、地址')
+            check(f('address').filter(has_text='—').count() >= 2 and f('birthday').filter(has_text='1990-02-03').count() >= 1, '⑤空值「—」、生日完整日期')
+            check(lead.evaluate("[...document.querySelectorAll('[data-keep=\\'me\\'] [data-field=address]')].every(e=>e.getBoundingClientRect().right<=innerWidth)"), '⑤長地址在畫面內換行')
+            measure(lead, '⑤ #/me/unit')
+            lead.screenshot(path=os.path.join(SHOTS, 't12_me_unit_375.png'), full_page=True)
 
             # ④ 登入前畫面：輸入框字級（手機 ≥16px、桌機 15px）與表單位置
             for hero_seed in (0.1, 0.5, 0.9):  # 隨機挑照片的三張都測

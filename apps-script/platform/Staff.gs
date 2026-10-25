@@ -846,18 +846,27 @@ function handleMyUnit_(token) {
   var org = stfReadOrg_();
   var scope = hit ? stfManagerScope_(hit.values, org) : null;
   if (!scope) return { ok: false, error: STF_MSG.UNIT_ONLY_MANAGER };
-  var people = stfAllRows_().map(function (r) { return stfToObj_(r.values, org, false); }).filter(function (p) {
+  // 生日、地址（Eason 2026-10-25）：只給門市與央廚（store 階梯）的單位主管；品牌辦公室、總部照舊不給。
+  // 審查（兩位 Fable）：單位要存在且啟用、職稱要啟用且是門市職稱才給——stfManagerScope_ 本身只比職級，
+  // 通訊錄與打卡共用，不在這裡收緊它（舊行為照舊），只收緊這兩欄。
+  var myUnit = org.unit[scope.unit];
+  var myTitle = org.title[stfStr_(hit.values[STF_COL.title])];
+  var priv = scope.ladder === 'store' && !!myUnit && myUnit.active !== false && (myUnit.ladder || 'store') === 'store' &&
+    !!myTitle && myTitle.active !== false && myTitle.parent === 'store';
+  var people = stfAllRows_().map(function (r) { return stfToObj_(r.values, org, priv); }).filter(function (p) {
     return p.status === 'active' && p.unit === scope.unit && (!scope.sameDept || p.dept === scope.dept);
   }).map(function (p) {
-    return { emp_no: p.emp_no, name: p.name, title: p.title, title_name: p.title_name, phone: p.phone };
+    var o = { emp_no: p.emp_no, name: p.name, title: p.title, title_name: p.title_name, phone: p.phone };
+    if (priv) { o.birthday = p.birthday; o.address = p.address; }
+    return o;
   });
-  return { ok: true, data: { unit_name: scope.unit_name, people: people } };
+  return { ok: true, data: { unit_name: scope.unit_name, private: priv, people: people } };
 }
 
 /**
  * 單位主管的範圍（§6.4 單位通訊錄與 §6.8 認領審核共用同一套判斷）：
  * status＝active、職級達門檻（store rank≥3 店長；hq rank≥2 總監）才回
- * {unit, unit_name, dept, sameDept}；總部單位且本人有部門時 sameDept＝true（只管同單位同部門）。
+ * {unit, unit_name, dept, ladder, sameDept}；總部單位且本人有部門時 sameDept＝true（只管同單位同部門）。
  * 不夠格回 null；總部單位有 active 部門但本人部門空白也回 null（不放大成全總部）。
  */
 function stfManagerScope_(values, org) {
@@ -873,7 +882,7 @@ function stfManagerScope_(values, org) {
   // GPT 複審第 4 條（2026-10-12）：總部單位底下有 active 部門、本人部門卻空白 → 不具資格（往拒絕方向）。
   // 否則 sameDept＝false 會讓他看得到／審得到整個總部所有部門（通訊錄 myUnit 與認領審核共用這裡）。
   if (ladder === 'hq' && dept === '' && stfActiveDeptsOf_(org, unitCode).length) return null;
-  return { unit: unitCode, unit_name: unit ? unit.name : '', dept: dept, sameDept: ladder === 'hq' && dept !== '' };
+  return { unit: unitCode, unit_name: unit ? unit.name : '', dept: dept, ladder: ladder, sameDept: ladder === 'hq' && dept !== '' };
 }
 
 // ============================================================
