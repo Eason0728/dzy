@@ -43,7 +43,7 @@
 |---|---|---|---|
 | T4-1 | 新人考核 | `evNewbieList`／`evNewbieSubmit`＋view | 只列自己可審核的人；一人一次 |
 | T4-2 | 單位結果與填寫進度 | `evUnitResults`、`evProgress`＋view | 品牌總監看得到品牌各店、店長只看本店 |
-| T4-3 | 個人明細與打分 | `evPersonDetail`、`evSupSave`（KPI、加減分、回饋） | 只能對 `stfCanReview_` 為真的人存 |
+| T4-3 | 個人明細與打分 | `evPersonDetail`、`evSupSave`（KPI、加減分、回饋） | 只能對往上一層（stfReviewNeed_）為真的人存 |
 | T4-4 | 列印 PDF | 列印樣式＋檔名 | 無頭 Chrome 印出抬頭含品牌與店名 |
 
 ## P5 設定與搬家

@@ -25,7 +25,10 @@ export const READ_ACTIONS = {
     // 個人帳號第二期（2026-10-17）：權限設定的純讀取；permInit／permMapSave／permEx*／permStoreSave／permAuditSeen 不列（寫入，試跑會攔）
     'permMapGet', 'permExList', 'permStoreGet', 'myPerms', 'permAuditList', 'permWho',
     // 第三期表單簽核（2026-10-18）：純讀取；apvSubmit／apvResubmit／apvWithdraw／apvDecide／apvSign／apvHandle／apvReassign／apvVoid／apvThresholdSave 不列（寫入，試跑會攔）
-    'apvThresholdGet', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta'],
+    'apvThresholdGet', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta',
+    // 績效評核（2026-10-26，docs/eval/plan.md）：純讀取；evSetup／evPeerSubmit／evSelfSubmit／evNewbieSubmit／evSupSave／ev*Save／evFinalize／evUnfinalize／evImportCommit 不列
+    // evImportPreview 只比對姓名、不寫資料
+    'evMe', 'evMyScores', 'evNewbieList', 'evUnitResults', 'evPersonDetail', 'evBankGet', 'evImportPreview'],
   audit: ['getAll'],
   dorm: ['rooms', 'list', 'contract', 'handover'],
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）

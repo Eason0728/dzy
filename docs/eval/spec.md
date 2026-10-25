@@ -54,9 +54,9 @@
 | `eval.read` | 看全集團結果、填寫進度、印 PDF | 總部人資部全部；`ceo`、`gm`、`chair` |
 | `eval.admin` | 定稿／解除定稿、改題庫、KPI 範本、時薪級距、等第獎金表、匯入舊成績 | 總部人資部 `hm`（總監） |
 
-- 「可審核的人」直接用平台現成的 `stfCanReview_`（同仁認領審核那套往上一層）：店長評本店計時、正職；區經理評本店店長；品牌辦公室評店長；廠長評央廚同仁；廚藝總監評廠長（S3 A）。
+- 「可審核的人」直接用平台現成的 `stfReviewScope_`＋`stfScopeMeets_(stfReviewNeed_(目前單位、部門、職稱))`（同仁認領審核那套往上一層；不用 `stfCanReview_`，它看認領送出的 p_* 欄，通過後會清空）：店長評本店計時、正職；區經理評本店店長；品牌辦公室評店長；廠長評央廚同仁；廚藝總監評廠長（S3 A）。
 - 不列進 `PERM_LOCKED`（Q5 A：全依職稱；分數連著獎金，所以 `eval.admin` 預設只給人資總監）。
-- 範圍計算比照 `audit.read.*`：`eval.read`＝all；`eval.read.brand`＝同品牌單位陣列；`eval.manage.own`＝`stfCanReview_` 為真的人。後端每個讀取 action 都先裁切再回傳。
+- 範圍計算比照 `audit.read.*`：`eval.read`＝all；`eval.read.brand`＝同品牌單位陣列；`eval.manage.own`＝上述往上一層為真的人。後端每個讀取 action 都先裁切再回傳。
 
 ### 2.3 匿名
 - 互評分數：任何人（含 `eval.read`）只看得到彙總平均與份數，看不到誰給誰幾分。後端寫入時記評分者，只用來防重複。
