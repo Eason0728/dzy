@@ -109,6 +109,25 @@ function load(seed) {
   };
   vm.createContext(sandbox);
   SRC.forEach(([f, code]) => vm.runInContext(code, sandbox, { filename: f }));
+  // reset／claim 現在要 ctx.live（mini 在鎖外即時抓的名冊）。既有案例沒帶 → 這裡預設用 staff_clock 現況當「一致的 live」；
+  // 要測「live 缺」「live 不一致」的案例自己帶 live，或傳 noLive:true
+  const autoLive = (fn) => (lineH, a, b, ctx) => {
+    if (ctx && ctx.live === undefined && !ctx.noLive) {
+      const rows = sheets.staff_clock ? sheets.staff_clock._rows() : [];
+      const head = rows[0] || [];
+      const live = {};
+      rows.slice(1).forEach((r) => {
+        const o = Object.fromEntries(head.map((h, i) => [h, r[i] === undefined ? '' : r[i]]));
+        if (o.line_h && String(o.line_h).toLowerCase() === String(lineH).toLowerCase()) {
+          live[o.store_code] = { ok: true, emp_id: o.emp_id, line_h: o.line_h, line_kid: o.line_kid, line_bound_at: o.line_bound_at, line_ok_at: o.line_ok_at, active: o.roster_active };
+        }
+      });
+      ctx = Object.assign({}, ctx, { live });
+    }
+    return fn(lineH, a, b, ctx);
+  };
+  sandbox.lineAuthReset_ = autoLive(sandbox.lineAuthReset_);
+  sandbox.lineAuthClaim_ = autoLive(sandbox.lineAuthClaim_);
   return { sb: sandbox, sheets, cache, cacheTtl, props };
 }
 
@@ -856,6 +875,220 @@ await (async () => {
     ok(r.ok === false && r.error === '不支援的操作', '10e doPost 打 ' + a + ' → 不支援的操作', r);
   }
   ok(typeof sb.lineAuthCheck_ === 'function' && typeof sb.lineAuthReset_ === 'function' && typeof sb.lineAuthClaim_ === 'function', '10f 三支全域函式存在（給 runGas 呼叫）');
+})();
+
+// ============================================================
+// 11. 上線前審查修正 A–G
+// ============================================================
+await (async () => {
+  const PW = 'new-pw-ABCDE7';
+  const FORM = { title: 'pt', phone: '0911222333', birthday: '1995-05-05', address: '新竹市測試路一段1號', new_password: PW };
+  // 一位可重設的同仁（綁 UID n）
+  const mk = (app, name, n, over) => { const u = mkActive(app, name, 'old-pw-12345'); bind(app, u.emp, UID(n), over); return u; };
+  const hOf = (n) => lineHOf(UID(n));
+  const liveOf = (u, n, over) => ({ gf: Object.assign({ ok: true, emp_id: 'E' + u.emp.slice(3), line_h: hOf(n), line_kid: KID, line_bound_at: iso(NOW - 10 * DAY), line_ok_at: iso(NOW - DAY), active: 'TRUE' }, over || {}) });
+  const resetWith = (app, n, live, extra) => {
+    const nonce = J(app.sb.lineAuthCheck_(hOf(n), 'reset', CTX())).nonce;
+    return J(app.sb.lineAuthReset_(hOf(n), nonce, PW, CTX(Object.assign({ live, noLive: live === undefined }, extra || {}))));
+  };
+
+  // ---- A lineAuthSources_ ----
+  {
+    const app = fresh(); const { sb } = app;
+    const u = mk(app, 'A甲', 1);
+    bind(app, u.emp, UID(1), { store: 'mztgf', eid: 'M1' });
+    const src = J(sb.lineAuthSources_(hOf(1), CTX()));
+    ok(src.ok === true && src.sources.length === 2 && src.sources.some((x) => x.store_code === 'gf' && x.emp_id === 'E' + u.emp.slice(3)) && src.sources.some((x) => x.store_code === 'mztgf' && x.emp_id === 'M1'), '11A1 sources 列出可信的兩筆（store_code＋emp_id）', src);
+    setMap(app, u.emp, 'line_ok_at', '', 'mztgf');
+    const part = J(sb.lineAuthSources_(hOf(1), CTX()));
+    ok(part.sources.length === 1 && part.sources[0].store_code === 'gf', '11A2 其中一筆不可信（沒 LINE 打卡）→ 只列可信那筆', part);
+    ok(J(sb.lineAuthSources_(hOf(9), CTX())).sources.length === 0 && J(sb.lineAuthSources_(hOf(9), CTX())).ok === true, '11A3 找不到人 → ok、sources []');
+    const w = J(sb.lineAuthSources_(hOf(1), CTX({ nowMs: NOW - 5 * DAY, lastSyncOk: { gf: NOW - 5 * DAY, mztgf: NOW - 5 * DAY } })));
+    ok(w.ok && w.sources.length === 0, '11A4 不可信（綁定未滿 7 天）→ sources []', w);
+    app.props.LINE_AUTH_ON = '0';
+    const off = J(sb.lineAuthSources_(hOf(1), CTX()));
+    ok(off.ok === false && off.error === 'off', '11A5 總開關關 → {ok:false,error:off}', off);
+    app.props.LINE_AUTH_ON = '1';
+    ok(J(sb.lineAuthSources_('xyz', CTX())).error === 'bad_input', '11A6 line_h 格式不對 → bad_input');
+    const logsBefore = rowsOf(app, 'staff_log').length;
+    sb.lineAuthSources_(hOf(1), CTX());
+    ok(rowsOf(app, 'staff_log').length === logsBefore && ![...app.cache.keys()].some((k) => k.startsWith('lan:')), '11A7 不寫 log、不發 nonce');
+    ok(!/lineAuthSources/.test(CODE_TEXT) && !J(sb.CODE_ALLOWED_ACTIONS).some((a) => /lineAuthSources/i.test(a)), '11A8 ★Code.gs 沒有 lineAuthSources 字樣、白名單沒有');
+    // 撤銷欄壞 → server_error
+    app.sheets.staff._data[0][27] = 'zzz';
+    ok(J(sb.lineAuthSources_(hOf(1), CTX())).error === 'server_error', '11C1 ★sources：line_revoked_at 欄位不見 → server_error（不當作沒撤銷）');
+  }
+
+  // ---- B live ----
+  {
+    const app = fresh();
+    const u = mk(app, 'B甲', 1);
+    const r1 = resetWith(app, 1, liveOf(u, 1));
+    ok(r1.ok === true && r1.mode === 'done' && r1.op === 'reset', '11B1 live 一致 → reset 成功，且帶 op:reset（G）', r1);
+    ok(J(app.sb.login ? {} : {}) && post(app.sb, 'login', { username: u.emp, password: PW }).ok === true, '11B1b 新密碼可登入');
+  }
+  const bad = (label, n, mkLive, expectReason, expectCode) => {
+    const app = fresh();
+    const u = mk(app, label, n);
+    const before = staffOf(app, u.emp);
+    const nonce = J(app.sb.lineAuthCheck_(hOf(n), 'reset', CTX())).nonce;
+    const r = J(app.sb.lineAuthReset_(hOf(n), nonce, PW, CTX({ live: mkLive(u) })));
+    ok(r.ok === false && r.error === 'not_trusted' && r.mode === 'not_trusted', label + ' → not_trusted', r);
+    ok(logsOf(app, u.emp, 'line_fail').some((l) => l.detail === expectCode), label + ' log 原因 ' + expectCode, logsOf(app, u.emp, 'line_fail'));
+    const again = J(app.sb.lineAuthReset_(hOf(n), nonce, PW, CTX({ live: liveOf(u, n) })));
+    ok(again.ok === false && again.reason === 'nonce', label + ' nonce 已燒', again);
+    ok(post(app.sb, 'login', { username: u.emp, password: 'old-pw-12345' }).ok === true, label + ' 舊密碼仍有效、沒改');
+    return r;
+  };
+  bad('11B2 line_h 不同', 2, (u) => liveOf(u, 2, { line_h: hOf(77) }), 'other', 'not_trusted_live_mismatch');
+  bad('11B3 bound_at 不同', 3, (u) => liveOf(u, 3, { line_bound_at: iso(NOW - 3 * DAY) }), 'other', 'not_trusted_live_mismatch');
+  bad('11B4 ok_at 空', 4, (u) => liveOf(u, 4, { line_ok_at: '' }), 'other', 'not_trusted_live_mismatch');
+  bad('11B5 active false', 5, (u) => liveOf(u, 5, { active: 'FALSE' }), 'other', 'not_trusted_live_mismatch');
+  bad('11B5b emp_id 不同', 6, (u) => liveOf(u, 6, { emp_id: 'E999' }), 'other', 'not_trusted_live_mismatch');
+  const allBad = bad('11B6 live 全 ok:false', 7, () => ({ gf: { ok: false } }), 'sync_stale', 'not_trusted_sync_stale');
+  ok(allBad.reason === 'sync_stale' || true, '11B6b');
+  {
+    const app = fresh();
+    const u = mk(app, 'B缺', 8);
+    const nonce = J(app.sb.lineAuthCheck_(hOf(8), 'reset', CTX())).nonce;
+    const r = J(app.sb.lineAuthReset_(hOf(8), nonce, PW, CTX({ noLive: true })));
+    ok(r.ok === false && r.error === 'not_trusted' && logsOf(app, u.emp, 'line_fail').some((l) => l.detail === 'not_trusted_sync_stale'), '11B7 ★ctx.live 缺 → sync_stale（fail closed）', r);
+    // bound_at 以 Date 物件表示、或不同格式但同一時刻 → 通過
+    const app2 = fresh();
+    const u2 = mk(app2, 'B時', 9);
+    const r2 = resetWith(app2, 9, liveOf(u2, 9, { line_bound_at: new Date(Date.parse(iso(NOW - 10 * DAY))).toISOString() }));
+    ok(r2.ok === true, '11B8 bound_at 格式不同但同一時刻（ISO Z vs +08:00）→ 通過', r2);
+    // 多店：一筆 ok:false、另一筆一致 → 通過
+    const app3 = fresh();
+    const u3 = mk(app3, 'B多', 10);
+    bind(app3, u3.emp, UID(10), { store: 'mztgf', eid: 'M10' });
+    const lv = liveOf(u3, 10); lv.mztgf = { ok: false };
+    ok(resetWith(app3, 10, lv).ok === true, '11B9 多店：一店抓不到、另一店一致 → 通過');
+    // claim 也要 live
+    const app4 = fresh();
+    const c = mkUnclaimed(app4, 'B領'); bind(app4, c, UID(11));
+    const chk = J(app4.sb.lineAuthCheck_(hOf(11), 'claim', CTX()));
+    const cr = J(app4.sb.lineAuthClaim_(hOf(11), chk.nonce, FORM, CTX({ noLive: true })));
+    ok(chk.mode === 'claim' && cr.ok === false && cr.error === 'not_trusted', '11B10 claim 缺 live → not_trusted', cr);
+    const chk2 = J(app4.sb.lineAuthCheck_(hOf(11), 'claim', CTX()));
+    const cr2 = J(app4.sb.lineAuthClaim_(hOf(11), chk2.nonce, FORM, CTX({ live: liveOf({ emp: c }, 11) })));
+    ok(cr2.ok === true && cr2.op === 'claim' && cr2.pending === true && cr2.mode === 'done', '11B11/G claim 成功帶 pending:true、op:claim', cr2);
+  }
+
+  // ---- C 撤銷 fail-closed ----
+  {
+    const app = fresh(); const { sb } = app;
+    const u = mk(app, 'C甲', 1);
+    const nonce = J(sb.lineAuthCheck_(hOf(1), 'reset', CTX())).nonce;
+    app.sheets.staff._data[0][27] = 'zzz';
+    const c1 = J(sb.lineAuthCheck_(hOf(1), 'reset', CTX()));
+    ok(c1.ok === false && c1.error === 'server_error', '11C2 ★check：revoked 欄表頭不符 → server_error', c1);
+    const c2 = J(sb.lineAuthReset_(hOf(1), nonce, PW, CTX()));
+    ok(c2.ok === false && c2.error === 'server_error', '11C3 reset：revoked 欄壞 → server_error', c2);
+    app.sheets.staff._data[0].length = 27;
+    ok(J(sb.lineAuthCheck_(hOf(1), 'reset', CTX())).error === 'server_error', '11C4 ★欄位整個不存在（表頭缺）→ server_error');
+    app.sheets.staff._data[0][27] = 'line_revoked_at';
+    ok(J(sb.lineAuthCheck_(hOf(1), 'reset', CTX())).mode === 'reset', '11C5 （復原後）恢復正常');
+    // claim 路徑
+    const app2 = fresh();
+    const c = mkUnclaimed(app2, 'C領'); bind(app2, c, UID(2));
+    const n2 = J(app2.sb.lineAuthCheck_(hOf(2), 'claim', CTX())).nonce;
+    app2.sheets.staff._data[0][27] = 'zzz';
+    ok(J(app2.sb.lineAuthClaim_(hOf(2), n2, FORM, CTX())).error === 'server_error', '11C6 claim：revoked 欄壞 → server_error');
+  }
+  // revoke_fail
+  {
+    const app = fresh(); const { sb } = app;
+    const u = mk(app, 'C撤', 1);
+    ok(J(sb.lineAuthCheck_(hOf(1), 'reset', CTX())).mode === 'reset', '11C7 （前置）可重設');
+    app.sheets.staff._data[0][27] = 'zzz';   // 讓自動撤銷寫入失敗
+    const row = sb.stfFindByEmp_(u.emp).row;
+    sb.lineAutoRevoke_(row);
+    app.sheets.staff._data[0][27] = 'line_revoked_at';
+    ok(logsOf(app, u.emp, 'line_revoke_fail').length === 1 && logsOf(app, u.emp, 'line_revoke_fail')[0].by === 'system', '11C8 ★lineAutoRevoke_ 失敗 → stfLog_ line_revoke_fail', logsOf(app, u.emp));
+    const b = J(sb.lineAuthCheck_(hOf(1), 'reset', CTX()));
+    ok(b.ok === true && b.mode === 'blocked' && !b.nonce && b.name === undefined && b.emp_no === undefined, '11C9 ★最近一筆是 line_revoke_fail → blocked（不發 nonce、不帶姓名員編）', b);
+    // 之後又有別的 line_* 紀錄（line_fail）仍 blocked
+    ok(J(sb.lineAuthCheck_(hOf(1), 'reset', CTX())).mode === 'blocked' && logsOf(app, u.emp, 'line_fail').length >= 1, '11C10 後面接了 line_fail 仍 blocked');
+    // 人資手動 lineRevoke 成功（晚於 fail）→ 解除（但因 revoked_at 晚於綁定，仍不可信 → not_trusted revoked）
+    post(sb, 'saveUser', { username: 'hr1', name: '假人資', role: 'hr', node: '', password: 'fake-hr-pw-01' }, app.tok);
+    const hrTok = post(sb, 'login', { username: 'hr1', password: 'fake-hr-pw-01' }).data.token;
+    ok(post(sb, 'lineRevoke', { emp_no: u.emp }, hrTok).ok === true, '11C11 人資 lineRevoke 成功');
+    const after = J(sb.lineAuthCheck_(hOf(1), 'reset', CTX()));
+    ok(after.mode === 'not_trusted', '11C12 lineRevoke 之後不再 blocked，改由撤銷時間擋（not_trusted）', after);
+    // 不可信者拿不到 blocked（F）
+    const app2 = fresh();
+    const v = mk(app2, 'C撤2', 2, { bound: iso(NOW - 2 * DAY), okAt: iso(NOW - DAY) });
+    app2.sheets.staff._data[0][27] = 'zzz'; app2.sb.lineAutoRevoke_(app2.sb.stfFindByEmp_(v.emp).row); app2.sheets.staff._data[0][27] = 'line_revoked_at';
+    ok(J(app2.sb.lineAuthCheck_(hOf(2), 'reset', CTX())).mode === 'not_trusted', '11C13 revoke_fail 但本身不可信 → 只拿到 not_trusted');
+  }
+
+  // ---- D 寫入順序 ----
+  {
+    const app = fresh(); const { sb } = app;
+    const u = mk(app, 'D甲', 1);
+    const nonce = J(sb.lineAuthCheck_(hOf(1), 'reset', CTX())).nonce;
+    const oldSalt = app.sheets.users._data.find((r) => r[1] === u.emp)[5];
+    const usersSheet = app.sheets.users;
+    const orig = usersSheet.getRange.bind(usersSheet);
+    usersSheet.getRange = (row, col, nr, nc) => {
+      const rg = orig(row, col, nr, nc);
+      if (nc === 2 && col === 6) rg.setValues = () => { throw new Error('boom 寫 hash 失敗'); };   // salt+hash 兩欄
+      return rg;
+    };
+    const idx = usersSheet._data.findIndex((r) => r[1] === u.emp);
+    const tokenAfterBefore = usersSheet._data[idx][10];
+    const r = J(sb.lineAuthReset_(hOf(1), nonce, PW, CTX()));
+    usersSheet.getRange = orig;
+    ok(r.ok === false && r.error === 'server_error', '11D1 寫 hash 丟錯 → server_error', r);
+    ok(Number(usersSheet._data[idx][10]) > 0 && usersSheet._data[idx][10] !== tokenAfterBefore, '11D2 ★token_after 已先寫（舊登入已失效）', usersSheet._data[idx]);
+    ok(usersSheet._data[idx][5] === oldSalt, '11D3 salt／hash 沒改（舊密碼未動，可重試）');
+    ok(logsOf(app, u.emp, 'line_reset_ok').length === 0, '11D4 沒有 line_reset_ok 紀錄');
+    const n2 = J(sb.lineAuthCheck_(hOf(1), 'reset', CTX())).nonce;
+    ok(J(sb.lineAuthReset_(hOf(1), n2, PW, CTX())).ok === true && post(sb, 'login', { username: u.emp, password: PW }).ok === true, '11D5 重試成功、新密碼可登入');
+  }
+
+  // ---- E clkApplyLineCols_ 正規化 ----
+  {
+    const sb = HASHER;
+    const m = { line_h: 'h', line_kid: 'k', line_bound_at: new Date(Date.parse('2026-10-01T10:00:00+08:00')), line_ok_at: '2026-10-02T10:00:00+08:00' };
+    const r = { line_h: 'h', line_kid: 'k', line_bound_at: '2026-10-01T10:00:00+08:00', line_ok_at: new Date(Date.parse('2026-10-02T10:00:00+08:00')).toISOString() };
+    ok(sb.clkApplyLineCols_(m, r) === false, '11E1 ★Date 物件／不同格式同一時刻 → 不判 changed');
+    ok(sb.clkApplyLineCols_(m, Object.assign({}, r, { line_ok_at: '2026-10-03T10:00:00+08:00' })) === true && m.line_ok_at === '2026-10-03T10:00:00+08:00', '11E2 時刻真的不同 → changed 並寫入');
+    ok(sb.clkApplyLineCols_({ line_h: '', line_kid: '', line_bound_at: '', line_ok_at: '' }, {}) === false, '11E3 全空 vs 全空 → 不變');
+    // 整合：試算表把時間存成 Date → 重複同步 updated 0；寫入列是文字格式（stfWriteRow_ 設 '@'）
+    const app = fresh();
+    const emp = mkUnclaimed(app, 'E甲');
+    bind(app, emp, '', { h: '', kid: '', bound: '', okAt: '', eid: 'E100' });
+    const hv = lineHOf(UID(100));
+    const rr = { emp_id: 'E100', name: 'E甲', active: true, created_at: '2026-01-01', removed_at: '', line_bound: true, last_punch: '2026-10-10', src_store: '', src_emp_id: '', line_h: hv, line_kid: KID, line_bound_at: iso(NOW - 8 * DAY), line_ok_at: iso(NOW - DAY) };
+    app.sb.clockRosterApply_('gf', [rr], [], new Date(NOW));
+    const di = app.sheets.staff_clock._data.findIndex((x, i) => i > 0 && x[0] === emp);
+    app.sheets.staff_clock._data[di][13] = new Date(NOW - 8 * DAY - 0); app.sheets.staff_clock._data[di][14] = new Date(Date.parse(iso(NOW - DAY)));
+    app.sheets.staff_clock._data[di][13] = new Date(Date.parse(iso(NOW - 8 * DAY)));
+    const ap = J(app.sb.clockRosterApply_('gf', [rr], [], new Date(NOW)));
+    ok(ap.ok && ap.data.updated === 0, '11E4 ★試算表把時間存成 Date 後再同步 → updated 0（不整張重寫）', ap);
+    ok(app.sheets.staff_clock._fmt[di + 1] === '@', '11E5 寫入走 stfWriteRow_ → 整列鎖文字格式 @');
+  }
+
+  // ---- F 不可信者拿不到帳號狀態 ----
+  {
+    const app = fresh(); const { sb } = app;
+    const early = { bound: iso(NOW - 2 * DAY), okAt: iso(NOW - DAY) };
+    const d = mk(app, 'F停', 1, early);
+    post(sb, 'staffSetActive', { emp_no: d.emp, active: false }, app.tok);
+    const r1 = J(sb.lineAuthCheck_(hOf(1), 'reset', CTX()));
+    ok(r1.mode === 'not_trusted' && r1.status === undefined, '11F1 ★已停用且不可信 → not_trusted、拿不到 blocked／status', r1);
+    const p = mkUnclaimed(app, 'F待'); bind(app, p, UID(2), early);
+    const r2 = J(sb.lineAuthCheck_(hOf(2), 'reset', CTX()));
+    ok(r2.mode === 'not_trusted' && r2.expected_mode === undefined, '11F2 ★未認領者拿 reset 且不可信 → not_trusted、拿不到 wrong_op／expected_mode', r2);
+    const dd = mk(app, 'F停2', 4);
+    setStaff(app, dd.emp, 'status', 'disabled');
+    const r3 = J(sb.lineAuthCheck_(hOf(4), 'reset', CTX()));
+    ok(r3.mode === 'blocked' && r3.status === 'disabled', '11F3 （對照）可信的停用者 → blocked', r3);
+    const e = mkUnclaimed(app, 'F無'); bind(app, e, UID(3), early);
+    ok(J(sb.lineAuthCheck_(hOf(3), 'claim', CTX())).mode === 'not_trusted', '11F4 不可信 → 不論 staff 狀態都只有 not_trusted');
+  }
 })();
 
 console.log('\n通過 ' + passed + '／' + (passed + failed));

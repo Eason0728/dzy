@@ -9,7 +9,8 @@
  *   3. 人資用的兩支 action（進分派表）：lineRevoke（停用某人的 LINE 開通／重設）、lineAuthLog（最近 5 筆 line_* 紀錄）
  *
  * ctx 形狀（由呼叫端傳入，函式不自己找時間與狀態）：
- *   { nowMs, kid, lastSyncOk: { 店代碼: 該店最後成功同步毫秒 } }
+ *   { nowMs, kid, lastSyncOk: { 店代碼: 該店最後成功同步毫秒 }, live }
+ *   live（只有 reset／claim 要）：{ 店代碼: {ok:true, emp_id, line_h, line_kid, line_bound_at, line_ok_at, active} | {ok:false} }，mini 在鎖外即時抓的名冊；缺＝sync_stale
  *   （lineTrust_ 另吃 ctx.revoked：{ 大寫員編: staff.line_revoked_at 毫秒 }，lineAuthCheck_ 等自己從 staff 分頁讀）
  *
  * ⚠ staff_log 只寫原因代碼，絕不寫 line_h、userId、姓名、手機、生日、地址、密碼。
@@ -163,6 +164,16 @@ function lineReadRevokedMap_() {
   return map;
 }
 
+/**
+ * fail-closed 版：欄位表頭找不到（缺／不符／分頁不在）或讀取丟錯 → 丟錯（呼叫端回 server_error），絕不當作「沒有撤銷」。
+ * check／sources／reset／claim 一律用這支；handleLineAuthLog_（只是顯示）才用寬鬆版 lineReadRevokedMap_。
+ */
+function lineReadRevokedMapStrict_() {
+  var st = lineRevokedColState_();
+  if (st !== 'ok') throw new Error('staff.' + LINE_REVOKED_HEADER + ' 欄不可用：' + st);
+  return lineReadRevokedMap_();
+}
+
 /** 寫 staff 該列的 line_revoked_at。回 null＝成功，否則錯誤字串（表頭不符一律停） */
 function lineMarkRevoked_(row, ms) {
   var st = lineRevokedColState_();
@@ -176,14 +187,38 @@ function lineMarkRevoked_(row, ms) {
   return null;
 }
 
-/** 停用同仁、撤回認領、退回認領時自動呼叫：失敗只記伺服器端 console，不擋原本的動作 */
+/**
+ * 停用同仁、撤回認領、退回認領時自動呼叫：失敗不擋原本的動作，但留兩道痕跡——
+ * console，以及 staff_log 的 line_revoke_fail（lineAuthCheck_ 看到最近一筆撤銷紀錄是它，就把該同仁一律 blocked，直到人資手動 lineRevoke 成功）
+ */
 function lineAutoRevoke_(row) {
+  var failed = false;
   try {
     var err = lineMarkRevoked_(row, Date.now());
-    if (err) console.error('[lineAutoRevoke_] ' + err);
+    if (err) { failed = true; console.error('[lineAutoRevoke_] ' + err); }
   } catch (e) {
+    failed = true;
     console.error('[lineAutoRevoke_] ' + (e && e.message ? e.message : e));
   }
+  if (!failed) return;
+  try {
+    var emp = stfNormEmp_(stfSheet_(STF_SHEET).getRange(row, 1, 1, 1).getValues()[0][0]);
+    stfLog_(emp, 'line_revoke_fail', 'system', '');
+  } catch (e2) {
+    console.error('[lineAutoRevoke_] log ' + (e2 && e2.message ? e2.message : e2));
+  }
+}
+
+/** 該同仁最近一筆「撤銷類」紀錄是不是 line_revoke_fail（晚於最後一次 line_revoke）。讀不到 log 丟錯＝fail closed */
+function lineRevokeFailed_(emp) {
+  var rows = stfReadRows_(STF_SHEET_LOG, STF_LOG_HEADERS.length);
+  for (var i = rows.length - 1; i >= 0; i--) {
+    if (stfNormEmp_(rows[i][1]) !== emp) continue;
+    var ev = stfStr_(rows[i][2]);
+    if (ev === 'line_revoke_fail') return true;
+    if (ev === 'line_revoke') return false;
+  }
+  return false;
 }
 
 // ============================================================
@@ -218,7 +253,8 @@ function lineCtx_(ctx) {
   return {
     nowMs: isFinite(now) && ctx.nowMs !== null && ctx.nowMs !== '' ? now : Date.now(),
     kid: ctx.kid === undefined || ctx.kid === null ? '' : String(ctx.kid),
-    lastSyncOk: ctx.lastSyncOk && typeof ctx.lastSyncOk === 'object' ? ctx.lastSyncOk : {}
+    lastSyncOk: ctx.lastSyncOk && typeof ctx.lastSyncOk === 'object' ? ctx.lastSyncOk : {},
+    live: ctx.live && typeof ctx.live === 'object' ? ctx.live : undefined   // 缺＝reset／claim 一律 sync_stale（fail closed）
   };
 }
 
@@ -264,15 +300,69 @@ function lineClaimPlan_(empNo, maps, org) {
 }
 
 /**
- * 查＋判斷（不上鎖、不發 nonce、不寫 log；check／reset／claim 共用）。
- * 回內部物件 { mode, emp_no, ... }；mode：not_bound／ambiguous／blocked／wrong_op／not_trusted／need_review／claim／reset。
+ * 找人＋可信判斷（不上鎖、不發 nonce、不寫 log；check／sources／reset／claim 共用）。
+ * 撤銷資料讀不到會丟錯（呼叫端轉 server_error）。
+ * 回 { early, emp, trusted }：early＝not_bound／ambiguous／not_trusted 的 core；否則 trusted＝可信的 staff_clock 列（≥1）
  */
-function lineCheckCore_(lineH, op, ctx) {
+function lineTrustPhase_(lineH, c) {
   var maps = clkMaps_();
   var f = lineFind_(lineH, maps);
-  if (f.status === 'not_bound') return { mode: 'not_bound' };
-  if (f.status === 'ambiguous') return { mode: 'ambiguous', code: 'ambiguous' };
+  if (f.status === 'not_bound') return { early: { mode: 'not_bound' }, maps: maps };
+  if (f.status === 'ambiguous') return { early: { mode: 'ambiguous', code: 'ambiguous' }, maps: maps };
   var emp = f.emp_no;
+  var tctx = { nowMs: c.nowMs, kid: c.kid, lastSyncOk: c.lastSyncOk, revoked: lineReadRevokedMapStrict_() };
+  var results = f.rows.map(function (r) { return lineTrust_(r, tctx); });
+  var trusted = f.rows.filter(function (r, i) { return results[i].trusted; });
+  if (!trusted.length) {
+    var rank = function (r) { return (r.reason === 'wait' || r.reason === 'need_line_punch') ? 0 : (r.reason === 'sync_stale' ? 1 : 2); };
+    results.sort(function (a, b) { return rank(a) - rank(b) || a.days_left - b.days_left; });
+    var best = results[0];
+    var pub = (best.reason === 'wait' || best.reason === 'need_line_punch' || best.reason === 'sync_stale') ? best.reason : 'other';
+    return { early: { mode: 'not_trusted', emp_no: emp, reason: pub, days_left: best.days_left, need_line_punch: best.need_line_punch,
+      code: 'not_trusted_' + best.reason }, maps: maps };
+  }
+  return { early: null, emp: emp, trusted: trusted, maps: maps };
+}
+
+/** live 欄位 emp_id／line_h 的比對用正規化 */
+function lineNormId_(v) { return String(v === undefined || v === null ? '' : v).trim().toUpperCase(); }
+
+/**
+ * 鎖內重查用：可信列至少一筆在 mini 即時抓的名冊（ctx.live[店代碼]）裡仍然成立——
+ * ok:true、emp_id 相同、line_h 相同、line_bound_at 同一時刻、line_ok_at 非空、active 為真。
+ * 回 '' ＝通過；'sync_stale'＝沒有任何可信列拿到即時資料（或 live 缺）；'live_mismatch'＝有即時資料但不一致
+ */
+function lineLiveCheck_(trusted, live) {
+  if (!live || typeof live !== 'object') return 'sync_stale';
+  var anyLive = false;
+  for (var i = 0; i < trusted.length; i++) {
+    var r = trusted[i];
+    var L = live[String(r.store_code).trim().toLowerCase()] || live[r.store_code];
+    if (!L || L.ok !== true) continue;
+    anyLive = true;
+    var lb = lineMs_(L.line_bound_at), rb = lineMs_(r.line_bound_at);
+    var lok = L.line_ok_at === undefined || L.line_ok_at === null ? '' : String(L.line_ok_at).trim();
+    if (lineNormId_(L.emp_id) === lineNormId_(r.emp_id) &&
+        String(L.line_h === undefined || L.line_h === null ? '' : L.line_h).trim().toLowerCase() === String(r.line_h).trim().toLowerCase() &&
+        isFinite(lb) && isFinite(rb) && lb === rb && lok !== '' && lineStrictTrue_(L.active)) return '';
+  }
+  return anyLive ? 'live_mismatch' : 'sync_stale';
+}
+
+/**
+ * 查＋判斷。needLive＝reset／claim 的鎖內重查（要求 ctx.live 佐證）；check 不要求。
+ * 回內部物件 { mode, emp_no, ... }；mode：not_bound／ambiguous／blocked／wrong_op／not_trusted／need_review／claim／reset。
+ * 順序：找人 → 可信 → (live) → 撤銷失敗 → 帳號狀態。不可信的人拿不到任何帳號狀態（blocked／wrong_op／need_review 都在可信之後）。
+ */
+function lineCheckCore_(lineH, op, ctx, needLive) {
+  var tp = lineTrustPhase_(lineH, ctx);
+  if (tp.early) return tp.early;
+  var maps = tp.maps, emp = tp.emp;
+  if (needLive) {
+    var lv = lineLiveCheck_(tp.trusted, ctx.live);
+    if (lv) return { mode: 'not_trusted', emp_no: emp, reason: lv === 'sync_stale' ? 'sync_stale' : 'other', days_left: 0, need_line_punch: false, code: 'not_trusted_' + lv };
+  }
+  if (lineRevokeFailed_(emp)) return { mode: 'blocked', emp_no: emp, status: 'disabled', code: 'blocked_revoke_fail' };
   var hit = stfFindByEmp_(emp);
   if (!hit) return { mode: 'need_review', emp_no: emp, code: 'need_review_no_staff' };
   var status = stfStr_(hit.values[STF_COL.status]);
@@ -282,17 +372,6 @@ function lineCheckCore_(lineH, op, ctx) {
   var want = status === 'unclaimed' ? 'claim' : (status === 'active' ? 'reset' : '');
   if (!want) return { mode: 'need_review', emp_no: emp, code: 'need_review_status' };
   if (op !== want) return { mode: 'wrong_op', emp_no: emp, expected_mode: want, code: 'wrong_op' };
-
-  var tctx = { nowMs: ctx.nowMs, kid: ctx.kid, lastSyncOk: ctx.lastSyncOk, revoked: lineReadRevokedMap_() };
-  var results = f.rows.map(function (r) { return lineTrust_(r, tctx); });
-  if (!results.some(function (r) { return r.trusted; })) {
-    var rank = function (r) { return (r.reason === 'wait' || r.reason === 'need_line_punch') ? 0 : (r.reason === 'sync_stale' ? 1 : 2); };
-    results.sort(function (a, b) { return rank(a) - rank(b) || a.days_left - b.days_left; });
-    var best = results[0];
-    var pub = (best.reason === 'wait' || best.reason === 'need_line_punch' || best.reason === 'sync_stale') ? best.reason : 'other';
-    return { mode: 'not_trusted', emp_no: emp, reason: pub, days_left: best.days_left, need_line_punch: best.need_line_punch,
-      code: 'not_trusted_' + best.reason };
-  }
 
   var name = stfStr_(hit.values[STF_COL.name]);
   if (want === 'reset') return { mode: 'reset', emp_no: emp, name: name };
@@ -350,6 +429,25 @@ function lineAuthCheck_(lineH, op, ctx) {
   });
 }
 
+/**
+ * 給 mini 在鎖外先抓即時名冊用：回這個 line_h「可信」的 staff_clock 列（只列 store_code＋emp_id）。
+ * 規則與 check 相同（找人、可信、撤銷）；不發 nonce、不寫 log、不上鎖。不可信／找不到／對到多人 → sources:[]。
+ * 撤銷資料讀不到 → server_error（fail closed）。
+ */
+function lineAuthSources_(lineH, ctx) {
+  if (!lineOn_()) return { ok: false, error: 'off' };
+  if (!lineHArgOk_(lineH)) return lineErr_('bad_input', LINE_MSG.BAD_INPUT);
+  var c = lineCtx_(ctx);
+  try {
+    var tp = lineTrustPhase_(lineH, c);
+    if (tp.early) return { ok: true, sources: [] };
+    return { ok: true, sources: tp.trusted.map(function (r) { return { store_code: r.store_code, emp_id: r.emp_id }; }) };
+  } catch (e) {
+    console.error('[lineAuthSources_] ' + (e && e.message ? e.message : e));
+    return lineErr_('server_error', LINE_MSG.SERVER);
+  }
+}
+
 /** 用 check 發的 nonce 重設密碼。成功回 { ok:true, mode:'done', op:'reset' } */
 function lineAuthReset_(lineH, nonce, newPw, ctx) {
   if (!lineOn_()) return lineErr_('off', LINE_MSG.OFF);
@@ -365,7 +463,7 @@ function lineAuthReset_(lineH, nonce, newPw, ctx) {
     if (pwErr) return lineErr_('bad_input', pwErr);
     lineNonceDrop_(nonce);   // 從這裡起一律作廢（一次性）
 
-    var core = lineCheckCore_(lineH, 'reset', c);
+    var core = lineCheckCore_(lineH, 'reset', c, true);
     if (core.mode !== 'reset' || core.emp_no !== rec.emp_no) {
       lineLogFail_(core.emp_no || rec.emp_no, core.code || 'recheck_mismatch');
       return lineModeErr_(core.mode === 'reset' ? { mode: 'wrong_op' } : core);
@@ -375,9 +473,11 @@ function lineAuthReset_(lineH, nonce, newPw, ctx) {
     var userRow = hit ? findUsrRowById_(stfStr_(hit.values[STF_COL.user_id])) : null;
     if (!hit || !userRow) return lineErr_('server_error', LINE_MSG.SERVER);
 
+    // 寫入順序偏安全：先讓舊登入失效，再換密碼，最後才清鎖與記 log。
+    // 中途失敗最壞＝使用者被登出但密碼沒改（可重試），不會出現「密碼換了、舊 token 還有效」
+    setTokenAfter_(userRow.row);
     var salt = Utilities.getUuid();
     stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.salt + 1, 1, 2).setValues([[salt, hashPassword_(newPw, salt)]]);
-    setTokenAfter_(userRow.row);   // 舊登入全部失效
     clearLoginState_(emp);
     var v = hit.values.slice();
     v[STF_COL.reset_fail] = 0;
@@ -415,7 +515,7 @@ function lineAuthClaim_(lineH, nonce, form, ctx) {
     var rec = lineNonceGet_(nonce, lineH, 'claim');
     if (!rec) return lineErr_('bad_input', LINE_MSG.NONCE, { reason: 'nonce' });
 
-    var core = lineCheckCore_(lineH, 'claim', c);
+    var core = lineCheckCore_(lineH, 'claim', c, true);
     if (core.mode !== 'claim' || core.emp_no !== rec.emp_no) {
       lineNonceDrop_(nonce);
       if (core.mode === 'need_review') { lineLogFail_(core.emp_no, core.code); return { ok: true, mode: 'need_review' }; }

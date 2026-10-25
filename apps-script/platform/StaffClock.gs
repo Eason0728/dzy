@@ -1497,11 +1497,27 @@ function clkFail_(j, code, message, retryable, d) {
 // ---- 名冊同步 ----
 
 /** 把 svc_roster 列的 LINE 四鍵寫進對照列 m（舊版名冊沒有這些鍵＝寫空字串）。回 true＝有變動 */
+/** 時間值（Date 或字串）→ 毫秒；空或不是時間 → NaN（本檔自帶，舊測試沙盒不一定載入 LineAuth.gs） */
+function clkLineMs_(x) {
+  if (x instanceof Date) return x.getTime();
+  var t = stfStr_(x);
+  return t ? Date.parse(t) : NaN;
+}
+
 function clkApplyLineCols_(m, r) {
   var changed = false;
   CLK_MAP_LINE.forEach(function (k) {
     var v = stfStr_(r && r[k]);
-    if (stfStr_(m[k]) !== v) { m[k] = v; changed = true; }
+    var cur = m[k];
+    var same;
+    if (k === 'line_bound_at' || k === 'line_ok_at') {
+      // 試算表可能把時間字串轉成 Date：兩邊都轉毫秒比（同一時刻不重寫）；都不是時間才退回字串比對
+      var a = clkLineMs_(cur), b = clkLineMs_(v);
+      same = (isFinite(a) && isFinite(b)) ? a === b : stfStr_(cur) === v;
+    } else {
+      same = stfStr_(cur) === v;
+    }
+    if (!same) { m[k] = v; changed = true; }
   });
   return changed;
 }
