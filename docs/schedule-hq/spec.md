@@ -74,9 +74,15 @@ CREATE TABLE sch_self_pending (
 - 起用日（Q4 現在就開始）：`mode_from=2026-11-01`（T01 起日；10 月 T00 是試排期、不送 LINE，不動）。切換那一刻對 11/1 起已存在的格子：**請假格（`L`）保留**，其他（門市模式排的上班／休假）一律依固定規則重產；產生後重送 T01、T02。之後每月 20 號產生下個月時，不覆蓋廠長在固定模式手改的格子（`source='manual'`）。CF 在 `sch_periods` 的鎖定狀態固定模式不看。
 
 ## 5. 管理系統畫面（~/dzy，modules/schedule）
-- 排班管理頁頂分頁改成**三個固定入口＋各自子分頁**：`門市排班`（現有 iframe，四個子分頁）／`總部排班`／`央廚排班`。三個都由營運系統畫面提供（`?embed=dzy&only=schedule&mode=store|self|fixed`），沿用 iframe＋入場券，不在管理系統另做原生畫面（資料在營運系統，畫面跟著走最少接縫）。
-  - 平台 `dynamicTabs` 只有一排：頁頂顯示 `門市排班｜總部排班｜央廚排班`（`views` 改成三個固定 view：`store`／`self`／`fixed`，`dynamicTabs` 關掉），子分頁留在 iframe 裡。
-  - 權限：選單 `platform.sched` 擴大＝店長同等職＋人資主管＋管理員＋**總部同仁**（`ladder hq` 或 `office` 的 active staff，Q 需求第 0 節第 1 題）＋廠長（已含在 sm/fm/am）。各分頁再由營運系統判斷能不能用（沒權限顯示「沒有權限」）。
+- **頁頂分頁照舊由營運系統送**（動態分頁，管理系統平台層不改）。營運系統在 `?only=schedule` 依「目前所在的店」送不同的分頁：
+  | 目前在 | 頁頂分頁（* 有權限才出現） |
+  |---|---|
+  | 門市 | 班表｜指定與需求｜同仁｜班別與設定｜總部排班*｜央廚排班* |
+  | 總部 HQ | 我的班表｜部屬核准*｜門市排班*｜央廚排班* |
+  | 央廚 CF | 央廚班表｜固定班別｜門市排班*｜總部排班* |
+  - 分頁 id：`board needs staff shifts`（門市）、`self` `approve`（總部）、`fixed` `fixedstaff`（央廚）、跨入口 `go-store` `go-hq` `go-cf`。點跨入口分頁＝營運系統自動切店（沿用個人登入的換店流程，整頁重載），切完停在該入口第一個分頁；`go-store` 回上次所在門市（沒有就第一家）。
+  - 只能進總部的人（一般總部同仁）：一進來就在 HQ、沒有門市分頁。
+  - 權限：選單 `platform.sched` 擴大＝店長同等職＋人資主管＋管理員＋**總部同仁**（`ladder hq` 或 `office` 的 active staff）。各分頁內容由營運系統判斷（沒權限＝沒有該分頁）。
 - **營運系統畫面**（`web/modules/schedule/`）新增兩個入口：
   - `self.js`（總部排班）：上方月份切換＋狀態列（草稿／已送出／已核准／退回原因）；月曆每格點了選「班別／休息日／例假／特休／事假…／國定假日假」；按「送出」；主管看到「部屬」清單（每人一列狀態），點進去看月曆，按「核准」「退回」（必填原因）。
   - `fixed.js`（央廚排班）：月曆總表（人×日），只有廠長能改格子；同仁頁設固定班別；「重新產生下個月」按鈕（不覆蓋手改）。
@@ -87,7 +93,7 @@ CREATE TABLE sch_self_pending (
 |---|---|---|
 | dzy→營運系統身分 `ident` | 加 `self:[{clock,emp_id,approval}]` | dzy StoreOps.gs＋契約檔；營運系統 person.js、dzy.js 讀取（缺＝[]） |
 | `svc/sched-alerts` 回傳 | 加 `self` 物件 | 營運系統＋dzy alerts.js（缺＝不顯示） |
-| 嵌入網址 | `&mode=store|self|fixed` | 營運系統 config.js＋dzy modules/schedule |
+| 頁頂分頁 id | 加 `self approve fixed fixedstaff go-store go-hq go-cf` | 營運系統 shell.js；dzy 不改平台 |
 | 打卡 SchedPub | **不變** | — |
 
 ## 7. 測試重點
@@ -127,11 +133,11 @@ CREATE TABLE sch_self_pending (
 ### 10.2 `svc/sched-alerts` 回傳加欄位
 `{items:[…原有], asOf, self:{due:['YYYY-MM'…], wait:N, missing:N}}`；`due`＝本人下個月（每月 25 號起）還沒 submitted／approved；`wait`＝可核准的人中 `submitted` 或有 pending 的人數；`missing`＝可核准的人中下個月（25 號起）還沒送出的人數。無總部身分＝`self` 省略。
 ### 10.3 嵌入網址
-`?embed=dzy&only=schedule&mode=store|self|fixed`（省略＝store）。營運系統 `config.js` 匯出 `SCHED_MODE`；`mode=self` 固定進 HQ、`mode=fixed` 固定進 CF（個人登入可進的話自動切到那家店，不能進＝沒有權限畫面）。
+不變（`?embed=dzy&only=schedule`）。入口由網址 hash 決定：`#/schedule/self`、`#/schedule/approve` → 需在 HQ；`#/schedule/fixed`、`#/schedule/fixedstaff` → 需在 CF；其他 → 門市。所在店不對時營運系統自動切店（能進才切，不能進＝沒有權限畫面）。管理系統首頁提醒的 view＝`self`／`approve`（總部提醒）、`board`（原有）。
 
 ## 11. 實作分段
 - **A｜管理系統後端＋minikit**：`storeIdent_` 加 `self`（含 `approval`）、契約檔、`platform.sched` 擴大到 `ladder hq／office` 的 active staff；minikit 只套這些 .gs 改動。
 - **B｜營運系統後端**：DB 遷移、mode、person.js（storesFor／personAccess／schedSelf／schedApprove）、§10.1 全部 action、規則 `checkSelfMonth`、fixed 產生器與每日 20 號排程、發布（重疊 T 期、只放已核准）、dayPlan 過濾、`svc/sched-alerts` 加 self、契約檔。
-- **C｜營運系統畫面**：`self.js`、`fixed.js`、`SCHED_MODE`、mock、e2e。
-- **D｜管理系統畫面**：排班管理三個固定 view（`store`／`self`／`fixed`，關 dynamicTabs，子分頁留 iframe）、alerts 加三種、e2e。
+- **C｜營運系統畫面**：`self.js`、`fixed.js`、依所在店送分頁與自動切店、mock、e2e。
+- **D｜管理系統畫面**：只改 `modules/schedule/alerts.js` 加三種提醒（view `self`／`approve`）與 e2e；平台層不改。
 - 審查：Codex 額度到 10/31，改**兩位 Fable 互盲**全面審，兩邊都抓到直接修、單邊交叉驗證。
