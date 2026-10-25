@@ -366,30 +366,29 @@ const fulltext = (app) => sheetText(app) + '\n' + JSON.stringify(app.props);
 
   // 開關
   delete app.props.LINE_AUTH_ON;
-  const off = J(sb.lineAuthCheck_(lineHOf(UID(1)), 'claim', CTX()));
+  const off = J(sb.lineAuthCheck_(lineHOf(UID(1)), 'reset', CTX()));
   ok(off.ok === true && off.mode === 'off' && Object.keys(off).length === 2, '4a ★總開關未設 → {ok:true, mode:off}，不查任何資料', off);
   app.props.LINE_AUTH_ON = '0';
-  ok(check(UID(1), 'claim').mode === 'off', '4b 開關 0 → off');
+  ok(check(UID(1), 'reset').mode === 'off', '4b 開關 0 → off');
   app.props.LINE_AUTH_ON = 'true';
-  ok(check(UID(1), 'claim').mode === 'off', '4c 開關必須恰為 1（"true" 不算）→ off');
+  ok(check(UID(1), 'reset').mode === 'off', '4c 開關必須恰為 1（"true" 不算）→ off');
   app.props.LINE_AUTH_ON = '1';
 
   // 輸入
-  ok(J(sb.lineAuthCheck_('xyz', 'claim', CTX())).error === 'bad_input' && J(sb.lineAuthCheck_(lineHOf(UID(1)), 'foo', CTX())).error === 'bad_input' && J(sb.lineAuthCheck_(undefined, 'claim', CTX())).error === 'bad_input', '4d line_h 格式不對／op 不認得 → bad_input');
+  ok(J(sb.lineAuthCheck_('xyz', 'reset', CTX())).error === 'bad_input' && J(sb.lineAuthCheck_(lineHOf(UID(1)), 'foo', CTX())).error === 'bad_input' && J(sb.lineAuthCheck_(undefined, 'reset', CTX())).error === 'bad_input', '4d line_h 格式不對／op 不認得 → bad_input');
 
   // not_bound
-  ok(check(UID(9), 'claim').mode === 'not_bound', '4e 沒綁定 → not_bound');
+  ok(check(UID(9), 'reset').mode === 'not_bound', '4e 沒綁定 → not_bound');
 
   // claim：未認領＋可信
   const eU = mkUnclaimed(app, '開通甲');
   bind(app, eU, UID(1));
+  const nonceCountBefore = [...app.cache.keys()].filter((k) => k.indexOf('lan:') === 0).length;
+  const logCountBefore = rowsOf(app, 'staff_log').length;
   const c1 = check(UID(1), 'claim');
-  ok(c1.ok && c1.mode === 'claim' && c1.name === '開通甲' && c1.emp_no === eU && c1.unit === 'mala-gf' && c1.unit_name === '新竹光復' && c1.title_options.join() === 'pt,ft' && c1.title_names.pt === '計時同仁' && c1.title_names.ft === '正職同仁' && /^[A-Za-z0-9]{16,}$/.test(c1.nonce), '4f ★未認領＋可信 → claim：姓名、員編、單位代碼與名稱、pt/ft 與中文、nonce', c1);
-  ok(c1.brand === undefined && c1.dept === undefined && c1.status === undefined, '4g 回應只含文件列出的欄位（不帶 brand／dept）', c1);
-  const nk = 'lan:' + c1.nonce;
-  const rec = JSON.parse(app.cache.get(nk).v);
-  ok(rec.h === lineHOf(UID(1)) && rec.op === 'claim' && rec.emp_no === eU && Object.keys(rec).length === 3 && app.cacheTtl[nk] === 600, '4h ★nonce：CacheService "lan:"+nonce、值 {h,op,emp_no}、600 秒', [rec, app.cacheTtl[nk]]);
-  ok(check(UID(1), 'claim').nonce !== c1.nonce, '4i 每次 check 發新 nonce');
+  ok(c1.ok === true && c1.mode === 'off' && Object.keys(c1).length === 2, '4f ★R3 LINE 開通已取消：claim 一律 {ok:true, mode:off}（不帶姓名、員編、title_options）', c1);
+  ok([...app.cache.keys()].filter((k) => k.indexOf('lan:') === 0).length === nonceCountBefore && rowsOf(app, 'staff_log').length === logCountBefore, '4g ★claim check 不發 nonce、不寫 staff_log');
+  ok(check(UID(1), 'claim').nonce === undefined && check(UID(9), 'claim').mode === 'off', '4h~4i claim 不論有沒有綁定都是 off、沒有 nonce');
 
   // wrong_op
   const w1 = check(UID(1), 'reset');
@@ -402,7 +401,7 @@ const fulltext = (app) => sheetText(app) + '\n' + JSON.stringify(app.props);
   ok(r1.mode === 'reset' && r1.name === '重設甲' && r1.emp_no === act.emp && /^[A-Za-z0-9]{16,}$/.test(r1.nonce) && r1.unit === undefined, '4k active＋可信 → reset：姓名、員編、nonce', r1);
   ok(JSON.parse(app.cache.get('lan:' + r1.nonce).v).op === 'reset', '4l reset 的 nonce 綁 op=reset');
   const w2 = check(UID(2), 'claim');
-  ok(w2.mode === 'wrong_op' && w2.expected_mode === 'reset', '4m 已開通的人要開通 → wrong_op＋提示 reset', w2);
+  ok(w2.mode === 'off' && w2.nonce === undefined, '4m 已開通的人用 claim → off（不再導 reset）', w2);
 
   // blocked：disabled／pending／rejected
   const blk = (name, uid, status, prep) => {
@@ -449,22 +448,13 @@ const fulltext = (app) => sheetText(app) + '\n' + JSON.stringify(app.props);
   setMap(app, a2.emp, 'roster_active', 'FALSE');
   ok(check(UID(11), 'reset').mode === 'reset', '4x ★另一人舊列失效後不再 ambiguous');
 
-  // need_review：無唯一主店
+  // R3：unclaimed 的人 claim 一律 off；用 reset 查則 wrong_op（前端導回「第一次使用」）
   const nr1 = mkUnclaimed(app, '審核甲');
   bind(app, nr1, UID(12), { role: 'support' });
-  ok(check(UID(12), 'claim').mode === 'need_review', '4y ★沒有 home 對照 → need_review');
-  const nr2 = mkUnclaimed(app, '審核乙');
-  bind(app, nr2, UID(13)); bind(app, nr2, UID(13), { store: 'mztgf', eid: 'NR2' });
-  ok(check(UID(13), 'claim').mode === 'need_review', '4z ★兩筆 home → need_review');
-  const nr3 = mkUnclaimed(app, '審核丙');
-  bind(app, nr3, UID(14), { store: 'hq', eid: 'HQ3' });
-  ok(check(UID(14), 'claim').mode === 'need_review', '4aa 主店是總部（多個單位）→ need_review');
+  ok(check(UID(12), 'claim').mode === 'off' && check(UID(12), 'reset').mode === 'wrong_op', '4y~4aa ★未認領者：claim → off；reset → wrong_op（不再有 claim／need_review 路徑）');
   const nr4 = mkUnclaimed(app, '審核丁');
   bind(app, nr4, UID(15), { active: 'FALSE' });
-  ok(check(UID(15), 'claim').mode === 'not_bound', '4ab 唯一 home 列已失效 → 當作沒綁定');
-  const nr5 = mkUnclaimed(app, '審核戊');
-  bind(app, nr5, UID(16), { store: 'cf', eid: 'CF5' });
-  { const x = check(UID(16), 'claim'); ok(x.mode === 'claim', '4ac 央廚（單一單位 ck、pt/ft 可用）→ claim', x); }
+  ok(check(UID(15), 'reset').mode === 'not_bound', '4ab 唯一 home 列已失效 → 當作沒綁定');
 
   // 失敗紀錄只有原因代碼
   const fails = logsOf(app, '', 'line_fail');
@@ -479,7 +469,7 @@ const fulltext = (app) => sheetText(app) + '\n' + JSON.stringify(app.props);
   // 鎖
   const orig = sb.LockService;
   sb.LockService = { getScriptLock: () => ({ tryLock: () => false, releaseLock() {} }) };
-  const busy = J(sb.lineAuthCheck_(lineHOf(UID(1)), 'claim', CTX()));
+  const busy = J(sb.lineAuthCheck_(lineHOf(UID(1)), 'reset', CTX()));
   sb.LockService = orig;
   ok(busy.ok === false && busy.error === 'busy', '4aj 等不到 ScriptLock → busy', busy);
 })();
@@ -515,14 +505,14 @@ const fulltext = (app) => sheetText(app) + '\n' + JSON.stringify(app.props);
   ok(hMis.ok === false && hMis.reason === 'nonce', '5e ★nonce 的 h 與呼叫者不符 → 拒', hMis);
   const afterMis = reset(UID(1), n3, 'new-pw-ABCDE5');
   ok(afterMis.ok === false && afterMis.reason === 'nonce', '5f h 不符的嘗試當場作廢 nonce（原主人也不能再用）');
-  // op 不符：claim 的 nonce 不能拿去 reset
+  // R3：claim 不再發 nonce；claim 函式停用，拿 reset 的 nonce 去 claim 也不會燒掉它
   const eU = mkUnclaimed(app, '隨機丙');
   bind(app, eU, UID(3));
-  const cn = chk(UID(3), 'claim').nonce;
-  const opMis = reset(UID(3), cn, 'new-pw-ABCDE6');
-  ok(opMis.ok === false && opMis.reason === 'nonce', '5g ★claim 的 nonce 拿去 reset → 拒', opMis);
-  const claimWithReset = J(sb.lineAuthClaim_(lineHOf(UID(1)), chk(UID(1), 'reset').nonce, { title: 'pt', phone: '0911222333', birthday: '1995-05-05', address: '新竹市測試路一段1號', new_password: 'new-pw-ABCDE7' }, CTX()));
-  ok(claimWithReset.ok === false && claimWithReset.reason === 'nonce', '5h reset 的 nonce 拿去 claim → 拒', claimWithReset);
+  ok(chk(UID(3), 'claim').nonce === undefined, '5g ★claim 不發 nonce');
+  const rn = chk(UID(1), 'reset').nonce;
+  const claimWithReset = J(sb.lineAuthClaim_(lineHOf(UID(1)), rn, { title: 'pt', phone: '0911222333', birthday: '1995-05-05', address: '新竹市測試路一段1號', new_password: 'new-pw-ABCDE7' }, CTX()));
+  ok(claimWithReset.ok === false && claimWithReset.error === 'off', '5h lineAuthClaim_ 停用 → off', claimWithReset);
+  ok(reset(UID(1), rn, 'new-pw-ABCDE7').ok === true, '5h2 reset 的 nonce 沒被 claim 動到');
   // 亂碼／過期
   ok(reset(UID(1), 'zzzzzzzzzzzz', 'new-pw-ABCDE8').reason === 'nonce' && reset(UID(1), '', 'new-pw-ABCDE8').reason === 'nonce' && reset(UID(1), "../'; DROP", 'new-pw-ABCDE8').reason === 'nonce', '5i 不存在／空／格式怪異的 nonce → 拒');
   const n4 = chk(UID(1), 'reset').nonce;
@@ -574,8 +564,8 @@ const fulltext = (app) => sheetText(app) + '\n' + JSON.stringify(app.props);
   // 非 reset mode 拒絕：claim 狀態的人
   const eU = mkUnclaimed(app, '重設丙');
   bind(app, eU, UID(2));
-  const cn = chk(UID(2), 'claim').nonce;
-  ok(reset(UID(2), cn, 'new-pw-12345').ok === false, '6l 未認領的人 reset → 拒（nonce op 不符）');
+  const cn = chk(UID(2), 'reset').nonce;
+  ok(cn === undefined && reset(UID(2), cn, 'new-pw-12345').ok === false, '6l 未認領的人 reset → check 不發 nonce、reset 拒');
 
   // 發 nonce 之後狀況變了：重查擋下
   const q = mkActive(app, '重設丁', 'old-pw-12345');
@@ -613,120 +603,32 @@ const fulltext = (app) => sheetText(app) + '\n' + JSON.stringify(app.props);
 })();
 
 // ============================================================
-// 7. lineAuthClaim_：職稱擋、單位不可改、與 claimSubmit 逐欄一致、核准後結果
+// 7. R3：LINE 開通已取消，lineAuthClaim_ 停用，不執行任何寫入
 // ============================================================
 (() => {
   const app = fresh();
   const { sb } = app;
-  const chk = (uid, op, ctx) => J(sb.lineAuthCheck_(lineHOf(uid), op, ctx || CTX()));
+  const chk = (uid, op) => J(sb.lineAuthCheck_(lineHOf(uid), op, CTX()));
   const claim = (uid, nonce, form, ctx) => J(sb.lineAuthClaim_(lineHOf(uid), nonce, form, ctx || CTX()));
   const FORM = (over) => Object.assign({ title: 'pt', phone: '0911222333', birthday: '1995-05-05', address: '新竹市測試路一段1號', new_password: 'line-pw-12345' }, over || {});
-
-  // 一般流程基準
-  const nameA = '開通乙', nameB = '開通丙';
-  const eA = mkUnclaimed(app, nameA), eB = mkUnclaimed(app, nameB);
+  const eA = mkUnclaimed(app, '開通乙');
   bind(app, eA, UID(1));
-  const sub = post(sb, 'claimSubmit', Object.assign({ name: nameB, emp_no: eB, password: 'line-pw-12345' }, PROF({ title: 'pt' })));
-  ok(sub.ok && sub.pending === true, '7a （前置）一般認領成功、pending', sub);
+  const snap = () => JSON.stringify(rowsOf(app, 'staff')) + JSON.stringify(rowsOf(app, 'users')) + JSON.stringify(rowsOf(app, 'staff_log'));
+  const before = snap();
   const nonce = chk(UID(1), 'claim').nonce;
+  ok(nonce === undefined, '7a claim check 沒有 nonce');
   const res = claim(UID(1), nonce, FORM());
-  ok(res.ok === true && res.mode === 'done' && res.op === 'claim' && res.pending === true && res.emp_no === eA, '7b ★LINE 開通成功：status pending（仍待審核）', res);
-  const sA = staffOf(app, eA), sB = staffOf(app, eB);
-  ok(sA.status === 'pending', '7c staff.status＝pending', sA.status);
-  const skip = ['emp_no', 'user_id', 'name', 'claimed_at', 'updated_at'];
-  const diff = Object.keys(sA).filter((k) => !skip.includes(k) && String(sA[k]) !== String(sB[k]));
-  ok(diff.length === 0, '7d ★LINE 開通與一般 claimSubmit 寫出的 staff 列逐欄相同（除編號／帳號／姓名／時間）', diff.map((k) => [k, sA[k], sB[k]]));
-  ok(sA.p_brand === 'mala' && sA.p_unit === 'mala-gf' && sA.p_dept === '' && sA.p_title === 'pt' && sA.birthday === '1995-05-05' && sA.phone === '0911222333' && sA.address === '新竹市測試路一段1號' && sA.claimed_at !== '', '7e p_* 與個資、claimed_at 都有寫', sA);
-  const uA = rowsOf(app, 'users').find((u) => u.username === eA), uB = rowsOf(app, 'users').find((u) => u.username === eB);
-  ok(uA.salt && uA.hash && uA.active === 'TRUE' && uB.salt && uB.hash && uB.active === 'TRUE' && uA.salt !== uB.salt, '7f users 都寫了 salt/hash、active 維持 TRUE');
-  ok(!sheetText(app).includes('line-pw-12345'), '7g 沒有明文密碼');
-  const lA = logsOf(app, eA, 'line_claim_ok');
-  ok(lA.length === 1 && lA[0].by === 'line-self' && lA[0].detail === '' && logsOf(app, eA, 'claim').length === 0, '7h staff_log line_claim_ok（by line-self）', lA);
-  ok(logsOf(app, eB, 'claim')[0].by === 'self', '7i 一般認領仍記 claim／self（行為不變）');
-  ok(post(sb, 'login', { username: eA, password: 'line-pw-12345' }).ok === false, '7j pending 登不進去（需審核）');
-
-  // 主管核准 → 兩路結果一致
-  ok(post(sb, 'staffConfirm', { emp_no: eA }, app.tok).ok && post(sb, 'staffConfirm', { emp_no: eB }, app.tok).ok, '7k 兩位都能照現有流程核准');
-  const cA = staffOf(app, eA), cB = staffOf(app, eB);
-  const diff2 = Object.keys(cA).filter((k) => !skip.includes(k) && !['confirmed_at'].includes(k) && String(cA[k]) !== String(cB[k]));
-  ok(diff2.length === 0 && cA.status === 'active' && cA.unit === 'mala-gf' && cA.brand === 'mala' && cA.title === 'pt', '7l ★核准後 staff 列逐欄相同', diff2);
-  ok(post(sb, 'login', { username: eA, password: 'line-pw-12345' }).ok, '7m 核准後可用 LINE 開通時設的密碼登入');
-  ok(chk(UID(1), 'claim').mode === 'wrong_op', '7n 核准後再開通 → wrong_op');
-
-  // 職稱擋：非 pt／ft → need_review，什麼都沒寫
-  const eC = mkUnclaimed(app, '開通丁');
-  bind(app, eC, UID(2));
-  const before = JSON.stringify(rowsOf(app, 'staff')) + JSON.stringify(rowsOf(app, 'users'));
-  for (const t of ['sm', 'am', 'fm', 'hs', '', 'PT', 'pt,ft', 'ft ']) {
-    const n = chk(UID(2), 'claim').nonce;
-    const r = claim(UID(2), n, FORM({ title: t }));
-    if (t === 'ft ') ok(r.ok === true && r.mode === 'done', '7o 職稱 "ft "（尾端空白）trim 後視為 ft');
-    else ok(r.ok === true && r.mode === 'need_review', '7o ★職稱 ' + JSON.stringify(t) + ' → need_review', r);
-    if (t === 'ft ') break;
-    ok(JSON.stringify(rowsOf(app, 'staff')) + JSON.stringify(rowsOf(app, 'users')) === before, '7p need_review 不寫任何資料（' + JSON.stringify(t) + '）');
-    ok(claim(UID(2), n, FORM()).reason === 'nonce', '7q need_review 後 nonce 作廢');
-  }
-  ok(staffOf(app, eC).p_title === 'ft', '7r ft 可選');
-
-  // 單位不可改：form 夾 unit／brand／dept 一律忽略
-  const eD = mkUnclaimed(app, '開通戊');
-  bind(app, eD, UID(3));
-  const nD = chk(UID(3), 'claim').nonce;
-  const rD = claim(UID(3), nD, Object.assign(FORM(), { unit: 'mzt-js', brand: 'mzt', dept: 'it', p_unit: 'dzy-hq' }));
-  const sD = staffOf(app, eD);
-  ok(rD.ok && sD.p_unit === 'mala-gf' && sD.p_brand === 'mala' && sD.p_dept === '' && sD.unit === '', '7s ★form 夾帶 unit／brand／dept 被忽略：單位固定是主店單位', sD);
-
-  // 欄位驗證：失敗什麼都沒寫、nonce 保留、改好再送
-  const eE = mkUnclaimed(app, '開通己');
-  bind(app, eE, UID(4));
-  const nE = chk(UID(4), 'claim').nonce;
-  const snapE = JSON.stringify(staffOf(app, eE));
-  const bads = [['phone', '123'], ['birthday', '2030-01-01'], ['birthday', '1995-13-45'], ['address', '短'], ['new_password', 'short'], ['new_password', eE]];
-  bads.forEach(([k, v]) => {
-    const r = claim(UID(4), nE, FORM({ [k]: v }));
-    ok(r.ok === false && r.error === 'bad_input' && r.reason === undefined, '7t 欄位 ' + k + '=' + String(v).slice(0, 12) + ' 不合規則 → bad_input', r);
-  });
-  ok(JSON.stringify(staffOf(app, eE)) === snapE, '7u 驗證失敗什麼都沒寫');
-  ok(claim(UID(4), nE, FORM({ phone: '0'.repeat(50) })).error === 'bad_input' && claim(UID(4), nE, { title: 'pt' }).ok === false, '7v 過長／缺欄位 → bad_input');
-  ok(claim(UID(4), nE, null).error === 'bad_input' && claim(UID(4), nE, FORM({ phone: 911222333 })).error === 'bad_input', '7w form 不是物件／欄位型別不是字串 → bad_input');
-  ok(claim(UID(4), nE, FORM()).ok === true, '7x ★驗證失敗不燒 nonce：改好再送成功');
-
-  // 發 nonce 後狀態變了
-  const eF = mkUnclaimed(app, '開通庚');
-  bind(app, eF, UID(5));
-  const nF = chk(UID(5), 'claim').nonce;
-  setMap(app, eF, 'role', 'support');
-  const rF = claim(UID(5), nF, FORM());
-  ok(rF.ok === true && rF.mode === 'need_review' && staffOf(app, eF).status === 'unclaimed', '7y 發 nonce 後主店變了 → 重查 need_review、不寫', rF);
-  const eG = mkUnclaimed(app, '開通辛');
-  bind(app, eG, UID(6));
-  const nG = chk(UID(6), 'claim').nonce;
-  setMap(app, eG, 'line_ok_at', '');
-  const rG = claim(UID(6), nG, FORM());
-  ok(rG.ok === false && rG.error === 'not_trusted' && staffOf(app, eG).status === 'unclaimed', '7z 發 nonce 後綁定不再可信 → not_trusted、不寫', rG);
-  // 總開關
+  ok(res.ok === false && res.error === 'off', '7b ★lineAuthClaim_ 一律 {ok:false, error:off}', res);
+  ok(snap() === before, '7c ★沒有任何寫入（staff／users／staff_log 都不變）');
+  ok(staffOf(app, eA).status === 'unclaimed', '7d staff 維持 unclaimed');
+  ok(claim(UID(1), 'zzzzzzzzzzzz', FORM({ title: 'ft' })).error === 'off' && claim(UID(1), undefined, null).error === 'off', '7e 任何參數（含亂碼 nonce、null form）都是 off');
   app.props.LINE_AUTH_ON = '';
-  ok(claim(UID(5), nF, FORM()).error === 'off', '7aa ★總開關關 → claim 拒');
+  ok(claim(UID(1), nonce, FORM()).error === 'off', '7f 總開關關也是 off');
   app.props.LINE_AUTH_ON = '1';
-  // 鎖
-  const eH = mkUnclaimed(app, '開通壬');
-  bind(app, eH, UID(7));
-  const nH = chk(UID(7), 'claim').nonce;
-  const orig = sb.LockService;
-  sb.LockService = { getScriptLock: () => ({ tryLock: () => false, releaseLock() {} }) };
-  const bz = claim(UID(7), nH, FORM());
-  sb.LockService = orig;
-  ok(bz.error === 'busy' && claim(UID(7), nH, FORM()).ok === true, '7ab claim 等不到鎖 → busy，且不燒 nonce');
-  // 併發：同 nonce 兩次
-  const eI = mkUnclaimed(app, '開通癸');
-  bind(app, eI, UID(8));
-  const nI = chk(UID(8), 'claim').nonce;
-  const two = [claim(UID(8), nI, FORM()), claim(UID(8), nI, FORM())];
-  ok(two.filter((x) => x.ok === true && x.mode === 'done').length === 1, '7ac ★併發同 nonce 兩次只開通一次', two);
-  ok(logsOf(app, eI, 'line_claim_ok').length === 1, '7ad staff_log 只一筆 line_claim_ok');
-  // 主店不是 store ladder 的 hq：不在 pt/ft 範圍（見 4aa need_review），此處驗 log 不含個資
-  const logTxt = rowsOf(app, 'staff_log').map((l) => Object.values(l).join('|')).join('\n');
-  ok(!logTxt.includes('0911222333') && !logTxt.includes('1995-05-05') && !logTxt.includes('測試路'), '7ae staff_log 不含手機／生日／地址');
+  ok(snap() === before && logsOf(app, eA, 'line_claim_ok').length === 0, '7g 仍無寫入、沒有 line_claim_ok 紀錄');
+  // 一般認領不受影響
+  const eB = mkUnclaimed(app, '開通丙');
+  ok(post(sb, 'claimSubmit', Object.assign({ name: '開通丙', emp_no: eB, password: 'line-pw-12345' }, PROF({ title: 'pt' }))).ok && staffOf(app, eB).status === 'pending', '7h 一般認領照常 pending');
 })();
 
 // ============================================================
@@ -964,15 +866,12 @@ await (async () => {
     bind(app3, u3.emp, UID(10), { store: 'mztgf', eid: 'M10' });
     const lv = liveOf(u3, 10); lv.mztgf = { ok: false };
     ok(resetWith(app3, 10, lv).ok === true, '11B9 多店：一店抓不到、另一店一致 → 通過');
-    // claim 也要 live
+    // R3：claim 已停用（不論 live）
     const app4 = fresh();
     const c = mkUnclaimed(app4, 'B領'); bind(app4, c, UID(11));
     const chk = J(app4.sb.lineAuthCheck_(hOf(11), 'claim', CTX()));
-    const cr = J(app4.sb.lineAuthClaim_(hOf(11), chk.nonce, FORM, CTX({ noLive: true })));
-    ok(chk.mode === 'claim' && cr.ok === false && cr.error === 'not_trusted', '11B10 claim 缺 live → not_trusted', cr);
-    const chk2 = J(app4.sb.lineAuthCheck_(hOf(11), 'claim', CTX()));
-    const cr2 = J(app4.sb.lineAuthClaim_(hOf(11), chk2.nonce, FORM, CTX({ live: liveOf({ emp: c }, 11) })));
-    ok(cr2.ok === true && cr2.op === 'claim' && cr2.pending === true && cr2.mode === 'done', '11B11/G claim 成功帶 pending:true、op:claim', cr2);
+    const cr = J(app4.sb.lineAuthClaim_(hOf(11), chk.nonce, FORM, CTX({ live: liveOf({ emp: c }, 11) })));
+    ok(chk.mode === 'off' && cr.ok === false && cr.error === 'off' && staffOf(app4, c).status === 'unclaimed', '11B10 claim 停用：check off、claim off、不寫入', cr);
   }
 
   // ---- C 撤銷 fail-closed ----
@@ -989,12 +888,11 @@ await (async () => {
     ok(J(sb.lineAuthCheck_(hOf(1), 'reset', CTX())).error === 'server_error', '11C4 ★欄位整個不存在（表頭缺）→ server_error');
     app.sheets.staff._data[0][27] = 'line_revoked_at';
     ok(J(sb.lineAuthCheck_(hOf(1), 'reset', CTX())).mode === 'reset', '11C5 （復原後）恢復正常');
-    // claim 路徑
+    // claim 路徑：停用（R3），不因 revoked 欄壞而改變
     const app2 = fresh();
     const c = mkUnclaimed(app2, 'C領'); bind(app2, c, UID(2));
-    const n2 = J(app2.sb.lineAuthCheck_(hOf(2), 'claim', CTX())).nonce;
     app2.sheets.staff._data[0][27] = 'zzz';
-    ok(J(app2.sb.lineAuthClaim_(hOf(2), n2, FORM, CTX())).error === 'server_error', '11C6 claim：revoked 欄壞 → server_error');
+    ok(J(app2.sb.lineAuthClaim_(hOf(2), 'x', FORM, CTX())).error === 'off', '11C6 claim 停用：永遠 off');
   }
   // revoke_fail
   {
@@ -1087,7 +985,7 @@ await (async () => {
     const r3 = J(sb.lineAuthCheck_(hOf(4), 'reset', CTX()));
     ok(r3.mode === 'blocked' && r3.status === 'disabled', '11F3 （對照）可信的停用者 → blocked', r3);
     const e = mkUnclaimed(app, 'F無'); bind(app, e, UID(3), early);
-    ok(J(sb.lineAuthCheck_(hOf(3), 'claim', CTX())).mode === 'not_trusted', '11F4 不可信 → 不論 staff 狀態都只有 not_trusted');
+    ok(J(sb.lineAuthCheck_(hOf(3), 'reset', CTX())).mode === 'not_trusted', '11F4 不可信 → 不論 staff 狀態都只有 not_trusted');
   }
 })();
 

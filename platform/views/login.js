@@ -103,7 +103,7 @@ function renderMode(el, app) {
   return function unmount() {};
 }
 
-/** 「用 LINE 開通／重設密碼」兩個連結（platform/config.js 的 LINE_LIFF_ID 空＝不顯示；網址只含公開的 LIFF ID） */
+/** 「用 LINE 重設密碼」連結（platform/config.js 的 LINE_LIFF_ID 空＝不顯示；網址只含公開的 LIFF ID） */
 function lineLinksHtml() {
   const links = lineLoginLinks();
   if (!links.length) return '';

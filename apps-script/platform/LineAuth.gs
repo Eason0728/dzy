@@ -23,8 +23,6 @@ var LINE_TRUST_MIN_AGE_MS = 7 * LINE_DAY_MS;
 var LINE_SYNC_MAX_AGE_MS = 26 * 3600 * 1000;
 var LINE_NONCE_TTL_SEC = 600;
 var LINE_NONCE_PREFIX = 'lan:';
-var LINE_CLAIM_TITLES = ['pt', 'ft'];
-var LINE_TITLE_FALLBACK = { pt: '計時同仁', ft: '正職同仁' };
 var LINE_LOG_SHOW = 5;
 var LINE_REVOKED_HEADER = 'line_revoked_at';
 var LINE_H_RE = /^[0-9a-f]{64}$/;
@@ -281,24 +279,6 @@ function lineLogFail_(empNo, code) {
   try { stfLog_(empNo || '', 'line_fail', 'line-self', code); } catch (e) { /* 紀錄失敗不影響回應 */ }
 }
 
-/** 開通計畫：主店唯一 → 單位（代碼＋名稱）、品牌、部門、可選職稱。回 { why }＝需人工審 */
-function lineClaimPlan_(empNo, maps, org) {
-  var home = lineHomeRow_(empNo, maps);
-  if (!home) return { why: 'no_home' };
-  var st = clkStoreByCode_(home.store_code);
-  if (!st) return { why: 'no_store' };
-  var units = clkUnitsOf_(st);
-  if (units.length !== 1) return { why: 'unit_count' };
-  var u = org.unit[units[0]];
-  if (!u || !u.active || !org.brand[u.parent] || !org.brand[u.parent].active) return { why: 'unit_org' };
-  if (u.ladder === 'hq' && stfActiveDeptsOf_(org, u.code).length) return { why: 'need_dept' };
-  var titles = LINE_CLAIM_TITLES.filter(function (t) {
-    return stfValidateOrg_(org, { brand: u.parent, unit: u.code, dept: '', title: t }) === null;
-  });
-  if (!titles.length) return { why: 'no_title' };
-  return { brand: u.parent, unit: u.code, unit_name: u.name, dept: '', titles: titles, org: org };
-}
-
 /**
  * 找人＋可信判斷（不上鎖、不發 nonce、不寫 log；check／sources／reset／claim 共用）。
  * 撤銷資料讀不到會丟錯（呼叫端轉 server_error）。
@@ -375,21 +355,12 @@ function lineCheckCore_(lineH, op, ctx, needLive) {
 
   var name = stfStr_(hit.values[STF_COL.name]);
   if (want === 'reset') return { mode: 'reset', emp_no: emp, name: name };
-  var plan = lineClaimPlan_(emp, maps, stfReadOrg_());
-  if (plan.why) return { mode: 'need_review', emp_no: emp, code: 'need_review_' + plan.why };
-  var names = {};
-  plan.titles.forEach(function (t) { names[t] = plan.org.title[t] ? plan.org.title[t].name : LINE_TITLE_FALLBACK[t]; });
-  return { mode: 'claim', emp_no: emp, name: name, unit: plan.unit, unit_name: plan.unit_name, brand: plan.brand, dept: plan.dept,
-    title_options: plan.titles, title_names: names };
 }
 
 /** 內部 → 回給 mini 的欄位（白名單）。沒有可信綁定的 mode 一律不帶姓名與員編 */
 function lineCheckPublic_(core, nonce) {
   var o = { ok: true, mode: core.mode };
-  if (core.mode === 'claim') {
-    o.name = core.name; o.emp_no = core.emp_no; o.unit = core.unit; o.unit_name = core.unit_name;
-    o.title_options = core.title_options; o.title_names = core.title_names; o.nonce = nonce;
-  } else if (core.mode === 'reset') {
+  if (core.mode === 'reset') {
     o.name = core.name; o.emp_no = core.emp_no; o.nonce = nonce;
   } else if (core.mode === 'not_trusted') {
     o.reason = core.reason; o.days_left = core.days_left; o.need_line_punch = core.need_line_punch;
@@ -418,13 +389,13 @@ function lineHArgOk_(lineH) { return typeof lineH === 'string' && LINE_H_RE.test
 
 /** op：'claim'｜'reset'。回 { ok:true, mode, ... }（欄位見 lineCheckPublic_）或 { ok:false, error, message } */
 function lineAuthCheck_(lineH, op, ctx) {
-  if (!lineOn_()) return { ok: true, mode: 'off' };
+  if (!lineOn_() || op === 'claim') return { ok: true, mode: 'off' };   // R3：LINE 開通已取消，claim 一律 off（不發 nonce、不寫 log）
   if (!lineHArgOk_(lineH) || (op !== 'claim' && op !== 'reset')) return lineErr_('bad_input', LINE_MSG.BAD_INPUT);
   var c = lineCtx_(ctx);
   return lineWithLock_(function () {
     var core = lineCheckCore_(lineH, op, c);
     if (core.code) lineLogFail_(core.emp_no, core.code);
-    var nonce = (core.mode === 'claim' || core.mode === 'reset') ? lineNonceIssue_(lineH, op, core.emp_no) : '';
+    var nonce = core.mode === 'reset' ? lineNonceIssue_(lineH, op, core.emp_no) : '';
     return lineCheckPublic_(core, nonce);
   });
 }
@@ -491,59 +462,16 @@ function lineAuthReset_(lineH, nonce, newPw, ctx) {
   });
 }
 
-/**
- * 用 check 發的 nonce 開通。form：{ phone, birthday, address, title, new_password }；單位／品牌／部門一律由主店推，form 裡帶的忽略。
- * 成功回 { ok:true, mode:'done', op:'claim', pending:true, emp_no }（status＝pending，等主管核准）；
- * 職稱不是 pt／ft、或主店推不出單位 → { ok:true, mode:'need_review' }（前端改導原認領流程）
- */
+/** 已停用（spec v1.2 R3：取消 LINE 開通）。保留函式避免外部呼叫報錯，不執行任何寫入。 */
 function lineAuthClaim_(lineH, nonce, form, ctx) {
-  if (!lineOn_()) return lineErr_('off', LINE_MSG.OFF);
-  if (!lineHArgOk_(lineH) || typeof nonce !== 'string' || !form || typeof form !== 'object') return lineErr_('bad_input', LINE_MSG.BAD_INPUT);
-  var pw = form.new_password === undefined || form.new_password === null ? '' : form.new_password;
-  var phone = form.phone === undefined || form.phone === null ? '' : form.phone;
-  var birthday = form.birthday === undefined || form.birthday === null ? '' : form.birthday;
-  var address = form.address === undefined || form.address === null ? '' : form.address;
-  var title = form.title === undefined || form.title === null ? '' : form.title;
-  if ([pw, phone, birthday, address, title].some(function (x) { return typeof x !== 'string'; })) return lineErr_('bad_input', LINE_MSG.BAD_INPUT);
-  if (stfTooLong_(pw, STF_MAX.password)) return lineErr_('bad_input', STF_MSG.PW_TOO_LONG);
-  if (stfTooLong_(phone, STF_MAX.phone)) return lineErr_('bad_input', '手機要是 09 開頭的 10 碼數字');
-  if (stfTooLong_(birthday, STF_MAX.birthday)) return lineErr_('bad_input', '生日格式要是 YYYY-MM-DD');
-  if (stfTooLong_(address, STF_MAX.address)) return lineErr_('bad_input', '居住地址請填 5～100 個字');
-  if (stfTooLong_(title, STF_MAX.org)) return lineErr_('bad_input', LINE_MSG.BAD_INPUT);
-  var c = lineCtx_(ctx);
-  return lineWithLock_(function () {
-    var rec = lineNonceGet_(nonce, lineH, 'claim');
-    if (!rec) return lineErr_('bad_input', LINE_MSG.NONCE, { reason: 'nonce' });
-
-    var core = lineCheckCore_(lineH, 'claim', c, true);
-    if (core.mode !== 'claim' || core.emp_no !== rec.emp_no) {
-      lineNonceDrop_(nonce);
-      if (core.mode === 'need_review') { lineLogFail_(core.emp_no, core.code); return { ok: true, mode: 'need_review' }; }
-      lineLogFail_(core.emp_no || rec.emp_no, core.code || 'recheck_mismatch');
-      return lineModeErr_(core.mode === 'claim' ? { mode: 'wrong_op' } : core);
-    }
-    if (core.title_options.indexOf(stfStr_(title)) === -1) {   // 職稱只收 pt／ft：其他導原認領流程
-      lineNonceDrop_(nonce);
-      lineLogFail_(core.emp_no, 'need_review_title');
-      return { ok: true, mode: 'need_review' };
-    }
-    var hit = stfFindByEmp_(core.emp_no);
-    if (!hit) return lineErr_('server_error', LINE_MSG.SERVER);
-    var wrote = stfClaimWrite_(hit, {
-      password: pw, brand: core.brand, unit: core.unit, dept: core.dept, title: stfStr_(title),
-      phone: phone, birthday: birthday, address: address
-    }, { event: 'line_claim_ok', by: 'line-self' });
-    if (!wrote.ok) return lineErr_('bad_input', wrote.error);   // 驗證失敗什麼都沒寫：nonce 保留，讓同仁改完再送
-    lineNonceDrop_(nonce);
-    return { ok: true, mode: 'done', op: 'claim', pending: true, emp_no: wrote.emp_no };
-  });
+  return { ok: false, error: 'off' };
 }
 
 // ============================================================
 // 5. 人資 action（進 Code.gs 分派表）
 // ============================================================
 
-/** 人資停用這個人的 LINE 開通／重設：之後只有「在這個時間之後重新綁定」且再滿 7 天＋LINE 打卡才恢復 */
+/** 人資停用這個人的 LINE 重設密碼：之後只有「在這個時間之後重新綁定」且再滿 7 天＋LINE 打卡才恢復 */
 function handleLineRevoke_(token, payload) {
   var t = stfAdminTarget_(token, payload);
   if (!t.ok) return t;

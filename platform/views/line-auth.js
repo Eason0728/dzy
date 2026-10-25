@@ -1,9 +1,9 @@
 /**
- * platform/views/line-auth.js — 用 LINE 開通／重設密碼（docs/line-auth/spec.md v1.1 第 0、6 節）
+ * platform/views/line-auth.js — 用 LINE 重設密碼（docs/line-auth/spec.md v1.2：R3 取消 LINE 開通，只剩重設）
  *
- * 頁面：line.html（登入前、不進殼）。LIFF 小頁面：?m=claim|reset → liff.init → 未登入就 liff.login()
+ * 頁面：line.html（登入前、不進殼）。LIFF 小頁面：?m=reset（沒帶 m 也當 reset；?m=claim 只顯示導回登入頁文字、不呼叫後端）→ liff.init → 未登入就 liff.login()
  * → liff.getIDToken() → POST /platform/svc/line-auth {op:'check', want, id_token} → 依 mode 畫畫面。
- * 後端（Mac mini lineauth.js 白名單）只回 ok/mode/error/message/name/emp_no/unit_name/title_options/title_names/
+ * 後端（Mac mini lineauth.js 白名單）只回 ok/mode/error/message/name/emp_no/unit_name/
  * days_left/need_line_punch/nonce/reason；wrong_op 的 expected_mode 與 blocked 的 status 不會到前端，所以
  * wrong_op 的導向以「與使用者想做的相反」為準（有 expected_mode 就用它）。
  *
@@ -20,15 +20,16 @@ import { BACKENDS, LINE_LIFF_ID } from '../config.js';
 export const LIFF_SDK_URL = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
 
 /** 登入前原本的方式（index.html 的 hash 路由，見 login.js currentMode） */
-export const FALLBACK_HREF = { claim: 'index.html#/claim', reset: 'index.html#/forgot' };
+export const FALLBACK_HREF = { reset: 'index.html#/forgot' };
 
 export const T = {
   preparing: '功能準備中',
-  badLink: '連結不正確，請回管理系統登入頁，從「用 LINE 開通」或「用 LINE 重設密碼」按鈕重新開啟。',
+  badLink: '連結不正確，請回管理系統登入頁，從「用 LINE 重設密碼」按鈕重新開啟。',
   loading: '確認身分中…',
-  title: { claim: '用 LINE 開通', reset: '用 LINE 重設密碼' },
+  title: { reset: '用 LINE 重設密碼' },
   fallback: '改用原本的方式',
-  claimSent: '已送出，等主管核准後就能登入',
+  claimOff: '第一次使用請回登入頁按「第一次使用」',
+  backToLogin: '返回登入頁',
   resetDone: '密碼已更新，其他裝置已登出',
   toLogin: '前往登入',
   notTrustedWait: (n) => `你的 LINE 綁定還要 ${n} 天才能用`,
@@ -37,13 +38,9 @@ export const T = {
   notBound: '找不到你的 LINE 打卡綁定。請先用 LINE 打卡綁定，或改用原本的方式。',
   ambiguous: '這個 LINE 對到多位同仁，請找人資協助，或改用原本的方式。',
   blocked: '你的帳號目前不能用 LINE 處理（可能正在等主管審核或已停用），請找你的主管或人資。',
-  needReviewClaim: '你的職務要走一般認領流程，主管審核',
   needReviewReset: '暫時無法用 LINE 處理，請改用原本的方式。',
-  off: 'LINE 開通與重設目前未開放，請改用原本的方式。',
-  wrongToClaim: '你的帳號還沒開通，請改用「用 LINE 開通」。',
-  wrongToReset: '你的帳號已經開通，要重設密碼請改用「用 LINE 重設密碼」。',
-  goClaim: '前往「用 LINE 開通」',
-  goReset: '前往「用 LINE 重設密碼」',
+  off: 'LINE 重設密碼目前未開放，請改用原本的方式。',
+  wrongToClaim: '你還沒開通帳號，請回登入頁按「第一次使用」',
   reopen: '請關閉後重新開啟',
   renewed: '已重新驗證，請再按一次送出',
   errors: {
@@ -63,12 +60,11 @@ export function lineAuthUrl(platformUrl) {
   return /\/api$/.test(u) ? u.replace(/\/api$/, '/svc/line-auth') : '';
 }
 
-/** 登入頁兩顆按鈕的資料：LIFF ID 空＝不顯示（回 []） */
+/** 登入頁按鈕的資料（只剩重設）：LIFF ID 空＝不顯示（回 []） */
 export function lineLoginLinks(liffId) {
   const id = String(liffId === undefined ? LINE_LIFF_ID : liffId || '').trim();
   if (!id || !/^[A-Za-z0-9-]+$/.test(id)) return [];
   return [
-    { mode: 'claim', label: '用 LINE 開通', href: `https://liff.line.me/${id}?m=claim` },
     { mode: 'reset', label: '用 LINE 重設密碼', href: `https://liff.line.me/${id}?m=reset` }
   ];
 }
@@ -91,33 +87,15 @@ export function parseMode(search) {
 }
 
 // ------------------------------------------------------------
-// 欄位驗證——規則與文字抄自 apps-script/platform/Staff.gs（stfValidate*_）與 platform/views/claim.js；
+// 欄位驗證——規則與文字抄自 apps-script/platform/Staff.gs（stfValidate*_）；
 // test/line-auth-front.test.mjs 會比對來源字串，兩邊改了這裡會紅。後端永遠會再驗一次。
 // ------------------------------------------------------------
 export const MSG = {
   pwShort: '密碼至少要 8 個字元',
   pwSame: '密碼不能跟編號一樣',
   pwMismatch: '兩次輸入的密碼不一樣',
-  pwLong: '密碼最多 128 個字元',
-  phone: '手機要是 09 開頭的 10 碼數字',
-  birthdayFormat: '生日格式要是 YYYY-MM-DD',
-  birthdayInvalid: '生日不是有效的日期',
-  birthdayRange: '生日年份看起來不對，請再確認',
-  address: '居住地址請填 5～100 個字',
-  title: '請選擇職稱'
+  pwLong: '密碼最多 128 個字元'
 };
-
-export function validateBirthday(s, nowMs) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return MSG.birthdayFormat;
-  const y = +m[1], mo = +m[2], d = +m[3];
-  const dt = new Date(Date.UTC(y, mo - 1, d));
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return MSG.birthdayInvalid;
-  const nowY = new Date((nowMs === undefined ? Date.now() : nowMs) + 8 * 3600 * 1000).getUTCFullYear();
-  const age = nowY - y;
-  if (age < 15 || age > 80) return MSG.birthdayRange;
-  return null;
-}
 
 export function validatePassword(pw, pw2, empNo) {
   if (pw.length < 8) return MSG.pwShort;
@@ -125,22 +103,6 @@ export function validatePassword(pw, pw2, empNo) {
   if (String(pw).toUpperCase() === String(empNo || '').toUpperCase()) return MSG.pwSame;
   if (pw !== pw2) return MSG.pwMismatch;
   return null;
-}
-
-/** 開通表單檢查。回 { error } 或 { form }（手機已去掉空白與連字號） */
-export function validateClaimForm(v, empNo, titleOptions, nowMs) {
-  const title = String(v.title || '');
-  if (!title || (titleOptions || []).indexOf(title) === -1) return { error: MSG.title };
-  const phone = String(v.phone || '').replace(/[\s-]/g, '');
-  if (!/^09[0-9]{8}$/.test(phone)) return { error: MSG.phone };
-  const birthday = String(v.birthday || '');
-  const bErr = validateBirthday(birthday, nowMs);
-  if (bErr) return { error: bErr };
-  const address = String(v.address || '').trim();
-  if (address.length < 5 || address.length > 100) return { error: MSG.address };
-  const pErr = validatePassword(String(v.pw || ''), String(v.pw2 || ''), empNo);
-  if (pErr) return { error: pErr };
-  return { form: { phone, birthday, address, title, new_password: String(v.pw) } };
 }
 
 // ------------------------------------------------------------
@@ -204,7 +166,7 @@ export function createLineAuth(deps) {
     return h('a', { class: 'btn ' + (primary ? 'btn-primary' : 'btn-secondary') + ' btn-block', 'data-role': role, href }, label);
   }
   const titleOf = (m) => T.title[m || want] || '用 LINE 認身分';
-  const fallbackBtn = () => linkBtn('fallback', T.fallback, FALLBACK_HREF[want] || FALLBACK_HREF.claim, false);
+  const fallbackBtn = () => linkBtn('fallback', T.fallback, FALLBACK_HREF.reset, false);
 
   function showInfo(name, text, opts) {
     const o = opts || {};
@@ -243,13 +205,12 @@ export function createLineAuth(deps) {
       return showInfo('error', errText(r));
     }
     switch (mode) {
-      case 'claim': return renderClaim(r, token);
       case 'reset': return renderReset(r, token);
       case 'not_trusted': return renderNotTrusted(r);
       case 'not_bound': return showInfo('not_bound', T.notBound);
       case 'ambiguous': return showInfo('ambiguous', T.ambiguous);
       case 'blocked': return showInfo('blocked', T.blocked);
-      case 'need_review': return showInfo('need_review', want === 'claim' ? T.needReviewClaim : T.needReviewReset);
+      case 'need_review': return showInfo('need_review', T.needReviewReset);
       case 'off': return showInfo('off', T.off);
       case 'wrong_op': return renderWrongOp(r);
       default: return showInfo('error', T.errors.server_error);
@@ -265,10 +226,9 @@ export function createLineAuth(deps) {
     return showInfo('not_trusted', text);
   }
 
-  function renderWrongOp(r) {
-    const exp = r.expected_mode === 'claim' || r.expected_mode === 'reset' ? r.expected_mode : (want === 'claim' ? 'reset' : 'claim');
-    const link = linkBtn('goto-' + exp, exp === 'claim' ? T.goClaim : T.goReset, 'line.html?m=' + exp, true);
-    return showInfo('wrong_op', exp === 'claim' ? T.wrongToClaim : T.wrongToReset, { extra: [link], noFallback: true });
+  function renderWrongOp() {
+    const link = linkBtn('goto-login', T.backToLogin, 'index.html', true);
+    return showInfo('wrong_op', T.wrongToClaim, { extra: [link], noFallback: true });
   }
 
   // ---------- 送出共用：token 過期重取一次、nonce 失效重新 check ----------
@@ -292,72 +252,6 @@ export function createLineAuth(deps) {
       return { screen: again };
     }
     return { res };
-  }
-
-  // ---------- 開通 ----------
-  function renderClaim(r, token) {
-    const empNo = String(r.emp_no || '');
-    const opts = Array.isArray(r.title_options) ? r.title_options.filter((x) => typeof x === 'string') : [];
-    const names = r.title_names && typeof r.title_names === 'object' ? r.title_names : {};
-    const nonceRef = { nonce: r.nonce, token };
-
-    const radios = opts.map((t, i) => {
-      const row = h('div', { class: 'checkbox-row' });
-      const inp = h('input', { type: 'radio', name: 'line-title', id: 'line-title-' + i, value: t, 'data-role': 'title-' + t });
-      row.appendChild(inp);
-      row.appendChild(h('label', { class: 'field-label', for: 'line-title-' + i }, names[t] || t));
-      return row;
-    });
-    const field = (id, label, type, extra) => {
-      const f = h('div', { class: 'field' });
-      f.appendChild(h('label', { class: 'field-label', for: id }, label));
-      f.appendChild(h('input', Object.assign({ class: 'input', id, type }, extra || {})));
-      return f;
-    };
-    const pair = (a, b) => kids(h('div', { class: 'form-grid-2' }), [a, b]);
-    const titleField = h('div', { class: 'field', 'data-role': 'title-wrap' });
-    titleField.appendChild(h('span', { class: 'field-label' }, '職稱'));
-    kids(titleField, radios);
-    const submit = h('button', { class: 'btn btn-primary btn-block', type: 'submit', 'data-role': 'submit' }, '送出審核');
-    const form = h('form', { class: 'stack', 'data-role': 'form', novalidate: 'novalidate' });
-    kids(form, [
-      titleField,
-      pair(field('line-birthday', '生日', 'date', { required: 'required' }), field('line-phone', '手機', 'tel', { inputmode: 'numeric', placeholder: '0912345678', required: 'required' })),
-      field('line-address', '居住地址', 'text', { autocomplete: 'street-address', required: 'required' }),
-      pair(field('line-pw', '設定密碼（8 碼以上）', 'password', { autocomplete: 'new-password', required: 'required' }),
-        field('line-pw2', '再輸入一次', 'password', { autocomplete: 'new-password', required: 'required' })),
-      h('p', { class: 'field-hint' }, '送出後要等你的單位主管審核，通過後才能用編號登入。'),
-      submit
-    ]);
-    const who = `${r.name || ''}（${empNo}）・${r.unit_name || ''}`;
-    const card = screen('claim', T.title.claim, [para(who, 'who'), errBox(), form, fallbackBtn()]);
-    const q = (sel) => card.querySelector(sel);
-
-    form.addEventListener('submit', async (ev) => {
-      if (ev && ev.preventDefault) ev.preventDefault();
-      const picked = radios.map((row) => row.querySelector('input')).find((i) => i.checked);
-      const v = validateClaimForm({
-        title: picked ? picked.value : '',
-        phone: q('#line-phone').value, birthday: q('#line-birthday').value, address: q('#line-address').value,
-        pw: q('#line-pw').value, pw2: q('#line-pw2').value
-      }, empNo, opts);
-      if (v.error) return showError(card, v.error);
-      showError(card, '');
-      submit.disabled = true;
-      submit.textContent = '送出中，請稍候…';
-      const out = await submitOp(card, token, nonceRef, (tk, nonce) => ({ op: 'claim', id_token: tk, nonce, form: v.form }));
-      submit.disabled = false;
-      submit.textContent = '送出審核';
-      if (out.fatal) return showReopen();
-      if (out.renewed) return undefined;
-      if (out.screen) return renderMode(out.screen, token);
-      const res = out.res;
-      if (res.ok === true && res.mode === 'done') return showInfo('claim_done', T.claimSent, { title: '已送出', extra: [linkBtn('to-login', T.toLogin, 'index.html', true)], noFallback: true });
-      if (res.ok === true) return renderMode(res, token);
-      if (['not_bound', 'not_trusted', 'ambiguous', 'blocked', 'need_review', 'off'].includes(res.error)) return renderMode(res, token);
-      return showError(card, errText(res));
-    });
-    return card;
   }
 
   // ---------- 重設 ----------
@@ -401,7 +295,12 @@ export function createLineAuth(deps) {
 
   // ---------- 入口 ----------
   async function run() {
-    want = parseMode(deps.search === undefined ? (win && win.location ? win.location.search : '') : deps.search);
+    const search = deps.search === undefined ? (win && win.location ? win.location.search : '') : deps.search;
+    want = parseMode(search) || (/(?:^|[?&])(m|liff\.state)=/.test(search || '') ? '' : 'reset');   // 沒帶 m 也當 reset
+    if (want === 'claim') {   // R3：LINE 開通已取消，只導回登入頁，不載 LIFF、不呼叫後端
+      want = '';
+      return screen('claim_off', '用 LINE 認身分', [para(T.claimOff, 'message'), linkBtn('to-login', T.backToLogin, 'index.html', true)]);
+    }
     if (!String(liffId || '').trim()) return showInfo('preparing', T.preparing, { title: T.preparing, noFallback: true });
     if (!want) return showInfo('bad_link', T.badLink, { title: '用 LINE 認身分', extra: [linkBtn('to-login', T.toLogin, 'index.html', false)], noFallback: true });
     showLoading();
