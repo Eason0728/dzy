@@ -151,6 +151,18 @@ export function mountList(el, ctx) {
       if (more) { const tr = more.closest('tr'); const open = tr.classList.toggle('stf-open'); more.setAttribute('aria-expanded', String(open)); more.textContent = open ? '收起 ▴' : '更多 ▾'; return; }
       onAction(e);
     });
+    // 「更多」展開後按 Esc、或點同仁名單其他地方都會收起（2026-10-26 Fable 複查建議）；el 跨重畫共用，只綁一次
+    if (!el.__stfMoreBound) {
+      el.__stfMoreBound = true;
+      const closeMore = (keep) => el.querySelectorAll('tr.stf-open').forEach((tr) => {
+        if (tr === keep) return;
+        tr.classList.remove('stf-open');
+        const b = tr.querySelector('[data-more]');
+        if (b) { b.setAttribute('aria-expanded', 'false'); b.textContent = '更多 ▾'; }
+      });
+      el.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMore(null); });
+      el.addEventListener('click', (e) => { closeMore(e.target.closest ? e.target.closest('tr.stf-open') : null); }, true);
+    }
     el.querySelector('[data-role="add-staff"]').addEventListener('click', () => openAddFlow(clockEnv()));
     if (orgTools) {
       el.querySelector('[data-role="org-upgrade"]').addEventListener('click', upgradeFlow);
