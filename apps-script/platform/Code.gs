@@ -44,7 +44,9 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'apvSetup', 'apvThresholdGet', 'apvThresholdSave', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta',
   'apvSubmit', 'apvResubmit', 'apvWithdraw', 'apvDecide', 'apvSign', 'apvHandle', 'apvReassign', 'apvVoid',
   // 2026-10-18：門市營運系統（StoreOps.gs）；永遠不可列進 minikit readActions 與 dryrun READ_ACTIONS
-  'svcStoreRedeem', 'svcStoreWho', 'svcStoreRoster'];
+  'svcStoreRedeem', 'svcStoreWho', 'svcStoreRoster',
+  // 2026-10-25：區域（督導負責區，Regions.gs；docs/regions/spec.md 第 9 節）。regionList／regionCheck 是讀取；regionSave／regionSwitch 寫入（上鎖）
+  'regionList', 'regionSave', 'regionCheck', 'regionSwitch'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -74,6 +76,8 @@ function doGet(e) {
 
 /** 解析 body、白名單檢查、分派到對應 handler。任何格式問題都回一般物件，不拋例外往外丟 */
 function dispatch_(e) {
+  // 區域快取（Regions.gs）只活在同一次請求：每次進來先清（mini 常駐行程的全域變數會跨請求留著）
+  if (typeof regionCtxReset_ === 'function') regionCtxReset_();
   var body = parseJsonBody_(e);
   if (body === null) {
     return { ok: false, error: CODE_MSG_BAD_REQUEST };
@@ -103,7 +107,8 @@ function dispatch_(e) {
     clockOutboxRetry: 1, clockOutboxCancel: 1, clockSetHome: 1, clockOldHomeDecide: 1, clockLink: 1, clockAddHome: 1,
     orgUpgrade2026: 1, orgRollback2026: 1, orgUpgrade202610: 1, orgRollback202610: 1, orgRename202610: 1, orgRenameRollback202610: 1, orgAddBranddev202610: 1, orgAddBranddevRollback202610: 1,
     permInit: 1, permMapSave: 1, permExSave: 1, permExRevoke: 1, permStoreSave: 1, permAuditSeen: 1,
-    apvSetup: 1, apvThresholdSave: 1, apvSubmit: 1, apvResubmit: 1, apvWithdraw: 1, apvDecide: 1, apvSign: 1, apvHandle: 1, apvReassign: 1, apvVoid: 1 };
+    apvSetup: 1, apvThresholdSave: 1, apvSubmit: 1, apvResubmit: 1, apvWithdraw: 1, apvDecide: 1, apvSign: 1, apvHandle: 1, apvReassign: 1, apvVoid: 1,
+    regionSave: 1, regionSwitch: 1 };
   if (MUTATING_ACTIONS[action]) {
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) {
@@ -234,6 +239,10 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'svcStoreRedeem': return handleSvcStoreRedeem_(payload);
     case 'svcStoreWho': return handleSvcStoreWho_(payload);
     case 'svcStoreRoster': return handleSvcStoreRoster_(payload);
+    case 'regionList': return handleRegionList_(token);
+    case 'regionSave': return handleRegionSave_(token, payload);
+    case 'regionCheck': return handleRegionCheck_(token);
+    case 'regionSwitch': return handleRegionSwitch_(token, payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };

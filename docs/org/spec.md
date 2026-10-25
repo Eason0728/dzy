@@ -272,3 +272,6 @@
   - 寫 `staff_log`（`org_add_branddev_2610`／`org_add_branddev_2610_rollback`）；不另建備份。
 - 種子（`STF_DEFAULT_ORG`）也有這一列，所以新環境直接有、apply 略過；舊環境由 apply 補。
 - 部署：後端（mini）先、前端後，再在同仁名單按「新增品牌發展部（10/23）」；前端先上時按鈕呼叫不存在的 action 而報錯但無害。mini 端 `dzy-minikit` 的 `test/runner/dzy-platform.test.js` 部門數斷言同步由 10 改 11（sync-gas 之後）。
+
+## 18. 區域（督導負責區，2026-10-25 起草）
+另見 `docs/regions/spec.md`（新分頁 regions、通訊錄「我的區域」、審核與稽核限區、REGIONS_ON 開關）。

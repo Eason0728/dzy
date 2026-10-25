@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'StaffClock.gs', 'Perms.gs', 'PermActions.gs', 'StoreOps.gs', 'Code.gs']
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'StaffClock.gs', 'Perms.gs', 'PermActions.gs', 'StoreOps.gs', 'Code.gs']
   .map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'dzy-store-contract-v2.json'), 'utf8'));
 

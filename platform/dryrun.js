@@ -25,7 +25,9 @@ export const READ_ACTIONS = {
     // 個人帳號第二期（2026-10-17）：權限設定的純讀取；permInit／permMapSave／permEx*／permStoreSave／permAuditSeen 不列（寫入，試跑會攔）
     'permMapGet', 'permExList', 'permStoreGet', 'myPerms', 'permAuditList', 'permWho',
     // 第三期表單簽核（2026-10-18）：純讀取；apvSubmit／apvResubmit／apvWithdraw／apvDecide／apvSign／apvHandle／apvReassign／apvVoid／apvThresholdSave 不列（寫入，試跑會攔）
-    'apvThresholdGet', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta'],
+    'apvThresholdGet', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta',
+    // 區域（2026-10-25，docs/regions/spec.md 第 9 節）：純讀取；regionSave（preview:false）／regionSwitch 不列（寫入，試跑會攔）
+    'regionList', 'regionCheck'],
   audit: ['getAll'],
   dorm: ['rooms', 'list', 'contract', 'handover'],
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）
@@ -89,6 +91,9 @@ export function isReadAction(backendId, action, payload) {
   // 2026-10-23 新增品牌發展部同一套：dryrun:true 預覽放行；dryrun:false 與 orgAddBranddevRollback202610 仍攔
   if (backendId === 'platform' && action === 'orgAddBranddev202610'
     && payload && payload.dryrun === true) return true;
+  // 區域存檔先 preview（只回差異、後端在寫入前就 return）視為讀取；真的存檔仍攔
+  if (backendId === 'platform' && action === 'regionSave'
+    && payload && payload.preview === true) return true;
   // 復職先 preview（只回舊對照清單、後端在寫入前就 return）視為讀取
   if (backendId === 'platform' && action === 'staffReinstate'
     && payload && payload.preview === true) return true;
