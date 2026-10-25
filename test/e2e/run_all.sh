@@ -22,6 +22,7 @@ TESTS=(
   e2e_t14_cashbook.py
   e2e_t15_regions.py
   e2e_t14_line_auth.py
+  e2e_t16_eval.py
 )
 
 for i in "${!TESTS[@]}"; do

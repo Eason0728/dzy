@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""e2e ⑭：績效評核（modules/eval）。後端＝本機 Node 把 apps-script/platform 的 .gs 載進 vm（eval_backend.mjs），
+"""e2e ⑯：績效評核（modules/eval）。後端＝本機 Node 把 apps-script/platform 的 .gs 載進 vm（eval_backend.mjs），
 瀏覽器打正式平台網址的請求一律 route 到它；全部假名、零真實網路。
 
 ① 計時同仁（1280）：首頁提醒 → 填寫評鑑（評完一位＋評一半一位 → 確認框列出沒評完的人 → 送出）→ 自評＋夥伴留言 → 改日期到 1/12 看我的成績。
