@@ -861,6 +861,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const px = dir.data.find((p) => p.emp_no === x.emp);
   ok(Array.isArray(dir.data) && px.name === '連同仁甲' && px.unit === 'mzt-gf' && px.active === true && px.clocks.map((c) => c.store_code + ':' + c.emp_id + ':' + c.role).sort().join() === 'mztgf:LX1:home,mztjs:LX2:support', 'B8 ★回 [{emp_no,name,unit,active,clocks:[{store_code,emp_id,role}]}]', px);
   ok(dir.data.find((p) => p.emp_no === nm.emp).clocks.length === 0, 'B8 ★只含 confirmed 對照（suggested／rejected 不給）');
+  ok(px.title === 'pt' && dir.data.find((p) => p.emp_no === mgrGF.emp).title === 'sm', 'B8 ★回職稱代碼 title（佈告欄依職稱決定看得到哪些品牌，2026-10-25）', px);
   const dirText = JSON.stringify(dir);
   ok(dirText.indexOf('0911222333') === -1 && dirText.indexOf('1995-05-05') === -1 && dirText.indexOf('測試路') === -1 && !/phone|birthday|address|password|hash|salt/.test(dirText), 'B8 ★svcDirectory 無手機、生日、地址（欄位與值都沒有）');
   post(sb, 'staffSetActive', { emp_no: x.emp, active: false }, tok);

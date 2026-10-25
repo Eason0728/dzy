@@ -2196,7 +2196,7 @@ function handleClockAlerts_(token) {
 
 /**
  * 佈告欄名單（spec §4.6）。不靠登入 token：payload.svc_key 要等於 Script Property BULLETIN_SVC_KEY（未設＝全拒，常數時間比對）。
- * 回 data＝[{emp_no,name,unit,unit_name,active,clocks:[{store_code,emp_id,role}]}]，只含 confirmed 對照，不含手機／生日／地址。
+ * 回 data＝[{emp_no,name,unit,unit_name,title,active,clocks:[{store_code,emp_id,role}]}]（title＝職稱代碼，2026-10-25），只含 confirmed 對照，不含手機／生日／地址。
  */
 function handleSvcDirectory_(payload) {
   var want = PropertiesService.getScriptProperties().getProperty(CLK_PROP_SVC_KEY);
@@ -2209,6 +2209,7 @@ function handleSvcDirectory_(payload) {
     var unit = clkStaffUnit_(s);
     return {
       emp_no: s.emp, name: clkStaffName_(s), unit: unit, unit_name: org.unit[unit] ? org.unit[unit].name : '',
+      title: stfStr_(s.values[STF_COL.title]),   // 職稱代碼（2026-10-25）：佈告欄依職稱決定總監級以上看得到全部品牌
       active: clkStaffStatus_(s) !== 'disabled',
       clocks: maps.filter(function (m) { return m.emp_no === s.emp; }).map(function (m) { return { store_code: m.store_code, emp_id: m.emp_id, role: m.role }; })
     };
