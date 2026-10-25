@@ -1022,6 +1022,7 @@ textarea.input:disabled {
 .dialog-actions {
   flex: 0 0 auto;
   display: flex;
+  flex-wrap: wrap;            /* 2026-10-26：320 寬按鈕放不下時換行，不跑出對話框 */
   justify-content: flex-end;
   gap: var(--space-2);
 }
@@ -1521,3 +1522,10 @@ textarea.input:disabled {
 
 /* 登入頁標題（2026-10-26）：太窄放不下時從「｜」後整齊換行，不在「管理／系統」中間斷 */
 .login-card .card-title .nowrap { white-space: nowrap; }
+
+/* 2026-10-26：320 寬手機頁首，按鈕縮小、名字至少留三個字（原本被擠到只剩一個字） */
+@media (max-width: 360px) {
+  .side-user .su-main { min-width: 3.4em; }
+  .su-act { gap: 4px; }
+  .su-act button { padding: 6px 7px; font-size: 12px; }
+}
