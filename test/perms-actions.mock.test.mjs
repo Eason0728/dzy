@@ -196,17 +196,17 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
     ok(r.ok === false && r.code === 'not_inited', '1: ' + a + ' 未初始化 → not_inited', r);
   }
   for (const n of ['perm_map', 'perm_ex', 'perm_store_map', 'perm_audit']) ok(!sheets[n], '1: 讀寫都試過之後仍然沒有分頁 ' + n + '（不自動建表）');
-  // permInit：非 admin 擋；admin 建四表、預設 27 條＋對照 5 筆；重跑不重複
+  // permInit：非 admin 擋；admin 建四表、預設 33 條＋對照 5 筆；重跑不重複
   on(app);
   const bad = post(sb, 'permInit', {}, P.hrHm.token);
   ok(bad.ok === false && bad.code === 'no_perm', '1: permInit 非 admin（連人資主管）→ no_perm', bad);
   const lk0 = app.counters.locks;
   const r1 = g('permInit');
-  ok(r1.ok && r1.data.created.length === 4 && r1.data.rules_seeded === 27 && r1.data.stores_seeded === 5, '1: admin permInit 建四表＋27 條＋5 筆對照', r1);
+  ok(r1.ok && r1.data.created.length === 4 && r1.data.rules_seeded === 33 && r1.data.stores_seeded === 5, '1: admin permInit 建四表＋33 條＋5 筆對照（2026-10-26 加公告管理六條）', r1);
   ok(app.counters.locks > lk0, '1: permInit 拿了 LockService');
-  ok(sheets.perm_map._rows().length === 28, '1: perm_map 28 列（表頭＋27）');
+  ok(sheets.perm_map._rows().length === 34, '1: perm_map 34 列（表頭＋33）');
   const r2 = g('permInit');
-  ok(r2.ok && r2.data.created.length === 0 && r2.data.rules_seeded === 0 && sheets.perm_map._rows().length === 28, '1: 重跑不重複', r2);
+  ok(r2.ok && r2.data.created.length === 0 && r2.data.rules_seeded === 0 && sheets.perm_map._rows().length === 34, '1: 重跑不重複', r2);
   const log = rowsOf(sheets, 'staff_log').filter((r) => r[2] === 'perm_init');
   ok(log.length === 2 && log.every((r) => /^created:/.test(r[4])), '1: staff_log 寫 perm_init（只有分頁名與數量）', log);
 }
@@ -226,6 +226,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
     ok(viaHm.ok === false && viaHm.code === 'no_perm' && viaSm.ok === false && viaSm.code === 'no_perm', '2: ' + a + ' 只有 admin（人資主管、店長都 no_perm）', [viaHm, viaSm]);
     ok(post(sb, a, p, '').ok === false && post(sb, a, p, 'garbage').ok === false, '2: ' + a + ' 沒 token／亂 token 被擋');
   }
+  // 2026-10-26：人資主管可設 platform.bulletin 例外的判斷在 StoreOps.gs（stfIsHrHead_），本檔不載入該檔 → 該案例見 storeops.mock 第 6 節
   for (const [a, p] of [['permMapGet', {}], ['permStoreGet', {}]]) {
     ok(post(sb, a, p, P.hrHm.token).ok === true, '2: ' + a + ' 人資主管（platform.permmap）可以');
     ok(post(sb, a, p, A).ok === true, '2: ' + a + ' admin 可以');
@@ -255,7 +256,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   const { sb, sheets, P, counters } = app;
   const A = sb.__admin;
   const g = post(sb, 'permMapGet', {}, A);
-  ok(g.ok && g.data.inited && g.data.rules.length === 27 && g.data.grantable.length === 13 && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write', '3: permMapGet 回 27 條規則、13 個可給功能、5 個鎖碼', g.data && Object.keys(g.data));
+  ok(g.ok && g.data.inited && g.data.rules.length === 33 && g.data.grantable.length === 14 && g.data.grantable[13] === 'platform.bulletin' && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write', '3: permMapGet 回 33 條規則、14 個可給功能（含公告管理）、5 個鎖碼', g.data && Object.keys(g.data));
   ok(g.data.titles.some((t) => t.code === 'osv' && t.rank === 2 && t.ladder === 'office') && g.data.depts.some((d) => d.code === 'hr') && g.data.names['audit.read'], '3: permMapGet 的 titles／depts／names 有內容（osv 職級 2）');
   const sav = (tok, add, remove) => post(sb, 'permMapSave', { add: add || [], remove: remove || [] }, tok);
   const R = (ladder, dept, title, perm) => ({ ladder, dept, title, perm });

@@ -31,6 +31,9 @@ DEFAULT_RULES = (
     + [('hq', 'hr', '*', p) for p in ('platform.staff', 'dorm.read', 'dorm.write')]
     + [('hq', 'hr', 'hm', 'platform.permmap')]
     + [('store', '', 'sm', 'store.void')]
+    # 2026-10-26 公告管理（R028–R033）：總監不分部門、辦公室總監、廚藝總監、執行長／總經理／董事長
+    + [('hq', '', 'hm', 'platform.bulletin'), ('office', '', 'odir', 'platform.bulletin'), ('store', '', 'rdd', 'platform.bulletin')]
+    + [('hq', '', t, 'platform.bulletin') for t in ('ceo', 'gm', 'chair')]
 )
 HRM_PERMS = ['platform.staff', 'dorm.read', 'dorm.write', 'platform.permmap']
 
@@ -115,10 +118,10 @@ class Mock11(MockBackend):
         if action in ('permMapSave',) and not has_map:
             return no_perm
         if action in ('permExList', 'permExSave', 'permExRevoke'):
-            # 2026-10-18：人資主管（有 platform.permmap）也能用個別例外，但只限 store.void／att.extra（PermActions.gs permAcExAuth_）
+            # 2026-10-18：人資主管（有 platform.permmap）也能用個別例外，但只限 store.void／att.extra／platform.bulletin（2026-10-26 加公告管理；PermActions.gs permAcExAuth_）
             if not (is_admin or has_map):
                 return no_perm
-            if not is_admin and action == 'permExSave' and p.get('perm') not in ('store.void', 'att.extra'):
+            if not is_admin and action == 'permExSave' and p.get('perm') not in ('store.void', 'att.extra', 'platform.bulletin'):
                 return no_perm
         elif action in ('permStoreSave', 'permAuditList', 'permAuditSeen') and not is_admin:
             return no_perm
@@ -127,12 +130,13 @@ class Mock11(MockBackend):
                 return {'ok': True, 'data': {'inited': False}}
             return {'ok': True, 'data': {
                 'inited': True, 'rules': list(self.rules),
-                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write'],
+                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin'],
                 'locked': LOCKED, 'names': {},
                 'counts': self.counts(),
                 'ladders': [{'code': 'store', 'name': '門市'}, {'code': 'office', 'name': '品牌辦公室'}, {'code': 'hq', 'name': '總部'}],
                 'titles': [
                     {'code': 'sm', 'name': '店長', 'ladder': 'store', 'rank': 3}, {'code': 'pt', 'name': '計時同仁', 'ladder': 'store', 'rank': 1},
+                    {'code': 'rdd', 'name': '廚藝總監', 'ladder': 'store', 'rank': 6},   # 2026-10-26：R030 公告管理的對象，名單要有這個身分才不會掉進「其他」
                     {'code': 'oam', 'name': '區經理', 'ladder': 'office', 'rank': 3}, {'code': 'osv', 'name': '區督導', 'ladder': 'office', 'rank': 4}, {'code': 'odir', 'name': '區總監', 'ladder': 'office', 'rank': 5},
                     {'code': 'hs', 'name': '部門同仁', 'ladder': 'hq', 'rank': 1}, {'code': 'hm', 'name': '人資主管', 'ladder': 'hq', 'rank': 5},
                     {'code': 'ceo', 'name': '執行長', 'ladder': 'hq', 'rank': 9}, {'code': 'gm', 'name': '總經理', 'ladder': 'hq', 'rank': 8}, {'code': 'chair', 'name': '董事長', 'ladder': 'hq', 'rank': 10}],
@@ -171,7 +175,7 @@ class Mock11(MockBackend):
                                'detail': {'rules_added': added, 'rules_removed': list(rem), 'affected': 3, 'people': [{'emp_no': 'DZY002', 'name': '李大華', 'added': ['dorm.write'], 'removed': []}]}})
             return {'ok': True, 'data': {'added': added, 'removed': list(rem), 'affected': 3}}
         if action == 'permExList':
-            return {'ok': True, 'data': {'inited': True, 'items': [dict(x) for x in self.exs if is_admin or x['perm'] in ('store.void', 'att.extra')]}}
+            return {'ok': True, 'data': {'inited': True, 'items': [dict(x) for x in self.exs if is_admin or x['perm'] in ('store.void', 'att.extra', 'platform.bulletin')]}}
         if action == 'permExSave':
             if not (p.get('note') or '').strip():
                 return self._err('bad_note', '原因必填，1 到 50 個字')
@@ -281,7 +285,7 @@ def main():
             check(ad.locator('[data-act="init"]').count() == 1, '★未初始化：admin 看到「初始化」按鈕')
             check(tabs(ad) == ['對照表', '個別例外', '店別對照', '權限異動'], 'admin 四個分頁：%s' % tabs(ad))
             ad.click('[data-act="init"]')
-            check('20 條預設規則' in ad.inner_text('.dialog-body') and '四張' in ad.inner_text('.dialog-body'), '初始化確認框說明會建四張表＋20 條預設規則')
+            check('預設規則' in ad.inner_text('.dialog-body') and '四張' in ad.inner_text('.dialog-body'), '初始化確認框說明會建四張表＋預設規則')
             dlg(ad, '取消')
             check(mock.inited is False, '取消不會初始化')
             ad.click('[data-act="init"]')
@@ -291,16 +295,16 @@ def main():
             groups = [g.get_attribute('data-group') for g in ad.locator('[data-role="role-list"] .pm-group').all()]
             check(groups == ['store', 'office', 'hq-dept', 'hq-top'], '★左側身分分組（20 條預設規則都對得到身分，沒有「其他」）：%s' % groups)
             gtitles = ad.locator('.pm-group-title').all_inner_texts()
-            check(gtitles == ['門市（含中央工廠）', '品牌辦公室', '總部（依部門）', '總部（高層，不分部門）'], '分組標題：%s' % gtitles)
-            check(ad.locator('.pm-role').count() == 16, '身分共 16 列（門市 2、辦公室 3、總部 8、高層 3），實際 %d' % ad.locator('.pm-role').count())
+            check(gtitles == ['門市（含中央工廠）', '品牌辦公室', '總部（依部門）', '總部（不分部門）'], '分組標題：%s' % gtitles)
+            check(ad.locator('.pm-role').count() == 18, '身分共 18 列（門市 3、辦公室 3、總部依部門 8、不分部門 4＝總監＋執行長／總經理／董事長），實際 %d' % ad.locator('.pm-role').count())
             hq_names = ad.locator('[data-group="hq-dept"] .pm-role span').all_inner_texts()
             check('人資部・全部職稱' in hq_names and '人資部・總監' in hq_names, '總部依部門兩列：%s' % hq_names)
             role = lambda name: ad.locator('.pm-role', has=ad.locator('span', has_text=name)).first
             check('3 人' in role('店長').inner_text(), '身分顯示人數（店長 3 人）：%s' % role('店長').inner_text().replace('\n', ' '))
             role('店長').click()
             perms_order = [r.get_attribute('data-perm') for r in ad.locator('[data-role="feature-row"]').all()]
-            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write'],
-                  '★右側 13 個功能列、順序正確：%s' % perms_order)
+            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin'],
+                  '★右側 14 個功能列、順序正確：%s' % perms_order)
             sw = lambda pg, perm: pg.locator('[data-role="feature-row"][data-perm="%s"] [data-act="toggle"]' % perm)
             on = lambda pg, perm: sw(pg, perm).get_attribute('aria-checked') == 'true'
             check(on(ad, 'audit.read.own') and not on(ad, 'dorm.read') and not on(ad, 'audit.read'), '店長：看自己店稽核＝開，其餘關')
@@ -495,7 +499,7 @@ def main():
             check(lk.count() == 5, '鎖住的五列仍顯示（含薪酬管理）')
             check(lk.locator('[data-act="toggle"][disabled]').count() == 5, '★鎖碼五列對非 admin：開關 disabled（含薪酬管理）')
             check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 5, '鎖列標示「只有系統管理員能改」')
-            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 8, '其餘 8 列可開關（含新增的收支作廢、額外考勤核定、收支管理，後端沒鎖）')
+            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 9, '其餘 9 列可開關（含新增的收支作廢、額外考勤核定、收支管理、公告管理，後端沒鎖）')
             hr.locator('[data-perm="platform.users"] [data-act="toggle"]').click(force=True)
             check('沒有未儲存' in hr.inner_text('[data-role="bar-msg"]'), '點 disabled 的鎖碼開關沒有任何變更')
             hr.fill('[data-role="who-input"]', '店長')
@@ -522,11 +526,11 @@ def main():
             }""")
             check(res['ok'] is False and res['code'] == 'perm_locked' and res['text'] == '只有系統管理員能改這個功能的對象', '★送出鎖碼 → perm_locked，中文：%s' % res)
             # 直接打網址進 admin 分頁 → 彈回首頁
-            # 人資主管的個別例外：功能下拉只有兩碼；清單只有後端回的那兩碼的例外（這裡沒有）
+            # 人資主管的個別例外：功能下拉只有三碼（2026-10-26 加公告管理）；清單只有後端回的那三碼的例外（這裡沒有）
             hr.evaluate("() => { window.location.hash = '#/perms/ex'; }")
             hr.wait_for_selector('[data-role="ex-perm"]')
             opts = hr.locator('[data-role="ex-perm"] option').all_inner_texts()
-            check(opts == ['收支作廢', '額外考勤核定'], '★人資主管個別例外只能選兩碼：%s' % opts)
+            check(opts == ['收支作廢', '額外考勤核定', '公告管理'], '★人資主管個別例外只能選三碼（含公告管理）：%s' % opts)
             check(hr.locator('[data-role="ex-item"]').count() == 0 and hr.locator('[data-role="ex-empty"]').count() == 1, '人資主管看不到別的碼的例外（照後端回傳顯示）')
             hr.evaluate("() => { window.location.hash = '#/perms/stores'; }")
             hr.wait_for_function("() => window.location.hash === '#/home'", timeout=5000)
@@ -573,7 +577,7 @@ def main():
             dr = open_as('admin', None, query='?dryrun=1')
             dr.evaluate("() => { window.location.hash = '#/perms/map'; }")
             dr.wait_for_selector('[data-role="feature-row"]')
-            check(dr.locator('.pm-role').count() == 16, '試跑模式：permMapGet 讀得到（16 個身分）')
+            check(dr.locator('.pm-role').count() == 18, '試跑模式：permMapGet 讀得到（18 個身分）')
             dr.locator('.pm-role', has=dr.locator('span', has_text='店長')).first.click()
             dr.locator('[data-perm="dorm.write"] [data-act="toggle"]').click()
             dr.click('[data-act="save"]')

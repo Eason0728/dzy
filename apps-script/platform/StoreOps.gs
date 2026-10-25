@@ -57,7 +57,7 @@ var STORE_SCHED_GATE_LADDERS = ['hq', 'office'];
 // 總部排班的打卡店別
 var STORE_SELF_CLOCK = 'hq';
 // 人資主管（不是 admin）可以設個別例外的兩個權限碼（spec §13.1）
-var STORE_HR_GRANTABLE = ['store.void', 'att.extra'];
+var STORE_HR_GRANTABLE = ['store.void', 'att.extra', 'platform.bulletin'];   // 2026-10-26 加公告管理（Eason：人資也能設）
 var STORE_PERM_VOID = 'store.void';
 var STORE_PERM_ATT_EXTRA = 'att.extra';
 

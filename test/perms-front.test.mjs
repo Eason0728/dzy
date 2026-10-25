@@ -43,9 +43,11 @@ const RULES = [
 ];
 const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write'] }, ORG);
 
-t('對照表 13 列、順序固定（不跟後端 grantable 順序）', () => {
+t('對照表 14 列、順序固定（2026-10-26 加公告管理）（不跟後端 grantable 順序）', () => {
   const rows = L.featureRows(DATA);
-  assert.equal(rows.length, 13);
+  assert.equal(rows.length, 14);
+  assert.equal(rows[13].perm, 'platform.bulletin');
+  assert.equal(rows[13].name, '公告管理');
   assert.deepEqual(rows.map((r) => r.perm), L.FEATURE_ORDER);
   assert.equal(rows[0].name, '看自己店稽核');
   assert.equal(rows[8].name, '改權限對照表');
@@ -199,7 +201,10 @@ t('身分清單：分組與順序', () => {
   assert.deepEqual(g[0].items.map((x) => x.name), ['計時同仁', '店長']);   // 依職級
   assert.deepEqual(g[2].items.map((x) => x.key), ['hq|hr|*', 'hq|hr|hm', 'hq|ops|*', 'hq|ops|hm']);
   assert.deepEqual(g[2].items.map((x) => x.name), ['人資部・全部職稱', '人資部・總監', '營運部・全部職稱', '營運部・總監']);
-  assert.deepEqual(g[3].items.map((x) => x.key), ['hq||gm', 'hq||ceo']);
+  // 2026-10-26：總監（不分部門）排在最前，名稱帶「（全部部門）」；公告管理預設給 hq||hm
+  assert.equal(g[3].title, '總部（不分部門）');
+  assert.deepEqual(g[3].items.map((x) => x.key), ['hq||hm', 'hq||gm', 'hq||ceo']);
+  assert.equal(g[3].items[0].name, '人資主管（全部部門）');
 });
 t('身分清單：現有規則目標不在清單 → 放「其他」不得隱藏', () => {
   const other = L.identityGroups(DATA_B).find((x) => x.id === 'other');
@@ -271,8 +276,8 @@ t('搜尋結果的來源白話與「我能用的功能」一致', () => {
   assert.deepEqual(who, mine);
   for (const [s, perms] of [['all', []], ['none', []], [[], []], [['a'], []], [['a', 'b'], ['audit.read.brand']]]) assert.equal(L.scopeLabel(s, perms), B.scopeText(s, perms));
 });
-t('人資主管在個別例外只能選的兩碼，都在可給清單裡', () => {
-  assert.deepEqual(L.HR_EX_FEATURES, ['store.void', 'att.extra']);
+t('人資主管在個別例外只能選的三碼（2026-10-26 加公告管理），都在可給清單裡', () => {
+  assert.deepEqual(L.HR_EX_FEATURES, ['store.void', 'att.extra', 'platform.bulletin']);
   L.HR_EX_FEATURES.forEach((p) => assert.ok(L.FEATURE_ORDER.includes(p), p));
 });
 t('每個功能都有白話說明', () => L.FEATURE_ORDER.forEach((p) => assert.ok(L.FEATURE_DESC[p], p)));

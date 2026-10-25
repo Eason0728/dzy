@@ -1925,28 +1925,63 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(sb.CODE_ALLOWED_ACTIONS.indexOf('ssoTicket') !== -1 && sb.CODE_ALLOWED_ACTIONS.indexOf('svcSsoRedeem') !== -1, 'SSO 分派白名單有兩支');
 })();
 
-// ── 公告管理權限＋bulletin-admin 入場券（2026-10-17）────────────────
+// ── 公告管理權限＋bulletin-admin 入場券（2026-10-17；2026-10-26 權限搬進「權限設定」，同仁名單不再勾選）────────────────
 (() => {
   const app = fresh();
   const { sb, tok, props } = app;
   props.BULLETIN_SVC_KEY = 'fake-bulletin-key-0001';
   const st = claimApprove(app, '公告同仁乙', 'bul-pw-0001');
   const other = claimApprove(app, '公告同仁丙', 'bul-pw-0002');
+  // 總監級（hm，不分部門）：預設規則 R028 給 platform.bulletin
+  const dir = claimApprove(app, '公告總監庚', 'bul-pw-0006', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hm' });
+  post(sb, 'permInit', {}, tok);
+  props.PERMS_ON = '1';
   const tkA = (t) => post(sb, 'ssoTicket', { aud: 'bulletin-admin' }, t);
   const rd = (ticket, aud) => post(sb, 'svcSsoRedeem', { svc_key: 'fake-bulletin-key-0001', ticket, aud });
   const perms = (t) => post(sb, 'me', {}, t).data.perms;
   const listed = (emp) => post(sb, 'staffList', {}, tok).data.staff.find((p) => p.emp_no === emp);
-  ok(tkA(st.token).code === 'no_perm' && perms(st.token).indexOf('platform.bulletin') === -1, 'BUL 沒勾 → 沒有 platform.bulletin、換不到管理券');
-  ok(listed(st.emp).bulletin_admin === false, 'BUL 同仁名單回 bulletin_admin＝false');
-  // 只有人資／admin 能設；格式要布林
-  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true }, other.token).error === '沒有權限設定公告管理', 'BUL ★一般同仁不能設（自己也不行）');
-  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true }, st.token).ok === false, 'BUL ★不能幫自己開');
-  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: 'yes' }, tok).error === '公告管理權限格式錯誤', 'BUL 非布林 → 格式錯誤');
-  const e1 = post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true }, tok);
-  ok(e1.ok, 'BUL admin 勾選成功', e1);
-  ok(props.BULLETIN_ADMINS === st.emp && listed(st.emp).bulletin_admin === true && listed(other.emp).bulletin_admin === false, 'BUL ★存進 BULLETIN_ADMINS、名單顯示已勾、別人不受影響', props.BULLETIN_ADMINS);
-  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true }, tok).error === '沒有要改的欄位', 'BUL 已勾再勾 → 沒有要改的欄位');
-  ok(perms(st.token).indexOf('platform.bulletin') !== -1, 'BUL ★勾選後同一個登入就有 platform.bulletin（每次請求重算）');
+  const MOVED = '公告管理已改到「權限設定」設定，請重新整理頁面';
+  ok(sb.STF_MSG.BULLETIN_MOVED === MOVED, 'BUL 搬家提示文案固定');
+  // (c) 沒有規則、沒有例外 → 沒有 platform.bulletin、換不到管理券
+  ok(tkA(st.token).code === 'no_perm' && perms(st.token).indexOf('platform.bulletin') === -1, 'BUL 沒規則也沒例外 → 沒有 platform.bulletin、換不到管理券');
+  // (b) 同仁名單不再有 bulletin_admin 欄位
+  ok(!('bulletin_admin' in listed(st.emp)) && post(sb, 'staffList', {}, tok).data.staff.every((p) => !('bulletin_admin' in p)), 'BUL ★同仁名單物件沒有 bulletin_admin 鍵');
+  // (a) 任何人帶 bulletin_admin（true／false／'yes'）→ 一律回搬家提示、什麼都不動
+  const hr = claimApprove(app, '公告人資丁', 'bul-pw-0003');
+  const ui = app.sheets.users._data.findIndex((r) => String(r[1]).toUpperCase() === hr.emp);
+  setCell(app, 'users', ui, 'role', 'hr');
+  const snap = () => JSON.stringify([rowsOf(app, 'staff'), rowsOf(app, 'staff_log'), rowsOf(app, 'perm_ex'), rowsOf(app, 'perm_audit'), props.BULLETIN_ADMINS || '']);
+  const before = snap();
+  [[true, tok, 'admin'], [false, tok, 'admin'], ['yes', tok, 'admin'], [true, hr.token, '人資'], [false, hr.token, '人資'], ['yes', hr.token, '人資'], [true, other.token, '一般同仁'], [true, st.token, '本人（自己）'], [false, st.token, '本人（自己）']].forEach(([v, t, who]) => {
+    const r = post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: v }, t);
+    ok(r.ok === false && r.error === MOVED, 'BUL ★' + who + ' 帶 bulletin_admin=' + JSON.stringify(v) + ' → 搬家提示', r);
+  });
+  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true, phone: '0922333444' }, tok).error === MOVED && listed(st.emp).phone !== '0922333444', 'BUL ★跟其他欄位一起帶也整筆拒絕（電話沒被改）');
+  ok(post(sb, 'staffEdit', { emp_no: 'DZY999', bulletin_admin: true }, tok).error === MOVED, 'BUL 不存在的編號也先回搬家提示（先於其他檢查）');
+  ok(snap() === before, 'BUL ★被拒的請求不改名單、不寫紀錄、不動 perm_ex／BULLETIN_ADMINS');
+  ok(tkA(st.token).code === 'no_perm', 'BUL 被拒後仍沒有管理權');
+  // 一般欄位照常可改
+  ok(post(sb, 'staffEdit', { emp_no: st.emp, phone: '0922333444' }, tok).ok, 'BUL 其他欄位（電話）照常可改');
+  // (f) 舊的 Script Property BULLETIN_ADMINS 完全不再認
+  props.BULLETIN_ADMINS = [st.emp, hr.emp, other.emp].join(',');
+  ok(perms(st.token).indexOf('platform.bulletin') === -1 && tkA(st.token).code === 'no_perm', 'BUL ★BULLETIN_ADMINS 寫了工號也不給（舊制作廢，staff）');
+  ok(perms(hr.token).indexOf('platform.bulletin') === -1 && tkA(hr.token).code === 'no_perm', 'BUL ★BULLETIN_ADMINS 寫了工號也不給（舊制作廢，人資角色）');
+  ok(typeof sb.stfBulletinGate_ === 'undefined', 'BUL 舊的 stfBulletinGate_（讀 BULLETIN_ADMINS）已移除');
+  ok(props.BULLETIN_ADMINS === [st.emp, hr.emp, other.emp].join(','), 'BUL 系統不再改寫 BULLETIN_ADMINS');
+  delete props.BULLETIN_ADMINS;
+  // (e) 總監級職稱：預設規則 R028 → 有 platform.bulletin、換得到管理券
+  ok(perms(dir.token).indexOf('platform.bulletin') !== -1, 'BUL ★總監 hm（不分部門）靠預設規則有 platform.bulletin');
+  ok(tkA(dir.token).ok, 'BUL 總監換得到管理券');
+  // 降成一般職稱 → 立刻失去
+  setStaff(app, dir.emp, 'title', 'hs');
+  ok(perms(dir.token).indexOf('platform.bulletin') === -1 && tkA(dir.token).code === 'no_perm', 'BUL 總監改成同仁 → 立刻沒有 platform.bulletin');
+  setStaff(app, dir.emp, 'title', 'hm');
+  ok(perms(dir.token).indexOf('platform.bulletin') !== -1, 'BUL 改回總監又有');
+  // (d) 個別例外：admin 給 st platform.bulletin → 同一個登入就有（每次請求重算）、換得到管理券
+  const ex = post(sb, 'permExSave', { emp_no: st.emp, perm: 'platform.bulletin', mode: 'add', until: '', note: '公告管理' }, tok);
+  ok(ex.ok && /^X\d+/.test(ex.data.ex_id), 'BUL admin 給個別例外 platform.bulletin', ex);
+  ok(perms(st.token).indexOf('platform.bulletin') !== -1, 'BUL ★例外生效後同一個登入就有 platform.bulletin（每次請求重算）');
+  ok(perms(other.token).indexOf('platform.bulletin') === -1, 'BUL 別人不受影響');
   const t1 = tkA(st.token);
   ok(t1.ok && /^[0-9a-f]{64}$/.test(t1.data.ticket), 'BUL 有權限 → 拿到管理券');
   ok(rd(t1.data.ticket, 'bulletin').code === 'ticket_invalid', 'BUL ★管理券不能當一般登入券用（aud 不符，且作廢）');
@@ -1958,44 +1993,23 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   // admin（'*'）沒有 DZY 編號也能管理
   const ta = tkA(tok).data.ticket, ra = rd(ta, 'bulletin-admin');
   ok(ra.ok && ra.data.emp_no === '' && ra.data.uid === 'u001' && ra.data.name === '系統管理者', 'BUL ★admin 換得到管理券（編號空、帶帳號 id 與名字）', ra);
-  // 取消勾選、停用都收回
-  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: false }, tok).ok && props.BULLETIN_ADMINS === '' && tkA(st.token).code === 'no_perm', 'BUL ★取消勾選 → 立刻換不到管理券');
-  post(sb, 'staffEdit', { emp_no: other.emp, bulletin_admin: true }, tok);
+  // 撤銷例外、停用都收回
+  ok(post(sb, 'permExRevoke', { ex_id: ex.data.ex_id }, tok).ok && perms(st.token).indexOf('platform.bulletin') === -1 && tkA(st.token).code === 'no_perm', 'BUL ★撤銷例外 → 立刻換不到管理券');
+  post(sb, 'permExSave', { emp_no: other.emp, perm: 'platform.bulletin', mode: 'add', until: '', note: '公告管理' }, tok);
+  ok(tkA(other.token).ok, 'BUL 前提：丙有例外就換得到');
   post(sb, 'staffSetActive', { emp_no: other.emp, active: false }, tok);
   ok(tkA(other.token).ok === false, 'BUL ★停用後換不到管理券');
-  // 跟其他欄位一起改也可以
-  const e3 = post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: true, phone: '0922333444' }, tok);
-  ok(e3.ok && listed(st.emp).bulletin_admin === true, 'BUL 與其他欄位一起改', e3);
-  // 寫進同仁紀錄
-  ok(JSON.stringify(rowsOf(app, 'staff_log')).indexOf('bulletin_admin=開') !== -1 && JSON.stringify(rowsOf(app, 'staff_log')).indexOf('bulletin_admin=關') !== -1, 'BUL ★同仁紀錄寫明開／關（權限清單可從紀錄重建）');
-  // 人資角色（role hr，非 staff）：被勾一樣有權限；不能幫自己開（審查 dzy-bulletin#44-2、#44-3）
-  const hr = claimApprove(app, '公告人資丁', 'bul-pw-0003');
-  const ui = app.sheets.users._data.findIndex((r) => String(r[1]).toUpperCase() === hr.emp);
-  setCell(app, 'users', ui, 'role', 'hr');
-  ok(perms(hr.token).indexOf('platform.staff') !== -1 && perms(hr.token).indexOf('platform.bulletin') === -1, 'BUL 人資角色預設沒有 platform.bulletin');
-  ok(post(sb, 'staffEdit', { emp_no: hr.emp, bulletin_admin: true }, hr.token).error === '不能設定自己的公告管理權限', 'BUL ★人資不能幫自己開');
-  ok(post(sb, 'staffEdit', { emp_no: st.emp, bulletin_admin: false }, hr.token).ok, 'BUL 人資可以設別人');
-  ok(post(sb, 'staffEdit', { emp_no: hr.emp, bulletin_admin: true }, tok).ok && perms(hr.token).indexOf('platform.bulletin') !== -1 && tkA(hr.token).ok, 'BUL ★人資角色被別人勾了 → 有 platform.bulletin、換得到管理券');
-  ok(post(sb, 'staffEdit', { emp_no: 'DZY999', bulletin_admin: true }, tok).ok === false, 'BUL 不存在的編號 → 失敗');
-  // 審查 dzy-bulletin#44-12：未認領列不能勾（否則人資勾完自己去認領就多一個有權限的帳號）
+  // 例外 remove 模式：總監被拿掉 platform.bulletin
+  post(sb, 'permExSave', { emp_no: dir.emp, perm: 'platform.bulletin', mode: 'remove', until: '', note: '暫停公告' }, tok);
+  ok(perms(dir.token).indexOf('platform.bulletin') === -1 && tkA(dir.token).code === 'no_perm', 'BUL 總監被個別例外 remove → 沒有 platform.bulletin');
+  // 開關關閉（PERMS_ON 不是 1）→ staff 帳號沒有 platform.bulletin（規則與例外都不算）
+  props.PERMS_ON = '0';
+  ok(perms(dir.token).indexOf('platform.bulletin') === -1 && tkA(dir.token).code === 'no_perm', 'BUL ★權限開關關閉 → 總監也沒有 platform.bulletin（fail closed）');
+  props.PERMS_ON = '1';
+  // 未認領列：沒有登入、不影響
   post(sb, 'staffImport', { names: ['公告未認領戊'] }, tok);
   const un = rowsOf(app, 'staff').find((r) => r.name === '公告未認領戊');
-  ok(un && un.status === 'unclaimed' && post(sb, 'staffEdit', { emp_no: un.emp_no, bulletin_admin: true }, tok).error === '只有已開通的同仁可以設定公告管理權限', 'BUL ★未認領列不能勾');
-  // 撤回認領、停用都收回
-  ok(props.BULLETIN_ADMINS.split(',').indexOf(hr.emp) !== -1, 'BUL 前提：人資丁有權限');
-  const uc = post(sb, 'staffUnclaim', { emp_no: hr.emp }, tok);
-  ok(uc.ok && props.BULLETIN_ADMINS.split(',').indexOf(hr.emp) === -1, 'BUL ★撤回認領 → 從清單移除', uc);
-  const st2 = claimApprove(app, '公告同仁己', 'bul-pw-0005');
-  post(sb, 'staffEdit', { emp_no: st2.emp, bulletin_admin: true }, tok);
-  ok(props.BULLETIN_ADMINS.split(',').indexOf(st2.emp) !== -1, 'BUL 前提：同仁己有權限');
-  post(sb, 'staffSetActive', { emp_no: st2.emp, active: false }, tok);
-  ok(props.BULLETIN_ADMINS.split(',').indexOf(st2.emp) === -1, 'BUL ★停用 → 從清單移除（復職要重新勾）');
-  post(sb, 'staffSetActive', { emp_no: st2.emp, active: true }, tok);
-  ok(listed(st2.emp).bulletin_admin === false, 'BUL 復職後不會自動恢復權限');
-  // 待審（pending）的人即使在清單裡也沒有權限（#44-13）
-  props.BULLETIN_ADMINS = [props.BULLETIN_ADMINS, st2.emp].filter(Boolean).join(',');
-  setStaff(app, st2.emp, 'status', 'pending');
-  ok(sb.stfBulletinGate_(rowsOf(app, 'staff').find((r) => r.emp_no === st2.emp).user_id) === false, 'BUL ★清單裡但狀態非 active → 不給');
+  ok(un && un.status === 'unclaimed' && post(sb, 'staffEdit', { emp_no: un.emp_no, bulletin_admin: true }, tok).error === MOVED, 'BUL 未認領列帶 bulletin_admin 一樣是搬家提示');
 })();
 
 // ============================================================

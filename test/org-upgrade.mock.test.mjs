@@ -1149,7 +1149,11 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const ctx = sb.permLoadCtx_(false);
   const permsOf = (emp) => sb.permComputeRow_(ctx, sb.stfFindByEmp_(emp).values, []).perms.join();
   const smPerms = permsOf(smGF.emp);
-  ok(smPerms === 'audit.read.own,store.void' && permsOf(amGF.emp) === smPerms && permsOf(fm.emp) === smPerms && permsOf(rdd.emp) === smPerms, '15 權限：區經理／廠長／廚藝總監 ≡ 店長（稽核自己店、收支作廢）', [smPerms, permsOf(fm.emp)]);
+  // 2026-10-26：廚藝總監 rdd 另有預設規則 R030（公告管理），其餘（區經理／廠長）仍 ≡ 店長；店長沒有公告管理
+  ok(smPerms === 'audit.read.own,store.void' && permsOf(amGF.emp) === smPerms && permsOf(fm.emp) === smPerms, '15 權限：區經理／廠長 ≡ 店長（稽核自己店、收支作廢）', [smPerms, permsOf(fm.emp)]);
+  const rddPerms = permsOf(rdd.emp).split(',').sort().join();
+  ok(rddPerms === 'audit.read.own,platform.bulletin,store.void', '15 權限：廚藝總監＝店長那些＋公告管理（R030）', rddPerms);
+  ok(!smPerms.includes('platform.bulletin'), '15 權限：店長沒有公告管理');
   const ckSm = sb.stfFindByEmp_(fm.emp).values.slice(); ckSm[sb.STF_COL.title] = 'sm';
   ok(sb.permComputeRow_(ctx, ckSm, []).perms.length === 0, '15 ★權限：中央工廠的店長（切換後的舊資料）→ 空權限（fail closed）');
   const auditOwn = sb.permComputeRow_(ctx, sb.stfFindByEmp_(fm.emp).values, []).auditScope;
