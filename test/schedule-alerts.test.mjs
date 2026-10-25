@@ -33,6 +33,35 @@ await t('badge＝所有 periods 數加總', () => {
   assert.equal(toBadge({ items: [] }), 0);
 });
 
+await t('self：缺＝不顯示、badge 不變', () => {
+  assert.deepEqual(toAlerts({ items: [], asOf: 'x' }), []);
+  assert.deepEqual(toAlerts({ items: [], self: null }), []);
+  assert.deepEqual(toAlerts({ items: [], self: 'x' }), []);
+  assert.deepEqual(toAlerts({ items: [], self: { due: [], wait: 0, missing: 0 } }), []);
+  assert.equal(toBadge({ items: [{ periods: ['T01'] }] }), 1);
+});
+await t('self.due：每月一列，view self，warn', () => {
+  assert.deepEqual(toAlerts({ items: [], self: { due: ['2026-11'], wait: 0, missing: 0 } }), [{ level: 'warn', text: '11 月班表還沒送出', view: 'self' }]);
+  const r = toAlerts({ items: [], self: { due: ['2026-11', '2026-12'] } });
+  assert.deepEqual(r.map((x) => x.text), ['11 月班表還沒送出', '12 月班表還沒送出']); assert.ok(r.every((x) => x.view === 'self' && x.level === 'warn'));
+});
+await t('self.wait：info，view approve；badge 加上 wait', () => {
+  assert.deepEqual(toAlerts({ items: [], self: { due: [], wait: 3, missing: 0 } }), [{ level: 'info', text: '3 位同仁的班表等你核准', view: 'approve' }]);
+  assert.equal(toBadge({ items: [{ periods: ['T01', 'T02'] }], self: { wait: 3, due: ['2026-11'], missing: 5 } }), 5);   // due、missing 不進 badge
+});
+await t('self.missing：warn，view approve', () => {
+  assert.deepEqual(toAlerts({ items: [], self: { due: [], wait: 0, missing: 2 } }), [{ level: 'warn', text: '2 位同仁下個月班表還沒送出', view: 'approve' }]);
+});
+await t('self 三種並列：門市提醒在前，順序 due、wait、missing', () => {
+  const r = toAlerts({ items: [{ name: '光復店', periods: ['T01'] }], self: { due: ['2026-11'], wait: 1, missing: 4 } });
+  assert.deepEqual(r.map((x) => x.view), ['board', 'self', 'approve', 'approve']);
+  assert.deepEqual(r.map((x) => x.level), ['warn', 'warn', 'info', 'warn']);
+});
+await t('self 壞資料：月份格式不對略過、負數或非數字當 0', () => {
+  assert.deepEqual(toAlerts({ items: [], self: { due: ['x', 5, null, '2026-11'], wait: -1, missing: 'a' } }).map((x) => x.text), ['11 月班表還沒送出']);
+  assert.equal(toBadge({ items: [], self: { wait: 'x' } }), 0);
+});
+
 const upstream = { ok: true, data: { items: [{ code: 'gf', name: '光復店', periods: ['T01', 'T02'] }, { code: 'mc', name: '美村店', periods: ['T01'] }], asOf: '2026-10-24T08:00:00Z' } };
 let sent = null;
 function fakeFetch(body, status = 200) {
@@ -48,6 +77,12 @@ await t('api.js 轉接後 alerts／badge 正確', async () => {
   const a = await mod.alerts(ctx);
   assert.deepEqual(a.map((x) => x.text), ['光復店 T01、T02 班表還沒送到 LINE', '美村店 T01 班表還沒送到 LINE']);
   assert.equal(await mod.badge(ctx), 3);
+});
+await t('api.js 轉接：self 一起帶回', async () => {
+  fakeFetch({ ok: true, data: { items: [], asOf: 'x', self: { due: ['2026-11'], wait: 2, missing: 1 } } });
+  const a = await mod.alerts(ctx);
+  assert.deepEqual(a.map((x) => x.text), ['11 月班表還沒送出', '2 位同仁的班表等你核准', '1 位同仁下個月班表還沒送出']);
+  assert.equal(await mod.badge(ctx), 2);
 });
 await t('零件數信封 → 空陣列、badge 0', async () => {
   fakeFetch({ ok: true, data: { items: [], asOf: 'x' } });

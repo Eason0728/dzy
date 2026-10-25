@@ -341,6 +341,22 @@ def main():
             sgos = [m for m in fs.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
             check(sgos[-1:] == [{'type': 'dzy-store-go', 'v': 1, 'id': 'staff'}] and at.evaluate('location.hash') == '#/schedule/staff', '點頁頂「同仁」→ 送 {dzy-store-go, id:staff}、網址 #/schedule/staff：%s' % sgos)
 
+            # ⑤d 總部排班提醒（schedule-hq spec §10.2）：svc/sched-alerts 回傳 self → 本人下月未送出、等核准、未送出三列；點了導到 #/schedule/approve（營運系統 mock，不跑真的 iframe 內容）
+            mock.sched_alerts = {'ok': True, 'data': {'items': [], 'asOf': '2026-10-25T00:00:00Z', 'self': {'due': ['2026-11'], 'wait': 2, 'missing': 1}}}
+            at.goto(base + '/index.html')
+            at.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
+            at.wait_for_selector(SCH + ':has-text("等你核准")', timeout=10000)
+            hrows = [x.replace('›', '').strip() for x in at.locator(SCH).all_inner_texts()]
+            check(hrows == ['11 月班表還沒送出', '2 位同仁的班表等你核准', '1 位同仁下個月班表還沒送出'], '首頁排班管理組顯示總部三種提醒：%s' % hrows)
+            at.click(SCH + ':has-text("等你核准")')
+            at.wait_for_selector('[data-keep="schedule"] iframe[data-role="store-frame"]')
+            check(at.evaluate('location.hash') == '#/schedule/approve', '點「2 位同仁的班表等你核准」→ 網址 #/schedule/approve：%s' % at.evaluate('location.hash'))
+            at.goto(base + '/index.html')
+            at.wait_for_selector(SCH + ':has-text("還沒送出")', timeout=10000)
+            at.click(SCH + ':has-text("11 月")')
+            at.wait_for_selector('[data-keep="schedule"] iframe[data-role="store-frame"]')
+            check(at.evaluate('location.hash') == '#/schedule/self', '點「11 月班表還沒送出」→ 網址 #/schedule/self：%s' % at.evaluate('location.hash'))
+
             # ⑥ 管理員兩個都看得到
             ad = new_page()
             ad.goto(base + '/index.html')
