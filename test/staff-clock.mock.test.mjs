@@ -341,6 +341,22 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
 // ============================================================
 // B3 staffLeave／staffLeaveCancel
 // ============================================================
+// B3b 2026-10-25 審查 A-02：店長不能對職級跟自己一樣或更高的同店同仁登記／撤銷離職
+(() => {
+  const app = fresh();
+  const { sb, tok } = app;
+  const sm = claimApprove(app, '職店長甲', 'rk-sm-pw-001', MZT_GF('sm'));
+  const sm2 = claimApprove(app, '職店長乙', 'rk-sm-pw-002', MZT_GF('sm'));
+  const am = claimApprove(app, '職區經理', 'rk-am-pw-001', MZT_GF('am'));
+  const pt = claimApprove(app, '職同仁一', 'rk-pt-pw-001', MZT_GF('pt'));
+  const up = post(sb, 'staffLeave', { emp_no: am.emp, last_day: dayT(1) }, sm.token);
+  ok(up.ok === false && up.code === 'no_perm' && staffOf(app, am.emp).last_day === '', 'B3b ★店長不能登記同店區經理離職', up);
+  ok(post(sb, 'staffLeave', { emp_no: sm2.emp, last_day: dayT(1) }, sm.token).code === 'no_perm', 'B3b ★同級（另一位店長）也擋');
+  ok(post(sb, 'staffLeave', { emp_no: pt.emp, last_day: dayT(1) }, sm.token).ok, 'B3b 店長登記同店店員 OK');
+  ok(post(sb, 'staffLeave', { emp_no: am.emp, last_day: dayT(1) }, tok).ok, 'B3b 總部登記區經理 OK');
+  ok(post(sb, 'staffLeaveCancel', { emp_no: am.emp }, sm.token).code === 'no_perm' && staffOf(app, am.emp).last_day === dayT(1), 'B3b ★店長不能撤銷總部替區經理登記的離職');
+})();
+
 (() => {
   const app = fresh();
   const { sb, sheets, tok } = app;
