@@ -46,6 +46,8 @@ def set_today(d):
 
 
 def install_routes(page, urls):
+    # 用 context.route：page.route('https://**') 攔不到殼裡其他模組打的代轉請求，會真的打到 Mac mini（審查 #14）
+    target = page.context
     real = urls['platform']
 
     def handle(route):
@@ -54,9 +56,14 @@ def install_routes(page, urls):
         r = urllib.request.Request('http://127.0.0.1:%d/platform/api' % BACKEND_PORT, data=data, headers={'Content-Type': 'text/plain'})
         body = urllib.request.urlopen(r, timeout=20).read()
         route.fulfill(status=200, headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'}, body=body)
-    page.route(real, handle)
+    target.route(real, handle)
     leaks = []
-    page.route('https://**', lambda route: (leaks.append(route.request.url), route.abort()) if '127.0.0.1' not in route.request.url else route.continue_())
+    def guard(route):
+        if route.request.url.split('?')[0] == real:
+            return route.fallback()   # 交給上面的本機後端轉送
+        leaks.append(route.request.url)
+        return route.abort()
+    target.route('https://**', guard)
     return leaks
 
 

@@ -21,6 +21,10 @@ export function mountSettings(el, ctx) {
     const r = await ctx.api.call('eval', 'evBankGet', { brand });
     if (!alive) return;
     if (r && r.error === 'not_inited') {
+      if (!(ctx.user && ctx.user.role === 'admin')) {   // 初始化只有系統管理者能按（審查 #12）
+        el.innerHTML = '<div class="card"><div class="card-title">績效評核還沒初始化</div><p>請系統管理者登入後，到這一頁按「初始化績效評核」。</p></div>';
+        return;
+      }
       el.innerHTML = '<div class="card"><div class="card-title">績效評核還沒初始化</div><p>系統管理者按下面的按鈕，會建立評核用的資料表、四個品牌的預設時薪與等第表，並把預設權限規則補進權限設定。重按不會蓋掉資料。</p><div class="btn-row"><button type="button" class="btn btn-primary" data-role="init">初始化績效評核</button></div><p class="field-hint" data-role="msg"></p></div>';
       const b = el.querySelector('[data-role="init"]');
       b.addEventListener('click', async () => {
@@ -44,7 +48,8 @@ export function mountSettings(el, ctx) {
       <div class="card" data-role="wage"></div>
       <div class="card" data-role="grade"></div>
       <div class="card" data-role="import"></div>`;
-    el.querySelector('#ev-brand').addEventListener('change', (e) => { brand = e.target.value; load(); });
+    // 品牌寫進網址，重新整理還停在同一個品牌（審查 #11）
+    el.querySelector('#ev-brand').addEventListener('change', (e) => { brand = e.target.value; ctx.nav('settings', { brand }); });   // 換網址會觸發 onRoute 重畫（ctx.params.brand）
     const seedBtn = el.querySelector('[data-act="seed"]');
     if (seedBtn) seedBtn.addEventListener('click', async () => {
       if (!(await ctx.ui.confirm('載入舊網站的小辛辣題目、時薪級距與 KPI 範本？會取代這裡目前的小辛辣設定。'))) return;

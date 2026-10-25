@@ -55,13 +55,15 @@ export function mountResults(el, ctx) {
         ${d.rows.map((x) => {
           const res = x.result;
           if (x.isMe) return `<tr><td>${esc(x.name)}（你）</td><td>${esc(x.titleName)}</td><td colspan="6" class="ev-note">自己的分數請看「我的成績」</td></tr>`;
-          if (!res) return `<tr><td>${esc(x.name)}</td><td>${esc(x.titleName)}</td><td colspan="6" class="ev-note">這一季沒有資料</td></tr>`;
+          // 看不到分數的同店同仁（例如店長看區經理）只列填寫進度；看得到但還沒人評的，照樣可以點進去先打 KPI、寫回饋（審查 #5、#6）
+          if (!x.canView) return `<tr><td>${esc(x.name)}</td><td>${esc(x.titleName)}</td><td colspan="6" class="ev-note">（不在你的查看範圍，只列填寫進度）</td></tr>`;
+          if (!res) return `<tr data-role="ev-row" data-emp="${esc(x.emp)}"><td><a href="#" data-role="open" data-emp="${esc(x.emp)}">${esc(x.name)}</a></td><td>${esc(x.titleName)}</td><td colspan="6" class="ev-note">這一季還沒有人評${x.canManage ? '，可以先點進去打 KPI、寫回饋' : ''}</td></tr>`;
           const adj = (Number(res.adjAtt) || 0) + (Number(res.adjPerf) || 0);
           const tier = isFt(x) ? (res.performance === null ? 'KPI 未評' : (res.grade || '—')) : (d.wageTiers[wageIdxOf(res)] ? d.wageTiers[wageIdxOf(res)][1] : '—');
           return `<tr data-role="ev-row" data-emp="${esc(x.emp)}"><td><a href="#" data-role="open" data-emp="${esc(x.emp)}">${esc(x.name)}</a></td><td>${esc(x.titleName)}</td>
             <td class="num">${r1(res.attitude)}</td><td class="num">${res.performance === null ? '未計' : r1(res.performance)}</td>
             <td class="num">${adj ? (adj > 0 ? '+' : '') + r1(adj) : '—'}</td><td class="num"><strong>${r1(res.total)}</strong></td><td>${esc(String(tier))}</td>
-            <td class="num">${res.source === 'hist' ? '舊系統' : res.attCount}${res.source === 'final' ? '（定稿）' : ''}</td></tr>`;
+            <td class="num">${res.source === 'hist' ? '舊系統' : res.attCount}${x.locked ? '（定稿）' : ''}</td></tr>`;
         }).join('')}
         </tbody></table></div></div>
       ${d.company.length ? `<div class="card"><div class="card-title">給公司的話（匿名）</div>${d.company.map((t) => `<div class="ev-msg">${esc(t)}</div>`).join('')}</div>` : ''}
@@ -110,7 +112,9 @@ export function mountResults(el, ctx) {
     const res = p.result;
     const editable = p.canManage && !p.finalized;
     const lock = p.finalized ? '<p class="field-hint">這一季已定稿，要修改請人資先解除定稿。</p>' : (p.canManage ? '' : '<p class="field-hint">你可以查看，但不能替這位同仁打分。</p>');
-    const itemRows = (labels, vals) => (labels || []).map((lb, i) => `<tr><td>${esc(lb)}</td><td class="num">${vals ? r1(vals[i]) : '—'}</td></tr>`).join('');
+    // 只有一位同事評時後端不回逐題（避免反推是誰給的分，審查 #4）
+    const itemRows = (labels, vals) => (vals ? (labels || []).map((lb, i) => `<tr><td>${esc(lb)}</td><td class="num">${r1(vals[i])}</td></tr>`).join('')
+      : (res && res.peerCount !== undefined && res.peerCount < 2 && labels && labels.length ? '<tr><td colspan="2" class="ev-note">只有一位同事評分，為了保護匿名不顯示逐題分數</td></tr>' : ''));
     let html = `<div class="card" data-role="ev-detail"><div class="card-title">${esc(p.name)}　${esc(qLabel(p.quarter))}　明細</div>${lock}`;
     if (res) {
       html += `<div class="table-wrap"><table class="table ev-table"><tbody>

@@ -178,7 +178,7 @@ const people = {
 };
 post(sb, 'permInit', {}, sb.__admin);
 app.props.PERMS_ON = '1';
-let today = process.env.TODAY || '2027-01-03';
+let today = '2026-12-20';   // 先在填寫窗外建題（填寫期間不能改題目），種完再換成 TODAY
 sb.evToday_ = () => today;
 const A = sb.__admin;
 console.log('evSetup', JSON.stringify(post(sb, 'evSetup', {}, A)).slice(0, 80));
@@ -187,6 +187,7 @@ for (const b of ['mala', 'mzt']) {
   for (const k of ['pt_att', 'pt_perf', 'ft_att']) post(sb, 'evBankSave', { brand: b, set: k, items: MALA_SEED[k] }, A);
 }
 const banks = { pt_attitude: MALA_SEED.pt_att, pt_perf: MALA_SEED.pt_perf, ft_attitude: MALA_SEED.ft_att };
+today = process.env.TODAY || '2027-01-03';
 const KPI = [['sales', '技能', '營業額', 5, '月營業額達標'], ['profit', '技能', '獲利率', 10, '淨利率 10%'], ['op', '技能', '營運評分', 20, '稽核 90 分以上'], ['stock', '技能', '盤點差異', 5, '差異 1% 以內'], ['google', '技能', 'Google 評論', 5, '4.5 星以上'],
   ['e6', '執行力', '主管交辦一', 5, ''], ['e7', '執行力', '主管交辦二', 5, ''], ['e8', '執行力', '主管交辦三', 5, ''], ['e9', '執行力', '主管交辦四', 5, ''], ['e10', '執行力', '主管交辦五', 5, '']]
   .map(([key, type, label, weight, target]) => ({ key, type, label, weight, target, a: '達成 100%', b: '達成 90%', c: '達成 80%', d: '未達 80%' }));

@@ -212,11 +212,15 @@ const { sb, sheets, P } = app;
   const r2 = ev(app, 'admin', 'evSetup');
   ok(r2.ok && r2.data.permAdded.length === 0 && sheets.ev_wage._data.length === 33, '1: 重按初始化不重複');
   ok(ev(app, 'sm', 'evBankSave', { brand: 'mala', set: 'pt_att', items: items(['x']) }).error === 'forbidden', '1: 店長不能改題目');
+  setToday(app, '2026-12-20');   // 填寫窗開的時候不能改題目（審查 #3），先在窗外建題
   seedBank(app, 'mala');
   seedBank(app, 'mzt');
   ok(ev(app, 'hrHm', 'evTplSave', { brand: 'mala', title: 'ft', items: KPI }).data.total === 70, '設定：mala 正職 KPI 範本 70 分');
   const bk = ev(app, 'hrHm', 'evBankSave', { brand: 'mala', set: 'pt_att', items: [{ key: 'a1', label: 'x', levels: ['1', '2'] }] });
   ok(bk.ok === false && bk.error === 'bad_request', '1: 星等說明不足 5 級 → 擋', bk);
+  setToday(app, '2027-01-03');
+  const inWin = ev(app, 'hrHm', 'evBankSave', { brand: 'mala', set: 'pt_att', items: items(['a1', 'a2', 'a3']) });
+  ok(inWin.ok === false && inWin.error === 'window_closed', '1: 填寫期間（1/3）改題目 → 擋', inWin);
 }
 
 // ── 2. evMe：同店名單、品牌題庫 ──
@@ -382,6 +386,46 @@ const { sb, sheets, P } = app;
   const g = ev(app, 'hrHm', 'evBankGet', { brand: 'mzt' }).data;
   const m = ev(app, 'hrHm', 'evBankGet', { brand: 'mala' }).data;
   ok(g.grade.length === 2 && g.wage.length === 2 && m.grade.length === 4 && m.wage.length === 8, '11: 只改到墨竹亭，小辛辣不變');
+}
+
+// ── 13. 品質審查（2026-10-26）修正的回歸測試 ──
+{
+  // #1 定稿只鎖有定稿列的人：店長 KPI 沒評完被略過 → 督導仍可補打
+  setToday(app, '2027-01-12');
+  ok(ev(app, 'hrHm', 'evFinalize', { unit: 'mala-gf', quarter: '2026-Q4' }).ok, '13: 重新定稿');
+  const sk = ev(app, 'osv', 'evSupSave', { emp: P.sm.emp, quarter: '2026-Q4', feedback: '補寫回饋' });
+  ok(sk.ok, '13 #1: 定稿時被略過（KPI 沒評完）的店長，督導仍可補打', sk);
+  ok(ev(app, 'sm', 'evSupSave', { emp: P.ft1.emp, quarter: '2026-Q4', feedback: 'x' }).error === 'finalized', '13 #1: 已定稿的人仍鎖住');
+  const ur = ev(app, 'osv', 'evUnitResults', { unit: 'mala-gf', quarter: '2026-Q4' }).data.rows;
+  ok(ur.find((x) => x.emp === P.ft1.emp).locked === true && ur.find((x) => x.emp === P.sm.emp).locked === false, '13 #1: 單位結果標出誰被鎖');
+  ok(ev(app, 'hrHm', 'evUnfinalize', { unit: 'mala-gf', quarter: '2026-Q4' }).ok, '13: 解除定稿');
+  // #2 執行長以上預設有 eval-manage（廚藝總監的上一層）
+  ok(sb.EV_PERM_DEFAULT_RULES.some((r) => r[2] === 'ceo' && r[3] === 'platform.eval-manage'), '13 #2: 執行長預設可替廚藝總監打分');
+  // #4 只有一位同事評時不回逐題同事分；主管明細也不回自評星等與逐題
+  const one = ev(app, 'ft1', 'evMyScores').data.quarters.find((q) => q.quarter === '2026-Q4');
+  ok(one && one.peerAttItems === null, '13 #4: 正職丙只有一位同事評 → 不回逐題同事平均', one && one.peerAttItems);
+  const det = ev(app, 'sm', 'evPersonDetail', { emp: P.ft1.emp, quarter: '2026-Q4' }).data.result;
+  ok(det.selfAtt === null && det.attItems === null && det.peerCount === 1 && det.total !== null, '13 #4: 主管明細只剩總分（不回自評星等、逐題）', det);
+  const two = ev(app, 'sm', 'evPersonDetail', { emp: P.pt2.emp, quarter: '2026-Q4' }).data.result;
+  ok(two.peerCount === 2 && Array.isArray(two.attItems), '13 #4: 兩位以上同事照常有逐題');
+  // #6 店長的單位結果列出同店所有人（看不到分數的只有進度）
+  ok(ev(app, 'sm', 'evUnitResults', { unit: 'mala-gf', quarter: '2026-Q4' }).data.rows.every((x) => 'canView' in x), '13 #6: 列帶 canView');
+  // #7 題目沒設好的品牌不收送出
+  setToday(app, '2027-01-03');
+  const yb = ev(app, 'admin', 'evBankGet', { brand: 'yiwu' });
+  ok(yb.ok && yb.data.bank.pt_att.length === 0, '13 #7 前置：一悟沒有題目');
+  // #8 回饋過 10 號閘門
+  ev(app, 'sm', 'evSupSave', { emp: P.pt2.emp, quarter: '2026-Q4', feedback: '本季回饋' });
+  setToday(app, '2027-01-08');
+  ok(!(ev(app, 'pt2', 'evMyScores').data.feedback || []).some((f) => f.quarter === '2026-Q4'), '13 #8: 1/8 看不到本季回饋');
+  setToday(app, '2027-01-10');
+  ok((ev(app, 'pt2', 'evMyScores').data.feedback || []).some((f) => f.quarter === '2026-Q4'), '13 #8: 1/10 看得到');
+  // #9 匯入總分對不上 → 擋
+  const im = ev(app, 'hrHm', 'evImportCommit', { rows: [{ quarter: '2026-Q2', emp: P.pt1.emp, kind: 'pt', result: { attitude: 10, performance: 10, total: 99 } }] });
+  ok(im.ok === false && /對不上/.test(im.message), '13 #9: 匯入總分對不上 → 擋', im);
+  // #10 KPI 等級亂填 → 擋
+  const kz = ev(app, 'sm', 'evSupSave', { emp: P.ft1.emp, quarter: '2026-Q4', kpi: { k1: { sel: 'Z' } } });
+  ok(kz.ok === false && kz.error === 'bad_request', '13 #10: KPI 等級 Z → 擋', kz);
 }
 
 // ── 12. 試跑白名單：讀取 action 都在 dryrun.js、寫入 action 都不在 ──

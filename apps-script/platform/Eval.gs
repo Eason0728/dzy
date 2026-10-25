@@ -51,7 +51,7 @@ var EV_PERM_DEFAULT_RULES = (function () {
   add('store', '', ['rdd'], ['platform.eval-manage', 'platform.eval-brand']);
   add('office', '', ['osv', 'odir'], ['platform.eval-manage', 'platform.eval-brand']);
   add('hq', 'hr', ['*'], ['platform.eval-all']);
-  add('hq', '', ['ceo', 'gm', 'chair'], ['platform.eval-all']);
+  add('hq', '', ['ceo', 'gm', 'chair'], ['platform.eval-all', 'platform.eval-manage']);   // manage：廚藝總監 rdd 的上一層是執行長以上（審查 2026-10-26 #2）
   add('hq', 'hr', ['hm'], ['platform.eval-admin']);
   return out;
 })();
@@ -246,6 +246,7 @@ function evGradeOf_(brand) {
     .map(function (r) { return { grade: evStr_(r.grade), min: Number(r.min_score), base: Number(r.bonus_base) }; });
   return t.length ? t.sort(function (a, b) { return b.min - a.min; }) : EV_GRADE_DEFAULT;
 }
+function evBankReady_(bank) { return bank.pt_att.length > 0 && bank.pt_perf.length > 0 && bank.ft_att.length > 0; }
 function evSetsFor_(kind) { return kind === 'pt' ? { att: 'pt_att', perf: 'pt_perf' } : { att: 'ft_att', perf: null }; }
 function evLabels_(bank, kind) {
   var s = evSetsFor_(kind);
@@ -272,7 +273,7 @@ function handleEvMe_(token) {
   var bank = evBankOf_(me.brand);
   out.me = { emp: me.emp, name: me.name, unit: me.unit, unitName: (c.org.unit[me.unit] || {}).name || me.unit, brand: me.brand, kind: evKind_(me) };
   out.bank = bank;
-  out.bankReady = bank.pt_att.length > 0 && bank.pt_perf.length > 0 && bank.ft_att.length > 0;
+  out.bankReady = evBankReady_(bank);
   out.peers = c.people.filter(function (p) { return p.emp !== me.emp && p.unit === me.unit && evEvaluable_(p, c.org); })
     .map(function (p) { return { emp: p.emp, name: p.name, kind: evKind_(p) }; });
   out.peerDone = evRows_('peer').some(function (r) { return r.quarter === q && stfNormEmp_(r.rater) === me.emp; });
@@ -288,6 +289,7 @@ function handleEvPeerSubmit_(token, payload) {
   var me = c.me;
   if (!me || !evEvaluable_(me, c.org)) return evFail_('forbidden', '你不在本季評核範圍');
   if (!evWindowOpen_(c.today)) return evFail_('window_closed', '現在不是填寫期間（每季第一個月 1～5 號）');
+  if (!evBankReady_(evBankOf_(me.brand))) return evFail_('bad_request', '這個品牌的題目還沒設定好');
   var list = payload && payload.ratings;
   if (!Array.isArray(list) || !list.length) return evFail_('bad_request', '至少要完整評完一位同仁');
   var q = evQuarterNow_(c.today);
@@ -323,6 +325,7 @@ function handleEvSelfSubmit_(token, payload) {
   payload = payload || {};
   var q = evQuarterNow_(c.today);
   var bank = evBankOf_(me.brand), kind = evKind_(me), sets = evSetsFor_(kind);
+  if (!evBankReady_(bank)) return evFail_('bad_request', '這個品牌的題目還沒設定好');
   if (!evStarsOk_(payload.att, bank[sets.att].length)) return evFail_('bad_request', '態度題沒評完');
   if (sets.perf && !evStarsOk_(payload.perf, bank[sets.perf].length)) return evFail_('bad_request', '工作表現題沒評完');
   var now = evNowText_();
@@ -385,8 +388,9 @@ function evPersonQuarter_(c, p, q, cache) {
     kpiTitle: tpl.title,
     kpi: tpl.items.map(function (it) { var v = kpiSel[it.key] || {}; return { key: it.key, label: it.label, type: it.type, weight: it.weight, target: it.target, sel: v.sel || '', actual: v.actual || '', score: evKpiItemScore_(it, v.sel) }; }),
     selfAtt: selfAtt, selfPerf: selfPerf,
-    peerAttItems: peerAtt && kind === 'ft' ? peerAtt.map(evFtAttitudeScale_) : peerAtt,
-    peerPerfItems: evAverageItems_(perfL.filter(function (s) { return s.length; })),
+    // 只有一位同事評時不回逐題「同事平均」（就是那一個人的原始星等，可反推；審查 2026-10-26 #4）
+    peerAttItems: peers.length < 2 ? null : (peerAtt && kind === 'ft' ? peerAtt.map(evFtAttitudeScale_) : peerAtt),
+    peerPerfItems: peers.length < 2 ? null : evAverageItems_(perfL.filter(function (s) { return s.length; })),
     peerCount: peers.length
   };
 }
@@ -435,7 +439,7 @@ function handleEvMyScores_(token) {
       var anon = String(m.anon).toUpperCase() !== 'FALSE';
       return { quarter: m.quarter, kind: m.kind, text: evStr_(m.text), from: m.kind === 'peer' && !anon ? nameOf(stfNormEmp_(m.from)) : '' };
     });
-  var fb = cache.sup.filter(function (x) { return stfNormEmp_(x.ratee) === me.emp && evStr_(x.feedback); })
+  var fb = cache.sup.filter(function (x) { return stfNormEmp_(x.ratee) === me.emp && evStr_(x.feedback) && evResultVisible_(x.quarter, c.today); })
     .map(function (x) { return { quarter: x.quarter, text: evStr_(x.feedback) }; });
   var nb = cache.newbie.filter(function (r) { return stfNormEmp_(r.emp_no) === me.emp; })[0];
   return { ok: true, data: {
@@ -505,15 +509,18 @@ function handleEvUnitResults_(token, payload) {
   if (!unitSet[unit]) return evFail_('forbidden', '你不能查看這個單位');
   var q = evValidQuarter_(payload.quarter) ? payload.quarter : evQuarterNow_(c.today);
   var cache = evCache_();
-  var people = c.people.filter(function (p) { return p.unit === unit && evEvaluable_(p, c.org) && (c.scope.canView(p) || (c.me && p.emp === c.me.emp)); });
-  var finalized = cache.fin.some(function (r) { return r.quarter === q && evStr_(r.unit) === unit; });
+  var sameUnit = c.me && c.me.unit === unit;
+  var people = c.people.filter(function (p) { return p.unit === unit && evEvaluable_(p, c.org) && (sameUnit || c.scope.canView(p)); });
+  var finalized = cache.fin.some(function (r) { return r.quarter === q && evStr_(r.unit) === unit; });   // 這一店這一季有定稿（個人是否鎖住看 rows[].locked）
   var rows = people.map(function (p) {
     var self = c.me && p.emp === c.me.emp;
-    var r = self ? null : evPersonQuarter_(c, p, q, cache);
+    var view = !self && c.scope.canView(p);
+    var r = view ? evPersonQuarter_(c, p, q, cache) : null;
     var f = r ? evFreeze_(r) : null;
     return {
       emp: p.emp, name: p.name, title: p.title, titleName: (c.org.title[p.title] || {}).name || p.title, kind: evKind_(p), isMe: !!self,
-      canManage: !self && c.scope.canManage(p),
+      canManage: !self && c.scope.canManage(p), canView: view,
+      locked: cache.fin.some(function (x) { return x.quarter === q && stfNormEmp_(x.emp_no) === p.emp; }),
       peerDone: cache.peer.some(function (x) { return x.quarter === q && stfNormEmp_(x.rater) === p.emp; }),
       selfDone: cache.self.some(function (x) { return x.quarter === q && stfNormEmp_(x.emp_no) === p.emp; }),
       result: f ? { attitude: f.attitude, performance: f.performance, adjAtt: f.adjAtt, adjPerf: f.adjPerf, subtotal: f.subtotal, total: f.total, grade: f.grade, wageIdx: f.wageIdx, attCount: f.attCount, perfCount: f.perfCount, source: r.source } : null
@@ -539,11 +546,15 @@ function handleEvPersonDetail_(token, payload) {
   var tpl = evKind_(p) === 'ft' ? evTplFor_(p, sup) : { title: '', items: [] };
   var nb = cache.newbie.filter(function (x) { return stfNormEmp_(x.emp_no) === p.emp; })[0];
   var f = r ? evFreeze_(r) : null;
-  if (f && r.source === 'live') { f.selfAtt = r.selfAtt; f.selfPerf = r.selfPerf; f.peerAttItems = r.peerAttItems; f.peerPerfItems = r.peerPerfItems; f.peerCount = r.peerCount; }
+  if (f && r.source === 'live') {
+    var few = r.peerCount < 2;   // 同事少於兩人：逐題平均＝自評＋那一位，回自評或逐題就能反推（審查 #4）
+    f.selfAtt = few ? null : r.selfAtt; f.selfPerf = few ? null : r.selfPerf; f.peerAttItems = r.peerAttItems; f.peerPerfItems = r.peerPerfItems; f.peerCount = r.peerCount;
+    if (few) { f.attItems = null; f.perfItems = null; }
+  }
   return { ok: true, data: {
     emp: p.emp, name: p.name, kind: evKind_(p), unit: p.unit, brand: p.brand, quarter: q,
     canManage: c.scope.canManage(p),
-    finalized: cache.fin.some(function (x) { return x.quarter === q && evStr_(x.unit) === p.unit; }),
+    finalized: cache.fin.some(function (x) { return x.quarter === q && stfNormEmp_(x.emp_no) === p.emp; }),   // 個人有定稿列才算鎖（KPI 沒評完被略過的人仍可補打，審查 #1）
     result: f, source: r ? r.source : null,
     sup: { kpi: sup ? evJson_(sup.kpi, {}) : {}, adjAtt: sup ? Number(sup.adj_att) || 0 : 0, adjPerf: sup ? Number(sup.adj_perf) || 0 : 0, adjReason: sup ? evStr_(sup.adj_reason) : '', feedback: sup ? evStr_(sup.feedback) : '' },
     tpl: tpl, tplTitles: evTplTitles_(p.brand),
@@ -566,18 +577,19 @@ function handleEvSupSave_(token, payload) {
   if ('adj_perf' in payload && num(payload.adj_perf) === null) return evFail_('bad_request', '表現調整要是 -100～100 的數字');
   if ('kpi' in payload && (typeof payload.kpi !== 'object' || Array.isArray(payload.kpi) || !payload.kpi)) return evFail_('bad_request', 'KPI 格式錯誤');
   return evWithLock_(function () {
-    if (evRows_('fin').some(function (x) { return x.quarter === q && evStr_(x.unit) === p.unit; })) return evFail_('finalized', '這一季已定稿，要改請人資先解除定稿');
+    if (evRows_('fin').some(function (x) { return x.quarter === q && stfNormEmp_(x.emp_no) === p.emp; })) return evFail_('finalized', '這位同仁這一季已定稿，要改請人資先解除定稿');
     var cur = evRows_('sup').filter(function (x) { return x.quarter === q && stfNormEmp_(x.ratee) === p.emp; })[0] || {};
     var o = { quarter: q, ratee: p.emp, kpi: cur.kpi || '', tpl_title: cur.tpl_title || '', adj_att: cur.adj_att || 0, adj_perf: cur.adj_perf || 0,
       adj_reason: cur.adj_reason || '', feedback: cur.feedback || '', by: c.me ? c.me.emp : String(c.user.id), at: evNowText_() };
     if ('kpi' in payload) {
-      var clean = {};
+      var clean = {}, badSel = '';
       Object.keys(payload.kpi).forEach(function (k) {
         var v = payload.kpi[k] || {};
         var sel = evStr_(v.sel);
-        if (['A', 'B', 'C', 'D', '完成', '未完成', ''].indexOf(sel) === -1) return;
+        if (['A', 'B', 'C', 'D', '完成', '未完成', ''].indexOf(sel) === -1) { badSel = sel; return; }
         clean[evStr_(k).slice(0, 40)] = { sel: sel, actual: evStr_(v.actual).slice(0, 200) };
       });
+      if (badSel) return evFail_('bad_request', 'KPI 評等只能是 A／B／C／D 或完成／未完成');
       o.kpi = JSON.stringify(clean);
     }
     if ('tpl_title' in payload) o.tpl_title = evStr_(payload.tpl_title).slice(0, 20);
@@ -664,6 +676,8 @@ function handleEvBankSave_(token, payload) {
   payload = payload || {};
   var b = evStr_(payload.brand), set = evStr_(payload.set);
   if (!evBrandOk_(b) || EV_SETS.indexOf(set) === -1) return evFail_('bad_request', '品牌或題組代碼錯誤');
+  // 填寫期間改題目＝同一季前後送出的題數不同、會混在一起平均（審查 #3）→ 擋，請在 6 號以後改
+  if (evWindowOpen_(c.today)) return evFail_('window_closed', '填寫期間（每季第一個月 1～5 號）不能改題目，請 6 號以後再改');
   var items = payload.items;
   if (!Array.isArray(items) || !items.length || items.length > 30) return evFail_('bad_request', '題目要 1～30 題');
   var keys = {}, rows = [], now = evNowText_(), by = c.me ? c.me.emp : String(c.user.id);
@@ -800,6 +814,10 @@ function handleEvImportCommit_(token, payload) {
     var res = r.result;
     var tot = Number(res.total);
     if (isNaN(tot) || tot < 0 || tot > 100) return evFail_('bad_request', '第 ' + (i + 1) + ' 筆總分錯誤');
+    if (res.attitude !== null && res.attitude !== undefined && res.attitude !== '') {
+      var expect = Number(res.attitude) + (Number(res.performance) || 0) + (Number(res.adjAtt) || 0) + (Number(res.adjPerf) || 0);
+      if (Math.abs(Math.min(expect, 100) - tot) > 0.15) return evFail_('bad_request', '第 ' + (i + 1) + ' 筆：態度＋表現＋調整（' + evRound1_(expect) + '）跟實際分數（' + tot + '）對不上');
+    }
     var g = evGradeFor_(tot, evGradeOf_(p.brand));
     var frozen = { attitude: res.attitude === null ? null : Number(res.attitude), performance: res.performance === null || res.performance === undefined ? null : Number(res.performance),
       adjAtt: Number(res.adjAtt) || 0, adjPerf: Number(res.adjPerf) || 0, total: tot, grade: g ? g.grade : null, bonusBase: g ? g.base : null,
