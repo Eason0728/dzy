@@ -334,7 +334,7 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   const a2 = fresh();
   const hc = a2.sheets.staff._data[0];
   const p2 = mk(a2, '測試辛', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
-  hc[26] = '';   // 模擬舊表：只有 hire_date、last_day
+  hc[26] = ''; hc[27] = '';   // 模擬舊表：只有 hire_date、last_day（line_revoked_at 也是後來才補的）
   ok(post(a2.sb, 'staffList', {}, a2.tok).data.staff.every((x) => Array.isArray(x.extra_depts) && x.extra_depts.length === 0), 'T2 欄位不存在：list 不炸、回 []');
   const r2 = post(a2.sb, 'staffEdit', { emp_no: p2.emp, extra_depts: ['it'] }, a2.hrTok);
   ok(r2.ok && hc[26] === 'extra_depts' && staffOf(a2, p2.emp).extra_depts === 'it', 'T2 欄位不存在：寫入時自動補表頭並寫入', r2);
@@ -579,7 +579,7 @@ function legacyApp(clockValue) {
   od.length = 1;
   LEGACY_ORG.forEach((r) => od.push(r.slice()));
   clkHq(app)[2] = clockValue === undefined ? 'dzy-hq,mzt-hq,mala-hq' : clockValue;
-  app.sheets.staff._data[0][26] = '';
+  app.sheets.staff._data[0][26] = ''; app.sheets.staff._data[0][27] = '';   // 舊表：沒有 extra_depts、line_revoked_at
   const P = {};
   P.offHs = mk(app, '升甲', { brand: 'mzt', unit: 'mzt-hq', title: 'hs' });
   P.offHm = mk(app, '升乙', { brand: 'mala', unit: 'mala-hq', title: 'hm' });
@@ -604,7 +604,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const app = legacyApp();
   const { sb, tok, hrTok, P } = app;
   const sheetCount0 = Object.keys(app.sheets).length;
-  ok(app.legacySnap.length === LEGACY_ORG.length && app.sheets.staff._data[0][26] === '', 'T4 （前置）舊 org、舊 staff 欄位');
+  ok(app.legacySnap.length === LEGACY_ORG.length && app.sheets.staff._data[0][26] === '' && app.sheets.staff._data[0][27] === '', 'T4 （前置）舊 org、舊 staff 欄位');
 
   // ── 權限：只有 role admin ──
   ok(upg(app, { dryrun: true }, hrTok).ok === false && upg(app, { dryrun: true }, hrTok).error === '沒有權限', 'T4 反：人資（platform.staff）呼叫 orgUpgrade2026 被擋（含預覽）');
@@ -628,7 +628,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(todoOf(dr, P.offCeo.emp) === 'title_ladder,exec_misplaced' && todoOf(dr, P.storeAm.emp) === 'title_ladder' && todoOf(dr, P.storeSv.emp) === 'title_ladder' && todoOf(dr, P.storeBd.emp) === 'title_ladder' && todoOf(dr, P.stopped.emp) === 'unit_inactive', 'T4 todo：品牌辦公室 ceo＝title_ladder＋exec_misplaced、am／sv／bd＝title_ladder、停用門市同仁＝unit_inactive');
   ok(todoOf(dr, P.normal.emp) === '' && todoOf(dr, P.ckPt.emp) === '' && todoOf(dr, P.hqIt.emp) === '' && todoOf(dr, P.offHs.emp) === '' && todoOf(dr, P.offHm.emp) === '', 'T4 todo：正常的人、會被自動對應的人不列');
   ok(dr.data.todo.every((x) => ['unit_inactive', 'title_ladder', 'exec_misplaced'].indexOf(x.flag) !== -1 && x.name && x.unit_name !== undefined), 'T4 todo 只有 unit_inactive／title_ladder／exec_misplaced 三種 flag，帶 name／unit_name');
-  ok(orgSnap(app).join() === app.legacySnap.join() && Object.keys(app.sheets).length === sheetCount0 && app.sheets.staff._data[0][26] === '' && clkHq(app)[2] === 'dzy-hq,mzt-hq,mala-hq' && staffOf(app, P.offHs.emp).title === 'hs' && !app.props.ORG_UPGRADE_STATE, 'T4 預覽不寫任何東西（org／分頁／欄位／clock／職稱／狀態都沒動）');
+  ok(orgSnap(app).join() === app.legacySnap.join() && Object.keys(app.sheets).length === sheetCount0 && app.sheets.staff._data[0][26] === '' && app.sheets.staff._data[0][27] === '' && clkHq(app)[2] === 'dzy-hq,mzt-hq,mala-hq' && staffOf(app, P.offHs.emp).title === 'hs' && !app.props.ORG_UPGRADE_STATE, 'T4 預覽不寫任何東西（org／分頁／欄位／clock／職稱／狀態都沒動）');
 
   // ── 正式升級 ──
   const r1 = upg(app, { dryrun: false });
@@ -758,7 +758,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const call = (a) => { try { return post(sb, a, {}, tok); } catch (e) { return { ok: false, thrown: String(e.message) }; } };
   let all;
   try { all = sb.clkStaffAll_(); } catch (e) { all = e.message; }
-  ok(Array.isArray(all) && all.length >= 10 && all.every((x) => x.values.length === 27 && x.values[26] === ''), 'R1 #1 clkStaffAll_ 對 26 欄分頁不丟錯、缺的第 27 欄補空字串', typeof all === 'string' ? all : all.length);
+  ok(Array.isArray(all) && all.length >= 10 && all.every((x) => x.values.length === 28 && x.values[26] === '' && x.values[27] === ''), 'R1 #1 clkStaffAll_ 對 26 欄分頁不丟錯、缺的第 27、28 欄補空字串', typeof all === 'string' ? all : all.length);
   const sl = call('staffList');
   ok(sl.ok && sl.data.staff.length >= 10, 'R1 #1 staffList 對 26 欄分頁可用（升級前 BOSS 要能開名單）', sl);
   const ca = call('clockAlerts');
