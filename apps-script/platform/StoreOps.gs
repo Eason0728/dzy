@@ -6,6 +6,7 @@
  *  1. ssoTicket aud 'store' 的 sub 判斷（storeSubForUser_；StaffClock.gs handleSsoTicket_ 呼叫）
  *  2. svcStoreRedeem／svcStoreWho／svcStoreRoster（憑 Script Property STORE_SVC_KEY）
  *  3. 誰核誰：attNeedOf_／attApproverOf_（純函式，分核定工時 hours／申請 req 兩張表）＋ storeAttPeople_
+ *     ＋ 督導／總監「只看」名單：attViewUnitsOf_／storeAttViewTargets_（ident att.view_people；掛 REGIONS_ON，docs/att-view/spec.md）
  *  4. 身分 ident 計算（storeIdent_）、試點開關 STORE_SSO_UNITS
  *  5. 衍生權限 platform.att／platform.sched／platform.storeops 的閘門（storeAttGate_／storeSchedGate_／storeOpsGate_；Staff.gs stfLoginGate_ 呼叫）
  *  6. 人資主管判斷 stfIsHrHead_、perm_map 補預設規則 storeopsPermSeed_
@@ -293,6 +294,55 @@ function storeAttTargets_(me, flags, people, org, home, mode, rctx) {
   return out;
 }
 
+/** 「只看」可看的門市單位：org 裡存在且 active、ladder store、屬於督導／總監所在辦公室的品牌、不是央廚（osv 與 odir 共用） */
+function storeViewUnitOk_(code, org, brand) {
+  var u = code ? org.unit[code] : null;
+  return !!(u && u.active && (u.ladder || 'store') === 'store' && brand && u.parent === brand && code !== STF_EXTRA_CK && brand !== STF_EXTRA_CK);
+}
+
+/**
+ * 督導／總監「只看」考勤的門市單位代碼（純函式；docs/att-view/spec.md §2）。
+ * osv（品牌辦公室區督導）→ regionIdx.bySupervisor[本人 emp] 各區的 stores 聯集（regionIdx 為 null／沒有本人＝[]）；
+ * odir（品牌辦公室總監）→ 所屬品牌底下 active、ladder store、非 ck 的門市；其他職稱、非 active＝[]。回排序去重陣列。
+ */
+function attViewUnitsOf_(me, org, regionIdx) {
+  if (!me || stfStr_(me.status) !== 'active') return [];
+  var title = stfStr_(me.title);
+  var o = storeOrgOf_(me, org);
+  if (!o || o.ladder !== 'office') return [];
+  var out = [];
+  var brand = o.unit.parent;
+  if (!brand || brand === STF_EXTRA_CK) return [];
+  if (title === 'osv') {
+    var codes = regionIdx && regionIdx.bySupervisor ? regionIdx.bySupervisor[stfStr_(me.emp)] : null;
+    if (!codes || !codes.length) return [];
+    codes.forEach(function (c) {
+      var r = regionIdx.byRegion ? regionIdx.byRegion[c] : null;
+      if (r && r.stores) r.stores.forEach(function (u) { if (storeViewUnitOk_(stfStr_(u), org, brand)) out.push(stfStr_(u)); });
+    });
+  } else if (title === 'odir') {
+    org.list.unit.forEach(function (u) { if (storeViewUnitOk_(u.code, org, brand)) out.push(u.code); });
+  } else {
+    return [];
+  }
+  return storeUniqSorted_(out.filter(function (x) { return x; }));
+}
+
+/** 「只看」名單的被看者（尚未換成打卡帳號）：units 內、需要核定工時、非 orphan、非本人（與 storeAttTargets_ 分開，不把看混進核） */
+function storeAttViewTargets_(me, people, org, home, units) {
+  var out = [];
+  if (!units || !units.length) return out;
+  people.forEach(function (t0) {
+    var t = storeEffectiveTarget_(t0, org, home);
+    if (!t || t.orphan) return;
+    if (!attNeedOf_(t, org, 'hours')) return;
+    if (units.indexOf(stfStr_(t.unit)) === -1) return;
+    if (stfStr_(me.emp) && stfStr_(me.emp) === stfStr_(t.emp)) return;
+    out.push(t);
+  });
+  return out;
+}
+
 // ============================================================
 // 3. 讀資料（碰試算表）
 // ============================================================
@@ -447,6 +497,16 @@ function storeIdent_(sub) {
   var rctx = typeof regionCtx_ === 'function' ? regionCtx_() : null;   // 區域：入口只讀一次
   var targets = storeAttTargets_(me, flags, people, org, home, 'hours', rctx);
   var reqTargets = storeAttTargets_(me, flags, people, org, home, 'req', rctx);
+  var viewTargets = [];
+  var viewOn = false;
+  try { viewOn = PropertiesService.getScriptProperties().getProperty('REGIONS_ON') === '1'; } catch (e) { viewOn = false; }
+  if (viewOn && p && !admin && !hrHead) {
+    var vIdx = null;
+    if (p.title === 'osv' && typeof regionIndexLive_ === 'function') {
+      try { vIdx = regionIndexLive_(); } catch (e2) { vIdx = null; }
+    }
+    viewTargets = storeAttViewTargets_(me, people, org, home, attViewUnitsOf_(me, org, vIdx));
+  }
   return {
     sub: sub, active: true,
     emp_no: p ? p.emp : '',
@@ -460,7 +520,7 @@ function storeIdent_(sub) {
     pilot_units: pilot,
     units_managed: storeUniqSorted_(managed),
     void_units: storeUniqSorted_(voidUnits),
-    att: { people: storeAttPeople_(targets, pilot), req_people: storeAttPeople_(reqTargets, pilot) }   // people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）
+    att: { people: storeAttPeople_(targets, pilot), req_people: storeAttPeople_(reqTargets, pilot), view_people: storeAttPeople_(viewTargets, pilot) }   // view_people＝督導／總監只看（REGIONS_ON='1' 才有，2026-10-25）； people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）
   };
 }
 
