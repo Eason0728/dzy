@@ -17,6 +17,12 @@ function selfOf(data) {
   return { due: Array.isArray(s.due) ? s.due.map(monthText).filter(Boolean) : [], wait: countOf(s.wait), missing: countOf(s.missing) };
 }
 
+/** 央廚固定排班提醒（營運系統 server/sched-alerts.js，2026-10-25）：data.fixed＝[{code,name,missing:N}]；缺或形狀不對＝沒有 */
+function fixedOf(data) {
+  const l = data && typeof data === 'object' && Array.isArray(data.fixed) ? data.fixed : [];
+  return l.filter((x) => x && typeof x === 'object' && countOf(x.missing) > 0).map((x) => ({ name: x.name || x.code || '央廚', missing: countOf(x.missing) }));
+}
+
 /** 上游 data → alerts() 的陣列：每家一列；零件數回空陣列；形狀不對回 null */
 export function toAlerts(data) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.items)) return null;
@@ -30,6 +36,7 @@ export function toAlerts(data) {
   for (const m of me.due) out.push({ level: 'warn', text: `${m}班表還沒送出`, view: 'self' });
   if (me.wait > 0) out.push({ level: 'info', text: `${me.wait} 位同仁的班表等你核准`, view: 'approve' });
   if (me.missing > 0) out.push({ level: 'warn', text: `${me.missing} 位同仁下個月班表還沒送出`, view: 'approve' });
+  for (const f of fixedOf(data)) out.push({ level: 'warn', text: `${f.name} 有 ${f.missing} 位同仁還沒設固定班別（平日班表空白）`, view: 'fixedstaff' });
   return out;
 }
 

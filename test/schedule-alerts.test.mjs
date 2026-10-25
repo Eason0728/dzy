@@ -57,6 +57,14 @@ await t('self 三種並列：門市提醒在前，順序 due、wait、missing', 
   assert.deepEqual(r.map((x) => x.view), ['board', 'self', 'approve', 'approve']);
   assert.deepEqual(r.map((x) => x.level), ['warn', 'warn', 'info', 'warn']);
 });
+await t('fixed：每家一列 warn，view fixedstaff；0 人、壞資料略過；不進 badge', () => {
+  assert.deepEqual(toAlerts({ items: [], fixed: [{ code: 'CF', name: '中央廚房', missing: 3 }] }),
+    [{ level: 'warn', text: '中央廚房 有 3 位同仁還沒設固定班別（平日班表空白）', view: 'fixedstaff' }]);
+  assert.deepEqual(toAlerts({ items: [], fixed: [{ code: 'CF', missing: 0 }, null, 'x', { code: 'CF', missing: -1 }] }), []);
+  assert.deepEqual(toAlerts({ items: [], fixed: 'x' }), []);
+  assert.equal(toAlerts({ items: [], fixed: [{ code: 'CF', missing: 2 }] })[0].text, 'CF 有 2 位同仁還沒設固定班別（平日班表空白）');
+  assert.equal(toBadge({ items: [], fixed: [{ code: 'CF', missing: 2 }] }), 0);
+});
 await t('self 壞資料：月份格式不對略過、負數或非數字當 0', () => {
   assert.deepEqual(toAlerts({ items: [], self: { due: ['x', 5, null, '2026-11'], wait: -1, missing: 'a' } }).map((x) => x.text), ['11 月班表還沒送出']);
   assert.equal(toBadge({ items: [], self: { wait: 'x' } }), 0);
