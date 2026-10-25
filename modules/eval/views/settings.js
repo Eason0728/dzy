@@ -1,10 +1,11 @@
 /**
- * 設定（eval.admin，預設人資總監）：四個品牌各自的題目、正職 KPI 範本、時薪級距、等第獎金表，加上匯入舊成績。
+ * 設定（platform.eval-admin，預設人資總監）：四個品牌各自的題目、正職 KPI 範本、時薪級距、等第獎金表，加上匯入舊成績。
  * 系統還沒初始化時，role admin 會看到「初始化績效評核」按鈕（evSetup，只補不覆蓋）。
  */
 'use strict';
 
 import { btnWaiting, errText } from '../lib.js';
+import { MALA_SEED } from '../seed-mala.js';
 
 const BRANDS = [['mala', '麻的小辛辣'], ['mzt', '墨竹亭燃麵本家'], ['yiwu', '一悟燒肉'], ['ck', '中央工廠（研發部）']];
 const SETS = [['pt_att', '計時同仁｜態度'], ['pt_perf', '計時同仁｜工作表現'], ['ft_att', '正職同仁｜態度']];
@@ -37,12 +38,28 @@ export function mountSettings(el, ctx) {
     el.innerHTML = `<div class="card"><div class="field"><label class="field-label" for="ev-brand">品牌</label>
       <select class="input" id="ev-brand">${BRANDS.map(([k, n]) => `<option value="${k}" ${k === brand ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
       <p class="ev-note">每個品牌的題目、範本、時薪、等第各自獨立。改題目不會影響已送出的分數（每筆送出都存了當時的題目）。</p></div>
+      ${brand === 'mala' ? '<div class="card"><div class="card-title">從舊網站搬題目</div><p class="ev-note">一鍵載入新竹光復舊評核網站現在用的三組題目、時薪級距，以及店長（sm）、正職（ft，原「儲備幹部」）兩張 KPI 範本初版。會取代小辛辣目前在這裡的題目與表；KPI 範本載入後請對照舊網站管理區核對。</p><div class="btn-row"><button type="button" class="btn btn-secondary" data-act="seed">載入小辛辣現行題目</button></div><p class="field-hint" data-role="seed-msg"></p></div>' : ''}
       ${SETS.map(([k, n]) => `<div class="card" data-role="bank" data-set="${k}"></div>`).join('')}
       <div class="card" data-role="tpl"></div>
       <div class="card" data-role="wage"></div>
       <div class="card" data-role="grade"></div>
       <div class="card" data-role="import"></div>`;
     el.querySelector('#ev-brand').addEventListener('change', (e) => { brand = e.target.value; load(); });
+    const seedBtn = el.querySelector('[data-act="seed"]');
+    if (seedBtn) seedBtn.addEventListener('click', async () => {
+      if (!(await ctx.ui.confirm('載入舊網站的小辛辣題目、時薪級距與 KPI 範本？會取代這裡目前的小辛辣設定。'))) return;
+      const stop = btnWaiting(seedBtn, '載入中');
+      const calls = SETS.map(([k]) => ['evBankSave', { brand: 'mala', set: k, items: MALA_SEED[k] }])
+        .concat(Object.keys(MALA_SEED.tpl).map((t) => ['evTplSave', { brand: 'mala', title: t, items: MALA_SEED.tpl[t] }]))
+        .concat([['evWageSave', { brand: 'mala', rows: MALA_SEED.wage }]]);
+      for (const [a2, p2] of calls) {
+        const x = await ctx.api.call('eval', a2, p2);
+        if (!x || !x.ok) { stop(true); el.querySelector('[data-role="seed-msg"]').textContent = '載入失敗：' + errText(x); return; }
+      }
+      stop(true);
+      ctx.ui.toast('已載入小辛辣現行題目、時薪與 KPI 範本', 'ok');
+      load();
+    });
     SETS.forEach(([k, n]) => bankEditor(el.querySelector(`[data-role="bank"][data-set="${k}"]`), k, n, d.bank[k]));
     tplEditor(el.querySelector('[data-role="tpl"]'), d.tpls);
     wageEditor(el.querySelector('[data-role="wage"]'), d.wage);

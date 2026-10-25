@@ -111,7 +111,7 @@ function run(staff, extra) {
 const has = (res, p) => res.perms.indexOf(p) !== -1;
 
 // ===== T1-1 =====
-ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'eval.manage.own', 'eval.read.brand', 'eval.read', 'eval.admin']), 'PERM_GRANTABLE 與契約一致（含營運系統新增的 store.void、att.extra，薪酬系統 payroll.write，績效評核四碼）');
+ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin']), 'PERM_GRANTABLE 與契約一致（含營運系統新增的 store.void、att.extra，薪酬系統 payroll.write，績效評核四碼）');
 ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write']), 'PERM_LOCKED 與契約一致（五碼，2026-10-19 加薪酬系統）');
 ok(r0.ok === true && r0.rules_seeded === 26 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋26 條規則＋5 筆對照（2026-10-20 加 am／fm／rdd 六條）', r0);
 ok(eq(r0.created, ['perm_map', 'perm_ex', 'perm_store_map', 'perm_audit']), '四張分頁都建出來', r0.created);

@@ -18,9 +18,9 @@ export default {
     { id: 'fill', name: '填寫評鑑', requires: ['platform.login'] },
     { id: 'self', name: '自評', requires: ['platform.login'] },
     { id: 'mine', name: '我的成績', requires: ['platform.login'] },
-    { id: 'newbie', name: '新人考核', requires: ['eval.manage.own'] },
-    { id: 'results', name: '單位結果', requires: ['eval.manage.own', 'eval.read.brand', 'eval.read'] },
-    { id: 'settings', name: '設定', requires: ['eval.admin'] }
+    { id: 'newbie', name: '新人考核', requires: ['platform.eval-manage'] },
+    { id: 'results', name: '單位結果', requires: ['platform.eval-manage', 'platform.eval-brand', 'platform.eval-all'] },
+    { id: 'settings', name: '設定', requires: ['platform.eval-admin'] }
   ],
   entry: () => import('./index.js')
 };

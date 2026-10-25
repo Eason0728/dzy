@@ -10,7 +10,7 @@
  * 規矩：
  * - 互評原始分數（誰給誰幾分）永遠不出現在任何回應；只回彙總（EvalCalc.gs evAggregate_）。
  * - 季度與填寫窗由後端判斷，不信前端。每筆送出存當下題目文字（labels），之後改題不會對錯題。
- * - 權限碼 eval.manage.own／eval.read.brand／eval.read／eval.admin（Perms.gs）；預設規則 EV_PERM_DEFAULT_RULES 由 evSetup 補進 perm_map。
+ * - 權限碼 platform.eval-manage／platform.eval-brand／platform.eval-all／platform.eval-admin（Perms.gs）；預設規則 EV_PERM_DEFAULT_RULES 由 evSetup 補進 perm_map。
  * - 依賴：Staff.gs（組織、同仁列）、ApprovalRoute.gs apvPerson_、Approvals.gs apvDirectory_、Auth.gs、Perms.gs、EvalCalc.gs。
  */
 
@@ -47,12 +47,12 @@ var EV_PERM_DEFAULT_RULES = (function () {
   var add = function (ladder, dept, titles, perms) {
     titles.forEach(function (t) { perms.forEach(function (p) { out.push([ladder, dept, t, p]); }); });
   };
-  add('store', '', ['sm', 'am', 'fm'], ['eval.manage.own']);
-  add('store', '', ['rdd'], ['eval.manage.own', 'eval.read.brand']);
-  add('office', '', ['osv', 'odir'], ['eval.manage.own', 'eval.read.brand']);
-  add('hq', 'hr', ['*'], ['eval.read']);
-  add('hq', '', ['ceo', 'gm', 'chair'], ['eval.read']);
-  add('hq', 'hr', ['hm'], ['eval.admin']);
+  add('store', '', ['sm', 'am', 'fm'], ['platform.eval-manage']);
+  add('store', '', ['rdd'], ['platform.eval-manage', 'platform.eval-brand']);
+  add('office', '', ['osv', 'odir'], ['platform.eval-manage', 'platform.eval-brand']);
+  add('hq', 'hr', ['*'], ['platform.eval-all']);
+  add('hq', '', ['ceo', 'gm', 'chair'], ['platform.eval-all']);
+  add('hq', 'hr', ['hm'], ['platform.eval-admin']);
   return out;
 })();
 
@@ -179,12 +179,12 @@ function evEnter_(token) {
 
 /**
  * 範圍：{all, units:{unit:true}, admin, canManage(p)}
- * eval.read → 全部；eval.read.brand → 同品牌單位；eval.manage.own → stfCanReview_ 為真的人（往上一層，S3 A）。
+ * platform.eval-all → 全部；platform.eval-brand → 同品牌單位；platform.eval-manage → 目前身分往上一層可審的人（stfReviewNeed_，S3 A）。
  */
 function evScope_(c) {
   var has = function (p) { return c.isAdmin || hasPerm_(c.perms, p); };
-  var s = { all: has('eval.read'), units: {}, admin: has('eval.admin'), manage: has('eval.manage.own') };
-  if (!s.all && hasPerm_(c.perms, 'eval.read.brand') && c.me && c.me.brand) {
+  var s = { all: has('platform.eval-all'), units: {}, admin: has('platform.eval-admin'), manage: has('platform.eval-manage') };
+  if (!s.all && hasPerm_(c.perms, 'platform.eval-brand') && c.me && c.me.brand) {
     Object.keys(c.org.unit).forEach(function (u) { if (c.org.unit[u].parent === c.me.brand) s.units[u] = true; });
   }
   var rscope = (s.manage && c.me) ? stfReviewScope_(c.me.values, c.org) : null;
@@ -591,7 +591,7 @@ function handleEvSupSave_(token, payload) {
 }
 
 // ============================================================
-// 7. 設定（eval.admin）
+// 7. 設定（platform.eval-admin）
 // ============================================================
 
 function evAdminEnter_(token) {

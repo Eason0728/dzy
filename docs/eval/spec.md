@@ -49,20 +49,20 @@
 | 碼 | 能做什麼 | 預設給誰 |
 |---|---|---|
 | （無，人人可用） | 填互評、自評、留言、看自己成績 | 所有 active 門市／央廚同仁（`platform.login`） |
-| `eval.manage.own` | 對「自己可審核的人」做新人考核、KPI 評分、± 調整、表現回饋；看這些人的結果 | 門市 `sm`、`am`；央廚 `fm`、`rdd`；品牌辦公室 `osv`、`odir` |
-| `eval.read.brand` | 看同品牌各單位結果、填寫進度、印 PDF | 品牌辦公室 `osv`、`odir`；央廚 `rdd` |
-| `eval.read` | 看全集團結果、填寫進度、印 PDF | 總部人資部全部；`ceo`、`gm`、`chair` |
-| `eval.admin` | 定稿／解除定稿、改題庫、KPI 範本、時薪級距、等第獎金表、匯入舊成績 | 總部人資部 `hm`（總監） |
+| `platform.eval-manage` | 對「自己可審核的人」做新人考核、KPI 評分、± 調整、表現回饋；看這些人的結果 | 門市 `sm`、`am`；央廚 `fm`、`rdd`；品牌辦公室 `osv`、`odir` |
+| `platform.eval-brand` | 看同品牌各單位結果、填寫進度、印 PDF | 品牌辦公室 `osv`、`odir`；央廚 `rdd` |
+| `platform.eval-all` | 看全集團結果、填寫進度、印 PDF | 總部人資部全部；`ceo`、`gm`、`chair` |
+| `platform.eval-admin` | 定稿／解除定稿、改題庫、KPI 範本、時薪級距、等第獎金表、匯入舊成績 | 總部人資部 `hm`（總監） |
 
 - 「可審核的人」直接用平台現成的 `stfReviewScope_`＋`stfScopeMeets_(stfReviewNeed_(目前單位、部門、職稱))`（同仁認領審核那套往上一層；不用 `stfCanReview_`，它看認領送出的 p_* 欄，通過後會清空）：店長評本店計時、正職；區經理評本店店長；品牌辦公室評店長；廠長評央廚同仁；廚藝總監評廠長（S3 A）。
-- 不列進 `PERM_LOCKED`（Q5 A：全依職稱；分數連著獎金，所以 `eval.admin` 預設只給人資總監）。
-- 範圍計算比照 `audit.read.*`：`eval.read`＝all；`eval.read.brand`＝同品牌單位陣列；`eval.manage.own`＝上述往上一層為真的人。後端每個讀取 action 都先裁切再回傳。
+- 不列進 `PERM_LOCKED`（Q5 A：全依職稱；分數連著獎金，所以 `platform.eval-admin` 預設只給人資總監）。
+- 範圍計算比照 `audit.read.*`：`platform.eval-all`＝all；`platform.eval-brand`＝同品牌單位陣列；`platform.eval-manage`＝上述往上一層為真的人。後端每個讀取 action 都先裁切再回傳。
 
 ### 2.3 匿名
-- 互評分數：任何人（含 `eval.read`）只看得到彙總平均與份數，看不到誰給誰幾分。後端寫入時記評分者，只用來防重複。
+- 互評分數：任何人（含 `platform.eval-all`）只看得到彙總平均與份數，看不到誰給誰幾分。後端寫入時記評分者，只用來防重複。
 - 夥伴留言勾「匿名」：回給收件人時不帶發話者；不勾則帶姓名。
 - 給公司的話：管理頁只顯示內容，永不帶發話者。
-- 例外：`eval.admin` 也看不到；要查只能 Eason 在 mini 直接查資料庫（記在 skill）。
+- 例外：`platform.eval-admin` 也看不到；要查只能 Eason 在 mini 直接查資料庫（記在 skill）。
 
 ## 3. 資料（mini 平台資料庫，全部 `ev_` 開頭；`evSetup` 只補不覆蓋，沒建前所有 action 回 `not_inited`）
 
@@ -93,9 +93,9 @@
 | 填寫評鑑 | 所有人 | 同店名單卡片、星等＋五級說明（預設展開）、草稿自動存、送出確認、非開放期唯讀預覽 |
 | 自評 | 所有人 | 同題目自評＋三種留言 |
 | 我的成績 | 所有人 | 留言卡、各季小計、查詢季度、細項、正職等第表／計時時薪落點、新人考核卡 |
-| 新人考核 | `eval.manage.own` | 待考核清單（滿月、逾期紅字）、填寫 |
-| 單位結果 | `eval.manage.own`／`eval.read.brand`／`eval.read` | 選單位＋季度：總覽、填寫進度（誰還沒填）、點人看明細、KPI 評分、± 調整、回饋、列印 PDF |
-| 設定 | `eval.admin` | 定稿本季、題庫（四品牌）、KPI 範本、時薪級距、等第獎金表、匯入舊成績 |
+| 新人考核 | `platform.eval-manage` | 待考核清單（滿月、逾期紅字）、填寫 |
+| 單位結果 | `platform.eval-manage`／`platform.eval-brand`／`platform.eval-all` | 選單位＋季度：總覽、填寫進度（誰還沒填）、點人看明細、KPI 評分、± 調整、回饋、列印 PDF |
+| 設定 | `platform.eval-admin` | 定稿本季、題庫（四品牌）、KPI 範本、時薪級距、等第獎金表、匯入舊成績 |
 
 外觀用管理系統樣式；PDF 抬頭依品牌名＋店名＋季度，檔名「<店名>＿績效評核＿<年>年第<季>季」。日夜天空背景不搬。
 

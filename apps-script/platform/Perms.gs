@@ -12,7 +12,7 @@
 var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap',
   'store.void', 'att.extra',   // 2026-10-18 營運系統：收支作廢、額外考勤核定（人資主管也能設這兩碼的個別例外，PermActions.gs）
   'payroll.write',              // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
-  'eval.manage.own', 'eval.read.brand', 'eval.read', 'eval.admin'];   // 2026-10-26 績效評核（docs/eval/spec.md §2.2；預設規則在 Eval.gs EV_PERM_DEFAULT_RULES，evSetup 補進 perm_map）
+  'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin'];   // 2026-10-26 績效評核（docs/eval/spec.md §2.2；預設規則在 Eval.gs EV_PERM_DEFAULT_RULES，evSetup 補進 perm_map）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
 var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write'];   // 2026-10-19 加薪酬系統
@@ -461,7 +461,7 @@ var PERM_NAMES = {
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
   'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.storeops': '門市營運',
   'payroll.write': '薪酬系統',
-  'eval.manage.own': '績效評核：替所屬同仁打分', 'eval.read.brand': '績效評核：看自己品牌各店', 'eval.read': '績效評核：看全集團', 'eval.admin': '績效評核：題目設定與定稿'
+  'platform.eval-manage': '績效評核：替所屬同仁打分', 'platform.eval-brand': '績效評核：看自己品牌各店', 'platform.eval-all': '績效評核：看全集團', 'platform.eval-admin': '績效評核：題目設定與定稿'
 };
 function permName_(code) { return PERM_NAMES[code] || code; }
 

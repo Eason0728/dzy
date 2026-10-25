@@ -1,6 +1,6 @@
 /**
  * 單位結果（店長以上）：選單位＋季度 → 總覽、誰還沒填、給公司的話 → 點人看明細、打 KPI、加減分、寫回饋。
- * 人資總監（eval.admin）另有定稿／解除定稿。列印 PDF 用瀏覽器列印，檔名「<店名>＿績效評核＿<年>年第<季>季」。
+ * 人資總監（platform.eval-admin）另有定稿／解除定稿。列印 PDF 用瀏覽器列印，檔名「<店名>＿績效評核＿<年>年第<季>季」。
  * 能看哪些單位、能替誰打分，全部由後端 evUnitResults／evPersonDetail 回的 canManage 決定。
  */
 'use strict';
@@ -57,7 +57,7 @@ export function mountResults(el, ctx) {
           if (x.isMe) return `<tr><td>${esc(x.name)}（你）</td><td>${esc(x.titleName)}</td><td colspan="6" class="ev-note">自己的分數請看「我的成績」</td></tr>`;
           if (!res) return `<tr><td>${esc(x.name)}</td><td>${esc(x.titleName)}</td><td colspan="6" class="ev-note">這一季沒有資料</td></tr>`;
           const adj = (Number(res.adjAtt) || 0) + (Number(res.adjPerf) || 0);
-          const tier = isFt(x) ? (res.grade || '—') : (d.wageTiers[wageIdxOf(res)] ? d.wageTiers[wageIdxOf(res)][1] : '—');
+          const tier = isFt(x) ? (res.performance === null ? 'KPI 未評' : (res.grade || '—')) : (d.wageTiers[wageIdxOf(res)] ? d.wageTiers[wageIdxOf(res)][1] : '—');
           return `<tr data-role="ev-row" data-emp="${esc(x.emp)}"><td><a href="#" data-role="open" data-emp="${esc(x.emp)}">${esc(x.name)}</a></td><td>${esc(x.titleName)}</td>
             <td class="num">${r1(res.attitude)}</td><td class="num">${res.performance === null ? '未計' : r1(res.performance)}</td>
             <td class="num">${adj ? (adj > 0 ? '+' : '') + r1(adj) : '—'}</td><td class="num"><strong>${r1(res.total)}</strong></td><td>${esc(String(tier))}</td>
@@ -97,7 +97,7 @@ export function mountResults(el, ctx) {
       load();
     });
     el.querySelectorAll('[data-role="open"]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); state.emp = a.dataset.emp; person(); }));
-    if (state.emp) person();
+    if (state.emp) await person();
   }
 
   async function person() {

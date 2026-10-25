@@ -19,7 +19,7 @@ export const STYLE = `
 .ev-star{width:40px;height:40px;border-radius:8px;border:1px solid var(--line);background:var(--card);font-size:22px;line-height:1;cursor:pointer;color:#bbb}
 .ev-star.on{color:var(--warn);border-color:var(--warn);background:var(--warn-light)}
 .ev-star:disabled{cursor:default}
-.ev-levels{font-size:13px;color:var(--muted);margin:0;padding-left:18px}
+.ev-levels{font-size:13px;color:var(--muted);margin:0;padding-left:0;list-style:none}
 .ev-levels li.on{color:var(--ink);font-weight:600}
 .ev-state{font-size:13px;color:var(--muted);font-weight:400;margin-left:auto}
 .ev-state.done{color:var(--ok)}
@@ -84,7 +84,7 @@ export function starItem(esc, item, value, onChange, readOnly) {
   const lv = Array.isArray(item.levels) ? item.levels : [];
   box.innerHTML = `<div class="ev-item-label">${esc(item.label)}</div>
     <div class="ev-stars" role="radiogroup" aria-label="${esc(item.label)}">${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="ev-star" data-star="${n}" aria-label="${n} 顆星" ${readOnly ? 'disabled' : ''}>★</button>`).join('')}</div>
-    ${lv.length ? `<ol class="ev-levels" reversed>${lv.map((t, i) => `<li data-lv="${5 - i}">${5 - i}★ ${esc(t)}</li>`).join('')}</ol>` : ''}`;
+    ${lv.length ? `<ul class="ev-levels">${lv.map((t, i) => `<li data-lv="${5 - i}">${5 - i}★ ${esc(t)}</li>`).join('')}</ul>` : ''}`;
   let v = value || null;
   const paint = () => {
     box.querySelectorAll('.ev-star').forEach((b) => b.classList.toggle('on', v !== null && Number(b.dataset.star) <= v));
