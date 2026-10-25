@@ -511,16 +511,19 @@ function loadNavTitle(user) {
   if (user.role !== 'staff' || !user.id || navTitle.uid === user.id) return;
   navTitle.uid = user.id;
   navTitle.text = '';
+  // 取不到（斷網、忙碌）就把 uid 清掉，下一次重畫側邊欄（切頁）再試一次
+  const retryLater = () => { if (navTitle.uid === user.id && !navTitle.text) navTitle.uid = null; };
   backendCall('platform', 'myProfile', {}).then((res) => {
     const d = (res && res.ok && res.data) || {};
     const now = auth.getUser() || {};
+    if (!res || !res.ok) { retryLater(); return; }
     if (!d.title_name || navTitle.uid !== user.id || now.id !== user.id) return;
     // 2026-10-26 Eason：職稱前加品牌名稱；總部人員（有部門）改加部門名稱。例：墨竹亭 店長、資訊部 總監
     navTitle.text = [d.dept_name || d.brand_name, d.title_name].filter(Boolean).map(String).join(' ');
     const rl = findDescendant(sideUserEl, (n) => n.className === 'rl');
     if (rl) rl.textContent = navTitle.text;
     pageSubEl.textContent = [now.name, navTitle.text].filter(Boolean).join('・');
-  }).catch(() => {});
+  }).catch(retryLater);
 }
 
 /**
