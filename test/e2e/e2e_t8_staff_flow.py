@@ -111,7 +111,7 @@ def main():
             staff.fill('#login-password', 'e2e-staff-pw-1')
             staff.click('[data-role="submit"]')
             staff.wait_for_selector('[data-role="module-card"]')
-            check(staff.locator('[data-role="module-card"]').count() == 3, '★通過後可登入，同仁只看得到「我的資料」「公告專區」「表單簽核」三個模組')
+            check(staff.locator('[data-role="module-card"]').count() == 4, '★通過後可登入，同仁只看得到「我的資料」「公告專區」「表單簽核」「績效評核」四個模組')
             check(staff.evaluate('location.hash') in ('', '#/home'), '登入後網址不停在 #/claim')
             staff.goto(base + '/index.html#/claim')
             staff.wait_for_selector('[data-role="module-card"]')
