@@ -460,10 +460,12 @@ function handleEvNewbieList_(token) {
   var list = c.people.filter(function (p) { return evEvaluable_(p, c.org) && c.scope.canManage(p); })
     .map(function (p) {
       var s = evNewbieStatus_(hire[p.emp] || '', c.today, !!done[p.emp], EV_NEWBIE_SINCE);
-      return { emp: p.emp, name: p.name, unit: p.unit, unitName: (c.org.unit[p.unit] || {}).name || p.unit, state: s.state, hire: s.hire || '', dueOn: s.dueOn || '', overdueDays: s.overdueDays || 0, daysLeft: s.daysLeft || 0, late: !!s.late };
+      return { emp: p.emp, name: p.name, unit: p.unit, brand: p.brand, unitName: (c.org.unit[p.unit] || {}).name || p.unit, state: s.state, hire: s.hire || '', dueOn: s.dueOn || '', overdueDays: s.overdueDays || 0, daysLeft: s.daysLeft || 0, late: !!s.late };
     }).filter(function (x) { return x.state === 'due' || x.state === 'waiting'; })
     .sort(function (a, b) { return (b.state === 'due') - (a.state === 'due') || b.overdueDays - a.overdueDays; });
-  return { ok: true, data: { list: list } };
+  var banks = {};
+  list.forEach(function (x) { if (!banks[x.brand]) { var b = evBankOf_(x.brand); banks[x.brand] = { pt_att: b.pt_att, pt_perf: b.pt_perf }; } });
+  return { ok: true, data: { list: list, banks: banks } };
 }
 
 /** payload {emp, att, perf}：計時題目（同舊站，正職新人也用計時那套）；一人一次 */
@@ -514,7 +516,7 @@ function handleEvUnitResults_(token, payload) {
       canManage: !self && c.scope.canManage(p),
       peerDone: cache.peer.some(function (x) { return x.quarter === q && stfNormEmp_(x.rater) === p.emp; }),
       selfDone: cache.self.some(function (x) { return x.quarter === q && stfNormEmp_(x.emp_no) === p.emp; }),
-      result: f ? { attitude: f.attitude, performance: f.performance, adjAtt: f.adjAtt, adjPerf: f.adjPerf, subtotal: f.subtotal, total: f.total, grade: f.grade, attCount: f.attCount, perfCount: f.perfCount, source: r.source } : null
+      result: f ? { attitude: f.attitude, performance: f.performance, adjAtt: f.adjAtt, adjPerf: f.adjPerf, subtotal: f.subtotal, total: f.total, grade: f.grade, wageIdx: f.wageIdx, attCount: f.attCount, perfCount: f.perfCount, source: r.source } : null
     };
   });
   var company = (c.scope.all || c.isAdmin || c.scope.units[unit]) ? cache.msg.filter(function (m) { return m.kind === 'company' && m.quarter === q && evStr_(m.to) === unit; }).map(function (m) { return evStr_(m.text); }) : [];

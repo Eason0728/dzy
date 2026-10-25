@@ -168,6 +168,8 @@ eq(sb.evNewbieScore_([], []), { attitude: null, performance: null, total: null }
   const pairs = [['evRound1', 'evRound1_'], ['evKpiItemScore', 'evKpiItemScore_'], ['evKpiTotal', 'evKpiTotal_'], ['evRaterTotal', 'evRaterTotal_']];
   const cases = [[15.05], [{ weight: 20, type: '技能' }, 'B'], [KPI10, { sales: 'A' }], [[5, 4, 3]]];
   pairs.forEach(([f, g], i) => eq(front[f](...cases[i]), sb[g](...cases[i]), 'front=gs ' + f));
+  const tiers = [['96 分以上', '340'], ['81～85 分', '230'], ['65 分以下', '法定']];
+  [98, 83.4, 40, null].forEach((sc) => eq(front.evWageTierIndex(tiers, sc), sb.evWageTierIndex_(tiers, sc), 'front=gs 時薪落點 ' + sc));
   ok(front.EV_KPI_SKILL_FACTOR.B === sb.EV_KPI_SKILL_FACTOR.B && front.EV_FT_ATT_FACTOR === sb.EV_FT_ATT_FACTOR, 'front=gs 常數');
 }
 

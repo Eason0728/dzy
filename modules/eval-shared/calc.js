@@ -38,3 +38,22 @@ export function evKpiTotal(items, selByKey) {
   }
   return evRound1(total);
 }
+
+/** 時薪落點：tiers＝[[區間文字, 時薪], …]，以下限門檻判定，容小數；無 → -1 */
+export function evWageTierIndex(tiers, score) {
+  if (score === null || score === undefined || !Array.isArray(tiers)) return -1;
+  let best = -1;
+  let bestLow = -Infinity;
+  tiers.forEach((row, i) => {
+    const s = String((row && row[0]) || '');
+    const nums = (s.match(/\d+(?:\.\d+)?/g) || []).map(Number);
+    let low;
+    if (/以下|以內/.test(s)) low = -Infinity;
+    else if (/以上/.test(s)) low = nums.length ? nums[0] : -Infinity;
+    else if (nums.length >= 2) low = Math.min(nums[0], nums[1]);
+    else if (nums.length === 1) low = nums[0];
+    else low = -Infinity;
+    if (low <= score && low >= bestLow) { best = i; bestLow = low; }
+  });
+  return best;
+}
