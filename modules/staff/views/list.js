@@ -10,6 +10,7 @@
 import { orgFieldsHtml, bindOrgFields, readOrgFields } from '../../staff-shared/org-fields.js';
 import { personFilter, ymd } from '../../staff-shared/clock-lib.js';
 import { clockTagsHtml, clockButtonsHtml, isClockAct, handleClockAct, openAddFlow } from '../../staff-shared/clock-ui.js';
+import { CARD_CSS } from './list-cards.js';
 
 const STATUS = {
   unclaimed: ['tag', '未開通'],
@@ -27,6 +28,8 @@ export const FILTERS = [
 const FLAG_TEXT = { unit_inactive: '所屬門市已停用', title_ladder: '職稱需重選', dept_inactive: '部門已停用', exec_misplaced: '建議改到鼎兆元總部／管理部' };
 // LINE 重設密碼紀錄（apps-script/platform/LineAuth.gs 寫進 staff_log 的 line_* 事件；docs/line-auth/spec.md §6）
 export const LINE_LOG_TEXT = { line_claim_ok: '用 LINE 送出開通（已停用）', line_reset_ok: '用 LINE 重設密碼', line_revoke: '停用 LINE', line_fail: '失敗' };
+// 手機卡片（≤860px，2026-10-26 Eason 選 B 版）：只露這些主要按鈕，其餘加 stf-sec 收進「更多」；電腦版整排照舊
+export const PRIMARY_ACTS = ['confirm', 'reject', 'edit', 'unlock', 'rename', 'enable', 'reinstate', 'add-home'];
 const CLOCK_TEXT = { updated: '會更新（補上一悟總部）', skipped: '不用更新', custom: '有自訂值，保留不動' };
 
 export function mountList(el, ctx) {
@@ -78,12 +81,17 @@ export function mountList(el, ctx) {
     if (canExtra) a.push(b('line', 'LINE 重設密碼'));   // 看紀錄＋停用此人的 LINE 重設密碼（platform.staff）
     a.push(p.status === 'disabled' ? b('enable', '啟用') : b('disable', '停用', 'btn-danger'));
     const extra = clockButtonsHtml(p, viewer); // 員工名單統一：離職／撤銷離職／打卡連結／改名／復職
-    return a.join(' ') + (extra ? ' ' + extra : '');
+    // 手機只露主要按鈕，其餘加上 stf-sec 收進「更多」（電腦版順序、顯示都不變）
+    const all = a.concat(extra ? extra.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) || [] : []);
+    const actOf = (h) => (/data-act="([^"]+)"/.exec(h) || [])[1];
+    let sec = 0;
+    const out = all.map((h) => (PRIMARY_ACTS.indexOf(actOf(h)) !== -1 ? h : (sec++, h.replace('class="btn ', 'class="btn stf-sec '))));
+    return out.join(' ') + (sec ? ' <button type="button" class="btn btn-secondary stf-more" data-more="1" aria-expanded="false">更多 ▾</button>' : '');
   }
 
   function rowsHtml() {
     const list = staff.filter(match);
-    if (!list.length) return '<tr><td colspan="6">沒有符合的同仁</td></tr>';
+    if (!list.length) return '<tr><td class="c-none" colspan="6">沒有符合的同仁</td></tr>';
     return list.map((p) => {
       const [cls, txt] = STATUS[p.status] || ['tag', p.status];
       const change = p.has_pending_change ? `<div class="text-muted">${p.status === 'active' ? '要改成' : '填的是'}：${esc(orgText(p, 'p_'))}</div>` : '';
@@ -93,13 +101,14 @@ export function mountList(el, ctx) {
       const flagTags = (p.flags || []).map((f) => `<span class="tag tag-warn" data-role="flag-tag">${esc(FLAG_TEXT[f] || f)}</span>`).join(' ');
       const priv = showPrivate && p.status !== 'unclaimed'
         ? `<div class="text-muted">生日 ${esc(p.birthday)}・手機 ${esc(p.phone)}・${esc(p.address)}</div>` : '';
+      // class c-*：手機版卡片排版用（list-cards.js），電腦版表格不受影響
       return `<tr>
-        <td>${esc(p.emp_no)}</td>
-        <td>${esc(p.name)}${flagTags ? ' ' + flagTags : ''}${priv}</td>
-        <td>${esc(orgText(p, '') || '—')}${extra}${change}</td>
-        <td><span class="${cls}">${esc(txt)}</span>${p.reset_locked ? ' <span class="tag tag-danger">密碼鎖住</span>' : ''} ${clockTagsHtml(p)}${reason}</td>
-        <td>${esc(p.claimed_at || '')}</td>
-        <td>${actionsHtml(p)}</td></tr>`;
+        <td class="c-emp">${esc(p.emp_no)}</td>
+        <td class="c-name">${esc(p.name)}${flagTags ? ' ' + flagTags : ''}${priv}</td>
+        <td class="c-org">${esc(orgText(p, '') || '—')}${extra}${change}</td>
+        <td class="c-status"><span class="${cls}">${esc(txt)}</span>${p.reset_locked ? ' <span class="tag tag-danger">密碼鎖住</span>' : ''} ${clockTagsHtml(p)}${reason}</td>
+        <td class="c-claim">${esc(p.claimed_at || '')}</td>
+        <td class="c-act">${actionsHtml(p)}</td></tr>`;
     }).join('');
   }
 
@@ -111,7 +120,7 @@ export function mountList(el, ctx) {
     const orgTools = showOrgTools();
     const counts = {};
     staff.forEach((p) => { counts[p.status] = (counts[p.status] || 0) + 1; });
-    el.innerHTML = `
+    el.innerHTML = `<style>${CARD_CSS}</style>
       <div class="card stack">
         <div class="card-row"><div class="card-title">同仁名單（${staff.length} 位）</div>
           <span>${orgTools ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-add-branddev-2610">新增品牌發展部（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-branddev-2610">退回品牌發展部</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
@@ -127,7 +136,7 @@ export function mountList(el, ctx) {
           <div class="checkbox-row"><input type="checkbox" id="stf-priv"${showPrivate ? ' checked' : ''}><label for="stf-priv">顯示個資（生日、手機、地址）</label></div>
         </div>
       </div>
-      <div class="card"><div class="table-wrap"><table class="table">
+      <div class="card"><div class="table-wrap stf-wrap"><table class="table stf-table">
         <thead><tr><th>編號</th><th>姓名</th><th>品牌／單位／職稱</th><th>狀態</th><th>認領時間</th><th>動作</th></tr></thead>
         <tbody data-role="rows">${rowsHtml()}</tbody></table></div></div>`;
     const redraw = () => { el.querySelector('[data-role="rows"]').innerHTML = rowsHtml(); };
@@ -135,7 +144,11 @@ export function mountList(el, ctx) {
     el.querySelector('#stf-f').addEventListener('change', (e) => { state.f = e.target.value; redraw(); });
     el.querySelector('#stf-brand').addEventListener('change', (e) => { state.brand = e.target.value; redraw(); });
     el.querySelector('#stf-priv').addEventListener('change', (e) => { showPrivate = e.target.checked; redraw(); });
-    el.querySelector('[data-role="rows"]').addEventListener('click', onAction);
+    el.querySelector('[data-role="rows"]').addEventListener('click', (e) => {
+      const more = e.target.closest ? e.target.closest('[data-more]') : null;
+      if (more) { const tr = more.closest('tr'); const open = tr.classList.toggle('stf-open'); more.setAttribute('aria-expanded', String(open)); more.textContent = open ? '收起 ▴' : '更多 ▾'; return; }
+      onAction(e);
+    });
     el.querySelector('[data-role="add-staff"]').addEventListener('click', () => openAddFlow(clockEnv()));
     if (orgTools) {
       el.querySelector('[data-role="org-upgrade"]').addEventListener('click', upgradeFlow);

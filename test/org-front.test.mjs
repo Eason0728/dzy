@@ -488,6 +488,34 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ok(count(elh) === 0 && elh.innerHTML.includes('data-role="add-staff"'), '17 ★非 admin＋旗標：八顆都不見');
 }
 
+// ── 2026-10-26：手機版一人一張卡（Eason 選 B 版：次要按鈕收進「更多」；電腦版表格不變） ──
+{
+  setSearch(null);
+  const { PRIMARY_ACTS } = await import('../modules/staff/views/list.js');
+  const { CARD_CSS } = await import('../modules/staff/views/list-cards.js');
+  const P3 = { emp_no: 'DZY003', name: '測試丙', status: 'disabled', brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs', flags: [] };
+  const P4 = { emp_no: 'DZY004', name: '測試丁', status: 'pending', brand: '', unit: '', title: '', p_brand: 'dzy', p_unit: 'dzy-hq', p_dept: 'it', p_title: 'hs', p_brand_name: '鼎兆元', has_pending_change: true, flags: [] };
+  const h = (perms) => makeCtx(baseHandler((a) => (a === 'staffList' ? { ok: true, data: { staff: [P1, P3, P4] } } : null)), { perms });
+  const rowOf = (el, emp) => el.innerHTML.split('<tr>').find((r) => r.includes('>' + emp + '</td>')) || '';
+  const btns = (row) => Array.from(row.matchAll(/<button\b[^>]*>/g)).map((m) => ({ act: (/data-act="([^"]+)"/.exec(m[0]) || [])[1], sec: /class="btn stf-sec /.test(m[0]), more: /data-more=/.test(m[0]) }));
+  const el = await mount(h(['platform.staff']));
+  ok(el.innerHTML.includes('<style>') && CARD_CSS.includes('@media (max-width: 860px)') && /class="table stf-table"/.test(el.innerHTML) && /class="table-wrap stf-wrap"/.test(el.innerHTML), '18 名單注入卡片樣式、斷點 860px（跟殼一致）、表格掛 stf-table');
+  const r1 = rowOf(el, 'DZY001');
+  ok(['c-emp', 'c-name', 'c-org', 'c-status', 'c-claim', 'c-act'].every((c) => r1.includes('<td class="' + c + '">')), '18 每列六格都有 c-* class（卡片排版用）');
+  const b1 = btns(r1);
+  ok(b1.filter((b) => b.act).map((b) => b.act).slice(0, 4).join() === 'edit,unclaim,line,disable', '18 ★電腦版按鈕順序不變（改資料、撤回認領、LINE、停用）');
+  ok(!b1.find((b) => b.act === 'edit').sec && ['unclaim', 'line', 'disable'].every((a) => b1.find((b) => b.act === a).sec), '18 改資料是主要按鈕；撤回認領、LINE、停用收進更多');
+  ok(b1.filter((b) => b.more).length === 1 && b1[b1.length - 1].more && !/data-act=/.test(r1.match(/<button[^>]*data-more[^>]*>/)[0]), '18 有次要按鈕 → 最後一顆是「更多」，且不帶 data-act（不會觸發動作）');
+  const b4 = btns(rowOf(el, 'DZY004'));
+  ok(['confirm', 'reject', 'edit'].every((a) => !b4.find((b) => b.act === a).sec), '18 待確認：確認、退回、改資料都露在卡片上');
+  ok(['unclaim', 'disable'].every((a) => b4.find((b) => b.act === a).sec), '18 ★紅色危險鈕（撤回認領、停用）一律收進更多');
+  const el2 = await mount(h([]));
+  const b3 = btns(rowOf(el2, 'DZY003'));
+  ok(['enable', 'reinstate'].every((a) => b3.some((b) => b.act === a && !b.sec)) && b3.some((b) => b.act === 'rename-clock' && b.sec), '18 已停用：啟用、復職露在卡片上，打卡改名收進更多');
+  ok(PRIMARY_ACTS.indexOf('unclaim') === -1 && PRIMARY_ACTS.indexOf('disable') === -1 && PRIMARY_ACTS.indexOf('confirm') !== -1, '18 主要按鈕清單不含撤回認領、停用');
+  ok(/\.stf-more \{ display: none; \}/.test(CARD_CSS.split('@media')[0]), '18 電腦版不顯示「更多」');
+}
+
 // ── 檢查 ──
 for (const f of ['modules/staff/views/list.js', 'modules/me/views/profile.js']) {
   const s = fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
