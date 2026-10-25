@@ -658,7 +658,7 @@ function storeSchedGate_(values) {
 
 /**
  * 督導／總監唯讀看班表的入口（2026-10-25 Eason：跟「只看考勤」同一批、只看門市）：
- * REGIONS_ON='1' 且職稱 osv／odir、attViewUnitsOf_ 有門市 → true。營運系統端依 att.view_people 給唯讀排班（scheduleAdmin 仍 false、看不到特休）。
+ * REGIONS_ON='1' 且職稱 osv／odir、只看名單（同 ident att.view_people 的算法）非空 → true。營運系統端依 att.view_people 給唯讀排班（scheduleAdmin 仍 false、看不到特休）。
  * 區域索引讀失敗＝督導沒有（不拖垮登入）；總監不靠索引。
  */
 function storeSchedViewGate_(values) {
@@ -673,7 +673,13 @@ function storeSchedViewGate_(values) {
     if (typeof regionIndexLive_ !== 'function') return false;
     try { idx = regionIndexLive_(); } catch (e2) { return false; }
   }
-  try { return attViewUnitsOf_(me, stfReadOrg_(), idx).length > 0; } catch (e3) { return false; }
+  try {
+    // 跟 ident 的 att.view_people 走同一條路（Fable QA 第 2 條）：區內要有需核工時、在試點、有打卡對照的同仁，營運系統才會給排班功能
+    var org = stfReadOrg_();
+    var units = attViewUnitsOf_(me, org, idx);
+    if (!units.length) return false;
+    return storeAttPeople_(storeAttViewTargets_(me, storePeople_(), org, storeHomeFn_(), units), storePilotUnits_()).length > 0;
+  } catch (e3) { return false; }
 }
 
 /** 本人有沒有 confirmed、roster_active 不是 FALSE 的總部（STORE_SELF_CLOCK）打卡對照；表沒建或讀失敗＝沒有 */

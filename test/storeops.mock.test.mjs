@@ -652,6 +652,13 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   app.sb.regionIndexLive_ = () => { throw new Error('boom'); };
   ok(app.sb.storeSchedGate_(row('DZY201')) === false && app.sb.storeSchedGate_(row('DZY203')) === true, '3d 區域索引壞掉：督導 false（不拖垮登入），總監照常');
   app.sb.regionIndexLive_ = () => idxA;
+  // 選單與 ident 一致：gate 為真 ⇔ view_people 非空
+  ['DZY201', 'DZY202', 'DZY203', 'DZY204', 'DZY231'].forEach((e) => ok(app.sb.storeSchedViewGate_(row(e)) === (V(e).length > 0), '3d gate ⇔ view_people 非空：' + e, { gate: app.sb.storeSchedViewGate_(row(e)), view: V(e) }));
+  // 區內門市都不在試點 → 只看名單空 → 沒有選單（不會出現點進去是空的）
+  const pilotKeep = app.props.STORE_SSO_UNITS;
+  app.props.STORE_SSO_UNITS = 'mala-gf';
+  ok(app.sb.storeSchedViewGate_(row('DZY201')) === false && V('DZY201').length === 0, '3d 區內門市不在試點 → 督導沒有選單');
+  app.props.STORE_SSO_UNITS = pilotKeep;
 })();
 
 // ============================================================
