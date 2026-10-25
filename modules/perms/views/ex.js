@@ -45,7 +45,7 @@ export function mountEx(el, ctx) {
       el.innerHTML = '<div class="card"><div class="card-title">權限設定還沒初始化</div><p class="text-muted">請先到「對照表」分頁按「初始化」。</p></div>';
       return;
     }
-    // 人資主管（沒有 platform.permex）只能選兩碼；admin 全部。後端 permExList 也只回他看得到的那兩碼的例外
+    // 人資主管（沒有 platform.permex）只能選三碼；admin 全部。後端 permExList 也只回他看得到的那三碼的例外
     const featList = ctx.can('platform.permex') ? FEATURE_ORDER : HR_EX_FEATURES;
     const featOpts = featList.map((p) => `<option value="${esc(p)}">${esc(featureName(p))}</option>`).join('');
     const staffOpts = staff.map((p) => `<option value="${esc(p.emp_no)} ${esc(p.name)}"></option>`).join('');
