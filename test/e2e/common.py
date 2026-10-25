@@ -550,8 +550,8 @@ class MockBackend:
                 total += 800
             h['signed'] = True
             c = self.contracts[h['contract_id']]
-            h['summary'] = {'name': c['name'], 'room_bed': c['room_bed_display'],
-                            'signed_at': '2026-08-17 10:30', 'compensation_total': total, 'pdf_url': ''}
+            # 已簽點交單：正式後端（Handover.gs getHandoverByToken，2026-10-12 起）只回 signed_at，mock 同形
+            h['summary'] = {'signed_at': '2026-08-17 10:30'}
             c['status'] = '已退宿'
             return {'ok': True, 'compensation_total': total, 'pdf_url': ''}
 

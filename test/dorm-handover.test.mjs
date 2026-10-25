@@ -21,7 +21,7 @@ globalThis.fetch = async (url) => {
 
 import assert from 'node:assert/strict';
 import { esc, datetime, date, roc, money } from '../platform/fmt.js';
-import { safePdfUrl, b64ToBytes, safePdfName, isPdfBytes } from '../modules/dorm/views/handover.js';
+import { safePdfUrl, b64ToBytes, safePdfName, isPdfBytes, preferShare, isLineInApp, giveCopyErrorText } from '../modules/dorm/views/handover.js';
 
 // ============================================================
 // 0／1. 最小 DOM stub（做法照抄 test/dorm-create.test.mjs）
@@ -634,6 +634,27 @@ t('safePdfName：去掉路徑與危險字元、補 .pdf、空的給預設', () =
   assert.equal(safePdfName('a\u0000b:c'), 'abc.pdf');
   assert.ok(safePdfName('x'.repeat(500)).length <= 120);
   assert.ok(safePdfName('x'.repeat(500)).endsWith('.pdf'));
+});
+
+t('preferShare：只有觸控（pointer: coarse）且支援分享才走分享；電腦就算支援分享也下載', () => {
+  const nav = { share() {}, canShare() { return true; } };
+  const coarse = () => ({ matches: true });
+  const fine = () => ({ matches: false });
+  assert.equal(preferShare(nav, coarse), true);
+  assert.equal(preferShare(nav, fine), false);
+  assert.equal(preferShare({}, coarse), false);
+  assert.equal(preferShare(nav, null), false);
+  assert.equal(preferShare(null, coarse), false);
+});
+t('isLineInApp：認得 LINE 內建瀏覽器', () => {
+  assert.equal(isLineInApp('Mozilla/5.0 (iPhone) AppleWebKit Mobile/15E148 Safari Line/13.18.0'), true);
+  assert.equal(isLineInApp('Mozilla/5.0 (iPhone) AppleWebKit Version/17.0 Mobile Safari/604.1'), false);
+  assert.equal(isLineInApp(''), false);
+});
+t('giveCopyErrorText：READONLY 中文化、空的給預設', () => {
+  assert.match(giveCopyErrorText('READONLY'), /維護中/);
+  assert.match(giveCopyErrorText(''), /請按一下再試/);
+  assert.equal(giveCopyErrorText('沒有權限'), '檔案還沒準備好：沒有權限');
 });
 
 // ============================================================
