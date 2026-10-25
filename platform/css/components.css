@@ -1225,6 +1225,8 @@ textarea.input:disabled {
   gap: var(--space-3);
   margin-top: var(--space-4);
 }
+/* LINE 重設密碼連結包在 span 裡（e2e 靠 data-role="line-links"），攤平讓它跟「第一次使用」同一條基線 */
+.login-links [data-role="line-links"] { display: contents; }
 .login-links a,
 .login-card .link-btn {
   color: var(--login-ink);
