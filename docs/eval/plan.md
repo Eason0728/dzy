@@ -23,7 +23,7 @@
 - 題組代碼：`pt_att`、`pt_perf`、`ft_att`。
 - 計時／正職判定：`title === 'pt'` → `'pt'`，其餘 → `'ft'`。
 - 星等陣列：依題目 `ord` 排序的整數陣列，1～5；未評＝`null`。
-- KPI 評分：`{"<key>":{"sel":"A"|"B"|"C"|"D"|"done"|"undone","actual":"<文字>"}}`。
+- KPI 評分：`{"<key>":{"sel":"A"|"B"|"C"|"D"|"完成"|"未完成","actual":"<文字>"}}`；範本項目 `type` 為 `技能`／`執行力`（沿用舊站值，搬資料不用轉換）。
 - action 名稱一律 `ev` 開頭駝峰：`evSetup`、`evMe`、`evPeerSubmit`、`evSelfSubmit`、`evMyScores`、`evNewbieList`、`evNewbieSubmit`、`evUnitResults`、`evPersonDetail`、`evSupSave`、`evProgress`、`evFinalize`、`evUnfinalize`、`evBankGet`、`evBankSave`、`evTplSave`、`evWageSave`、`evGradeSave`、`evImportPreview`、`evImportCommit`。
   讀取 action（進 readActions／dryrun）：`evMe`、`evMyScores`、`evNewbieList`、`evUnitResults`、`evPersonDetail`、`evProgress`、`evBankGet`、`evImportPreview`。
 - 錯誤形狀沿用平台 `{ok:false, code, msg}`；本模組新 code：`not_inited`、`window_closed`、`duplicate`、`not_in_unit`、`no_scope`、`finalized`。
