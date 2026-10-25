@@ -21,7 +21,7 @@ from common import MockBackend, ROOT, SHOTS, check, finish, login, start_server
 from playwright.sync_api import sync_playwright
 
 PORT = 8830
-LIFF_ID = '1234567890-AbCdEfGh'
+LIFF_ID = '2011292256-Qs80XEBg'
 ID_TOKEN = 'e2e-fake-id-token'
 
 FAKE_LIFF = """
@@ -59,9 +59,11 @@ class LineMock:
 RESET = {'ok': True, 'mode': 'reset', 'name': '王小明', 'emp_no': 'DZY023', 'nonce': 'b' * 64}
 
 
-def open_line(browser, mock, line, mode, with_hook=True):
+def open_line(browser, mock, line, mode, with_hook=True, route_cfg=None):
     page = browser.new_context(viewport={'width': 375, 'height': 800}).new_page()
     mock.install(page)
+    if route_cfg:
+        page.route('**/platform/config.js', route_cfg)
     line.install(page)
     if with_hook:
         page.add_init_script(FAKE_LIFF)
@@ -144,20 +146,24 @@ def main():
                 page.wait_for_selector('#forgot-emp')
                 check('index.html' in page.url and page.url.endswith('#/forgot'), '「改用原本的方式」→ 忘記密碼頁：%s' % page.url)
 
-            # ⑤ LINE_LIFF_ID 空：準備中；登入頁沒有兩顆按鈕；填了才出現
+            # ⑤ LINE_LIFF_ID 空（攔 config.js 改空）：準備中；登入頁沒有按鈕；正式值（config.js 原檔）才出現
+            cfg = open(os.path.join(ROOT, 'platform', 'config.js'), encoding='utf-8').read()
+            m = re.search(r"LINE_LIFF_ID = '([^']*)'", cfg)
+            check(m is not None and m.group(1) == LIFF_ID, 'config.js 的 LINE_LIFF_ID 是正式 LIFF ID')
+            emptied = re.sub(r"LINE_LIFF_ID = '[^']*'", "LINE_LIFF_ID = ''", cfg)
+            empty_cfg = lambda r: r.fulfill(status=200, content_type='application/javascript', body=emptied)
             line.calls.clear()
-            page = open_line(browser, mock, line, 'reset', with_hook=False)
+            page = open_line(browser, mock, line, 'reset', with_hook=False, route_cfg=empty_cfg)
             page.wait_for_selector('[data-screen="preparing"]')
             check('功能準備中' in page.inner_text('[data-role="line-card"]') and not line.calls, '★LINE_LIFF_ID 空：line.html 顯示「功能準備中」、不打後端')
             ctx = browser.new_context(viewport={'width': 1280, 'height': 800})
             lp = ctx.new_page()
             mock.install(lp)
+            lp.route('**/platform/config.js', empty_cfg)
             lp.goto(base + '/index.html')
             lp.wait_for_selector('#login-username')
             check(lp.locator('[data-role="line-links"]').count() == 0, '★LINE_LIFF_ID 空：登入頁沒有「用 LINE 重設密碼」')
-            cfg = open(os.path.join(ROOT, 'platform', 'config.js'), encoding='utf-8').read()
-            check("LINE_LIFF_ID = ''" in cfg, 'config.js 預設 LINE_LIFF_ID 是空字串')
-            patched = cfg.replace("LINE_LIFF_ID = ''", "LINE_LIFF_ID = '%s'" % LIFF_ID)
+            patched = cfg
             lp2 = browser.new_context(viewport={'width': 375, 'height': 800}).new_page()
             mock.install(lp2)
             lp2.route('**/platform/config.js', lambda r: r.fulfill(status=200, content_type='application/javascript', body=patched))

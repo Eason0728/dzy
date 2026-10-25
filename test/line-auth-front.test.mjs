@@ -76,9 +76,9 @@ const pick = (root, title) => { root.all((n) => n.tag === 'input' && n.attrs.typ
 const RESET = { ok: true, mode: 'reset', name: '王小明', emp_no: 'DZY023', nonce: 'm'.repeat(64) };
 
 // ================= 設定與純函式 =================
-ok(LINE_LIFF_ID === '', 'config.LINE_LIFF_ID 預設空字串（功能未開）');
+ok(/^2011292256-[A-Za-z0-9]{8}$/.test(LINE_LIFF_ID), 'config.LINE_LIFF_ID 是 channel 2011292256 的 LIFF ID');
 ok(lineLoginLinks('').length === 0 && lineLoginLinks('  ').length === 0, 'LIFF ID 空：登入頁按鈕不顯示');
-ok(lineLoginLinks().length === 0, '用 config 預設值（空）：不顯示');
+ok(lineLoginLinks().length === 1 && lineLoginLinks()[0].href === 'https://liff.line.me/' + LINE_LIFF_ID + '?m=reset', '用 config 的 LIFF ID：只顯示重設');
 {
   const l = lineLoginLinks('1234567890-AbCdEfGh');
   ok(l.length === 1 && l[0].href === 'https://liff.line.me/1234567890-AbCdEfGh?m=reset' && l[0].mode === 'reset', 'R3：有 LIFF ID 只有一顆連到 liff.line.me?m=reset（沒有 m=claim）', l);

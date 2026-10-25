@@ -53,7 +53,7 @@ export const DEPARTMENTS = [
  * （endpoint https://dzy.mozhuting.com/line.html）後把 ID 填進來。LINE 路由＝同主機 /platform/svc/line-auth，
  * 由 BACKENDS.platform 推導（platform/views/line-auth.js lineAuthUrl()），這裡不另存。
  */
-export const LINE_LIFF_ID = '';
+export const LINE_LIFF_ID = '2011292256-Qs80XEBg';
 
 export const BACKENDS = {
   // 2026-10 起平台後端在公司 Mac mini（dzy-minikit apps/dzy-platform，Funnel /platform）。
