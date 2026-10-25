@@ -107,8 +107,8 @@ function renderMode(el, app) {
 function lineLinksHtml() {
   const links = lineLoginLinks();
   if (!links.length) return '';
-  return `<div class="login-links" data-role="line-links">${links.map((l) =>
-    `<a href="${esc(l.href)}" data-role="line-${esc(l.mode)}">${esc(l.label)}</a>`).join('')}</div>`;
+  return `<span data-role="line-links">${links.map((l) =>
+    `<a href="${esc(l.href)}" data-role="line-${esc(l.mode)}">${esc(l.label)}</a>`).join('')}</span>`;
 }
 
 function renderLoginForm(el, app) {
@@ -143,9 +143,8 @@ function renderLoginForm(el, app) {
         </form>
         <div class="login-links">
           <a href="#/claim" data-role="to-claim">第一次使用</a>
-          <a href="#/forgot" data-role="to-forgot">忘記密碼</a>
+          ${lineLinksHtml()}
         </div>
-        ${lineLinksHtml()}
       </div>
         </div>
       </div>
