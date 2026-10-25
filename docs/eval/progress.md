@@ -30,8 +30,12 @@
 - 權限碼改名 `platform.eval-manage／eval-brand／eval-all／eval-admin`：平台 manifest 規定權限碼前綴＝模組 ns（platform）。
 - `platform/` 動了兩個檔：registry.js 一行、dryrun.js 讀取白名單（新平台 action 必補，同表單簽核前例）。
 - 主管範圍用目前身分判斷「往上一層」（stfReviewScope_＋stfScopeMeets_(stfReviewNeed_)），不用 stfCanReview_（它看認領送出欄，通過後清空）。
-- 本機測試環境：scratchpad evstack（run-backend.sh 8848、run-web.sh 8849）；e2e 用 `test/e2e/eval_backend.mjs`＋`e2e_t14_eval.py`。
-- 還沒做：mini 的 app.json（gas／gasSource／readActions 加 EvalCalc.gs、Eval.gs 與 7 支讀取 action）、光復舊成績實際匯入與重算差 0（要 Eason 匯出舊試算表）、舊站唯讀版（T5-5）、三套題目草稿網頁給總監（T0）。
+- 本機測試環境：scratchpad evstack（run-backend.sh 8848、run-web.sh 8849）；e2e 用 `test/e2e/eval_backend.mjs`＋`e2e_t16_eval.py`（主線已有兩支 ⑭）。
+- 2026-10-26 已把 origin/main（93 筆：收支管理、排班、區域、LINE 認身分）併進分支 `eval-merge`（之後在這條分支做；`eval-req` 停用）。registry：績效評核排在薪酬管理後、收支管理前（cashbook 測試要求它最後一列）。
+- Mac mini：minikit 分支 `eval-gas`（app.json 登記兩支 .gs＋7 支讀取 action；gas/ 檔要等 dzy main 合併後 sync-gas）。
+- 舊站唯讀版：mala-eval 分支 `moved-readonly`（js/config.js MOVED_TO；已用假後端驗過只剩我的成績＋搬家說明），2027-01-01 前推。
+- 三品牌題目草稿網頁（給總監）：https://claude.ai/artifact/2rrNcbDSDx5m77r9GenRsy（Eason 要用分享選單開權限給總監）。
+- 還沒做：光復舊成績實際匯入與重算差 0（上線後人資在設定頁貼上舊試算表；要能讀舊試算表）、上線（T7）、帳號認領追蹤（11/15 起）。
 
 ## 落地清單
 - [ ] 1 排程上線：

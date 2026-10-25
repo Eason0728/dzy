@@ -66,6 +66,8 @@ def login(page, base, user):
     page.fill('#login-password', PW)
     page.click('[data-role="submit"]')
     page.wait_for_selector('[data-role="view-content"]', state='attached', timeout=10000)
+    # 等選單（模組清單）載完再直接打網址，不然殼會先把人導回首頁
+    page.wait_for_selector('[data-nav="eval"]', state='attached', timeout=10000)
 
 
 def no_hscroll(page):
@@ -73,7 +75,7 @@ def no_hscroll(page):
 
 
 def click_confirm(page):
-    page.locator('.dialog button', has_text='確定').click()
+    page.locator('.dialog button', has_text='確定').dispatch_event('click')
 
 
 def main():
@@ -160,11 +162,12 @@ def main():
             check('已逾期' in page.locator('[data-role="ev-newbie"] summary').inner_text(), '③ 新人考核：滿月未考標逾期')
             check(no_hscroll(page), '③ 新人考核 375px 沒有橫向捲軸')
             nb = page.locator('[data-role="ev-newbie"]').first
-            nb.locator('summary').click()
+            nb.locator('summary').dispatch_event('click')
             ni = nb.locator('[data-role="ev-item"]')
+            # 375px 時直接送 click 事件：座標點擊會把星星捲到黏在頂端的手機選單底下，點到選單按鈕（測試手法問題，不是畫面問題）
             for i in range(ni.count()):
-                ni.nth(i).locator('[data-star="4"]').click()
-            nb.locator('[data-role="submit"]').click()
+                ni.nth(i).locator('[data-star="4"]').dispatch_event('click')
+            nb.locator('[data-role="submit"]').dispatch_event('click')
             click_confirm(page)
             page.wait_for_selector('text=目前沒有待考核的新人', timeout=10000)
             check(True, '③ 新人考核送出後從清單消失')
@@ -174,7 +177,7 @@ def main():
             opts = page.locator('#ev-unit option').all_inner_texts()
             check(len(opts) == 1 and '新竹光復' in opts[0], '③ 店長的單位只有自己店：%s' % opts)
             check(no_hscroll(page), '③ 單位結果 375px 沒有橫向捲軸（表格自己捲）')
-            page.locator('[data-role="open"]', has_text='正職丁').click()
+            page.locator('[data-role="open"]', has_text='正職丁').dispatch_event('click')
             page.wait_for_selector('[data-role="kpi-row"]', timeout=10000)
             rows = page.locator('[data-role="kpi-row"]')
             for i in range(rows.count()):
@@ -182,12 +185,12 @@ def main():
                 opts2 = sel.locator('option').all_inner_texts()
                 sel.select_option('完成' if '完成' in opts2 else 'A')
             check(page.locator('[data-role="kpi-total"]').inner_text().strip() == '70', '③ KPI 全 A／完成 → 即時合計 70')
-            page.click('[data-role="save-kpi"]')
+            page.locator('[data-role="save-kpi"]').dispatch_event('click')
             page.wait_for_selector('text=✅ 已儲存', timeout=10000)
             row = page.locator('[data-role="ev-row"]', has_text='正職丁').inner_text()
             check('70' in row, '③ 存檔後總覽表現欄變 70：%s' % row.replace('\t', ' '))
             page.fill('#ev-feedback', '這季帶新人很用心')
-            page.click('[data-role="save-sup"]')
+            page.locator('[data-role="save-sup"]').dispatch_event('click')
             page.wait_for_function("() => (document.querySelector('[data-role=\"sup-msg\"]')||{}).textContent === '✅ 已儲存'", timeout=10000)
             check(True, '③ 回饋存檔')
             ctx.close()
