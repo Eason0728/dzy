@@ -46,7 +46,7 @@ def main():
             page.click('[data-role="nav-desktop"] [data-nav="__home__"]')
             page.wait_for_selector('[data-role="module-card"]')
             check(page.evaluate("() => window.__e2eSameDocument") == 'yes', '回首頁後記號還在')
-            check(page.locator('[data-role="module-card"]').count() == 14, '回首頁十四組卡片重畫完成')
+            check(page.locator('[data-role="module-card"]').count() == 15, '回首頁十五組卡片重畫完成')
 
             # 網址列 hash 正確跟著走（spec §4.9 路由字串）
             page.click('[data-role="nav-desktop"] [data-nav="dorm"]')
