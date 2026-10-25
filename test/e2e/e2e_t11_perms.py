@@ -20,7 +20,7 @@ from playwright.sync_api import sync_playwright
 
 PORT = 8802
 
-LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write']   # 2026-10-19 加薪酬管理（＝後端 PERM_LOCKED）
+LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write']   # 2026-10-19 加薪酬管理、2026-10-25 加收支管理（＝後端 PERM_LOCKED）
 # 預設規則（Perms.gs PERM_DEFAULT_RULES，20 條）
 DEFAULT_RULES = (
     [('store', '', 'sm', 'audit.read.own')]
