@@ -176,7 +176,7 @@ pending／rejected／active --unclaim（後台，冒用時用）--> unclaimed（
 | `staffReject` | `{emp_no, reason}` | reason 必填、200 字內；**pending → 同 unitReject（回 unclaimed、清密碼與個資、留原因，2026-10-12）**；active 有 p_* 則只清 p_*；log `reject` |
 | `staffSetActive` | `{emp_no, active}` | 停用／啟用（同步 users.active）；log `disable`／`enable` |
 | `staffUnclaim` | `{emp_no}` | 冒用處理，見 §5 |
-| `staffUnlockReset` | `{emp_no}` | reset_fail＝0、reset_locked 空、reset_lock_until 空、reset_lock_count＝0；log `reset_unlock` |
+| `staffUnlockReset` | `{emp_no}` | reset_fail＝0、reset_locked 空、reset_lock_until 空、reset_lock_count＝0；並清登入鎖定（`clearLoginState_(emp_no)`，2026-10-25）；log `reset_unlock` |
 | `staffEdit` | `{emp_no, name?, birthday?, brand?, unit?, dept?, title?, phone?, address?}` | 後台直接改正式欄；改 name 同步 users.name；log `admin_edit`（只記欄位名） |
 
 ### 6.4 單位通訊錄（需 token＋`platform.self`）

@@ -71,7 +71,8 @@ export function mountList(el, ctx) {
     const a = [];
     if (p.status === 'pending' || (p.status === 'active' && p.has_pending_change)) a.push(b('confirm', '確認', 'btn-primary'), b('reject', '退回'));
     if (p.status !== 'unclaimed' && p.status !== 'disabled') a.push(b('edit', '改資料'));
-    if (p.reset_locked) a.push(b('unlock', '解鎖忘記密碼'));
+    // 登入鎖定存在後台快取、名單看不到，所以已開通的同仁一律給這顆（2026-10-25 審查 A-01）
+    if (p.reset_locked || p.status === 'active') a.push(b('unlock', '解除鎖定'));
     if (['pending', 'rejected', 'active'].indexOf(p.status) !== -1) a.push(b('unclaim', '撤回認領', 'btn-danger'));
     if (p.status === 'unclaimed') a.push(b('rename', '改姓名'));
     if (canExtra) a.push(b('line', 'LINE 重設密碼'));   // 看紀錄＋停用此人的 LINE 重設密碼（platform.staff）
@@ -487,7 +488,7 @@ export function mountList(el, ctx) {
       const v = await ctx.ui.dialog({ title: `改姓名 ${p.emp_no}`, body, actions: [{ label: '取消', value: null, variant: 'secondary' }, { label: '儲存', value: 'ok', variant: 'primary' }] });
       if (v === 'ok') run('staffEdit', { emp_no: p.emp_no, name: body.querySelector('#rn-name').value.trim() }, '已改名');
     } else if (act === 'unlock') {
-      if (await ctx.ui.confirm(`解鎖 ${who} 的忘記密碼？`)) run('staffUnlockReset', { emp_no: p.emp_no }, '已解鎖');
+      if (await ctx.ui.confirm(`解除 ${who} 的登入鎖定與忘記密碼鎖定？`)) run('staffUnlockReset', { emp_no: p.emp_no }, '已解鎖');
     } else if (act === 'unclaim') {
       if (await ctx.ui.confirm(`撤回 ${who} 的認領？他的密碼與個資會清空，所有登入立刻失效，名字可以重新認領。用在發現被別人冒用時。`)) {
         run('staffUnclaim', { emp_no: p.emp_no }, '已撤回');

@@ -1407,6 +1407,8 @@ function handleStaffUnlockReset_(token, payload) {
   t.v[STF_COL.reset_locked] = '';
   t.v[STF_COL.reset_lock_until] = '';
   t.v[STF_COL.reset_lock_count] = 0;
+  // 2026-10-25 審查 A-01：一併清登入鎖定（別人用你的員編錯 3 次就能鎖你 15 分鐘，之前同仁帳號沒有任何人能解）
+  clearLoginState_(t.emp);
   return stfSave_(t, 'reset_unlock', '');
 }
 
