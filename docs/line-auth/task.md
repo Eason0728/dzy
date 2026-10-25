@@ -1,13 +1,13 @@
 # 任務清單：管理系統 LINE 認身分
-依據 plan.md v0.1。每個任務 100–200 行以內；驗收要附實際指令與輸出。
+依據 plan.md v0.1、spec.md v1.1（v1.1 改動：開通保留審核、nonce、總開關、停用鈕、kid、兩條 LINE 打卡路徑）。每個任務 100–200 行以內；驗收要附實際指令與輸出。
 
 ## P1 打卡端（mala-clock-in，分支 line-auth）
 - **T1-1 line_ok_at 寫入與清空**（Liff.gs／Liff.js）
-  - 輸入：liff_punch 成功（events 寫入 status ok）、liff_bind、mgr_line_unbind
+  - 輸入：liff_punch 與 liff_clock 成功（events 寫入 status ok）、liff_bind、mgr_line_unbind
   - 輸出：roster 欄 line_ok_at（缺欄自動補表頭）；bind／unbind 清空；寫失敗不影響回應
   - 驗收：tests/line-ok-at.test.js（成功寫、被擋不寫、bind 清、unbind 清、寫失敗打卡照常）全綠；既有測試全綠
 - **T1-2 svc_roster 三新欄**（SvcStaff.gs）
-  - 輸出：line_h（LINE_MAP_KEY 未設＝空）、line_bound_at、line_ok_at
+  - 輸出：line_h（LINE_MAP_KEY 未設＝空）、line_kid（LINE_MAP_KID）、line_bound_at、line_ok_at
   - 驗收：tests/svc-roster-line.test.js 用 fixture 向量比對 line_h；未綁三欄空字串；回應不含原始 userId
 - **T1-3 LineHub 關鍵字**（LineHub.gs，只光復）
   - 輸入：文字「開通管理系統」「重設密碼」
@@ -16,7 +16,7 @@
 - **T1-4 六店部署補丁**：照 patch_direct.py 形狀做 check／deploy 腳本（三方比對、只換 Liff.js／SvcStaff.js／光復 LineHub.js、拉回逐檔比）；先在暫存目錄套補丁驗 node --check
 
 ## P2 平台後端（dzy，分支 line-auth）
-- **T2-1 staff_clock 三新欄**：CLK_MAP_HEADERS 尾端加欄＋既有分頁自動補表頭；clockRosterApply_ 寫入
+- **T2-1 staff_clock 四新欄（line_h、line_kid、line_bound_at、line_ok_at）＋staff 尾端 line_revoked_at**：表頭自動補；clockRosterApply_ 寫入
   - 驗收：test/staff-clock.mock.test.mjs 新段落（舊表頭自動補、三欄寫入、舊版 svc_roster 沒有新鍵時寫空不報錯）
 - **T2-2 lineTrust_＋找人**：純函式
   - 驗收：test/line-auth.test.mjs（剛好 7 天、差 1 秒、ok_at＝bound_at、ok_at 空、未 confirmed、roster_active FALSE、兩人同 line_h＝ambiguous、多店一店可信即可）
@@ -24,8 +24,10 @@
   - 驗收：各 mode 各一案；blocked 涵蓋 disabled／pending／rejected；無唯一主店＝need_review
 - **T2-4 lineAuthReset_**：重查＋密碼規則＋salt/hash＋token_after＋清鎖＋staff_log
   - 驗收：重設後舊 token 失效、新密碼可登入、忘記密碼鎖清掉、staff_log line_reset_ok、非 reset mode 拒絕
-- **T2-5 lineAuthClaim_**：抽出 handleStaffConfirm_ 的核准副作用成共用函式 stfConfirmEffects_，兩路共用
-  - 驗收：LINE 開通與「認領＋主管核准」產生的 staff 列（除 actor／時間）逐欄相同；職稱非 pt／ft＝need_review；單位不可改；分派表不含 lineAuth*（比照 proxy-authorize 測試）；既有 staff*.mock 全綠
+- **T2-5 lineAuthClaim_**：抽出 handleClaimSubmit_ 的寫入成共用函式 stfClaimWrite_，兩路共用；結果 status＝pending
+  - 驗收：LINE 開通與一般認領產生的 staff 列（除 actor／時間）逐欄相同；之後主管核准結果一致；職稱非 pt／ft＝need_review；單位不可改；分派表不含 lineAuth*；既有 staff*.mock 全綠
+- **T2-6 總開關、nonce、停用鈕**：LINE_AUTH_ON；nonce 一次性（CacheService）；ScriptLock；同仁名單停用鈕 action（platform.staff，進分派表）＋停用／撤回認領時自動寫 line_revoked_at
+  - 驗收：開關關＝off；同 nonce 第二次拒；停用後舊綁定不可信、之後重綁滿 7 天恢復
 
 ## P3 Mac mini（dzy-minikit，分支 line-auth）
 - **T3-0 CORS 探針**：kit 路由能否被 dzy.mozhuting.com 瀏覽器呼叫（本機 runner＋devserver 實測）；結論寫進 spec §5
