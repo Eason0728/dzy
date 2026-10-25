@@ -223,6 +223,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   app.sheets.staff_clock._data.length = 1;
   app.sheets.staff_clock._data.push(['DZY023', 'mztgf', 'MZTGF03', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
   app.sheets.staff_clock._data.push(['DZY031', 'mztgf', 'MZTGF07', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app.sheets.staff_clock._data.push(['DZY023', 'hq', 'H001', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);   // 總部排班身分（ident.self）
   const fx = FIX.responses.ident_active.data;
   const got = app.ident('DZY023');
   const { pilot_units: fxPilot, ...fxRest } = fx;
@@ -845,15 +846,17 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const att_has = (s2, u) => { const r = post(s2, 'login', { username: u, password: PW }); return r.ok && has(r.data.perms, 'platform.att'); };
   const sched = (u) => { const p = perms(u); return !!p && has(p, 'platform.sched'); };
   ok(sb.STORE_SCHED_GATE_TITLES.slice().sort().join() === 'am,fm,sm', '7c STORE_SCHED_GATE_TITLES＝sm／fm／am');
+  ok(sb.STORE_SCHED_GATE_LADDERS.slice().sort().join() === 'hq,office', '7c STORE_SCHED_GATE_LADDERS＝hq／office（2026-10-25 總部自填排班）');
   ok(sched('DZY001') && sched('DZY004') && sched('DZY008') && sched('DZY042'), '7c 店長（sm）有 platform.sched');
   ok(sched('DZY006'), '7c 廠長（fm）有');
   ok(sched('DZY020'), '7c 人資主管有');
-  ok(!sched('DZY010') && !sched('DZY014'), '7c 總監（odir）沒有');
-  ok(!sched('DZY012'), '7c 區督導（osv）沒有');
-  ok(!sched('DZY022'), '7c 非人資的部門主管（hm）沒有');
-  ok(!sched('DZY025') && !sched('DZY026') && !sched('DZY027'), '7c ceo／gm／chair 沒有');
-  ok(!sched('DZY002') && !sched('DZY003') && !sched('DZY007') && !sched('DZY013') && !sched('DZY021') && !sched('DZY023'), '7c 正職、計時、行政、人資同仁、部門同仁沒有');
-  ok(sched('DZY001') && att_has(sb, 'DZY010'), '7c 對照：總監有 platform.att 但沒有 platform.sched');
+  ok(sched('DZY010') && sched('DZY014'), '7c 品牌辦公室總監（odir，ladder office）有（2026-10-25 起）');
+  ok(sched('DZY012') && sched('DZY013') && sched('DZY015') && sched('DZY011'), '7c 品牌辦公室區督導（osv）、行政（ofs）、舊資料 oam 有');
+  ok(sched('DZY022'), '7c 非人資的部門主管（hm，ladder hq）有');
+  ok(sched('DZY025') && sched('DZY026') && sched('DZY027'), '7c ceo／gm／chair（ladder hq）有');
+  ok(sched('DZY021') && sched('DZY023') && sched('DZY024'), '7c 總部人資同仁、部門同仁、管理部同仁（hs）有');
+  ok(!sched('DZY002') && !sched('DZY003') && !sched('DZY007') && !sched('DZY005') && !sched('DZY041'), '7c 門市／央廚正職、計時（ladder store 非 sm／fm／am）沒有');
+  ok(sched('DZY001') && att_has(sb, 'DZY010') && sched('DZY010'), '7c 對照：總監兩個都有');
   ok(perms('DZY030') === null, '7c 停用（離職）者登入被擋、拿不到');
   ok(has(perms('BOSS'), '*'), '7c admin 靠 * 全過');
   ok(!sched('DZY040'), '7c 有 att.extra 之前沒有');
@@ -867,9 +870,27 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const row = BIG.find((p) => p[0] === 'DZY001');
   const dead = staffRow(['DZY001', row[1], row[2], row[3], 'sm', 'disabled', row[6]], 0);
   ok(sb.storeSchedGate_(dead) === false && sb.storeSchedGate_(null) === false, '7c 停用的店長、空列 → false');
+  const hqRow = BIG.find((p) => p[0] === 'DZY023');
+  ok(sb.storeSchedGate_(staffRow(hqRow, 0)) === true, '7c 總部同仁（ladder hq）→ true');
+  ok(sb.storeSchedGate_(staffRow([hqRow[0], hqRow[1], hqRow[2], hqRow[3], hqRow[4], 'disabled', hqRow[6]], 0)) === false, '7c 停用的總部同仁 → false');
+  // 總部／辦公室同仁還要有 hq 打卡對照（confirmed、roster_active 不是 FALSE、store_code=hq），跟 ident.self 同一套
+  const scd = app.sheets.staff_clock._data;
+  const hqIdx = (e) => scd.findIndex((r, i) => i > 0 && r[0] === e && r[1] === 'hq');
+  const i23 = hqIdx('DZY023');
+  ok(i23 > 0 && sched('DZY023'), '7c 總部同仁有 hq 對照 → 有');
+  scd[i23][6] = 'FALSE';
+  ok(!sched('DZY023') && sb.storeSchedGate_(staffRow(hqRow, 0)) === false, '7c hq 對照 roster_active=FALSE → 沒有');
+  scd[i23][6] = ''; scd[i23][4] = 'pending';
+  ok(!sched('DZY023'), '7c hq 對照還沒確認（pending）→ 沒有');
+  scd[i23][4] = 'confirmed';
+  ok(sched('DZY023'), '7c 對照恢復 → 又有');
+  const keep = scd.splice(i23, 1)[0];
+  ok(!sched('DZY023'), '7c 完全沒有 hq 對照 → 沒有選單');
+  ok(sched('DZY001') && sched('DZY020'), '7c 店長、人資主管不受 hq 對照影響');
+  scd.splice(i23, 0, keep);
   // 總開關空 → 沒有
   app.props.STORE_SSO_UNITS = '';
-  ok(!sched('DZY001') && !sched('DZY020') && !sched('DZY006'), '7c 試點空：店長、人資主管、廠長都沒有');
+  ok(!sched('DZY001') && !sched('DZY020') && !sched('DZY006') && !sched('DZY023') && !sched('DZY010'), '7c 試點空：店長、人資主管、廠長、總部同仁、辦公室總監都沒有');
   ok(has(perms('BOSS'), '*'), '7c 試點空：admin 仍是 *');
   app.props.STORE_SSO_UNITS = 'mzt-gf';
   ok(sched('DZY001'), '7c 試點開回來：店長又有');
@@ -938,6 +959,43 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const pp = [me, { emp: 'DZY103', status: 'unclaimed', unit: '', dept: '', title: '' }];
   ok(eq(app.sb.storeAttTargets_(me, { admin: true }, pp, org, home).map((x) => x.emp), ['DZY103']), '7c 不能核自己的規則照舊（推算的人也不含自己）');
   ok(app.sb.storeAttTargets_({ emp: 'DZY101', status: 'active', unit: 'mala-gf', dept: '', title: 'sm' }, {}, pp, org, null).length === 0, '7c 沒給 home 對照就不推算');
+})();
+
+// ============================================================
+// 7d. ident.self（總部排班身分，2026-10-25 docs/schedule-hq/spec.md §3.1）
+// ============================================================
+(() => {
+  const app = world(BIG, { pilot: 'mala-gf', admins: [['u_admin01', 'BOSS', '系統管理員']] });   // 試點只有 mala-gf：總部不在試點內，self 也要照給
+  const sc = app.sheets.staff_clock._data;
+  sc.length = 1;
+  const row = (emp, store, id, role, state, active) => sc.push([emp, store, id, role, state, 'created', active, '', '', '', '']);
+  row('DZY023', 'hq', 'H023', 'staff', 'confirmed', 'TRUE');     // 部門同仁
+  row('DZY022', 'hq', 'H022', 'staff', 'confirmed', 'TRUE');     // 部門總監（hm）
+  row('DZY025', 'hq', 'H025', 'staff', 'confirmed', 'TRUE');     // 執行長
+  row('DZY024', 'hq', 'H024', 'home', 'confirmed', 'TRUE');      // 管理部同仁（role home 也算）
+  row('DZY021', 'hq', 'H021', 'staff', 'pending', 'TRUE');       // 未確認 → 不列
+  row('DZY015', 'hq', 'H015', 'staff', 'confirmed', 'FALSE');    // roster_active FALSE → 不列
+  row('DZY013', 'hq', 'H013', 'staff', 'confirmed', 'TRUE');     // 品牌辦公室行政
+  row('DZY013', 'hq', 'H013', 'staff', 'confirmed', 'TRUE');     // 重複列只算一筆
+  row('DZY001', 'mztgf', 'MZTGF01', 'staff', 'confirmed', 'TRUE');   // 只有門市打卡 → []
+  row('DZY020', 'hq', 'H020', 'staff', 'confirmed', 'TRUE');     // 人資主管
+  row('DZY020', 'hq', 'H020B', 'staff', 'confirmed', 'TRUE');
+  row('DZY020', 'gf', 'G020', 'staff', 'confirmed', 'TRUE');     // 非 hq 的對照不列
+  const self = (sub) => app.ident(sub).self;
+  ok(eq(self('DZY023'), [{ clock: 'hq', emp_id: 'H023', approval: true }]), '7d 部門同仁：self 一筆、approval true（同部門總監核）', self('DZY023'));
+  ok(eq(self('DZY022'), [{ clock: 'hq', emp_id: 'H022', approval: false }]), '7d 部門總監：approval false（考勤沒人核他）', self('DZY022'));
+  ok(eq(self('DZY025'), [{ clock: 'hq', emp_id: 'H025', approval: false }]), '7d 執行長：approval false', self('DZY025'));
+  ok(eq(self('DZY024'), [{ clock: 'hq', emp_id: 'H024', approval: true }]), '7d 管理部同仁（role home）：approval true（執行長以上核）', self('DZY024'));
+  ok(eq(self('DZY013'), [{ clock: 'hq', emp_id: 'H013', approval: true }]), '7d 品牌辦公室行政：approval true；重複對照只算一筆', self('DZY013'));
+  ok(eq(self('DZY021'), []), '7d 未確認（state≠confirmed）的對照不列');
+  ok(eq(self('DZY015'), []), '7d roster_active＝FALSE 的對照不列');
+  ok(eq(self('DZY001'), []), '7d 只有門市打卡、沒有 hq 對照 → []');
+  ok(eq(self('DZY020'), [{ clock: 'hq', emp_id: 'H020', approval: false }, { clock: 'hq', emp_id: 'H020B', approval: false }]), '7d 人資主管（hm）approval false；多筆 hq 依 emp_id 排序、非 hq（gf）不列', self('DZY020'));
+  ok(eq(self('U:u_admin01'), []), '7d admin 沒有同仁編號 → []');
+  ok(Array.isArray(app.ident('DZY023').self) && keysOf(app.ident('DZY023')).slice(-2).join() === 'att,self', '7d self 是 ident 最後一個欄位（att 之後）');
+  // 沒有任何同仁用打卡資料時（打卡分頁沒建）不炸
+  const sbNoClk = world(BIG, { pilot: 'mala-gf' });
+  ok(Array.isArray(sbNoClk.ident('DZY023').self), '7d 沒有任何對照列 → self 仍是陣列');
 })();
 
 // ============================================================
