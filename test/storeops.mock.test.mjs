@@ -739,7 +739,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
 })();
 
 // ============================================================
-// 6. 人資主管可設 store.void／att.extra 例外；其他碼不行
+// 6. 人資主管可設 store.void／att.extra／platform.bulletin 例外；其他碼不行（2026-10-26 加公告管理）
 // ============================================================
 (() => {
   const app = world(BIG);
@@ -754,8 +754,18 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(au.length === a0 + 1 && au[au.length - 1][1] === 'u020' && au[au.length - 1][2] === 'DZY002' && au[au.length - 1][3] === 'store.void' && au[au.length - 1][5] === 'perm_ex', '6 寫 perm_audit（誰、對誰、加了什麼、cause=perm_ex）', au[au.length - 1]);
   const s2 = ex(hrTok, 'DZY003', 'att.extra', 'add', { until: '2099-12-31' });
   ok(s2.ok, '6 人資主管能設 att.extra 例外（含到期日）', s2);
+  // 2026-10-26：公告管理從同仁名單勾選搬進權限設定，人資主管可在個別例外給／拿掉
+  const s3 = ex(hrTok, 'DZY004', 'platform.bulletin', 'add', { until: '2099-12-31' });
+  ok(s3.ok && /^X\d+/.test(s3.data.ex_id), '6 人資主管能設 platform.bulletin 例外（公告管理）', s3);
+  const au3 = audits();
+  ok(au3[au3.length - 1][1] === 'u020' && au3[au3.length - 1][2] === 'DZY004' && au3[au3.length - 1][3] === 'platform.bulletin' && au3[au3.length - 1][5] === 'perm_ex', '6 platform.bulletin 例外寫 perm_audit', au3[au3.length - 1]);
+  ok(ex(hrTok, 'DZY004', 'platform.bulletin', 'remove', { note: '暫停公告' }).ok, '6 人資主管能設 platform.bulletin 的 remove 例外');
+  ok(ex(hrTok, 'DZY020', 'platform.bulletin').code === 'perm_self', '6 人資主管不能對自己設 platform.bulletin 例外');
+  ok(ex(app.login('DZY021'), 'DZY004', 'platform.bulletin').code === 'no_perm' && ex(app.login('DZY001'), 'DZY004', 'platform.bulletin').code === 'no_perm', '6 人資同仁／店長不能設 platform.bulletin 例外');
   ok(ex(hrTok, 'DZY003', 'audit.read').code === 'no_perm', '6 ★人資主管不能設 audit.read');
   ok(ex(hrTok, 'DZY003', 'audit.write').code === 'no_perm' && ex(hrTok, 'DZY003', 'platform.staff').code === 'no_perm' && ex(hrTok, 'DZY003', 'platform.users').code === 'no_perm', '6 ★人資主管不能設其他任何碼（audit.write、platform.staff、platform.users）');
+  ok(ex(hrTok, 'DZY003', 'payroll.write').code === 'no_perm' && ex(hrTok, 'DZY003', 'cashbook.write').code === 'no_perm' && ex(hrTok, 'DZY003', 'platform.permmap').code === 'no_perm', '6 ★人資主管不能設 payroll.write、cashbook.write、platform.permmap');
+  ok(JSON.stringify(sb.STORE_HR_GRANTABLE) === JSON.stringify(['store.void', 'att.extra', 'platform.bulletin']), '6 STORE_HR_GRANTABLE＝store.void、att.extra、platform.bulletin');
   const audit = ex(hrTok, 'DZY003', 'audit.read.own');
   ok(audit.ok === false, '6 ★audit.* 例外被拒（不能設 audit.read.own）', audit);
   ok(ex(hrTok, 'DZY020', 'store.void').code === 'perm_self', '6 人資主管不能對自己設例外');
@@ -765,7 +775,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(ex(app.adminTok, 'DZY003', 'audit.read').ok === true, '6 admin 照舊可設任何碼');
   // 列表：人資主管只看得到自己管得到的兩碼
   const ls = post(sb, 'permExList', {}, hrTok);
-  ok(ls.ok && ls.data.items.length >= 2 && ls.data.items.every((i) => i.perm === 'store.void' || i.perm === 'att.extra'), '6 permExList：人資主管只看到 store.void／att.extra 例外', ls.data && ls.data.items.map((i) => i.perm));
+  ok(ls.ok && ls.data.items.length >= 2 && ls.data.items.every((i) => ['store.void', 'att.extra', 'platform.bulletin'].includes(i.perm)) && ls.data.items.some((i) => i.perm === 'platform.bulletin'), '6 permExList：人資主管只看到 store.void／att.extra／platform.bulletin 例外', ls.data && ls.data.items.map((i) => i.perm));
   ok(post(sb, 'permExList', {}, app.login('DZY021')).code === 'no_perm', '6 permExList：非人資主管 no_perm');
   ok(post(sb, 'permExList', {}, app.adminTok).data.items.some((i) => i.perm === 'audit.read'), '6 permExList：admin 看全部');
   // 撤銷
@@ -776,11 +786,13 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(rv.ok && audits().length === a1 + 1 && audits()[a1][4] === 'store.void' && audits()[a1][5] === 'perm_ex', '6 人資主管能撤銷 store.void 例外並寫 perm_audit', rv);
   ok(post(sb, 'permExRevoke', { ex_id: s1.data.ex_id }, hrTok).code === 'bad_state', '6 重複撤銷 → bad_state');
   ok(post(sb, 'permExRevoke', { ex_id: s2.data.ex_id }, app.login('DZY021')).code === 'no_perm', '6 非人資主管不能撤銷');
+  ok(post(sb, 'permExRevoke', { ex_id: s3.data.ex_id }, hrTok).ok, '6 人資主管能撤銷 platform.bulletin 例外');
   // 人資主管給自己的例外：撤銷自己被別人設的也擋（perm_self）
   const toHr = post(sb, 'permExSave', { emp_no: 'DZY020', perm: 'att.extra', mode: 'add', until: '', note: '給人資主管' }, app.adminTok);
   ok(toHr.ok && post(sb, 'permExRevoke', { ex_id: toHr.data.ex_id }, hrTok).code === 'perm_self', '6 人資主管不能撤銷對自己的例外');
   // PERM_GRANTABLE／名稱／預設規則
   ok(has(sb.PERM_GRANTABLE, 'store.void') && has(sb.PERM_GRANTABLE, 'att.extra') && sb.permName_('store.void') === '收支作廢' && sb.permName_('att.extra') === '額外考勤核定', '6 PERM_GRANTABLE 含兩碼、中文名「收支作廢」「額外考勤核定」');
+  ok(has(sb.PERM_GRANTABLE, 'platform.bulletin') && sb.PERM_LOCKED.indexOf('platform.bulletin') === -1, '6 PERM_GRANTABLE 含 platform.bulletin、不是鎖碼');
   ok(sb.PERM_DEFAULT_RULES.some((r) => r.join('|') === 'store||sm|store.void') && !sb.PERM_DEFAULT_RULES.some((r) => r[3] === 'att.extra'), '6 預設規則：store 階梯 sm → store.void；att.extra 只走例外');
   ok(sb.PERM_LOCKED.indexOf('store.void') === -1 && sb.PERM_LOCKED.indexOf('att.extra') === -1, '6 兩碼不是鎖碼');
   // 已初始化環境：補預設規則（只補不覆蓋）
@@ -788,11 +800,11 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const mapRows = old.sheets.perm_map._data;
   const r20 = mapRows.findIndex((r, i) => i > 0 && r[3] === 'sm' && r[4] === 'store.void');
   mapRows.splice(r20, 1);                                       // 模擬少了店長 store.void 那一條
-  ok(old.sb.permLoadTables_().rules.length === 26, '6 模擬正式環境：perm_map 少一條（新預設規則不會自動生效）');
+  ok(old.sb.permLoadTables_().rules.length === 32, '6 模擬正式環境：perm_map 少一條（新預設規則不會自動生效）');
   ok(eq(old.ident('DZY001').void_units, []), '6 正式環境未補規則前：店長沒有 store.void');
   ok(old.sb.storeopsPermSeed_({ role: 'staff', id: 'u1' }).error === 'no_perm', '6 補規則函式只有 admin');
   const sd = old.sb.storeopsPermSeed_({ role: 'admin', id: 'a001' });
-  ok(sd.ok && eq(sd.added, ['R028']) && old.sheets.perm_map._data.length === 28, '6 補預設規則：只補缺的一條，流水號接在最大號後', sd);
+  ok(sd.ok && eq(sd.added, ['R034']) && old.sheets.perm_map._data.length === 34, '6 補預設規則：只補缺的一條，流水號接在最大號後', sd);
   ok(eq(old.ident('DZY001').void_units, ['mzt-gf']), '6 補完後店長有 store.void');
   ok(eq(old.sb.storeopsPermSeed_({ role: 'admin', id: 'a001' }).added, []), '6 重跑不重複');
   old.sheets.perm_map._data.find((r, i) => i > 0 && r[3] === 'sm' && r[4] === 'store.void')[5] = 'FALSE';

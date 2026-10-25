@@ -92,7 +92,7 @@ var STF_MSG = {
   NOT_REVIEWER: '只有單位主管可以審核',
   NOT_IN_REGION: '這家店不在你負責的區域',
   NO_EXTRA_PERM: '沒有權限修改兼任部門',
-  NO_BULLETIN_PERM: '沒有權限設定公告管理',
+  BULLETIN_MOVED: '公告管理已改到「權限設定」設定，請重新整理頁面',
   REVIEW_SELF: '不能審核自己',
   NOT_PENDING_REVIEW: '這位同仁不在等待審核',
   REASON_TOO_LONG: '退回原因最多 200 個字'
@@ -133,27 +133,7 @@ function stfDate_(v) {
 
 function stfNormEmp_(v) { return stfStr_(v).toUpperCase(); }
 
-// 公告管理權限（2026-10-17 Eason：同仁名單逐人勾選、人資與 admin 可設）：可管理電子佈告欄公告的同仁編號清單，
-// 存在 Script Property BULLETIN_ADMINS（逗號分隔 DZY###）。不另開 staff 尾端欄位（尾端欄有組織升級／備份機制，改動面太大）。
-// 有勾的人登入時衍生權限 platform.bulletin（Auth.gs authPermsWithGate_）；admin（'*'）本來就有。
-var STF_PROP_BULLETIN = 'BULLETIN_ADMINS';
-function stfBulletinAdmins_() {
-  var raw = PropertiesService.getScriptProperties().getProperty(STF_PROP_BULLETIN) || '';
-  return raw.split(',').map(function (x) { return stfNormEmp_(x); }).filter(function (x) { return STF_EMP_RE.test(x); });
-}
-/** 這個帳號（users id）對應的同仁列有勾「可管理公告」且未停用 → true（給非 staff 角色用；staff 角色走 stfLoginGate_） */
-function stfBulletinGate_(userId) {
-  if (!stfSheet_(STF_SHEET)) return false;
-  var hit = stfFindByUserId_(userId);
-  if (!hit || stfStr_(hit.values[STF_COL.status]) !== 'active') return false;   // 只有已開通（審查 #44-13）
-  return stfBulletinAdmins_().indexOf(stfNormEmp_(hit.values[STF_COL.emp_no])) !== -1;
-}
-function stfSetBulletinAdmin_(emp, on) {
-  var e = stfNormEmp_(emp), list = stfBulletinAdmins_().filter(function (x) { return x !== e; });
-  if (on) list.push(e);
-  list.sort();
-  PropertiesService.getScriptProperties().setProperty(STF_PROP_BULLETIN, list.join(','));
-}
+// 公告管理權限 2026-10-26 起改由權限設定給（Perms.gs PERM_GRANTABLE 的 platform.bulletin）；舊的 Script Property BULLETIN_ADMINS 不再讀（Eason：清空重設）。
 
 /** 原始欄位長度超過上限 → true（非字串、非數字一律當超過；undefined／null 當空字串通過） */
 function stfTooLong_(v, max) {
@@ -428,7 +408,6 @@ function stfDecorate_(o, extraMap, org, withFlags) {
   var codes = stfSplitCodes_(extraMap[stfNormEmp_(o.emp_no)]);
   o.extra_depts = codes;
   o.extra_dept_names = codes.map(function (c) { return stfExtraDeptName_(org, c); });
-  o.bulletin_admin = stfBulletinAdmins_().indexOf(stfNormEmp_(o.emp_no)) !== -1;
   if (withFlags) o.flags = stfFlags_(o, org);
   return o;
 }
@@ -921,8 +900,6 @@ function stfLoginGate_(userId) {
   if (status === 'pending') return { block: STF_MSG.LOGIN_PENDING };
   if (status === 'rejected') return { block: STF_MSG.LOGIN_REJECTED };
   // 衍生權限 platform.review 的「審核者資格」部分：改用新規則（stfReviewScope_）。人資／admin 由 Auth.gs 另外補
-  // bulletin＝公告管理權限（BULLETIN_ADMINS 有勾、且在職）→ Auth.gs 補 platform.bulletin
-  var bulletin = status === 'active' && stfBulletinAdmins_().indexOf(stfNormEmp_(hit.values[STF_COL.emp_no])) !== -1;
   // att＝衍生權限 platform.att（StoreOps.gs storeAttGate_；Auth.gs authPermsWithGate_ 補上）
   var att = typeof storeAttGate_ === 'function' ? storeAttGate_(hit.values) : false;
   // sched＝衍生權限 platform.sched（StoreOps.gs storeSchedGate_；Auth.gs authPermsWithGate_ 補上）
@@ -930,7 +907,7 @@ function stfLoginGate_(userId) {
   // storeops＝衍生權限 platform.storeops（StoreOps.gs storeOpsGate_；STORE_SSO_UNITS 空＝全關）
   var org = stfReadOrg_();
   var storeops = typeof storeOpsGate_ === 'function' ? storeOpsGate_(hit.values, org) : false;
-  return { review: !!stfReviewScope_(hit.values, org), bulletin: bulletin, att: att, sched: sched, storeops: storeops };
+  return { review: !!stfReviewScope_(hit.values, org), att: att, sched: sched, storeops: storeops };
 }
 
 /**
@@ -1189,8 +1166,6 @@ function stfClearClaim_(v) {
   v[STF_COL.reset_fail] = 0;
   v[STF_COL.reset_lock_count] = 0;
   v[STF_COL.status] = 'unclaimed';
-  // 撤回認領＝帳號回到沒人用：公告管理權限一併收回，免得下一個認領這個名字的人接手（審查 dzy-bulletin#44-12）
-  stfSetBulletinAdmin_(v[STF_COL.emp_no], false);
 }
 
 // ============================================================
@@ -1367,7 +1342,6 @@ function handleStaffSetActive_(token, payload) {
     if (t.status === 'disabled') return { ok: false, error: STF_MSG.BAD_STATE };
     t.v[STF_COL.prev_status] = t.status;
     t.v[STF_COL.status] = 'disabled';
-    stfSetBulletinAdmin_(t.emp, false);   // 停用收回公告管理權限（復職要重新勾；審查 #44-10）
     usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
     setTokenAfter_(userRow.row);
     if (typeof lineAutoRevoke_ === 'function') lineAutoRevoke_(t.hit.row);   // 停用＝LINE 開通／重設一併收回（LineAuth.gs）
@@ -1419,13 +1393,8 @@ function handleStaffEdit_(token, payload) {
     if (!meX.ok) return meX;
     if (!hasPerm_(meX.data.perms, 'platform.staff')) return { ok: false, error: STF_MSG.NO_EXTRA_PERM };
   }
-  // 公告管理權限同樣只有 platform.staff（人資）與 admin 能設
-  if (payload && payload.bulletin_admin !== undefined) {
-    if (typeof payload.bulletin_admin !== 'boolean') return { ok: false, error: '公告管理權限格式錯誤' };
-    var meB = handleMe_(token);
-    if (!meB.ok) return meB;
-    if (!hasPerm_(meB.data.perms, 'platform.staff')) return { ok: false, error: STF_MSG.NO_BULLETIN_PERM };
-  }
+  // 2026-10-26 公告管理搬到權限設定：同仁名單不再收這個欄位（舊版頁面送來也拒絕，免得以為設成功）
+  if (payload && payload.bulletin_admin !== undefined) return { ok: false, error: STF_MSG.BULLETIN_MOVED };
   var t = stfAdminTarget_(token, payload);
   if (!t.ok) return t;
   payload = payload || {};
@@ -1490,16 +1459,6 @@ function handleStaffEdit_(token, payload) {
       changed.push('extra_depts');
     }
   }
-  var bulletinNew = null;
-  if (payload.bulletin_admin !== undefined && payload.bulletin_admin !== (stfBulletinAdmins_().indexOf(t.emp) !== -1)) {
-    // 不能設定自己的（含人資幫自己開；審查 dzy-bulletin#44-3）
-    if (stfStr_(t.v[STF_COL.user_id]) && stfStr_(t.v[STF_COL.user_id]) === String(t.auth.user.id)) return { ok: false, error: '不能設定自己的公告管理權限' };
-    // 只能勾已開通的同仁：未認領／待審的列勾了，之後自己去認領就多一個有權限的帳號（審查 #44-12）
-    if (payload.bulletin_admin && t.status !== 'active') return { ok: false, error: '只有已開通的同仁可以設定公告管理權限' };
-    bulletinNew = payload.bulletin_admin;
-    // 紀錄寫明開／關：權限清單存在 Script Property（不在試算表備份裡），staff_log 是可追溯、可重建的那份（審查 #44-4）
-    changed.push('bulletin_admin=' + (bulletinNew ? '開' : '關'));
-  }
   if (!changed.length) return { ok: false, error: '沒有要改的欄位' };
   // 第二期：改組織欄／兼任部門前後各算一次權限；非 admin 若讓對方拿到（失去）platform.permmap → 擋
   var chkE = null;
@@ -1509,7 +1468,6 @@ function handleStaffEdit_(token, payload) {
     chkE = permStaffChangeCheck_(isAdminE, t.hit.values, exBeforeE, t.v, exAfterE);
     if (chkE.block) return chkE.block;
   }
-  if (bulletinNew !== null) stfSetBulletinAdmin_(t.emp, bulletinNew);
   if (changed.indexOf('name') !== -1) {
     var userRow = findUsrRowById_(stfStr_(t.v[STF_COL.user_id]));
     if (userRow) stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.name + 1).setValue(authSafeCell_(t.v[STF_COL.name]));

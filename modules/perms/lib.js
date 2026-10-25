@@ -4,11 +4,11 @@
  */
 'use strict';
 
-/** 可給的 13 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
-export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write'];
+/** 可給的 14 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
+export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin'];
 
-/** 人資主管（platform.permmap 但不是 admin）在個別例外只能動的兩碼；對照後端 STORE_HR_GRANTABLE，真正擋的是後端，前端只是不顯示選不了的 */
-export const HR_EX_FEATURES = ['store.void', 'att.extra'];
+/** 人資主管（platform.permmap 但不是 admin）在個別例外只能動的三碼（2026-10-26 加公告管理）；對照後端 STORE_HR_GRANTABLE，真正擋的是後端，前端只是不顯示選不了的 */
+export const HR_EX_FEATURES = ['store.void', 'att.extra', 'platform.bulletin'];
 
 export const FEATURE_NAMES = {
   'audit.read.own': '看自己店稽核',
@@ -23,13 +23,14 @@ export const FEATURE_NAMES = {
   'store.void': '收支作廢',
   'att.extra': '額外考勤核定',
   'payroll.write': '薪酬管理',
-  'cashbook.write': '收支管理'
+  'cashbook.write': '收支管理',
+  'platform.bulletin': '公告管理'
 };
 
 /** 其他會出現在 myPerms／異動裡的碼 */
 const OTHER_NAMES = {
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
-  'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能'
+  'platform.login': '登入', '*': '全部功能'
 };
 
 export function featureName(code) {
@@ -236,7 +237,8 @@ export const FEATURE_DESC = {
   'store.void': '門市現金收支可以作廢（店長預設有；其他人要在個別例外給）',
   'att.extra': '額外核定本單位所有要考勤的人（只能在個別例外給，可設到期日）',
   'payroll.write': '進薪酬管理：看與改全集團薪資、鎖定月份（建議只用個別例外開給指定的人）',
-  'cashbook.write': '進收支管理：會計跨店查現金收支、作廢、月結鎖定、改會計科目、匯出 Excel（財務部門預設有）'
+  'cashbook.write': '進收支管理：會計跨店查現金收支、作廢、月結鎖定、改會計科目、匯出 Excel（財務部門預設有）',
+  'platform.bulletin': '進電子佈告欄的公告管理：新增、上架、下架、置頂公告與看簽名回條（總監級以上預設有）'
 };
 
 /** 總部高層（不分部門）的職稱代碼 */
@@ -276,7 +278,10 @@ export function identityGroups(data) {
   });
   if (hqItems.length) groups.push({ id: 'hq-dept', title: '總部（依部門）', items: hqItems });
   const tops = titleList(data, 'hq').filter((t) => HQ_TOP_TITLES.indexOf(t.code) !== -1).map((t) => mk('hq', '', t.code, t.name));
-  if (tops.length) groups.push({ id: 'hq-top', title: '總部（高層，不分部門）', items: tops });
+  // 2026-10-26：「總監（全部部門）」＝一條規則涵蓋每個部門的總監（公告管理預設用它，之後新增的部門也自動適用）
+  const head = titleList(data, 'hq').find((t) => t.code === HQ_HEAD_TITLE);
+  if (head) tops.unshift(mk('hq', '', HQ_HEAD_TITLE, `${head.name}（全部部門）`));
+  if (tops.length) groups.push({ id: 'hq-top', title: '總部（不分部門）', items: tops });
   const others = [];
   const seen = {};
   (data.rules || []).forEach((r) => {

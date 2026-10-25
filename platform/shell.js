@@ -499,6 +499,30 @@ const deptOpenState = new Map();
 const ROLE_ZH = { admin: '系統管理者', manager: '總監', accountant: '會計', storelead: '店長', staff: '員工' };
 
 /**
+ * 名字下方的身分文字（2026-10-26 Eason：顯示職稱）：同仁帳號（role staff）顯示自己的職稱，
+ * 由 myProfile 的 title_name 取得（每次載入頁面只問一次，回來再補畫）；系統帳號、還沒拿到、沒有職稱 → 照舊顯示角色。
+ */
+const navTitle = { uid: null, text: '' };
+function roleLabel(user) {
+  if (user.role === 'staff' && navTitle.uid === user.id && navTitle.text) return navTitle.text;
+  return ROLE_ZH[user.role] || user.role || '';
+}
+function loadNavTitle(user) {
+  if (user.role !== 'staff' || !user.id || navTitle.uid === user.id) return;
+  navTitle.uid = user.id;
+  navTitle.text = '';
+  backendCall('platform', 'myProfile', {}).then((res) => {
+    const t = res && res.ok && res.data && res.data.title_name;
+    const now = auth.getUser() || {};
+    if (!t || navTitle.uid !== user.id || now.id !== user.id) return;
+    navTitle.text = String(t);
+    const rl = findDescendant(sideUserEl, (n) => n.className === 'rl');
+    if (rl) rl.textContent = navTitle.text;
+    pageSubEl.textContent = [now.name, navTitle.text].filter(Boolean).join('・');
+  }).catch(() => {});
+}
+
+/**
  * 左側深色側邊欄（外觀照門市營運系統 ~/mala-store-ops/web/js/shell.js sidebarHtml，2026-10-11）：
  * 品牌 → 首頁 → 我的資料 →「部門」標籤 → 十一個部門（可展開，功能依 manifest.dept 掛上）→ 底部使用者區（改密碼／登出）。
  * 手機（≤860px）由 CSS 改成「上排品牌＋使用者、下排圖示選單」，同一份 DOM，不另做第二份導覽。
@@ -521,13 +545,15 @@ function renderTopNav() {
   // 沒掛部門的模組（我的資料）排在首頁下面
   for (const m of permittedModules) if (!m.dept) sideNavEl.appendChild(moduleItem(m));
 
-  // 部門分組（2026-10-16）：十一個部門全列，有功能的預設展開、空的收合；點標題切換，空部門展開顯示「尚無功能」。
-  // 手機版由 CSS 隱藏部門標題、把功能攤平成下排圖示（同一份 DOM）。
+  // 部門分組（2026-10-16）：有功能的預設展開，點標題切換。手機版由 CSS 隱藏部門標題、把功能攤平成下排圖示（同一份 DOM）。
+  // 2026-10-26 Eason：登入者沒有任何功能的部門整個不顯示；一個部門都沒有就連「部門」標籤也不畫。
   if (currentModule && currentModule.dept) deptOpenState.set(currentModule.dept, true);
-  sideNavEl.appendChild(el('div', { class: 'nav-label', text: '部門' }));
-  for (const d of DEPARTMENTS) {
-    const mods = permittedModules.filter((m) => m.dept === d.id);
-    const open = deptOpenState.has(d.id) ? deptOpenState.get(d.id) : mods.length > 0;
+  const visibleDepts = DEPARTMENTS
+    .map((d) => ({ d, mods: permittedModules.filter((m) => m.dept === d.id) }))
+    .filter((x) => x.mods.length > 0);
+  if (visibleDepts.length) sideNavEl.appendChild(el('div', { class: 'nav-label', text: '部門' }));
+  for (const { d, mods } of visibleDepts) {
+    const open = deptOpenState.has(d.id) ? deptOpenState.get(d.id) : true;
     const head = el('button', {
       type: 'button',
       class: 'nav-dept-head',
@@ -536,10 +562,9 @@ function renderTopNav() {
     }, [
       el('span', { class: 'arrow', 'aria-hidden': 'true', text: open ? '▾' : '▸' }),
       el('span', { class: 'lb', text: d.name }),
-      mods.length ? el('span', { class: 'cnt', text: String(mods.length) }) : null
-    ].filter(Boolean));
-    const items = el('div', { class: 'nav-dept-items' },
-      mods.length ? mods.map(moduleItem) : [el('div', { class: 'nav-dept-empty', text: '尚無功能' })]);
+      el('span', { class: 'cnt', text: String(mods.length) })
+    ]);
+    const items = el('div', { class: 'nav-dept-items' }, mods.map(moduleItem));
     sideNavEl.appendChild(el('div', { class: `nav-dept${open ? ' is-open' : ''}`, 'data-dept': d.id }, [head, items]));
   }
   for (const m of permittedModules) if (navBadgeCache[m.id]) setNavBadge(m.id, navBadgeCache[m.id]);
@@ -549,7 +574,7 @@ function renderTopNav() {
   sideUserEl.appendChild(el('div', { class: 'av', 'aria-hidden': 'true', text: '🙂' }));
   sideUserEl.appendChild(el('div', { class: 'su-main' }, [
     el('div', { class: 'nm', text: user.name || '' }),
-    el('div', { class: 'rl', text: ROLE_ZH[user.role] || user.role || '' })
+    el('div', { class: 'rl', text: roleLabel(user) })
   ]));
   // 修改密碼是平台層自己的功能（不是模組），所有登入者都看得到，不需要任何權限碼。
   sideUserEl.appendChild(el('div', { class: 'su-act' }, [
@@ -559,7 +584,8 @@ function renderTopNav() {
 
   // 內容區頂端頁名：首頁顯示「首頁」、模組顯示模組名；副標＝登入者
   pageTitleEl.textContent = currentModule ? currentModule.name : '待辦與異常';
-  pageSubEl.textContent = [user.name, ROLE_ZH[user.role] || user.role].filter(Boolean).join('・');
+  pageSubEl.textContent = [user.name, roleLabel(user)].filter(Boolean).join('・');
+  loadNavTitle(user);
 }
 
 /** 側邊欄模組名稱右側的待辦件數（與首頁卡片同一個 badge() 結果；0／沒數字不顯示）。 */

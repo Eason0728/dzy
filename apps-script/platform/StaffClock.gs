@@ -586,7 +586,6 @@ function clkDisableStaff_(s, by, detail, d) {
   v[STF_COL.prev_status] = status;
   v[STF_COL.status] = 'disabled';
   v[STF_COL.updated_at] = clkNowText_(d);
-  stfSetBulletinAdmin_(v[STF_COL.emp_no], false);   // 離職停用收回公告管理權限（審查 dzy-bulletin#44-10）
   if (userRow) {
     stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
     setTokenAfter_(userRow.row);
@@ -2289,7 +2288,7 @@ var SSO_AUDS = { bulletin: 1, 'bulletin-admin': 1, store: 1 };
 /**
  * 換一張入場券。aud：
  *  - bulletin：同仁本人登入佈告欄。只發給 role staff＋DZY###；系統帳號回 no_emp，佈告欄照舊選名字。
- *  - bulletin-admin（2026-10-17）：管理系統「公告管理／新增公告」分頁用，換佈告欄的管理憑證。要有 platform.bulletin（同仁名單勾選）或 admin（'*'）。
+ *  - bulletin-admin（2026-10-17）：管理系統「公告管理／新增公告」分頁用，換佈告欄的管理憑證。要有 platform.bulletin（權限設定，2026-10-26 起）或 admin（'*'）。
  */
 function handleSsoTicket_(token, payload) {
   var aud = payload && typeof payload.aud === 'string' ? payload.aud : '';

@@ -12,7 +12,8 @@
 var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap',
   'store.void', 'att.extra',   // 2026-10-18 營運系統：收支作廢、額外考勤核定（人資主管也能設這兩碼的個別例外，PermActions.gs）
   'payroll.write',              // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
-  'cashbook.write'];            // 2026-10-24 收支管理（會計跨店查帳、作廢、月結鎖定、改科目）；2026-10-25 改為鎖碼（審查 B-01：人資可整條職稱線開給全集團現金帳）
+  'cashbook.write',             // 2026-10-24 收支管理（會計跨店查帳、作廢、月結鎖定、改科目）；2026-10-25 改為鎖碼（審查 B-01：人資可整條職稱線開給全集團現金帳）
+  'platform.bulletin'];         // 2026-10-26 公告管理（電子佈告欄的公告管理／新增公告；原本同仁名單逐人勾 BULLETIN_ADMINS，Eason：搬進權限設定、不鎖碼、人資可設）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
 var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write'];   // 2026-10-19 加薪酬系統；2026-10-25 加收支管理
@@ -48,6 +49,11 @@ var PERM_DEFAULT_RULES = (function () {
   // 正式環境 perm_map 早已初始化，由 orgUpgrade202610 複製「店長的現行規則」（Eason 可能改過店長）；oam 已停用、它的規則保留不影響。
   ['am', 'fm', 'rdd'].forEach(function (t) { add('store', '', t, ['audit.read.own', 'store.void']); });
   add('hq', 'fin', '*', ['cashbook.write']);   // 2026-10-24 收支管理（第 27 條；正式環境 perm_map 已初始化不會自動補，由 Eason 在權限設定打開）
+  // 2026-10-26 公告管理（第 28–33 條）：總監級以上預設打開（Eason）。總監 hm 不分部門一條；正式環境同樣由 Eason 在權限設定打開。
+  add('hq', '', 'hm', ['platform.bulletin']);
+  add('office', '', 'odir', ['platform.bulletin']);
+  add('store', '', 'rdd', ['platform.bulletin']);
+  ['ceo', 'gm', 'chair'].forEach(function (t) { add('hq', '', t, ['platform.bulletin']); });
   return out;
 })();
 

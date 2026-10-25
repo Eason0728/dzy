@@ -215,3 +215,13 @@ manifest 只改 requires：模組＝`['audit.read','audit.read.brand','audit.rea
 - **再擴鎖碼（2026-10-25，全資料審查 B-01）**：`PERM_LOCKED` 現為六碼＝上述四碼＋`payroll.write`（2026-10-19）＋`cashbook.write`。被擋時訊息依碼組出「薪酬系統」「收支管理」。已開出去的權限不收回，只是之後只有 admin 能改。
 - **登入鎖依裝置**：失敗計數與鎖定以「帳號＋來源（ipHash）」為鍵，鎖定只擋該來源；次數與時間（3 次、15 分鐘）不變。ipHash 取不到（空字串）時退回以帳號為鍵；來源全域桶照舊。
 - **救回管理員**：Apps Script 全域函式 `rescueAdmin()`（讀暫時屬性 `BOOTSTRAP_USERNAME`／`BOOTSTRAP_PASSWORD`，只重設既有帳號、不新建；啟用、role admin、換密碼、舊 token 失效、清登入鎖定），**不進** Code.gs 分派表，只能由 mini 的 run-fn 白名單或編輯器執行。
+
+## 13.3 公告管理搬進權限設定（2026-10-26，Eason；優先於前文第 15、39 行對 platform.bulletin 的描述）
+
+- `platform.bulletin`（公告專區「公告管理」「新增公告」、佈告欄管理入場券 bulletin-admin）改為**可給的功能**：加進 `PERM_GRANTABLE`（第 14 碼），對照表與個別例外都能給。
+- **不鎖碼**：有 `platform.permmap` 的人可改對照表；人資主管的個別例外可設（`STORE_HR_GRANTABLE` 加這碼）。自己給自己照舊擋（perm_self）。
+- **舊名單不轉移**：Script Property `BULLETIN_ADMINS` 不再讀寫（Eason 選「清空，我自己重設」）；同仁名單的「可管理公告」勾選框與標籤拿掉，`staffEdit` 帶 `bulletin_admin` 一律回「公告管理已改到權限設定」。
+- **預設規則**（只在空表 permInit 時寫入；正式環境已初始化，由 Eason 在權限設定手動打開）：總部 總監（全部部門，`hq||hm`）、品牌辦公室 總監 odir、門市 廚藝總監 rdd、執行長、總經理、董事長（R028–R033）。
+- 權限設定左側「總部（不分部門）」多一個身分「總監（全部部門）」＝一條規則涵蓋每個部門的總監；各部門的「○○部・總監」那列不會顯示由這條規則來的開關（查同仁仍看得到來源）。
+- 系統帳號（非 staff 角色）只能靠 roles 分頁拿這碼；`PERMS_ON` 關時，同仁帳號一律沒有公告管理（只剩 admin）。
+- 離職／停用／撤回認領：不再個別收回；非 active 本來就算不到任何權限、也登不進來。個別例外照其他功能一樣保留在 perm_ex。

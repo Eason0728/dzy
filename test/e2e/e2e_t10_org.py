@@ -187,15 +187,19 @@ def main():
             check(mock.edits[-1].get('extra_depts') == ['training', 'ops'], '★勾選營運部 → 帶 extra_depts=[training, ops]：%s' % mock.edits[-1].get('extra_depts'))
             check('兼任：訓練部、營運部' in ad.inner_text(row1), '儲存後名單兼任文字更新')
             check('bulletin_admin' not in mock.edits[-1], '★公告管理沒動 → 不帶 bulletin_admin：%s' % mock.edits[-1])
-            # ③b 公告管理權限勾選（2026-10-17）
+            # ③b 公告管理（2026-10-26 改到「權限設定」：同仁名單編輯框不再有勾選，也不再送 bulletin_admin）
             ad.click(row1 + ' [data-act="edit"]')
-            ad.wait_for_selector('#ed-bul')
-            check(not ad.is_checked('#ed-bul'), '公告管理預設沒勾')
-            ad.check('#ed-bul')
+            ad.wait_for_selector('.dialog [data-code="ops"]')
+            check(ad.locator('#ed-bul').count() == 0 and ad.locator('[data-role="bulletin-wrap"]').count() == 0, '★編輯框沒有「可管理公告」勾選（已搬到權限設定）')
+            check('可管理公告' not in ad.inner_text('.dialog'), '編輯框文字沒有「可管理公告」')
+            n_edits = len(mock.edits)
+            ad.fill('#ed-phone', '0911222333')
             ad.click('.dialog .btn-primary:has-text("儲存")')
             ad.wait_for_function("() => !document.querySelector('.dialog')")
             ad.wait_for_timeout(300)
-            check(mock.edits[-1] == {'emp_no': 'DZY001', 'bulletin_admin': True}, '★勾「可管理公告」→ 只帶 bulletin_admin=true：%s' % mock.edits[-1])
+            check(len(mock.edits) == n_edits + 1 and mock.edits[-1].get('phone') == '0911222333', '改手機照常送出 staffEdit：%s' % mock.edits[-1])
+            check(all('bulletin_admin' not in e for e in mock.edits), '★所有送出的 staffEdit 都不帶 bulletin_admin：%s' % mock.edits[-1])
+            check('bulletin-admin-tag' not in ad.inner_html('[data-role="rows"]'), '名單列沒有「公告管理」標籤')
 
             # ④ 切換組織
             ad.click('[data-role="org-upgrade"]')

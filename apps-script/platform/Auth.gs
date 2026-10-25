@@ -846,8 +846,8 @@ function setTokenAfter_(rowNumber) {
  */
 function authStaffGate_(user) {
   if (!user) return {};
-  // 非 staff 角色（例如人資 hr）：不擋登入、不算審核資格，但同仁名單勾了「可管理公告」一樣給 platform.bulletin（審查 dzy-bulletin#44-2）
-  if (String(user.role) !== 'staff') return typeof stfBulletinGate_ === 'function' ? { bulletin: stfBulletinGate_(user.id) } : {};
+  // 非 staff 角色：不擋登入、不算審核資格（公告管理 2026-10-26 起改走權限設定，系統帳號靠 roles 分頁）
+  if (String(user.role) !== 'staff') return {};
   if (typeof stfLoginGate_ !== 'function') return {};
   var gate = stfLoginGate_(user.id) || {};
   // 權限開關開（PERMS_ON='1'，Perms.gs；第二期）：staff 列不存在或 status≠active → 一律拒絕（登入與 token 都擋）
@@ -867,10 +867,6 @@ function authPermsWithGate_(role, gate) {
   var canReview = (gate && gate.review) || perms.indexOf('platform.staff') !== -1;
   if (canReview && perms.indexOf('platform.review') === -1 && perms.indexOf('*') === -1) {
     perms = perms.concat(['platform.review']);
-  }
-  // 公告管理權限（同仁名單勾選，Staff.gs stfBulletinAdmins_）
-  if (gate && gate.bulletin && perms.indexOf('platform.bulletin') === -1 && perms.indexOf('*') === -1) {
-    perms = perms.concat(['platform.bulletin']);
   }
   // 考勤管理選單（StoreOps.gs storeAttGate_）：衍生權限，不寫進 roles
   if (gate && gate.att && perms.indexOf('platform.att') === -1 && perms.indexOf('*') === -1) {
