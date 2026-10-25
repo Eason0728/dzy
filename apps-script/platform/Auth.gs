@@ -34,6 +34,9 @@ var AUTH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // spec §5.3：token 有效期 7
 var AUTH_LOGIN_FAIL_LIMIT = 3;              // spec §5.2：連續失敗 3 次鎖定（Eason 2026-08-14 由 5 改為 3）
 var AUTH_LOGIN_TOTAL_LIMIT = 30;            // 2026-10-17 複驗：同帳號跨所有來源 15 分鐘內失敗 30 次 → 所有來源一起鎖
 var AUTH_LOGIN_LOCK_SECONDS = 15 * 60;      // spec §5.2：鎖 15 分鐘
+// 認得的手機（2026-10-25 全資料審查 MB-03，Eason 定 90 天）：登入成功時發一張手機憑證，之後這支手機不受「整個帳號鎖」影響
+var AUTH_DEVICE_TTL_SECONDS = 90 * 24 * 60 * 60;
+var AUTH_DEVICE_MAX = 512;                   // 憑證字串長度上限（實際約 120 字）；超過一律不認
 // 2026-10-12 安全修補
 var AUTH_USERNAME_MAX = 64;                 // 帳號 trim 後 1–64 字，超過直接回通用錯誤、不碰 cache／表
 var AUTH_LOG_MAX_ROWS = 5000;               // login_log 只留最新 5000 列（不含表頭）
@@ -137,6 +140,43 @@ function signPayload_(payload) {
   var sigBytes = Utilities.computeHmacSha256Signature(payloadPart, getHmacSecret_());
   var sigPart = toBase64Url_(sigBytes);
   return payloadPart + '.' + sigPart;
+}
+
+// ── 認得的手機（2026-10-25 全資料審查 MB-03）────────────────────────
+// 問題：「整個帳號鎖」（各來源合計 15 分鐘錯 30 次）連正確密碼也擋，攻擊者換 10 個以上來源就能把店長鎖在門外；
+// 但不能改成「正確密碼放行」——攻擊者猜中時也是正確密碼，等於沒有上限。
+// 做法（防惡意鎖人的標準作法）：登入成功時發一張手機憑證，存在那支手機；之後帶著有效憑證登入，跳過「整個帳號鎖」
+// （密碼照樣要對、單一來源鎖照樣有效）。攻擊者沒有憑證，仍受 30 次上限管制。
+// 憑證簽章前面加 'device|'：跟登入 token 的簽章不同，拿去當登入 token 驗不過（verifyToken_ 簽的是 payload 本身）。
+// 撤銷：簽發時間早於 users.token_after（改密碼、重設、撤回認領、救回管理員都會更新）＝失效。
+function authDeviceSig_(payloadPart) {
+  return toBase64Url_(Utilities.computeHmacSha256Signature('device|' + payloadPart, getHmacSecret_()));
+}
+function issueDeviceToken_(user, minIssuedAt) {
+  var issuedAt = Math.max(Date.now(), Number(minIssuedAt) || 0);
+  var payload = { d: String(user.id), i: issuedAt, e: Math.floor(Date.now() / 1000) + AUTH_DEVICE_TTL_SECONDS };
+  var payloadPart = toBase64Url_(stringToBytes_(JSON.stringify(payload)));
+  return payloadPart + '.' + authDeviceSig_(payloadPart);
+}
+/** 這支手機是不是「認得的」：簽章對、沒過期、屬於 found 這個帳號、簽發時間晚於 token_after。任何一點不對＝false */
+function authDeviceTrusted_(device, found) {
+  if (typeof device !== 'string' || !device || device.length > AUTH_DEVICE_MAX || !found) return false;
+  var dot = device.indexOf('.');
+  if (dot === -1 || device.indexOf('.', dot + 1) !== -1) return false;
+  var payloadPart = device.slice(0, dot), sigPart = device.slice(dot + 1);
+  if (!payloadPart || !sigPart) return false;
+  var payload;
+  try {
+    if (!authSafeEqual_(authDeviceSig_(payloadPart), sigPart)) return false;
+    payload = JSON.parse(bytesToString_(fromBase64UrlToBytes_(payloadPart)));
+  } catch (e) {
+    return false;
+  }
+  if (!payload || typeof payload.d !== 'string' || typeof payload.e !== 'number' || typeof payload.i !== 'number') return false;
+  if (payload.e < Math.floor(Date.now() / 1000)) return false;
+  if (payload.d !== String(found.values[AUTH_USERS_COL.id])) return false;
+  var after = Number(found.values[AUTH_USERS_COL.token_after]) || 0;
+  return payload.i > after;
 }
 
 /** issueToken_(user) — user = {id, role, node}；payload 逐字照 spec §5.3：{u,r,n,e} */
@@ -518,7 +558,8 @@ function recordLoginFailure_(username, state, ipHash) {
 
 // ── 來源桶（2026-10-12，防跨帳號密碼噴灑）─────────────────────────
 // 有 ipHash：同一來源 15 分鐘（固定窗）失敗 30 次 → 該來源鎖 15 分鐘，連正確密碼也先擋（不影響其他來源）。
-// 沒 ipHash（Apps Script 拿不到 IP；minikit 執行器目前也沒往下傳）：全域桶，15 分鐘失敗 300 次後，
+// 沒 ipHash（Apps Script 拿不到 IP）：全域桶，15 分鐘失敗 300 次後，
+// （2026-10-25 更正：minikit 執行器有把 X-Forwarded-For 最後一段放進 e.clientIp 往下傳，正式環境走的是「有 ipHash」這條）
 // 失敗訊息加一句「請稍後再試」，但**正確密碼照樣登入**——全域鎖會讓一個攻擊者把全公司鎖在門外。
 
 function authIpLockKey_(ipHash) { return 'auth_ip_lock:' + ipHash; }
@@ -689,14 +730,22 @@ function handleLogin_(payload, ipHash) {
   }
 
   // 帳號跨來源總計數已達門檻：所有來源一起擋（連正確密碼也一樣）
-  if (authTotalLocked_(username)) {
+  // 例外（2026-10-25 審查 MB-03）：帶「認得的手機」憑證的不受這道鎖影響，密碼照樣要對（見 authDeviceTrusted_）
+  // 只在真的鎖住時才查 users 分頁，平常登入不多讀一次
+  var trusted = null;
+  var isTrusted = function () {
+    if (trusted === null) trusted = authDeviceTrusted_(payload.device, findUserRow_(username));
+    return trusted;
+  };
+  if (authTotalLocked_(username) && !isTrusted()) {
     writeLoginLog_(username, ipHash, AUTH_LOG_LOCKED);
     return { ok: false, error: AUTH_MSG_LOCKED };
   }
 
   var state = getLoginState_(username, ipHash);
   var nowSec = Math.floor(Date.now() / 1000);
-  if (state.lockedUntil && state.lockedUntil > nowSec) {
+  // 取不到 ipHash 時這道鎖以帳號為鍵＝也是「整個帳號鎖」，認得的手機同樣不受影響；有 ipHash 時只鎖該來源，照樣擋
+  if (state.lockedUntil && state.lockedUntil > nowSec && !(ipHash === '' && isTrusted())) {
     writeLoginLog_(username, ipHash, AUTH_LOG_LOCKED);
     return { ok: false, error: AUTH_MSG_LOCKED };
   }
@@ -757,7 +806,8 @@ function handleLogin_(payload, ipHash) {
   var data = {
     token: token,
     user: { id: user.id, name: user.name, role: user.role, node: user.node },
-    perms: perms
+    perms: perms,
+    device: issueDeviceToken_(user, (Number(recheck.values[AUTH_USERS_COL.token_after]) || 0) + 1)   // 認得的手機（前端按帳號存起來）
   };
   if (pc.auditScope !== null && pc.auditScope !== undefined) data.audit_scope = pc.auditScope;
   // role staff 永遠不回 secrets（第二期；即使 LEGACY_SECRETS=1）

@@ -85,7 +85,9 @@ export function mountList(el, ctx) {
     const all = a.concat(extra ? extra.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) || [] : []);
     const actOf = (h) => (/data-act="([^"]+)"/.exec(h) || [])[1];
     let sec = 0;
-    const out = all.map((h) => (PRIMARY_ACTS.indexOf(actOf(h)) !== -1 ? h : (sec++, h.replace('class="btn ', 'class="btn stf-sec '))));
+    // 解除鎖定：忘記密碼被鎖（名單看得到）才是主要按鈕；其他已開通同仁的這顆收進「更多」，不然每張卡片都多一顆（2026-10-25）
+    const primary = (h) => PRIMARY_ACTS.indexOf(actOf(h)) !== -1 && !(actOf(h) === 'unlock' && !p.reset_locked);
+    const out = all.map((h) => (primary(h) ? h : (sec++, h.replace('class="btn ', 'class="btn stf-sec '))));
     return out.join(' ') + (sec ? ' <button type="button" class="btn btn-secondary stf-more" data-more="1" aria-expanded="false">更多 ▾</button>' : '');
   }
 
