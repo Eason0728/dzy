@@ -44,10 +44,11 @@ const tick = () => new Promise((r) => setImmediate(r));
 
 const storeops = (await import('../modules/storeops/index.js')).default;
 const attendance = (await import('../modules/attendance/index.js')).default;
+const schedule = (await import('../modules/schedule/index.js')).default;
 const embedA = await import('../modules/storeops/embed.js');
 const embedB = await import('../modules/attendance/embed.js');
 
-for (const [label, mod, query] of [['門市營運', storeops, ''], ['考勤管理', attendance, '&only=duty']]) {
+for (const [label, mod, query] of [['門市營運', storeops, ''], ['考勤管理', attendance, '&only=duty'], ['排班管理', schedule, '&only=schedule']]) {
   const root = new El('div');
   sent.length = 0; calls.length = 0;
   const unmount = mod.mount(root, mkCtx());
@@ -104,10 +105,11 @@ for (const [label, mod, query] of [['門市營運', storeops, ''], ['考勤管�
   });
 }
 
-await t('兩份共用檔 embed.js 逐字相同', () => {
+await t('三份共用檔 embed.js 逐字相同（門市營運、考勤管理、排班管理）', () => {
   const a = fs.readFileSync(new URL('../modules/storeops/embed.js', import.meta.url), 'utf8');
   const b = fs.readFileSync(new URL('../modules/attendance/embed.js', import.meta.url), 'utf8');
-  assert.equal(a, b);
+  const c = fs.readFileSync(new URL('../modules/schedule/embed.js', import.meta.url), 'utf8');
+  assert.equal(a, b); assert.equal(a, c);
 });
 
 await t('return 白名單：營運系統網址一律放行；本機網址只在本機開發時放行', () => {
@@ -183,6 +185,39 @@ await t('考勤管理不處理 return（照樣顯示 iframe）', async () => {
   assert.equal(replaced.length, 0); assert.equal(calls.length, 0);
   assert.equal(root.all((n) => n.tagName === 'iframe').length, 1);
   un();
+});
+
+await t('排班管理 forceGo：頁頂沒有 self／approve（在門市）時，首次同步與 onRoute 仍送 dzy-store-go；一般 id 不在頁頂不送', async () => {
+  const root = new El('div');
+  sent.length = 0;
+  const navs = [];
+  const ctx = { ...mkCtx(), viewId: 'approve', tabs: () => true, nav: (id) => navs.push(id) };
+  const un = schedule.mount(root, ctx);
+  await tick();
+  const frame = root.all((n) => n.tagName === 'iframe')[0];
+  const nav = { type: 'dzy-store-nav', v: 1, items: [{ id: 'board', label: '班表' }, { id: 'needs', label: '需求' }], cur: 'board' };
+  await winListeners.message({ origin: ORIGIN, source: frame.contentWindow, data: nav });
+  const gos = () => sent.map((x) => x.m).filter((m) => m.type === 'dzy-store-go');
+  assert.deepEqual(gos(), [{ type: 'dzy-store-go', v: 1, id: 'approve' }]);
+  assert.deepEqual(navs, [], '送出 go 後不被 cur=board 拉回');
+  // 營運系統切店後回報 cur=approve → 不再拉回
+  await winListeners.message({ origin: ORIGIN, source: frame.contentWindow, data: { ...nav, items: [{ id: 'self', label: '我的班表' }, { id: 'approve', label: '核准' }], cur: 'approve' } });
+  assert.deepEqual(navs, []);
+  // 之後點首頁提醒 self：onRoute 送 go self
+  sent.length = 0;
+  schedule.onRoute({ ...ctx, viewId: 'self' });
+  assert.deepEqual(gos(), [{ type: 'dzy-store-go', v: 1, id: 'self' }]);
+  un();
+  // 非 forceGo 的 id 不在頁頂：首次同步不送
+  const root2 = new El('div');
+  sent.length = 0;
+  const ctx2 = { ...mkCtx(), viewId: 'staff', tabs: () => true, nav() {} };
+  const un2 = schedule.mount(root2, ctx2);
+  await tick();
+  const fr2 = root2.all((n) => n.tagName === 'iframe')[0];
+  await winListeners.message({ origin: ORIGIN, source: fr2.contentWindow, data: nav });
+  assert.deepEqual(gos(), []);
+  un2();
 });
 
 await t('manifest：dept／requires／名稱符合規格，且過 manifest 驗證器', async () => {

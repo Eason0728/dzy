@@ -5,11 +5,23 @@
 'use strict';
 
 import { createEmbed } from './embed.js';
+import { unwrap, toAlerts, toBadge } from './alerts.js';
 
-export default createEmbed({
+const embed = createEmbed({
   title: '考勤管理',
   query: '&only=duty',
   allowReturn: false,
   tabs: true,   // 出勤核定的子分頁畫在管理系統頁頂、跟「考勤管理」同一列，2026-10-20
   tip: '只顯示出勤核定；可核定的人與考勤店由系統依組織決定'
 });
+
+// 首頁待辦與側邊欄數字（2026-10-24，營運系統 spec §17.5）：走代轉 ns attendance／action attAlerts，只有件數
+async function fetchAlerts(ctx) {
+  try { return unwrap(await ctx.api.call('attendance', 'attAlerts')); } catch (e) { return null; }
+}
+
+export default {
+  ...embed,
+  async alerts(ctx) { return toAlerts(await fetchAlerts(ctx)); },
+  async badge(ctx) { return toBadge(await fetchAlerts(ctx)); }
+};

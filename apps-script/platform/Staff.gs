@@ -90,6 +90,7 @@ var STF_MSG = {
   LOGIN_PENDING: '帳號還在等主管審核',
   LOGIN_REJECTED: '帳號資料被退回，請找人資重新開通',
   NOT_REVIEWER: '只有單位主管可以審核',
+  NOT_IN_REGION: '這家店不在你負責的區域',
   NO_EXTRA_PERM: '沒有權限修改兼任部門',
   NO_BULLETIN_PERM: '沒有權限設定公告管理',
   REVIEW_SELF: '不能審核自己',
@@ -617,37 +618,21 @@ function stfCleanProfile_(payload, org, needPrivate) {
   return err ? { error: err } : { clean: v };
 }
 
-function handleClaimSubmit_(payload) {
-  payload = payload || {};
-  // 長度先擋（2026-10-12）：在碰全域額度 cache、讀名單之前
-  if (stfTooLong_(payload.name, STF_MAX.name) || stfTooLong_(payload.emp_no, STF_MAX.emp_no)) {
-    return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
-  }
-  if (stfTooLong_(payload.password, STF_MAX.password)) return { ok: false, error: STF_MSG.PW_TOO_LONG };
-  if (stfTooLong_(payload.phone, STF_MAX.phone)) return { ok: false, error: '手機要是 09 開頭的 10 碼數字' };
-  if (stfTooLong_(payload.birthday, STF_MAX.birthday)) return { ok: false, error: '生日格式要是 YYYY-MM-DD' };
-  if (stfTooLong_(payload.address, STF_MAX.address)) return { ok: false, error: '居住地址請填 5～100 個字' };
-  if (STF_ORG_FIELDS.some(function (f) { return stfTooLong_(payload[f], STF_MAX.org); })) {
-    return { ok: false, error: '請選擇品牌' };
-  }
-  var name = stfStr_(payload.name);
-  var empNo = stfNormEmp_(payload.emp_no);
-  if (!name || !STF_EMP_RE.test(empNo)) return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
-  if (stfGlobalFlood_('submit')) return { ok: false, error: STF_MSG.TOO_MANY };
-  var password = payload.password === undefined || payload.password === null ? '' : String(payload.password);
-
-  var hits = stfUnclaimedByName_(name);
-  if (hits.length !== 1 || stfNormEmp_(hits[0].values[STF_COL.emp_no]) !== empNo) {
-    return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
-  }
+/**
+ * 認領寫入共用（handleClaimSubmit_ 與 LineAuth.gs lineAuthClaim_）：驗密碼與組織／個資 → staff 寫 p_*、個資、claimed_at、status pending → users 寫 salt/hash → staff_log。
+ * 呼叫端先確認 hit 是這位 unclaimed 同仁。input 取 password、brand、unit、dept、title、phone、address、birthday。
+ * actor＝{ event, by }（staff_log 的事件與操作者）。回 {ok:false, error} 或 {ok:true, emp_no}；驗證失敗時什麼都沒寫。
+ */
+function stfClaimWrite_(hit, input, actor) {
+  var empNo = stfNormEmp_(hit.values[STF_COL.emp_no]);
+  var password = input.password === undefined || input.password === null ? '' : String(input.password);
   var pwErr = stfValidatePassword_(password, empNo);
   if (pwErr) return { ok: false, error: pwErr };
   var org = stfReadOrg_();
-  var res = stfCleanProfile_(payload, org, true);
+  var res = stfCleanProfile_(input, org, true);
   if (res.error) return { ok: false, error: res.error };
   var c = res.clean;
 
-  var hit = hits[0];
   var userRow = findUsrRowById_(stfStr_(hit.values[STF_COL.user_id]));
   if (!userRow) return { ok: false, error: STF_MSG.NOT_FOUND };
 
@@ -668,7 +653,35 @@ function handleClaimSubmit_(payload) {
   // users：設密碼（active 維持 TRUE）
   var salt = Utilities.getUuid();
   stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.salt + 1, 1, 2).setValues([[salt, hashPassword_(password, salt)]]);
-  stfLog_(empNo, 'claim', 'self', '');
+  stfLog_(empNo, actor.event, actor.by, '');
+  return { ok: true, emp_no: empNo };
+}
+
+function handleClaimSubmit_(payload) {
+  payload = payload || {};
+  // 長度先擋（2026-10-12）：在碰全域額度 cache、讀名單之前
+  if (stfTooLong_(payload.name, STF_MAX.name) || stfTooLong_(payload.emp_no, STF_MAX.emp_no)) {
+    return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
+  }
+  if (stfTooLong_(payload.password, STF_MAX.password)) return { ok: false, error: STF_MSG.PW_TOO_LONG };
+  if (stfTooLong_(payload.phone, STF_MAX.phone)) return { ok: false, error: '手機要是 09 開頭的 10 碼數字' };
+  if (stfTooLong_(payload.birthday, STF_MAX.birthday)) return { ok: false, error: '生日格式要是 YYYY-MM-DD' };
+  if (stfTooLong_(payload.address, STF_MAX.address)) return { ok: false, error: '居住地址請填 5～100 個字' };
+  if (STF_ORG_FIELDS.some(function (f) { return stfTooLong_(payload[f], STF_MAX.org); })) {
+    return { ok: false, error: '請選擇品牌' };
+  }
+  var name = stfStr_(payload.name);
+  var empNo = stfNormEmp_(payload.emp_no);
+  if (!name || !STF_EMP_RE.test(empNo)) return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
+  if (stfGlobalFlood_('submit')) return { ok: false, error: STF_MSG.TOO_MANY };
+
+  var hits = stfUnclaimedByName_(name);
+  if (hits.length !== 1 || stfNormEmp_(hits[0].values[STF_COL.emp_no]) !== empNo) {
+    return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
+  }
+  var hit = hits[0];
+  var wrote = stfClaimWrite_(hit, payload, { event: 'claim', by: 'self' });
+  if (!wrote.ok) return wrote;
 
   // 2026-10-12 Eason：認領只是核對編號，送出後要等單位主管審核通過才開通——不回 token、不自動登入。
   // 回傳同時放頂層 pending 與 data.pending（平台 spec §4.8 形狀是 {ok,data}）
@@ -846,18 +859,29 @@ function handleMyUnit_(token) {
   var org = stfReadOrg_();
   var scope = hit ? stfManagerScope_(hit.values, org) : null;
   if (!scope) return { ok: false, error: STF_MSG.UNIT_ONLY_MANAGER };
-  var people = stfAllRows_().map(function (r) { return stfToObj_(r.values, org, false); }).filter(function (p) {
+  // 生日、地址（Eason 2026-10-25）：只給門市與央廚（store 階梯）的單位主管；品牌辦公室、總部照舊不給。
+  // 審查（兩位 Fable）：單位要存在且啟用、職稱要啟用且是門市職稱才給——stfManagerScope_ 本身只比職級，
+  // 通訊錄與打卡共用，不在這裡收緊它（舊行為照舊），只收緊這兩欄。
+  var myUnit = org.unit[scope.unit];
+  var myTitle = org.title[stfStr_(hit.values[STF_COL.title])];
+  var priv = scope.ladder === 'store' && !!myUnit && myUnit.active !== false && (myUnit.ladder || 'store') === 'store' &&
+    !!myTitle && myTitle.active !== false && myTitle.parent === 'store';
+  var people = stfAllRows_().map(function (r) { return stfToObj_(r.values, org, priv); }).filter(function (p) {
     return p.status === 'active' && p.unit === scope.unit && (!scope.sameDept || p.dept === scope.dept);
   }).map(function (p) {
-    return { emp_no: p.emp_no, name: p.name, title: p.title, title_name: p.title_name, phone: p.phone };
+    var o = { emp_no: p.emp_no, name: p.name, title: p.title, title_name: p.title_name, phone: p.phone };
+    if (priv) { o.birthday = p.birthday; o.address = p.address; }
+    return o;
   });
-  return { ok: true, data: { unit_name: scope.unit_name, people: people } };
+  // 我的區域（docs/regions/spec.md 第 4 節）：osv＝自己負責的區、odir＝全品牌門市；people 只給姓名、職稱、手機；不受 REGIONS_ON 影響
+  var regions = (hit && typeof regionDirectory_ === 'function') ? regionDirectory_(hit.values, org, stfAllRows_(), regionCtx_().idx) : [];
+  return { ok: true, data: { unit_name: scope.unit_name, private: priv, people: people, regions: regions } };
 }
 
 /**
  * 單位主管的範圍（§6.4 單位通訊錄與 §6.8 認領審核共用同一套判斷）：
  * status＝active、職級達門檻（store rank≥3 店長；hq rank≥2 總監）才回
- * {unit, unit_name, dept, sameDept}；總部單位且本人有部門時 sameDept＝true（只管同單位同部門）。
+ * {unit, unit_name, dept, ladder, sameDept}；總部單位且本人有部門時 sameDept＝true（只管同單位同部門）。
  * 不夠格回 null；總部單位有 active 部門但本人部門空白也回 null（不放大成全總部）。
  */
 function stfManagerScope_(values, org) {
@@ -873,7 +897,7 @@ function stfManagerScope_(values, org) {
   // GPT 複審第 4 條（2026-10-12）：總部單位底下有 active 部門、本人部門卻空白 → 不具資格（往拒絕方向）。
   // 否則 sameDept＝false 會讓他看得到／審得到整個總部所有部門（通訊錄 myUnit 與認領審核共用這裡）。
   if (ladder === 'hq' && dept === '' && stfActiveDeptsOf_(org, unitCode).length) return null;
-  return { unit: unitCode, unit_name: unit ? unit.name : '', dept: dept, sameDept: ladder === 'hq' && dept !== '' };
+  return { unit: unitCode, unit_name: unit ? unit.name : '', dept: dept, ladder: ladder, sameDept: ladder === 'hq' && dept !== '' };
 }
 
 // ============================================================
@@ -901,10 +925,12 @@ function stfLoginGate_(userId) {
   var bulletin = status === 'active' && stfBulletinAdmins_().indexOf(stfNormEmp_(hit.values[STF_COL.emp_no])) !== -1;
   // att＝衍生權限 platform.att（StoreOps.gs storeAttGate_；Auth.gs authPermsWithGate_ 補上）
   var att = typeof storeAttGate_ === 'function' ? storeAttGate_(hit.values) : false;
+  // sched＝衍生權限 platform.sched（StoreOps.gs storeSchedGate_；Auth.gs authPermsWithGate_ 補上）
+  var sched = typeof storeSchedGate_ === 'function' ? storeSchedGate_(hit.values) : false;
   // storeops＝衍生權限 platform.storeops（StoreOps.gs storeOpsGate_；STORE_SSO_UNITS 空＝全關）
   var org = stfReadOrg_();
   var storeops = typeof storeOpsGate_ === 'function' ? storeOpsGate_(hit.values, org) : false;
-  return { review: !!stfReviewScope_(hit.values, org), bulletin: bulletin, att: att, storeops: storeops };
+  return { review: !!stfReviewScope_(hit.values, org), bulletin: bulletin, att: att, sched: sched, storeops: storeops };
 }
 
 /**
@@ -944,7 +970,9 @@ function stfReviewScope_(values, org) {
     }
   }
   if (!kinds.length) return null;
-  return { kinds: kinds, unit: unitCode, unit_name: unit.name, brand: unit.parent, dept: dept, rank: title.rank, titleLadder: title.parent };
+  // emp／title（區域，docs/regions/spec.md 第 5 節）：給 stfScopeMeetsKind_ 問 regionOfficeCovers_ 用
+  return { kinds: kinds, unit: unitCode, unit_name: unit.name, brand: unit.parent, dept: dept, rank: title.rank, titleLadder: title.parent,
+    emp: stfNormEmp_(values[STF_COL.emp_no]), title: title.code };
 }
 
 /** 被審的一個身分（單位、部門、職稱）需要哪一種審核者；回 null＝資料已不合規或沒有上一層 → 只有人資 */
@@ -972,7 +1000,7 @@ function stfReviewNeed_(org, unitCode, dept, titleCode) {
       return need;
     }
     if (t.rank >= 3) {
-      need.kind = 'brand'; need.brand = u.parent;
+      need.kind = 'brand'; need.brand = u.parent; need.unit = unitCode;   // unit：區域限區用（regionOfficeCovers_）
       if (t.rank === 3) need.alt = [{ kind: 'store', unit: unitCode }];
       return need;
     }
@@ -989,16 +1017,19 @@ function stfReviewNeed_(org, unitCode, dept, titleCode) {
   return null;
 }
 
-function stfScopeMeets_(scope, need) {
+/** rctx＝區域 {on, idx}（regionCtx_()）；省略＝視為開關關（行為同區域上線前） */
+function stfScopeMeets_(scope, need, rctx) {
   if (!scope || !need) return false;
   // 同一個職稱階梯才比職級：被審的人職級跟審核者同級或更高 → 擋（不同階梯不比；第二期起職稱＝權限，不能核准同級或更高）
   if (scope.titleLadder === need.title.parent && scope.rank <= need.title.rank) return false;
-  return [need].concat(need.alt || []).some(function (o) { return stfScopeMeetsKind_(scope, o); });
+  return [need].concat(need.alt || []).some(function (o) { return stfScopeMeetsKind_(scope, o, rctx); });
 }
-function stfScopeMeetsKind_(scope, o) {
+function stfScopeMeetsKind_(scope, o, rctx) {
   if (scope.kinds.indexOf(o.kind) === -1) return false;
   if ((o.kind === 'store' || o.kind === 'ck') && scope.unit !== o.unit) return false;
   if (o.kind === 'brand' && scope.brand !== o.brand) return false;
+  // 區域（docs/regions/spec.md 第 5 節）：門市的品牌辦公室審核，區督導只限負責該店的區（開關關＝一律 true）
+  if (o.kind === 'brand' && o.unit && rctx && rctx.on && !regionOfficeCovers_({ emp: scope.emp, title: scope.title }, o.unit, rctx)) return false;
   if (o.kind === 'dept' && scope.dept !== o.dept) return false;
   return true;
 }
@@ -1008,13 +1039,13 @@ function stfScopeMeetsKind_(scope, o) {
  * 被審的人看「送出的」p_unit／p_dept／p_title；若列上已有「目前身分」（unit 有值，例如店長建檔後退回認領保留的組織欄），
  * 兩個身分都要夠格才算（取嚴者）。首次認領沒有目前身分＝只看送出的。
  */
-function stfCanReview_(scope, values, org) {
+function stfCanReview_(scope, values, org, rctx) {
   if (!scope) return false;
   var submitted = stfReviewNeed_(org, stfStr_(values[STF_COL.p_unit]), stfStr_(values[STF_COL.p_dept]), stfStr_(values[STF_COL.p_title]));
-  if (!stfScopeMeets_(scope, submitted)) return false;
+  if (!stfScopeMeets_(scope, submitted, rctx)) return false;
   if (stfStr_(values[STF_COL.unit]) !== '') {
     var current = stfReviewNeed_(org, stfStr_(values[STF_COL.unit]), stfStr_(values[STF_COL.dept]), stfStr_(values[STF_COL.title]));
-    if (!stfScopeMeets_(scope, current)) return false;
+    if (!stfScopeMeets_(scope, current, rctx)) return false;
   }
   return true;
 }
@@ -1031,7 +1062,8 @@ function stfReviewer_(token) {
     if (hit) scope = stfReviewScope_(hit.values, org);
   }
   if (!isHr && !scope) return { ok: false, error: STF_MSG.NOT_REVIEWER };
-  return { ok: true, user: me.data.user, isHr: isHr, scope: scope, org: org };
+  var rctx = (!isHr && typeof regionCtx_ === 'function') ? regionCtx_() : null;   // 區域：只在入口讀一次
+  return { ok: true, user: me.data.user, isHr: isHr, scope: scope, org: org, rctx: rctx };
 }
 
 /** 這一列是不是「這位審核者可以審的認領待審」（不能審自己；人資全可審；其他看 stfCanReview_） */
@@ -1039,7 +1071,7 @@ function stfCanReviewRow_(rv, values) {
   if (stfStr_(values[STF_COL.status]) !== 'pending') return false;
   if (stfStr_(values[STF_COL.user_id]) === String(rv.user.id)) return false;
   if (rv.isHr) return true;
-  return stfCanReview_(rv.scope, values, rv.org);
+  return stfCanReview_(rv.scope, values, rv.org, rv.rctx);
 }
 
 function handleUnitPending_(token) {
@@ -1058,6 +1090,16 @@ function handleUnitPending_(token) {
   return { ok: true, data: { people: people, scope_name: rv.scope ? rv.scope.unit_name : '', all_units: rv.isHr } };
 }
 
+/**
+ * 被擋的原因是不是「只因區域不符」：區域開關開、審核者是限區職稱（區督導），而開關關時本來審得到 → true。
+ * 只用來挑錯誤訊息（docs/regions/spec.md 第 5 節），不改任何審核結果。
+ */
+function stfRegionBlocked_(rv, values) {
+  if (!rv || rv.isHr || !rv.scope || !rv.rctx || !rv.rctx.on) return false;
+  if (typeof REG_LIMITED_TITLES === 'undefined' || REG_LIMITED_TITLES.indexOf(rv.scope.title) === -1) return false;
+  return stfCanReview_(rv.scope, values, rv.org, { on: false, idx: rv.rctx.idx });
+}
+
 /** 審核單筆共用：資格、找列、不能審自己、狀態要是認領待審、範圍要對 */
 function stfReviewTarget_(token, payload) {
   var rv = stfReviewer_(token);
@@ -1066,7 +1108,7 @@ function stfReviewTarget_(token, payload) {
   if (!hit) return { ok: false, error: STF_MSG.NOT_FOUND };
   if (stfStr_(hit.values[STF_COL.user_id]) === String(rv.user.id)) return { ok: false, error: STF_MSG.REVIEW_SELF };
   if (stfStr_(hit.values[STF_COL.status]) !== 'pending') return { ok: false, error: STF_MSG.NOT_PENDING_REVIEW };
-  if (!stfCanReviewRow_(rv, hit.values)) return { ok: false, error: STF_MSG.NOT_REVIEWER };
+  if (!stfCanReviewRow_(rv, hit.values)) return { ok: false, error: stfRegionBlocked_(rv, hit.values) ? STF_MSG.NOT_IN_REGION : STF_MSG.NOT_REVIEWER };
   return { ok: true, rv: rv, hit: hit, v: hit.values.slice(), emp: stfNormEmp_(hit.values[STF_COL.emp_no]) };
 }
 
@@ -1099,6 +1141,7 @@ function handleUnitReject_(token, payload) {
   if (!t.ok) return t;
   var err = stfRejectClaim_(t.v, reason);
   if (err) return { ok: false, error: err };
+  if (typeof lineAutoRevoke_ === 'function') lineAutoRevoke_(t.hit.row);   // 退回認領＝LINE 開通／重設一併收回（LineAuth.gs）
   t.v[STF_COL.updated_at] = stfNowText_();
   stfWriteRow_(STF_SHEET, t.hit.row, t.v, STF_COL_COUNT);
   stfLog_(t.emp, 'reject', t.rv.user.id, 'unit_review');
@@ -1295,6 +1338,7 @@ function handleStaffReject_(token, payload) {
     // 不再停在 rejected（rejected 登不進去，也不能再認領，會卡死）
     var rjErr = stfRejectClaim_(t.v, reason);
     if (rjErr) return { ok: false, error: rjErr };
+    if (typeof lineAutoRevoke_ === 'function') lineAutoRevoke_(t.hit.row);   // 撤回認領＝LINE 開通／重設一併收回（LineAuth.gs）
     return stfSave_(t, 'reject', '');
   } else if (t.status === 'active' && hasP) {
     STF_ORG_FIELDS.forEach(function (f) { t.v[STF_COL['p_' + f]] = ''; });
@@ -1326,6 +1370,7 @@ function handleStaffSetActive_(token, payload) {
     stfSetBulletinAdmin_(t.emp, false);   // 停用收回公告管理權限（復職要重新勾；審查 #44-10）
     usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
     setTokenAfter_(userRow.row);
+    if (typeof lineAutoRevoke_ === 'function') lineAutoRevoke_(t.hit.row);   // 停用＝LINE 開通／重設一併收回（LineAuth.gs）
     var saved = stfSave_(t, 'disable', '');
     if (typeof permAuditDisabled_ === 'function') permAuditDisabled_(t.auth.user.id, t.v);   // 停用收回的權限留一筆異動紀錄
     // 員工名單統一：舊「停用」按鈕只停平台帳號——同時對他每個打卡對照發停用單（StaffClock.gs）
@@ -1351,6 +1396,7 @@ function handleStaffUnclaim_(token, payload) {
   stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.salt + 1, 1, 2).setValues([['', '']]);
   setTokenAfter_(userRow.row);
   stfClearClaim_(t.v);
+  if (typeof lineAutoRevoke_ === 'function') lineAutoRevoke_(t.hit.row);   // 撤回認領＝LINE 開通／重設一併收回（LineAuth.gs）
   return stfSave_(t, 'unclaim', '');
 }
 
@@ -1559,6 +1605,8 @@ function setupStaff() {
   stfEnsureSheet_(ss, STF_SHEET, STF_HEADERS, []);
   stfEnsureSheet_(ss, STF_SHEET_ORG, STF_ORG_HEADERS, STF_DEFAULT_ORG);
   stfEnsureSheet_(ss, STF_SHEET_LOG, STF_LOG_HEADERS, []);
+  // 區域（Regions.gs，docs/regions/spec.md 第 3 節）：只補不覆蓋，表頭不一致就停
+  if (typeof REG_SHEET === 'string') stfEnsureSheet_(ss, REG_SHEET, REG_HEADERS, []);
 
   var roles = ss.getSheetByName(USR_SHEET_ROLES);
   var last = roles.getLastRow();

@@ -127,7 +127,7 @@ class Mock11(MockBackend):
                 return {'ok': True, 'data': {'inited': False}}
             return {'ok': True, 'data': {
                 'inited': True, 'rules': list(self.rules),
-                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin'],
+                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin'],
                 'locked': LOCKED, 'names': {},
                 'counts': self.counts(),
                 'ladders': [{'code': 'store', 'name': '門市'}, {'code': 'office', 'name': '品牌辦公室'}, {'code': 'hq', 'name': '總部'}],
@@ -299,8 +299,8 @@ def main():
             check('3 人' in role('店長').inner_text(), '身分顯示人數（店長 3 人）：%s' % role('店長').inner_text().replace('\n', ' '))
             role('店長').click()
             perms_order = [r.get_attribute('data-perm') for r in ad.locator('[data-role="feature-row"]').all()]
-            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin'],
-                  '★右側 12 個功能列、順序正確：%s' % perms_order)
+            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin'],
+                  '★右側 17 個功能列、順序正確：%s' % perms_order)
             sw = lambda pg, perm: pg.locator('[data-role="feature-row"][data-perm="%s"] [data-act="toggle"]' % perm)
             on = lambda pg, perm: sw(pg, perm).get_attribute('aria-checked') == 'true'
             check(on(ad, 'audit.read.own') and not on(ad, 'dorm.read') and not on(ad, 'audit.read'), '店長：看自己店稽核＝開，其餘關')
@@ -495,7 +495,7 @@ def main():
             check(lk.count() == 5, '鎖住的五列仍顯示（含薪酬管理）')
             check(lk.locator('[data-act="toggle"][disabled]').count() == 5, '★鎖碼五列對非 admin：開關 disabled（含薪酬管理）')
             check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 5, '鎖列標示「只有系統管理員能改」')
-            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 11, '其餘 11 列可開關（含收支作廢、額外考勤核定、績效評核四碼，後端沒鎖）')
+            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 12, '其餘 12 列可開關（含收支作廢、額外考勤核定、收支管理、績效評核四碼，後端沒鎖）')
             hr.locator('[data-perm="platform.users"] [data-act="toggle"]').click(force=True)
             check('沒有未儲存' in hr.inner_text('[data-role="bar-msg"]'), '點 disabled 的鎖碼開關沒有任何變更')
             hr.fill('[data-role="who-input"]', '店長')

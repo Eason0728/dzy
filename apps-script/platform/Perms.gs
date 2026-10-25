@@ -12,6 +12,7 @@
 var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap',
   'store.void', 'att.extra',   // 2026-10-18 營運系統：收支作廢、額外考勤核定（人資主管也能設這兩碼的個別例外，PermActions.gs）
   'payroll.write',              // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
+  'cashbook.write',             // 2026-10-24 收支管理（會計跨店查帳、作廢、月結鎖定、改科目；不鎖碼，Eason Q1 B：人資可在權限設定打開）
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin'];   // 2026-10-26 績效評核（docs/eval/spec.md §2.2；預設規則在 Eval.gs EV_PERM_DEFAULT_RULES，evSetup 補進 perm_map）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
@@ -29,7 +30,7 @@ var PERM_AUDIT_HEADERS = ['at', 'by', 'emp_no', 'added', 'removed', 'cause', 'se
 
 var PERM_LADDERS = ['store', 'office', 'hq'];
 
-// 預設規則（spec §3.1）：[ladder, dept, title, perm]；寫入時依序編 R001…（共 26 條）
+// 預設規則（spec §3.1）：[ladder, dept, title, perm]；寫入時依序編 R001…（共 27 條）
 var PERM_DEFAULT_RULES = (function () {
   var out = [];
   var add = function (ladder, dept, title, perms) {
@@ -47,6 +48,7 @@ var PERM_DEFAULT_RULES = (function () {
   // 2026-10-20（docs/org/spec.md 第 15 節；第 21–26 條，接在後面不改既有編號）：區經理 am、中央工廠廠長 fm／廚藝總監 rdd 與店長同一套預設。
   // 正式環境 perm_map 早已初始化，由 orgUpgrade202610 複製「店長的現行規則」（Eason 可能改過店長）；oam 已停用、它的規則保留不影響。
   ['am', 'fm', 'rdd'].forEach(function (t) { add('store', '', t, ['audit.read.own', 'store.void']); });
+  add('hq', 'fin', '*', ['cashbook.write']);   // 2026-10-24 收支管理（第 27 條；正式環境 perm_map 已初始化不會自動補，由 Eason 在權限設定打開）
   return out;
 })();
 
@@ -151,7 +153,7 @@ function permEnsureSheet_(ss, name, headers) {
 
 /**
  * 初始化四張權限分頁。只有 role admin。只補不覆蓋：表頭一致就不動；
- * perm_map 只有表頭（空表）才寫預設規則（PERM_DEFAULT_RULES，目前 26 條）；perm_store_map 空表才寫 5 筆對照。
+ * perm_map 只有表頭（空表）才寫預設規則（PERM_DEFAULT_RULES，目前 27 條）；perm_store_map 空表才寫 5 筆對照。
  * 任一分頁表頭不一致 → 一張都不建，回錯。
  * 回 { ok:true, created:[分頁名], rules_seeded:n, stores_seeded:n } 或 { ok:false, error, message }
  */
@@ -200,7 +202,8 @@ function permInit_(auth) {
  * input = { staff:{status,brand,unit,dept,title,extra_depts:[...],emp_no?},
  *           org:{units:{code:{ladder,parent}}, titles:{code:{parent,rank}}},
  *           rules:[{rule_id,ladder,dept,title,perm}], exs:[{ex_id,emp_no?,perm,mode,until}],
- *           storeMap:{unit:audit_store}, today:'YYYY-MM-DD' }
+ *           storeMap:{unit:audit_store}, today:'YYYY-MM-DD', regionCtx?:{on, idx} }
+ * regionCtx（區域，Regions.gs regionCtx_；由呼叫端讀好傳入）：開著時 osv／oam 的 audit.read.brand 只回負責區域的門市
  * 回 { perms:[…], auditScope:'all'|'none'|[codes], sources:[{perm,source,rule_id?,ex_id?,until?}] }
  * rules／exs 預期已只含 active 的列；exs 只採用 emp_no 非空且等於本人的列（本人無工號＝全部不採用）。
  */
@@ -306,11 +309,25 @@ function permCompute_(input) {
   } else if (has('audit.read.brand')) {
     var list = [];
     var units = org.units || {};
-    Object.keys(units).forEach(function (code) {
-      if (!brand || units[code].active === false || permStr_(units[code].parent) !== brand) return;
-      var st = permStr_(storeMap[code]);
-      if (st) list.push(st);
-    });
+    var rc = input.regionCtx;
+    if (rc && rc.on && (title === 'osv' || title === 'oam')) {
+      // 區域（docs/regions/spec.md 第 6 節）：區督導只看自己負責區域的門市；沒有區域＝[]
+      var idx = rc.idx || {};
+      ((idx.bySupervisor || {})[empNo] || []).forEach(function (c) {
+        var reg = (idx.byRegion || {})[c];
+        (reg ? reg.stores : []).forEach(function (u) {
+          if (!units[u] || units[u].active === false) return;
+          var st = permStr_(storeMap[u]);
+          if (st) list.push(st);
+        });
+      });
+    } else {
+      Object.keys(units).forEach(function (code) {
+        if (!brand || units[code].active === false || permStr_(units[code].parent) !== brand) return;
+        var st = permStr_(storeMap[code]);
+        if (st) list.push(st);
+      });
+    }
     scope = permUniqSorted_(list);
   } else if (has('audit.read.own')) {
     var own = permStr_(storeMap[permStr_(staff.unit)]);
@@ -454,13 +471,13 @@ function permOrgIndex_() {
 
 // 權限碼中文名（myPerms 與畫面用；沒列到的顯示代碼本身）
 var PERM_NAMES = {
-  'audit.read.own': '稽核：我的門市', 'audit.read.brand': '稽核：自己品牌的店', 'audit.read': '稽核：全部店',
+  'audit.read.own': '稽核：我的門市', 'audit.read.brand': '稽核：自己品牌的店（區督導只看自己區）', 'audit.read': '稽核：全部店',
   'audit.write': '稽核：填單與門市管理', 'dorm.read': '宿舍：查看', 'dorm.write': '宿舍：建約與點交',
   'platform.staff': '同仁名單', 'platform.users': '人員管理', 'platform.permmap': '權限設定',
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
-  'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.storeops': '門市營運',
-  'payroll.write': '薪酬系統',
+  'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
+  'payroll.write': '薪酬系統', 'cashbook.write': '收支管理',
   'platform.eval-manage': '績效評核：替所屬同仁打分', 'platform.eval-brand': '績效評核：看自己品牌各店', 'platform.eval-all': '績效評核：看全集團', 'platform.eval-admin': '績效評核：題目設定與定稿'
 };
 function permName_(code) { return PERM_NAMES[code] || code; }
@@ -492,7 +509,8 @@ function permLoadCtx_(useDefaults) {
     exs: inited ? t.exs : [],
     storeMap: inited ? t.storeMap : {},
     org: permOrgIndex_(),
-    today: permTodayTaipei_()
+    today: permTodayTaipei_(),
+    regionCtx: typeof regionCtx_ === 'function' ? regionCtx_() : null
   };
 }
 
@@ -506,7 +524,7 @@ function permStaffObj_(values, extraCodes) {
 function permComputeRow_(ctx, values, extraCodes, rulesOverride) {
   return permCompute_({
     staff: permStaffObj_(values, extraCodes), org: ctx.org,
-    rules: rulesOverride || ctx.rules, exs: ctx.exs, storeMap: ctx.storeMap, today: ctx.today
+    rules: rulesOverride || ctx.rules, exs: ctx.exs, storeMap: ctx.storeMap, today: ctx.today, regionCtx: ctx.regionCtx || null
   });
 }
 

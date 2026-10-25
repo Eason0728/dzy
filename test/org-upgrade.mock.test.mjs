@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'StaffClock.gs', 'Perms.gs', 'PermActions.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'StaffClock.gs', 'Perms.gs', 'PermActions.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 
 let passed = 0;
 let failed = 0;
@@ -334,7 +334,7 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   const a2 = fresh();
   const hc = a2.sheets.staff._data[0];
   const p2 = mk(a2, '測試辛', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
-  hc[26] = '';   // 模擬舊表：只有 hire_date、last_day
+  hc[26] = ''; hc[27] = '';   // 模擬舊表：只有 hire_date、last_day（line_revoked_at 也是後來才補的）
   ok(post(a2.sb, 'staffList', {}, a2.tok).data.staff.every((x) => Array.isArray(x.extra_depts) && x.extra_depts.length === 0), 'T2 欄位不存在：list 不炸、回 []');
   const r2 = post(a2.sb, 'staffEdit', { emp_no: p2.emp, extra_depts: ['it'] }, a2.hrTok);
   ok(r2.ok && hc[26] === 'extra_depts' && staffOf(a2, p2.emp).extra_depts === 'it', 'T2 欄位不存在：寫入時自動補表頭並寫入', r2);
@@ -579,7 +579,7 @@ function legacyApp(clockValue) {
   od.length = 1;
   LEGACY_ORG.forEach((r) => od.push(r.slice()));
   clkHq(app)[2] = clockValue === undefined ? 'dzy-hq,mzt-hq,mala-hq' : clockValue;
-  app.sheets.staff._data[0][26] = '';
+  app.sheets.staff._data[0][26] = ''; app.sheets.staff._data[0][27] = '';   // 舊表：沒有 extra_depts、line_revoked_at
   const P = {};
   P.offHs = mk(app, '升甲', { brand: 'mzt', unit: 'mzt-hq', title: 'hs' });
   P.offHm = mk(app, '升乙', { brand: 'mala', unit: 'mala-hq', title: 'hm' });
@@ -604,7 +604,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const app = legacyApp();
   const { sb, tok, hrTok, P } = app;
   const sheetCount0 = Object.keys(app.sheets).length;
-  ok(app.legacySnap.length === LEGACY_ORG.length && app.sheets.staff._data[0][26] === '', 'T4 （前置）舊 org、舊 staff 欄位');
+  ok(app.legacySnap.length === LEGACY_ORG.length && app.sheets.staff._data[0][26] === '' && app.sheets.staff._data[0][27] === '', 'T4 （前置）舊 org、舊 staff 欄位');
 
   // ── 權限：只有 role admin ──
   ok(upg(app, { dryrun: true }, hrTok).ok === false && upg(app, { dryrun: true }, hrTok).error === '沒有權限', 'T4 反：人資（platform.staff）呼叫 orgUpgrade2026 被擋（含預覽）');
@@ -628,7 +628,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(todoOf(dr, P.offCeo.emp) === 'title_ladder,exec_misplaced' && todoOf(dr, P.storeAm.emp) === 'title_ladder' && todoOf(dr, P.storeSv.emp) === 'title_ladder' && todoOf(dr, P.storeBd.emp) === 'title_ladder' && todoOf(dr, P.stopped.emp) === 'unit_inactive', 'T4 todo：品牌辦公室 ceo＝title_ladder＋exec_misplaced、am／sv／bd＝title_ladder、停用門市同仁＝unit_inactive');
   ok(todoOf(dr, P.normal.emp) === '' && todoOf(dr, P.ckPt.emp) === '' && todoOf(dr, P.hqIt.emp) === '' && todoOf(dr, P.offHs.emp) === '' && todoOf(dr, P.offHm.emp) === '', 'T4 todo：正常的人、會被自動對應的人不列');
   ok(dr.data.todo.every((x) => ['unit_inactive', 'title_ladder', 'exec_misplaced'].indexOf(x.flag) !== -1 && x.name && x.unit_name !== undefined), 'T4 todo 只有 unit_inactive／title_ladder／exec_misplaced 三種 flag，帶 name／unit_name');
-  ok(orgSnap(app).join() === app.legacySnap.join() && Object.keys(app.sheets).length === sheetCount0 && app.sheets.staff._data[0][26] === '' && clkHq(app)[2] === 'dzy-hq,mzt-hq,mala-hq' && staffOf(app, P.offHs.emp).title === 'hs' && !app.props.ORG_UPGRADE_STATE, 'T4 預覽不寫任何東西（org／分頁／欄位／clock／職稱／狀態都沒動）');
+  ok(orgSnap(app).join() === app.legacySnap.join() && Object.keys(app.sheets).length === sheetCount0 && app.sheets.staff._data[0][26] === '' && app.sheets.staff._data[0][27] === '' && clkHq(app)[2] === 'dzy-hq,mzt-hq,mala-hq' && staffOf(app, P.offHs.emp).title === 'hs' && !app.props.ORG_UPGRADE_STATE, 'T4 預覽不寫任何東西（org／分頁／欄位／clock／職稱／狀態都沒動）');
 
   // ── 正式升級 ──
   const r1 = upg(app, { dryrun: false });
@@ -758,7 +758,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const call = (a) => { try { return post(sb, a, {}, tok); } catch (e) { return { ok: false, thrown: String(e.message) }; } };
   let all;
   try { all = sb.clkStaffAll_(); } catch (e) { all = e.message; }
-  ok(Array.isArray(all) && all.length >= 10 && all.every((x) => x.values.length === 27 && x.values[26] === ''), 'R1 #1 clkStaffAll_ 對 26 欄分頁不丟錯、缺的第 27 欄補空字串', typeof all === 'string' ? all : all.length);
+  ok(Array.isArray(all) && all.length >= 10 && all.every((x) => x.values.length === 28 && x.values[26] === '' && x.values[27] === ''), 'R1 #1 clkStaffAll_ 對 26 欄分頁不丟錯、缺的第 27、28 欄補空字串', typeof all === 'string' ? all : all.length);
   const sl = call('staffList');
   ok(sl.ok && sl.data.staff.length >= 10, 'R1 #1 staffList 對 26 欄分頁可用（升級前 BOSS 要能開名單）', sl);
   const ca = call('clockAlerts');
@@ -1442,6 +1442,56 @@ function noBranddev(app) { const d = app.sheets.org._data; for (let i = d.length
   const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
   ok(/CODE_ALLOWED_ACTIONS = \[[\s\S]*?'orgAddBranddev202610', 'orgAddBranddevRollback202610'[\s\S]*?\];/.test(src) && /orgAddBranddev202610: 1, orgAddBranddevRollback202610: 1/.test(src) && /case 'orgAddBranddev202610'/.test(src) && /case 'orgAddBranddevRollback202610'/.test(src), '17 兩個 action 在白名單、寫入鎖、分派表');
   ok(!/READ_ACTIONS[^\n]*orgAddBranddev/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '17 不在任何讀取清單');
+})();
+
+// ============================================================
+// 第 18 節（2026-10-25 Eason）：單位通訊錄加生日、地址——只限門市與央廚（store 階梯）的單位主管
+// ============================================================
+(() => {
+  const app = freshNew();
+  const { sb } = app;
+  const PRIV = (p) => 'birthday' in p || 'address' in p;
+  const sm = mk(app, '十八甲', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+  const am = mk(app, '十八乙', { brand: 'mala', unit: 'mala-gf', title: 'am' });
+  const pt = mk(app, '十八丙', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+  setStaff(app, pt.emp, 'birthday', ''); setStaff(app, pt.emp, 'address', '');   // 舊資料沒填
+  const other = mk(app, '十八丁', { brand: 'mzt', unit: 'mzt-gf', title: 'pt', birthday: '1990-01-02', address: '別店測試路9號' });
+  const fm = mk(app, '十八戊', { brand: 'ck', unit: 'ck', title: 'fm' });
+  const rdd = mk(app, '十八己', { brand: 'ck', unit: 'ck', title: 'rdd' });
+  const ckPt = mk(app, '十八庚', { brand: 'ck', unit: 'ck', title: 'pt', birthday: '1999-12-31', address: '央廚測試路2號' });
+  const osv = mk(app, '十八辛', { brand: 'mala', unit: 'mala-hq', title: 'osv' });
+  mk(app, '十八壬', { brand: 'mala', unit: 'mala-hq', title: 'ofs' });
+  const itHm = mk(app, '十八癸', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hm' });
+  mk(app, '十八子', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
+
+  const u1 = post(sb, 'myUnit', {}, sm.token);
+  const byEmp = (r, e) => r.data.people.find((p) => p.emp_no === e);
+  ok(u1.ok && u1.data.private === true && byEmp(u1, pt.emp).birthday === '' && byEmp(u1, pt.emp).address === '' && byEmp(u1, am.emp).birthday === '1995-05-05' && byEmp(u1, am.emp).address === '新竹市測試路一段1號', '18 門市店長：同店同仁含生日地址（空的回空字串）', u1);
+  ok(!u1.data.people.some((p) => p.emp_no === other.emp) && JSON.stringify(u1).indexOf('別店測試路') === -1, '18 ★門市店長拿不到別店同仁的生日地址');
+  const u2 = post(sb, 'myUnit', {}, am.token);
+  ok(u2.ok && u2.data.private === true && byEmp(u2, sm.emp).birthday === '1995-05-05', '18 區經理（門市階梯）也有');
+  [fm, rdd].forEach((m) => {
+    const r = post(sb, 'myUnit', {}, m.token);
+    ok(r.ok && r.data.private === true && byEmp(r, ckPt.emp).birthday === '1999-12-31' && byEmp(r, ckPt.emp).address === '央廚測試路2號', '18 央廚 ' + m.name + '：含生日地址', r);
+  });
+  [osv, itHm].forEach((m) => {
+    const r = post(sb, 'myUnit', {}, m.token);
+    ok(r.ok && r.data.people.length >= 2 && r.data.private === false && !r.data.people.some(PRIV) && JSON.stringify(r).indexOf('測試路') === -1, '18 ★' + m.name + '（品牌辦公室／總部）：通訊錄照舊、不含生日地址', r);
+  });
+  ok(post(sb, 'myUnit', {}, pt.token).ok === false && post(sb, 'myUnit', {}, ckPt.token).ok === false, '18 ★計時同仁仍看不到通訊錄');
+  // 審查（Fable 兩位都抓到）：資料不正常的「主管」不給生日地址（通訊錄本身維持舊行為，只收緊這兩欄）
+  const odd = (label, field, val, over) => {
+    const m = mk(app, '十八' + label, Object.assign({ brand: 'mala', unit: 'mala-gf', title: 'sm' }, over || {}));
+    setStaff(app, m.emp, field, val);
+    const r = post(sb, 'myUnit', {}, m.token);
+    ok(!r.ok || (r.data.private === false && !r.data.people.some(PRIV)), '18 ★' + label + '：不給生日地址', r);
+  };
+  odd('停用職稱督導', 'title', 'sv');
+  odd('停用職稱品牌總監', 'title', 'bd');
+  odd('門市掛辦公室總監', 'title', 'odir');
+  odd('門市掛執行長', 'title', 'ceo');
+  odd('停用門市', 'unit', 'mzt-mc', { brand: 'mzt', unit: 'mzt-gf' });
+  odd('不存在單位', 'unit', 'zz-none');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

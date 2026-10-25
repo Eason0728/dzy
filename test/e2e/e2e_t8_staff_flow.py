@@ -113,6 +113,10 @@ def main():
             staff.wait_for_selector('[data-role="module-card"]')
             check(staff.locator('[data-role="module-card"]').count() == 4, '★通過後可登入，同仁只看得到「我的資料」「公告專區」「表單簽核」「績效評核」四個模組')
             check(staff.evaluate('location.hash') in ('', '#/home'), '登入後網址不停在 #/claim')
+            check(staff.locator('[data-role="nav-desktop"] .nav-dept').count() == 0 and staff.locator('[data-role="nav-desktop"] .nav-label').count() == 0,
+                  '★2026-10-26 沒有任何部門功能的同仁：側邊欄不顯示部門（連「部門」標籤也沒有）')
+            staff.wait_for_function("() => { const r = document.querySelector('[data-role=\"nav-desktop\"] .rl') || document.querySelector('.su-main .rl'); return r && r.textContent === '計時同仁'; }", timeout=5000)
+            check(True, '★2026-10-26 名字下方顯示職稱「計時同仁」（不是「員工」）')
             staff.goto(base + '/index.html#/claim')
             staff.wait_for_selector('[data-role="module-card"]')
             check(staff.locator('.toast-warn:has-text("沒有權限")').count() == 0, '已登入打開 #/claim 不跳「沒有權限」')

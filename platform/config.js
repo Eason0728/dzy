@@ -46,6 +46,15 @@ export const DEPARTMENTS = [
   { id: 'franchise', name: '加盟部門' }
 ];
 
+/**
+ * LINE 開通／重設密碼的 LIFF app ID（docs/line-auth/spec.md §6）。空字串＝功能未開：
+ * 登入頁不顯示「用 LINE 開通／用 LINE 重設密碼」兩顆按鈕，line.html 顯示「功能準備中」。
+ * LIFF ID 是公開值（出現在 liff.line.me 網址），可以進 repo。Eason 在 LINE Developers 建好 LIFF app
+ * （endpoint https://dzy.mozhuting.com/line.html）後把 ID 填進來。LINE 路由＝同主機 /platform/svc/line-auth，
+ * 由 BACKENDS.platform 推導（platform/views/line-auth.js lineAuthUrl()），這裡不另存。
+ */
+export const LINE_LIFF_ID = '2011292256-Qs80XEBg';
+
 export const BACKENDS = {
   // 2026-10 起平台後端在公司 Mac mini（dzy-minikit apps/dzy-platform，Funnel /platform）。
   // 回退：還原這一行成舊 Apps Script /exec（git revert 合併 minikit-cutover 的 commit），見 ~/dzy-minikit/apps/dzy-platform/ROLLBACK.md

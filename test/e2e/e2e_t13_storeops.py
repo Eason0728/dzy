@@ -37,10 +37,15 @@ class Mock13(MockBackend):
         super().__init__(base)
         mk = lambda name, perms: {'password': 'e2e-pw', 'perms': perms,
                                   'user': {'id': 'u-' + name, 'name': name, 'role': 'staff', 'node': ''}}
-        USERS['att1'] = mk('督導甲', ['platform.self', 'platform.att', 'platform.storeops'])
+        USERS['att1'] = mk('督導甲', ['platform.self', 'platform.att', 'platform.sched', 'platform.storeops'])   # 店長同等職：考勤管理＋排班管理
+        USERS['att2'] = mk('督導乙', ['platform.self', 'platform.att', 'platform.storeops'])   # 區督導／總監類：有考勤管理、沒有排班管理（2026-10-24）
         USERS['plain1'] = mk('同仁乙', ['platform.self', 'platform.storeops'])
         USERS['none1'] = mk('同仁丙', ['platform.self'])  # 總開關關著／不屬於任何營運系統門市：兩個衍生權限都沒有
         self.sso_calls = []
+        # 排班管理首頁待辦（hr-move-spec §5）：預設兩列（光復店 T01、T02／美村店 T01）
+        self.sched_alerts = {'ok': True, 'data': {'items': [{'code': 'gf', 'name': '光復店', 'periods': ['T01', 'T02']}, {'code': 'mc', 'name': '美村店', 'periods': ['T01']}], 'asOf': '2026-10-24T00:00:00Z'}}
+        # 考勤管理首頁待辦（spec §17.5）：預設三列（核定 3 天／申請 2 筆／新手機 1 支）
+        self.att_alerts = {'ok': True, 'data': {'items': [{'kind': 'approve', 'count': 3}, {'kind': 'request', 'count': 2}, {'kind': 'device', 'count': 1}], 'partial': False, 'asOf': '2026-10-24T00:00:00Z', 'pending': False}}
 
     def platform_action(self, action, body):
         if action == 'ssoTicket':
@@ -214,6 +219,43 @@ def main():
             ids = [c.get_attribute('data-module') for c in at.locator('[data-role="module-card"]').all()]
             check('attendance' in ids and 'storeops' in ids, '有 platform.att：首頁有考勤管理與門市營運，實際：%s' % ids)
             check(at.locator('[data-role="nav-desktop"] [data-nav="attendance"]').count() == 1, '有 platform.att：左側選單有「考勤管理」')
+            # ⑤0 有 platform.att 沒有 platform.sched（區督導、總監類）：有考勤管理、沒有排班管理（卡片與左側選單都沒有）
+            ao = new_page()
+            ao.goto(base + '/index.html')
+            do_login(ao, 'att2')
+            ids2 = [c.get_attribute('data-module') for c in ao.locator('[data-role="module-card"]').all()]
+            check('attendance' in ids2 and 'schedule' not in ids2, '有 platform.att 沒有 platform.sched：有考勤管理、沒有排班管理，實際：%s' % ids2)
+            check(ao.locator('[data-role="nav-desktop"] [data-nav="schedule"]').count() == 0, '沒有 platform.sched：左側選單沒有「排班管理」')
+            check(at.locator('[data-role="nav-desktop"] [data-nav="schedule"]').count() == 1, '有 platform.sched：左側選單有「排班管理」')
+            ao.close()
+            # ⑤a 首頁考勤管理組的待辦（2026-10-24，spec §17.5）：只回件數，三列提醒文字逐字
+            ATT = '[data-role="alert-list"][data-module="attendance"] [data-role="alert-row"]'
+            at.wait_for_selector(ATT + ':has-text("支新手機等核准")', timeout=10000)
+            rows = [x.replace('›', '').strip() for x in at.locator(ATT).all_inner_texts()]
+            check(rows == ['本月還有 3 天沒核定', '2 筆加班請假申請待審', '1 支新手機等核准'], '首頁考勤管理組顯示三列提醒（只有件數）：%s' % rows)
+            check(('attendance', 'attAlerts') in getattr(mock, 'proxy_calls', []), '首頁待辦走代轉 ns attendance／action attAlerts')
+            # 點「1 支新手機等核准」→ 網址 #/attendance/device，且 iframe 收到 dzy-store-go device
+            at.click(ATT + ':has-text("支新手機等核准")')
+            at.wait_for_selector('[data-keep="attendance"] iframe[data-role="store-frame"]')
+            check(at.evaluate('location.hash') == '#/attendance/device', '點「1 支新手機等核准」→ 網址 #/attendance/device：%s' % at.evaluate('location.hash'))
+            fa0 = None
+            for _ in range(50):
+                fa0 = store_frame(at)
+                if fa0:
+                    try:
+                        if fa0.evaluate("() => window.__got.length") >= 1:
+                            break
+                    except Exception:
+                        pass
+                at.wait_for_timeout(100)
+            fa0.evaluate("(cur) => parent.postMessage({ type: 'dzy-store-nav', v: 1, cur: cur, items: [{ id: 'approve', label: '核定工時', badge: 0 }, { id: 'request', label: '申請審核', badge: 0 }, { id: 'device', label: '手機核准', badge: 1 }] }, '*')", 'approve')
+            at.wait_for_timeout(500)
+            g0 = [m for m in fa0.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(g0 == [{'type': 'dzy-store-go', 'v': 1, 'id': 'device'}] and at.evaluate('location.hash') == '#/attendance/device',
+                  'iframe 收到 {dzy-store-go, id:device}、網址維持 #/attendance/device：%s %s' % (g0, at.evaluate('location.hash')))
+            at.goto(base + '/index.html')
+            at.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
+
             before = len(mock.sso_calls)
             at.click('[data-role="nav-desktop"] [data-nav="attendance"]')
             at.wait_for_selector('iframe[data-role="store-frame"]')
@@ -266,6 +308,84 @@ def main():
             agos = [m for m in fa.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
             check(agos == [{'type': 'dzy-store-go', 'v': 1, 'id': 'request'}] and at.evaluate('location.hash') == '#/attendance/request', '重新整理在申請審核：出勤核定先回報核定工時時，管理系統叫它切回申請審核、網址不變：%s %s' % (agos, at.evaluate('location.hash')))
 
+            # ⑤c 排班管理（hr-move-spec §5）：首頁提醒列、點了導到 #/schedule/board、頁頂四個動態分頁
+            at.goto(base + '/index.html')
+            at.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
+            SCH = '[data-role="alert-list"][data-module="schedule"] [data-role="alert-row"]'
+            at.wait_for_selector(SCH + ':has-text("美村店")', timeout=10000)
+            rows = [x.replace('›', '').strip() for x in at.locator(SCH).all_inner_texts()]
+            check(rows == ['光復店 T01、T02 班表還沒送到 LINE', '美村店 T01 班表還沒送到 LINE'], '首頁排班管理組顯示每家店一列提醒：%s' % rows)
+            check(('schedule', 'schedAlerts') in getattr(mock, 'proxy_calls', []), '首頁待辦走代轉 ns schedule／action schedAlerts')
+            at.click(SCH + ':has-text("光復店")')
+            at.wait_for_selector('[data-keep="schedule"] iframe[data-role="store-frame"]')
+            check(at.evaluate('location.hash') == '#/schedule/board', '點「光復店 T01、T02…」→ 網址 #/schedule/board：%s' % at.evaluate('location.hash'))
+            fs = None
+            for _ in range(50):
+                fs = store_frame(at)
+                if fs:
+                    try:
+                        if fs.evaluate("() => window.__got.length") >= 1:
+                            break
+                    except Exception:
+                        pass
+                at.wait_for_timeout(100)
+            check(fs is not None and fs.url == STORE + '/dzy-store/?embed=dzy&only=schedule', '排班管理 iframe 網址帶 &only=schedule：%s' % (fs.url if fs else None))
+            SNAV = "(cur) => parent.postMessage({ type: 'dzy-store-nav', v: 1, cur: cur, items: [{ id: 'board', label: '班表', badge: 0 }, { id: 'needs', label: '指定與需求', badge: 0 }, { id: 'staff', label: '同仁', badge: 0 }, { id: 'shifts', label: '班別與設定', badge: 0 }] }, '*')"
+            fs.evaluate(SNAV, 'board')
+            at.wait_for_function("() => document.querySelectorAll('[data-role=\"view-nav\"] .nav-item').length === 4")
+            stabs = [x.replace('\n', '') for x in at.locator('[data-role="view-nav"] .nav-item').all_inner_texts()]
+            check(stabs == ['班表', '指定與需求', '同仁', '班別與設定'] and at.evaluate('location.hash') == '#/schedule/board', '排班管理頁頂收到四個動態分頁、網址 #/schedule/board：%s %s' % (stabs, at.evaluate('location.hash')))
+            check({'type': 'dzy-store-tabs', 'v': 1} in fs.evaluate("() => window.__got.map(m => m.data)"), '排班管理：收到選單後回 dzy-store-tabs')
+            at.locator('[data-role="view-nav"] .nav-item', has_text='同仁').click()
+            at.wait_for_timeout(300)
+            sgos = [m for m in fs.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(sgos[-1:] == [{'type': 'dzy-store-go', 'v': 1, 'id': 'staff'}] and at.evaluate('location.hash') == '#/schedule/staff', '點頁頂「同仁」→ 送 {dzy-store-go, id:staff}、網址 #/schedule/staff：%s' % sgos)
+
+            # ⑤d 總部排班提醒（schedule-hq spec §10.2）：svc/sched-alerts 回傳 self → 本人下月未送出、等核准、未送出三列；點了導到 #/schedule/approve（營運系統 mock，不跑真的 iframe 內容）
+            mock.sched_alerts = {'ok': True, 'data': {'items': [], 'asOf': '2026-10-25T00:00:00Z', 'self': {'due': ['2026-11'], 'wait': 2, 'missing': 1}}}
+            at.goto(base + '/index.html')
+            at.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
+            at.wait_for_selector(SCH + ':has-text("等你核准")', timeout=10000)
+            hrows = [x.replace('›', '').strip() for x in at.locator(SCH).all_inner_texts()]
+            check(hrows == ['11 月班表還沒送出', '2 位同仁的班表等你核准', '1 位同仁下個月班表還沒送出'], '首頁排班管理組顯示總部三種提醒：%s' % hrows)
+            at.click(SCH + ':has-text("等你核准")')
+            at.wait_for_selector('[data-keep="schedule"] iframe[data-role="store-frame"]')
+            check(at.evaluate('location.hash') == '#/schedule/approve', '點「2 位同仁的班表等你核准」→ 網址 #/schedule/approve：%s' % at.evaluate('location.hash'))
+            # 門市狀態（頁頂只有 board／needs／staff／shifts，沒有 approve）：營運系統回報選單後，管理系統仍要送 go approve（營運系統收到會自動切店）
+            fh = None
+            for _ in range(50):
+                fh = store_frame(at)
+                if fh:
+                    try:
+                        if fh.evaluate("() => window.__got.length") >= 1:
+                            break
+                    except Exception:
+                        pass
+                at.wait_for_timeout(100)
+            fh.evaluate(SNAV, 'board')
+            at.wait_for_timeout(500)
+            hgos = [m for m in fh.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(hgos == [{'type': 'dzy-store-go', 'v': 1, 'id': 'approve'}], '從門市狀態點總部提醒「等你核准」→ 送 {dzy-store-go, id:approve}：%s' % hgos)
+            at.goto(base + '/index.html')
+            at.wait_for_selector(SCH + ':has-text("還沒送出")', timeout=10000)
+            at.click(SCH + ':has-text("11 月")')
+            at.wait_for_selector('[data-keep="schedule"] iframe[data-role="store-frame"]')
+            check(at.evaluate('location.hash') == '#/schedule/self', '點「11 月班表還沒送出」→ 網址 #/schedule/self：%s' % at.evaluate('location.hash'))
+            fh2 = None
+            for _ in range(50):
+                fh2 = store_frame(at)
+                if fh2:
+                    try:
+                        if fh2.evaluate("() => window.__got.length") >= 1:
+                            break
+                    except Exception:
+                        pass
+                at.wait_for_timeout(100)
+            fh2.evaluate(SNAV, 'board')
+            at.wait_for_timeout(500)
+            hgos2 = [m for m in fh2.evaluate("() => window.__got.map(m => m.data)") if m.get('type') == 'dzy-store-go']
+            check(hgos2 == [{'type': 'dzy-store-go', 'v': 1, 'id': 'self'}], '從門市狀態點總部提醒「11 月班表還沒送出」→ 送 {dzy-store-go, id:self}：%s' % hgos2)
+
             # ⑥ 管理員兩個都看得到
             ad = new_page()
             ad.goto(base + '/index.html')
@@ -309,6 +429,24 @@ def main():
             nl.click('[data-role="submit"]')
             nl.wait_for_url(STORE + '/dzy-store/?s=gf#sso=' + TICKET, timeout=10000)
             check(True, '登入後導回營運系統並帶 #sso=券：%s' % nl.url)
+
+            # ⑩ 代轉失敗／部分門市讀不到：首頁考勤管理組顯示「暫時讀不到」，不出現假的件數
+            mock.att_alerts_fail = True
+            fl = new_page()
+            fl.goto(base + '/index.html')
+            do_login(fl, 'att1')
+            ATT = '[data-role="alert-list"][data-module="attendance"] [data-role="alert-row"]'
+            fl.wait_for_selector(ATT, timeout=10000)
+            rows = [x.replace('›', '').strip() for x in fl.locator(ATT).all_inner_texts()]
+            check(rows == ['暫時讀不到'], '代轉失敗：首頁考勤管理組只顯示「暫時讀不到」：%s' % rows)
+            mock.att_alerts_fail = False
+            mock.att_alerts = {'ok': True, 'data': {'items': [{'kind': 'request', 'count': 2}], 'partial': True, 'asOf': '2026-10-24T00:00:00Z', 'pending': False}}
+            pt = new_page()
+            pt.goto(base + '/index.html')
+            do_login(pt, 'att1')
+            pt.wait_for_selector(ATT + ':has-text("部分門市暫時讀不到")', timeout=10000)
+            rows = [x.replace('›', '').strip() for x in pt.locator(ATT).all_inner_texts()]
+            check(rows == ['2 筆加班請假申請待審', '部分門市暫時讀不到'], '部分門市讀不到：件數照出、另加一列「部分門市暫時讀不到」：%s' % rows)
 
             check(mock.leaked == [], '真實網路零流出：%s' % mock.leaked)
             browser.close()

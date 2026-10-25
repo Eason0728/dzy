@@ -16,7 +16,7 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Perms.gs', 'PermActions.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'Perms.gs', 'PermActions.gs', 'StoreOps.gs', 'StaffClock.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 
 let passed = 0;
 let failed = 0;
@@ -542,6 +542,224 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   const rowIdx = sheets.users._rows().findIndex((r) => String(r[1]) === hrHead.emp);
   sheets.users.getRange(rowIdx + 1, 8).setValue('FALSE');
   ok(sb.proxyAuthorize_(hrHead.token, 'payroll', 'payroll_month').code === 'BAD_TOKEN', '13p: 帳號停用後立刻 BAD_TOKEN');
+}
+
+// ============================================================
+// 14. 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：ns attendance／action attAlerts
+//     只認 platform.att（含衍生）；用 attendance/read 服務金鑰；subject＝登入身分的 DZY 編號（admin 為 U:<id>）
+// ============================================================
+{
+  const ATT = 'FAKE-ATT-ALERT-KEY-31';
+  const extra = { module_secrets: seed().module_secrets.concat([['attendance', 'read', ATT]]) };
+  const { sb, sheets } = fresh(extra);
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  const props = sb.PropertiesService.getScriptProperties();
+  props.setProperty('STORE_SSO_UNITS', 'mala-gf');
+
+  ok(JSON.stringify(sb.PROXY_READ_ACTIONS.attendance) === JSON.stringify(READ_ACTIONS.attendance) && READ_ACTIONS.attendance[0] === 'attAlerts', '14a: attendance 讀清單兩邊（Auth.gs／dryrun.js）一致且含 attAlerts', [sb.PROXY_READ_ACTIONS.attendance, READ_ACTIONS.attendance]);
+
+  const a = sb.proxyAuthorize_(boss, 'attendance', 'attAlerts');
+  ok(a.ok === true && a.secret === ATT && a.filterNode === null && a.isWrite === false && a.subject === 'U:u001', '14b: admin → 服務金鑰、讀、subject＝U:<id>', a);
+  ok(sb.proxyAuthorize_(boss, 'attendance', 'attSetSomething').code === 'FORBIDDEN', '14c: action 不是 attAlerts（admin 也）→ FORBIDDEN');
+
+  const sm = mkStaff(sb, boss, '考勤店長', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+  const r = sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts');
+  ok(r.ok === true && r.secret === ATT && r.isWrite === false && r.subject === sm.emp && /^DZY\d+$/.test(String(r.subject)), '14d: 有 platform.att 的店長 → subject＝DZY 編號', r);
+  ok(sb.proxyAuthorize_(sm.token, 'attendance', 'attWrite').code === 'FORBIDDEN', '14e: 店長打非 attAlerts → FORBIDDEN');
+  ok(sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts').secret !== undefined && JSON.stringify(post(sb, 'me', {}, sm.token)).indexOf(ATT) === -1, '14f: me 回應不含服務金鑰');
+
+  const pt = mkStaff(sb, boss, '考勤計時', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+  ok(sb.proxyAuthorize_(pt.token, 'attendance', 'attAlerts').code === 'FORBIDDEN', '14g: 沒有 platform.att 的計時同仁 → FORBIDDEN');
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'acc1', PW.acc), 'attendance', 'attAlerts').code === 'FORBIDDEN', '14h: 會計（非 staff、無 platform.att）→ FORBIDDEN');
+  // 即使有 attendance.read 之類的通用權限也不走通用邏輯
+  sheets.roles.appendRow(['attrole', '假', 'attendance.read,attendance.write']);
+  sheets.users.appendRow(['u090', 'attx', '假', 'attrole', '', 's9', H('fake-attx-pw-01', 's9'), 'TRUE', '', '', '']);
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'attx', 'fake-attx-pw-01'), 'attendance', 'attAlerts').code === 'FORBIDDEN', '14i: 只有 attendance.read 通用權限、沒有 platform.att → FORBIDDEN（不走通用邏輯）');
+
+  // 有 platform.att 但 storeSubForUser_ 回空（非 DZY 編號的系統帳號）→ FORBIDDEN
+  sheets.roles.appendRow(['attsys', '假', 'platform.att']);
+  sheets.users.appendRow(['u091', 'sysatt', '假', 'attsys', '', 's9', H('fake-sysatt-pw-01', 's9'), 'TRUE', '', '', '']);
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'sysatt', 'fake-sysatt-pw-01'), 'attendance', 'attAlerts').code === 'FORBIDDEN', '14j: 有 platform.att 但沒有 DZY 編號身分（subject 空）→ FORBIDDEN');
+
+  // PERMS_ON 開（第二期權限表）：platform.att 由 authPermsWithGate_ 併入、與開關無關 → 店長照樣 ok＋DZY subject，計時照樣 FORBIDDEN（2026-10-24 總審）
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '14n 前置：permInit_ 建表');
+  turnOn(sb);
+  const rOn = sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts');
+  ok(rOn.ok === true && rOn.secret === ATT && rOn.isWrite === false && rOn.subject === sm.emp && /^DZY\d+$/.test(String(rOn.subject)), '14n: PERMS_ON 開 → 店長仍 ok、subject＝DZY 編號', rOn);
+  ok(sb.proxyAuthorize_(pt.token, 'attendance', 'attAlerts').code === 'FORBIDDEN', '14o: PERMS_ON 開 → 計時同仁仍 FORBIDDEN');
+  ok(sb.proxyAuthorize_(boss, 'attendance', 'attAlerts').subject === 'U:u001', '14p: PERMS_ON 開 → admin 仍 subject＝U:<id>');
+
+  // 沒設 attendance/read → NO_SECRET；整個 ns 沒登記 → UNKNOWN_NS
+  const n = fresh();
+  ok(n.sb.proxyAuthorize_(tokenOf(n.sb, 'BOSS', PW.boss), 'attendance', 'attAlerts').code === 'UNKNOWN_NS', '14k: module_secrets 沒有 attendance → UNKNOWN_NS');
+  const w = fresh({ module_secrets: seed().module_secrets.concat([['attendance', 'write', 'FAKE-ONLY-WRITE']]) });
+  ok(w.sb.proxyAuthorize_(tokenOf(w.sb, 'BOSS', PW.boss), 'attendance', 'attAlerts').code === 'NO_SECRET', '14l: 只有 attendance/write、沒有 read → NO_SECRET（不拿寫入碼頂替）');
+  const num = fresh({ module_secrets: seed().module_secrets.concat([['attendance', 'read', 123456]]) });
+  ok(String(num.sb.proxyAuthorize_(tokenOf(num.sb, 'BOSS', PW.boss), 'attendance', 'attAlerts').secret) === '123456', '14m: 純數字金鑰被試算表轉成 number 也回字串');
+}
+
+// ============================================================
+// 15. 收支管理（2026-10-24）：cashbook.write 一個開關（不是鎖碼）、財務部門預設有、管理金鑰只在代轉時給、操作人由平台決定
+// ============================================================
+{
+  const CB = 'FAKE-CASHBOOK-ADMIN-KEY-66';
+  const extra = { module_secrets: seed().module_secrets.concat([['cashbook', 'write', CB]]) };
+  const { sb, sheets } = fresh(extra);
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  const hasCb = (o) => JSON.stringify(o).indexOf(CB) !== -1;
+  const READ = ['adminStores', 'adminList', 'adminLocks', 'adminGet'];
+  const WRITE = ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock'];
+
+  ok(JSON.stringify(sb.PROXY_READ_ACTIONS.cashbook) === JSON.stringify(READ) && JSON.stringify(READ_ACTIONS.cashbook) === JSON.stringify(READ), '15a: cashbook 讀清單兩邊（Auth.gs／dryrun.js）一致，且就是 adminStores／adminList／adminLocks／adminGet');
+  ok(JSON.stringify(sb.PROXY_WRITE_ACTIONS.cashbook) === JSON.stringify(WRITE) && JSON.stringify(WRITE_ACTIONS.cashbook) === JSON.stringify(WRITE), '15b: cashbook 寫入清單兩邊一致，且就是 adminSave／adminVoid／adminLock／adminUnlock');
+  ok(sb.PERM_GRANTABLE.indexOf('cashbook.write') !== -1 && sb.PERM_LOCKED.indexOf('cashbook.write') === -1, '15c: cashbook.write 可給、且不是鎖碼（人資可在權限設定打開）');
+  ok(sb.permName_('cashbook.write') === '收支管理', '15d: 中文名「收支管理」');
+  ok(sb.PERM_DEFAULT_RULES.some((r) => r.join('|') === 'hq|fin|*|cashbook.write'), '15e: 財務部門預設規則 hq／fin／*／cashbook.write');
+
+  for (const act of READ) {
+    const a = sb.proxyAuthorize_(boss, 'cashbook', act);
+    ok(a.ok && a.secret === CB && a.isWrite === false && a.filterNode === null, '15f: admin ' + act + ' → 讀、給管理金鑰、不裁切', a);
+  }
+  const a0 = sb.proxyAuthorize_(boss, 'cashbook', 'adminList');
+  ok(a0.operator === '系統管理者（BOSS）（管理系統）', '15g: 操作人＝登入者姓名＋帳號（平台決定，呼叫端沒有地方可以帶）', a0.operator);
+  for (const act of WRITE) {
+    const w = sb.proxyAuthorize_(boss, 'cashbook', act);
+    ok(w.ok && w.isWrite === true && w.secret === CB && /（管理系統）$/.test(w.operator), '15h: admin ' + act + ' → 寫入、帶操作人', w);
+  }
+  for (const bad of ['adminSetPass', 'create', 'update', 'void', 'lock', 'unlock', 'bootstrap', 'list', 'pnlSummary', '']) {
+    ok(sb.proxyAuthorize_(boss, 'cashbook', bad).code === 'FORBIDDEN', '15i: 不在白名單的 action「' + bad + '」→ FORBIDDEN（門市通道動作、損益動作都不通）');
+  }
+
+  for (const [u, pw] of [['acc1', PW.acc], ['lead1', PW.lead], ['mgr1', PW.mgr], ['viewer1', PW.viewer]]) {
+    const t = tokenOf(sb, u, pw);
+    for (const act of ['adminList', 'adminVoid']) {
+      const r = sb.proxyAuthorize_(t, 'cashbook', act);
+      ok(r.ok === false && r.code === 'FORBIDDEN' && !hasCb(r), '15j: 沒有 cashbook.write 的 ' + u + ' ' + act + ' → FORBIDDEN、不含金鑰', r);
+    }
+  }
+  ok(sb.proxyAuthorize_('', 'cashbook', 'adminList').code === 'NO_TOKEN', '15k: 沒登入 → NO_TOKEN');
+  ok(sb.proxyAuthorize_('x.y.z', 'cashbook', 'adminList').code === 'BAD_TOKEN', '15k2: 假 token → BAD_TOKEN');
+
+  // 其他 ns 的 operator 行為不變：audit 不帶；cashbook 與 payroll 帶
+  ok(sb.proxyAuthorize_(boss, 'audit', 'getAll').operator === undefined, '15l: audit 仍不帶 operator');
+
+  // 過渡旗標打開也絕不下發收支管理金鑰
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '1');
+  const lg = post(sb, 'login', { username: 'BOSS', password: PW.boss });
+  ok(lg.ok && !hasCb(lg) && !hasCb(post(sb, 'me', {}, lg.data.token)), '15m: LEGACY_SECRETS=1 時 admin 的 login／me 仍不含收支管理金鑰', lg.data && lg.data.secrets);
+  ok(!('cashbook' in sb.pickSecrets_(['*'])) && !('cashbook' in sb.pickSecrets_(['cashbook.write'])), '15n: pickSecrets_ 永不含 cashbook');
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '');
+
+  // 同仁（PERMS_ON）：財務部門預設有；人資、營運沒有；個別例外給了就有；停用後立刻擋
+  const finStaff = mkStaff(sb, boss, '財務同仁甲', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' });
+  const finHead = mkStaff(sb, boss, '財務主管乙', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hm' });
+  const hrStaff = mkStaff(sb, boss, '人資同仁丙', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
+  const opsStaff = mkStaff(sb, boss, '營運同仁丁', { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs' });
+  const store = mkStaff(sb, boss, '店長戊', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '15 前置：permInit_');
+  turnOn(sb);
+  for (const who of [finStaff, finHead]) {
+    const r = sb.proxyAuthorize_(who.token, 'cashbook', 'adminVoid');
+    ok(r.ok && r.secret === CB && r.isWrite === true && r.filterNode === null, '15o: 財務部門同仁預設可寫（作廢）', r);
+  }
+  ok(/^財務同仁甲（DZY\d+）（管理系統）$/.test(sb.proxyAuthorize_(finStaff.token, 'cashbook', 'adminList').operator), '15p: 財務同仁的操作人是本人姓名＋工號');
+  for (const [label, who] of [['人資', hrStaff], ['營運', opsStaff], ['店長', store]]) {
+    const r = sb.proxyAuthorize_(who.token, 'cashbook', 'adminList');
+    ok(r.ok === false && r.code === 'FORBIDDEN' && !hasCb(r), '15q: ' + label + '同仁沒有收支管理 → FORBIDDEN', r);
+  }
+  const meFin = post(sb, 'me', {}, finStaff.token);
+  ok(meFin.ok && !hasCb(meFin) && meFin.data.perms.indexOf('cashbook.write') !== -1, '15r: 財務同仁 me 有 cashbook.write 但不含金鑰', meFin.data && meFin.data.perms);
+  sheets.perm_ex.appendRow(['X902', hrStaff.emp, 'cashbook.write', 'add', '', 'Eason 開', 'TRUE', '', 'u001', '', '']);
+  ok(sb.proxyAuthorize_(hrStaff.token, 'cashbook', 'adminLock').ok === true, '15s: 個別例外給了 cashbook.write 的人資同仁 → 可寫（S3 選 B 時就靠這個）');
+  sheets.perm_ex.appendRow(['X903', finStaff.emp, 'cashbook.write', 'remove', '', '調走收支', 'TRUE', '', 'u001', '', '']);
+  ok(sb.proxyAuthorize_(finStaff.token, 'cashbook', 'adminList').code === 'FORBIDDEN', '15t: 個別例外拿掉 cashbook.write → FORBIDDEN');
+  const rowIdx = sheets.users._rows().findIndex((r) => String(r[1]) === finHead.emp);
+  sheets.users.getRange(rowIdx + 1, 8).setValue('FALSE');
+  ok(sb.proxyAuthorize_(finHead.token, 'cashbook', 'adminList').code === 'BAD_TOKEN', '15u: 帳號停用後立刻 BAD_TOKEN');
+}
+
+// ============================================================
+// 16. 排班管理首頁待辦（2026-10-24，營運系統 hr-move-spec §5）：ns schedule／action schedAlerts
+//     與 attendance 同規則但權限改認 platform.sched（只給能排班的人；有 att 沒 sched → 403），subject＝DZY 編號，用 schedule/read 服務金鑰（與 attendance 的是兩列、同值）
+// ============================================================
+{
+  const SCH = 'FAKE-SCHED-ALERT-KEY-41';
+  const extra = { module_secrets: seed().module_secrets.concat([['schedule', 'read', SCH], ['attendance', 'read', 'FAKE-ATT-OTHER']]) };
+  const { sb, sheets } = fresh(extra);
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  sb.PropertiesService.getScriptProperties().setProperty('STORE_SSO_UNITS', 'mala-gf');
+
+  ok(JSON.stringify(sb.PROXY_READ_ACTIONS.schedule) === JSON.stringify(READ_ACTIONS.schedule) && READ_ACTIONS.schedule[0] === 'schedAlerts', '16a: schedule 讀清單兩邊（Auth.gs／dryrun.js）一致且含 schedAlerts', [sb.PROXY_READ_ACTIONS.schedule, READ_ACTIONS.schedule]);
+
+  const a = sb.proxyAuthorize_(boss, 'schedule', 'schedAlerts');
+  ok(a.ok === true && a.secret === SCH && a.filterNode === null && a.isWrite === false && a.subject === 'U:u001', '16b: admin → schedule 金鑰（不是 attendance 那列）、讀、subject＝U:<id>', a);
+  ok(sb.proxyAuthorize_(boss, 'schedule', 'schedSetSomething').code === 'FORBIDDEN', '16c: action 不是 schedAlerts（admin 也）→ FORBIDDEN');
+  ok(sb.proxyAuthorize_(boss, 'schedule', 'attAlerts').code === 'FORBIDDEN' && sb.proxyAuthorize_(boss, 'attendance', 'schedAlerts').code === 'FORBIDDEN', '16d: schedule／attendance 的 action 不能互換');
+
+  const sm = mkStaff(sb, boss, '排班店長', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
+  const r = sb.proxyAuthorize_(sm.token, 'schedule', 'schedAlerts');
+  ok(r.ok === true && r.secret === SCH && r.isWrite === false && r.subject === sm.emp && /^DZY\d+$/.test(String(r.subject)), '16e: 有 platform.sched 的店長 → subject＝DZY 編號', r);
+  ok(sb.proxyAuthorize_(sm.token, 'schedule', 'schedWrite').code === 'FORBIDDEN', '16f: 店長打非 schedAlerts → FORBIDDEN');
+  ok(JSON.stringify(post(sb, 'me', {}, sm.token)).indexOf(SCH) === -1, '16g: me 回應不含服務金鑰');
+
+  const pt = mkStaff(sb, boss, '排班計時', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+  ok(sb.proxyAuthorize_(pt.token, 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16h: 沒有 platform.sched 的計時同仁 → FORBIDDEN（403）');
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'acc1', PW.acc), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16i: 會計（無 platform.sched）→ FORBIDDEN');
+  sheets.roles.appendRow(['schrole', '假', 'schedule.read,schedule.write']);
+  sheets.users.appendRow(['u092', 'schx', '假', 'schrole', '', 's9', H('fake-schx-pw-01', 's9'), 'TRUE', '', '', '']);
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'schx', 'fake-schx-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16j: 只有 schedule.read 通用權限、沒有 platform.sched → FORBIDDEN');
+  sheets.roles.appendRow(['schsys', '假', 'platform.sched']);
+  sheets.users.appendRow(['u093', 'syssch', '假', 'schsys', '', 's9', H('fake-syssch-pw-01', 's9'), 'TRUE', '', '', '']);
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'syssch', 'fake-syssch-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16k: 有 platform.sched 但沒有 DZY 編號身分 → FORBIDDEN');
+
+  // 2026-10-25 起 platform.sched 含總部／品牌辦公室同仁：區督導（ladder office）也有；沒有 platform.sched 的（只有 platform.att 的帳號）仍 403
+  const osv = mkStaff(sb, boss, '排班督導', { brand: 'mala', unit: 'mala-hq', title: 'osv' });
+  // 還要有 hq 打卡對照（confirmed、roster_active 不是 FALSE）才有 platform.sched（2026-10-25 縮小範圍）
+  ok(sb.proxyAuthorize_(osv.token, 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16q0: 區督導沒有 hq 打卡對照 → 沒有 platform.sched → 403');
+  sb.clkSetup_(sb.SpreadsheetApp.getActive());
+  sheets.staff_clock.appendRow([osv.emp, 'hq', 'HQ' + osv.emp.slice(3), 'staff', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
+  ok(sb.proxyAuthorize_(osv.token, 'schedule', 'schedAlerts').code !== 'FORBIDDEN', '16q: 區督導（品牌辦公室，2026-10-25 起有 platform.sched）→ schedule 不再 403');
+  ok(sb.proxyAuthorize_(osv.token, 'attendance', 'attAlerts').code !== 'FORBIDDEN', '16r: 同一個人打 attendance 仍過（platform.att）');
+  ok(sb.proxyAuthorize_(sm.token, 'attendance', 'attAlerts').code !== 'FORBIDDEN', '16s: 店長 attendance 也過');
+  sheets.roles.appendRow(['attonly', '假', 'platform.att']);
+  sheets.users.appendRow(['u794', 'attonly', '假', 'attonly', '', 's9', H('fake-attonly-pw-01', 's9'), 'TRUE', '', '', '']);
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'attonly', 'fake-attonly-pw-01'), 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16t: roles 只給 platform.att 的帳號 → schedule 403（platform.att 不能頂替 platform.sched）');
+
+  // PERMS_ON 開：同 14n～14p
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '16l 前置：permInit_ 建表');
+  turnOn(sb);
+  const rOn = sb.proxyAuthorize_(sm.token, 'schedule', 'schedAlerts');
+  ok(rOn.ok === true && rOn.secret === SCH && rOn.subject === sm.emp, '16l: PERMS_ON 開 → 店長仍 ok、subject＝DZY 編號', rOn);
+  ok(sb.proxyAuthorize_(pt.token, 'schedule', 'schedAlerts').code === 'FORBIDDEN', '16m: PERMS_ON 開 → 計時同仁仍 FORBIDDEN');
+  ok(sb.proxyAuthorize_(boss, 'schedule', 'schedAlerts').subject === 'U:u001', '16n: PERMS_ON 開 → admin 仍 subject＝U:<id>');
+
+  const n = fresh();
+  ok(n.sb.proxyAuthorize_(tokenOf(n.sb, 'BOSS', PW.boss), 'schedule', 'schedAlerts').code === 'UNKNOWN_NS', '16o: module_secrets 沒有 schedule → UNKNOWN_NS');
+  const w = fresh({ module_secrets: seed().module_secrets.concat([['schedule', 'write', 'FAKE-ONLY-WRITE'], ['attendance', 'read', 'FAKE-ATT-OTHER']]) });
+  ok(w.sb.proxyAuthorize_(tokenOf(w.sb, 'BOSS', PW.boss), 'schedule', 'schedAlerts').code === 'NO_SECRET', '16p: 只有 schedule/write、沒有 read → NO_SECRET（不拿寫入碼、也不拿 attendance/read 頂替）');
+}
+
+// ============================================================
+// 17. pickSecrets_ 明文排除 attendance／schedule／payroll（2026-10-24 Fable 驗證 B：日後補 write 列也不准漏）
+// ============================================================
+{
+  const mk = (n) => 'FAKE-PICK-' + n;
+  const extra = { module_secrets: seed().module_secrets.concat([
+    ['attendance', 'read', mk('ATT-R')], ['attendance', 'write', mk('ATT-W')],
+    ['schedule', 'read', mk('SCH-R')], ['schedule', 'write', mk('SCH-W')],
+    ['payroll', 'read', mk('PAY-R')], ['payroll', 'write', mk('PAY-W')]
+  ]) };
+  const { sb } = fresh(extra);
+  const picked = sb.pickSecrets_(['*']);
+  ok(!('attendance' in picked) && !('schedule' in picked) && !('payroll' in picked), '17a: pickSecrets_([*]) 不含 attendance／schedule／payroll（連 write 列都有也不下發）', Object.keys(picked));
+  ok(Object.keys(picked).length > 0 && JSON.stringify(picked).indexOf('FAKE-PICK-') === -1, '17b: 其他後端（audit／dorm）照舊會有，且不含這三個的金鑰值', Object.keys(picked));
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '1');
+  const lg = post(sb, 'login', { username: 'BOSS', password: PW.boss });
+  const me = post(sb, 'me', {}, lg.data.token);
+  const noThree = (r) => { const t = JSON.stringify(r); const sec = (r.data && r.data.secrets) || {}; return t.indexOf('FAKE-PICK-') === -1 && !('attendance' in sec) && !('schedule' in sec) && !('payroll' in sec); };
+  ok(lg.ok && me.ok && noThree(lg) && noThree(me), '17c: LEGACY_SECRETS=1 的 admin login／me 不含 attendance、schedule、payroll 金鑰', lg.data && lg.data.secrets);
+  ok(lg.data.secrets !== undefined, '17d: 對照：LEGACY_SECRETS=1 的 admin 仍照舊有 secrets 物件（其他後端）');
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '');
 }
 
 if (failed > 0) {

@@ -24,8 +24,10 @@ export const MODULES = [
   { load: () => import('../modules/approvals/manifest.js') },
   { load: () => import('../modules/storeops/manifest.js') },
   { load: () => import('../modules/attendance/manifest.js') },
+  { load: () => import('../modules/schedule/manifest.js') },
   { load: () => import('../modules/payroll/manifest.js') },
   { load: () => import('../modules/eval/manifest.js') },
+  { load: () => import('../modules/cashbook/manifest.js') },
 ];
 
 /**

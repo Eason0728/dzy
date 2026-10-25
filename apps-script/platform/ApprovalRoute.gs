@@ -181,11 +181,13 @@ function apvDirectMembers_(of, ctx) {
   if (!of || !of.unit) return [];
   var need = stfReviewNeed_(ctx.org, of.unit, of.dept, of.title);
   if (!need) return [];
+  // 區域（docs/regions/spec.md 第 5 節 Q2）：店長的直屬主管跟認領同一套限區判斷；ctx 沒帶就讀一次（請求內快取）
+  var rctx = ctx.regionCtx !== undefined ? ctx.regionCtx : (typeof regionCtx_ === 'function' ? regionCtx_() : null);
   var out = [];
   for (var i = 0; i < ctx.people.length; i++) {
     var p = ctx.people[i];
     if (!p.opened || p.emp === of.emp || apvExcluded_(ctx, p.emp)) continue;
-    if (stfScopeMeets_(stfReviewScope_(p.values, ctx.org), need)) out.push(p);
+    if (stfScopeMeets_(stfReviewScope_(p.values, ctx.org), need, rctx)) out.push(p);
   }
   return out;
 }

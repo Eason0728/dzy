@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'StaffClock.gs', 'Perms.gs', 'PermActions.gs', 'StoreOps.gs', 'Code.gs']
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'StaffClock.gs', 'Perms.gs', 'PermActions.gs', 'StoreOps.gs', 'Code.gs']
   .map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'dzy-store-contract-v2.json'), 'utf8'));
 
@@ -131,7 +131,7 @@ const SVC = 'fake-store-svc-key-0001';
 const USERS_HEAD = ['id', 'username', 'name', 'role', 'node', 'salt', 'hash', 'active', 'created_at', 'last_login_at', 'token_after'];
 
 // 人：[emp, 姓名, unit, dept, title, status, hire, 打卡店, 打卡編號]
-const CLK = { '': 'gf', 'mzt-wx': 'gf', 'mzt-gf': 'mztgf', 'mzt-js': 'mztjs', 'mala-gf': 'gf', ck: 'cf', 'mzt-hq': 'hq', 'mala-hq': 'hq', 'dzy-hq': 'hq' };
+const CLK = { 'mzt-lzl': 'mztlzl', '': 'gf', 'mzt-wx': 'gf', 'mzt-gf': 'mztgf', 'mzt-js': 'mztjs', 'mala-gf': 'gf', ck: 'cf', 'mzt-hq': 'hq', 'mala-hq': 'hq', 'dzy-hq': 'hq' };
 const BIG = [
   ['DZY001', '店長一', 'mzt-gf', '', 'sm', 'active', '2026-01-05'],
   ['DZY002', '陳小明', 'mzt-gf', '', 'ft', 'active', '2026-02-01'],
@@ -223,14 +223,35 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   app.sheets.staff_clock._data.length = 1;
   app.sheets.staff_clock._data.push(['DZY023', 'mztgf', 'MZTGF03', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
   app.sheets.staff_clock._data.push(['DZY031', 'mztgf', 'MZTGF07', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app.sheets.staff_clock._data.push(['DZY023', 'hq', 'H001', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);   // 總部排班身分（ident.self）
   const fx = FIX.responses.ident_active.data;
   const got = app.ident('DZY023');
   const { pilot_units: fxPilot, ...fxRest } = fx;
   const { pilot_units: gotPilot, ...gotRest } = got;
-  ok(eq(gotRest, fxRest), '1 契約 ident_active：除了 pilot_units 外逐欄相同（含欄位順序、att.people）', { got: gotRest, want: fxRest });
+  ok(eq(gotRest, fxRest), '1 契約 ident_active：除了 pilot_units 外逐欄相同（含欄位順序、att.people、att.view_people＝[]）', { got: gotRest, want: fxRest });
   ok(eq(keysOf(got), keysOf(fx)), '1 契約 ident_active：欄位名與順序逐字相同');
   ok(Array.isArray(gotPilot) && eq(gotPilot, ['mzt-gf']), '1 契約 ident_active：pilot_units 是陣列（本情境試點＝mzt-gf）');
   ok(FIX.responses.ident_active.ok === true && eq(Object.keys(FIX.responses.ident_active), ['ok', 'data']), '1 契約信封 {ok:true,data}');
+
+  // 1a2. ident_osv_view：假督導（osv，REGIONS_ON=1、負責 A 區＝mzt-gf）逐欄相同（view_people 兩人、req_people 一位店長）
+  const cast2 = [
+    ['DZY061', '周督導', 'mzt-hq', '', 'osv', 'active', '2026-01-01'],
+    ['DZY023', '陳小明', 'mzt-gf', '', 'sm', 'active', '2026-03-01'],
+    ['DZY031', '李計時', 'mzt-gf', '', 'pt', 'active', '2026-05-01']
+  ];
+  const app2 = world(cast2, { pilot: 'mzt-gf,mzt-hq', admins: [['u_admin01', 'BOSS', '系統管理員']] });
+  app2.sheets.staff_clock._data.length = 1;
+  app2.sheets.staff_clock._data.push(['DZY061', 'hq', 'HQ01', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app2.sheets.staff_clock._data.push(['DZY023', 'mztgf', 'MZTGF03', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app2.sheets.staff_clock._data.push(['DZY031', 'mztgf', 'MZTGF07', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app2.props.REGIONS_ON = '1';
+  // 真資料：往 regions 分頁推一列 A 區（mzt-gf、督導 DZY061、active）；mock sandbox 的區域快取跨呼叫持久，改分頁後要 reset
+  app2.sheets.regions._data.push(['r-mzt-a', 'A區', 'mzt', 'mzt-gf', 'DZY061', 'TRUE', '2026-10-25 09:00:00', 'tester']);
+  app2.sb.regionCtxReset_();
+  const fxO = FIX.responses.ident_osv_view.data;
+  const gotO = app2.ident('DZY061');
+  ok(eq(gotO, fxO), '1 契約 ident_osv_view：整份逐欄相同（含 pilot_units、att.req_people、att.view_people）', { got: gotO, want: fxO });
+  ok(eq(keysOf(gotO), keysOf(fxO)) && FIX.responses.ident_osv_view.ok === true, '1 契約 ident_osv_view：欄位名與順序逐字相同');
 
   // 1b. admin 沒有同仁編號：整份逐欄相同（試點 mala-gf，那邊沒有人 → att.people 空）
   app.props.STORE_SSO_UNITS = 'mala-gf';
@@ -469,7 +490,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const g = (label, got, want) => ok(eq(got, want), label, { got, want });
   // 契約形狀：兩份名單同一種項目、各自排序
   const id1 = app.ident('DZY101');
-  ok(eq(Object.keys(id1.att), ['people', 'req_people']) && id1.att.req_people.every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name'])), '3b att 有 people 與 req_people，項目欄位相同');
+  ok(eq(Object.keys(id1.att), ['people', 'req_people', 'view_people']) && id1.att.req_people.every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name'])), '3b att 有 people 與 req_people，項目欄位相同');
   // 核定工時
   g('3b 工時：店長核本店所有打卡的人（計時、正職、區經理、自己）', H('DZY101'), ['DZY101', 'DZY102', 'DZY103', 'DZY104']);
   g('3b 工時：別店店長只核別店（不含甲店區經理）', H('DZY105'), ['DZY105', 'DZY106', 'DZY107']);
@@ -522,6 +543,122 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // 區督導有考勤管理選單
   const r = post(app.sb, 'login', { username: 'DZY121', password: PW });
   ok(r.ok && has(r.data.perms, 'platform.att'), '3b 區督導登入有 platform.att');
+})();
+
+
+// ============================================================
+// 3c. 督導／總監只看考勤名單 att.view_people（docs/att-view/spec.md；掛 REGIONS_ON）
+// ============================================================
+(() => {
+  const cast = [
+    ['DZY201', '督導甲', 'mzt-hq', '', 'osv', 'active', '2026-01-01'],
+    ['DZY202', '督導乙未劃區', 'mzt-hq', '', 'osv', 'active', '2026-01-01'],
+    ['DZY203', '總監甲', 'mzt-hq', '', 'odir', 'active', '2026-01-01'],
+    ['DZY204', '行政甲', 'mzt-hq', '', 'ofs', 'active', '2026-01-01'],
+    ['DZY210', 'A區店長1', 'mzt-gf', '', 'sm', 'active', '2026-01-01'],
+    ['DZY211', 'A區計時1', 'mzt-gf', '', 'pt', 'active', '2026-01-01'],
+    ['DZY212', 'A區店長2', 'mzt-js', '', 'sm', 'active', '2026-01-01'],
+    ['DZY213', 'A區正職2', 'mzt-js', '', 'ft', 'active', '2026-01-01'],
+    ['DZY220', 'B區店長', 'mzt-lzl', '', 'sm', 'active', '2026-01-01'],
+    ['DZY230', '別品牌店長', 'mala-gf', '', 'sm', 'active', '2026-01-01'],
+    ['DZY231', '別品牌督導', 'mala-hq', '', 'osv', 'active', '2026-01-01'],
+    ['DZY240', '央廚廠長', 'ck', '', 'fm', 'active', '2026-01-01'],
+    ['DZY250', '人資主管', 'dzy-hq', 'hr', 'hm', 'active', '2026-01-01'],
+    ['DZY251', '財務同仁', 'dzy-hq', 'fin', 'hs', 'active', '2026-01-01'],
+    ['DZY260', '停用督導', 'mzt-hq', '', 'osv', 'disabled', '2026-01-01']
+  ];
+  const mkIdx = (m) => {
+    const byRegion = { A: { stores: ['mzt-gf', 'mzt-js'] }, B: { stores: ['mzt-lzl'] } };
+    return { byRegion, bySupervisor: m };
+  };
+  const app = world(cast, { pilot: PERMS_ALL_PILOT + ',mzt-lzl' });
+  const V = (s) => app.ident(s).att.view_people.map((x) => x.sub).sort();
+  const g = (label, got, want) => ok(eq(got, want), label, { got, want });
+  const people = cast.map((c) => ({ emp: c[0], name: c[1], unit: c[2], dept: c[3], title: c[4], status: c[5] }));
+  const O = app.sb.stfReadOrg_();
+  ok(!!O, '3c 取得 org 物件');
+  const P = (e) => people.find((x) => x.emp === e);
+  const idxA = mkIdx({ DZY201: ['A'] });
+  g('3c units：督導甲負責 A 區 → 兩家店', app.sb.attViewUnitsOf_(P('DZY201'), O, idxA), ['mzt-gf', 'mzt-js']);
+  g('3c units：督導負責兩區 → 聯集排序去重', app.sb.attViewUnitsOf_(P('DZY201'), O, mkIdx({ DZY201: ['B', 'A', 'A'] })), ['mzt-gf', 'mzt-js', 'mzt-lzl']);
+  g('3c units：未劃區督導 → []', app.sb.attViewUnitsOf_(P('DZY202'), O, idxA), []);
+  g('3c units：regionIdx=null → []', app.sb.attViewUnitsOf_(P('DZY201'), O, null), []);
+  // 區域索引被污染：別品牌店、ck、品牌辦公室、停用店、不存在的店 → 全被濾掉，只剩同品牌 active 門市
+  const dirtyIdx = { byRegion: { A: { stores: ['mzt-gf', 'mala-gf', 'ck', 'mzt-hq', 'mzt-wx', 'no-such', ''] } }, bySupervisor: { DZY201: ['A'], DZY231: ['A'], DZY260: ['A'] } };
+  g('3c units：索引塞別品牌店／ck／品牌辦公室／停用店／不存在店 → 都被濾掉', app.sb.attViewUnitsOf_(P('DZY201'), O, dirtyIdx), ['mzt-gf']);
+  g('3c units：督導已調到別品牌辦公室但索引仍掛舊品牌區 → []', app.sb.attViewUnitsOf_(P('DZY231'), O, mkIdx({ DZY231: ['A', 'B'] })), []);
+  const dirUnits = app.sb.attViewUnitsOf_(P('DZY203'), O, null);
+  ok(dirUnits.indexOf('mzt-gf') !== -1 && dirUnits.indexOf('mzt-js') !== -1 && dirUnits.indexOf('mzt-lzl') !== -1 && dirUnits.every((u) => u.indexOf('mzt-') === 0 && u !== 'mzt-hq' && u !== 'mzt-wx'), '3c units：總監＝全品牌 active 門市，不含辦公室、停用店、別品牌、ck', { dirUnits });
+  g('3c units：一般同仁／店長 → []', [app.sb.attViewUnitsOf_(P('DZY210'), O, idxA), app.sb.attViewUnitsOf_(P('DZY211'), O, idxA), app.sb.attViewUnitsOf_(P('DZY250'), O, idxA)], [[], [], []]);
+  g('3c units：停用狀態 → []', app.sb.attViewUnitsOf_(P('DZY260'), O, mkIdx({ DZY260: ['A'] })), []);
+
+  // 沒有 regionIndexLive_、REGIONS_ON 未設／0 → 全空
+  g('3c 開關未設：督導 view_people=[]', V('DZY201'), []);
+  app.props.REGIONS_ON = '0';
+  app.sb.regionIndexLive_ = () => idxA;
+  g('3c 開關 0：督導／總監 view_people=[]', [V('DZY201'), V('DZY203')], [[], []]);
+  app.props.REGIONS_ON = '1';
+  g('3c 開關 1：督導甲＝A 區兩店需核工時的人（含店長），不含 B 區、辦公室、ck、總部、別品牌', V('DZY201'), ['DZY210', 'DZY211', 'DZY212', 'DZY213']);
+  g('3c 未劃區督導 → []', V('DZY202'), []);
+  app.sb.regionIndexLive_ = () => null;
+  g('3c regionIndexLive_ 回 null → []', V('DZY201'), []);
+  app.sb.regionIndexLive_ = () => { throw new Error('boom'); };
+  g('3c regionIndexLive_ 丟例外 → []（不拖垮 ident）', V('DZY201'), []);
+  delete app.sb.regionIndexLive_;
+  g('3c 沒有 regionIndexLive_（regions 未合併）→ 督導 []', V('DZY201'), []);
+  app.sb.regionIndexLive_ = () => idxA;
+  const dv = V('DZY203');
+  ok(has(dv, 'DZY210') && has(dv, 'DZY220') && !has(dv, 'DZY230') && !has(dv, 'DZY240') && !has(dv, 'DZY201') && !has(dv, 'DZY203') && !has(dv, 'DZY204'), '3c 總監＝全品牌門市（含 B 區店長）、不含別品牌、ck、辦公室、本人', { dv });
+  g('3c 別品牌督導未劃區 → []', V('DZY231'), []);
+  g('3c 一般同仁／店長 → []', [V('DZY210'), V('DZY211'), V('DZY240')], [[], [], []]);
+  g('3c 停用督導 → 停用', app.ident('DZY260').active, false);
+  g('3c admin／人資主管 view_people=[]', [app.ident('U:a001').att.view_people, V('DZY250')], [[], []]);
+  // 項目形狀與 people 相同、各自排序
+  const vp = app.ident('DZY201').att.view_people;
+  ok(vp.length === 4 && vp.every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name'])), '3c view_people 項目形狀同 people');
+
+  // 現有 people／req_people 不受影響：同一組資料，開關 0 與 1 逐欄相同
+  // （regions 設計下 REGIONS_ON=1 時督導的 req_people 本來就縮到該區，所以這裡只釘 people；req_people 另斷言）
+  const snap = () => cast.map((c) => { const i = app.ident(c[0]); return i.att ? JSON.stringify([i.att.people]) : ''; });
+  app.sheets.regions._data.push(['r-mzt-a', 'A區', 'mzt', 'mzt-gf,mzt-js', 'DZY201', 'TRUE', '2026-10-25 09:00:00', 'tester']);
+  app.props.REGIONS_ON = '0';
+  app.sb.regionCtxReset_();
+  const before = snap();
+  app.props.REGIONS_ON = '1';
+  app.sb.regionCtxReset_();
+  const after = snap();
+  ok(eq(before, after), '3c 開關 0／1：每個人的 people 完全相同');
+  const reqOf = (e) => app.ident(e).att.req_people.map((x) => x.sub).sort();
+  g('3c REGIONS_ON=1：督導甲 req_people 只剩 A 區店長（DZY210、DZY212），不含 B 區店長', reqOf('DZY201'), ['DZY210', 'DZY212']);
+
+  // 3d. 只看考勤的人也有排班管理選單（platform.sched，2026-10-25 Eason：總監唯讀看班表，跟只看考勤同一批）
+  //     先拿掉所有 hq 打卡對照（那條是總部自填排班的路），這裡只測「只看名單」這條新路
+  const row = (e) => staffRow(cast.find((c) => c[0] === e), 0);
+  const scd = app.sheets.staff_clock ? app.sheets.staff_clock._data : null;
+  if (scd) for (let i = scd.length - 1; i > 0; i--) if (scd[i][1] === 'hq') scd.splice(i, 1);
+  app.sb.regionIndexLive_ = () => idxA;
+  app.props.REGIONS_ON = '1';
+  app.sb.regionCtxReset_();
+  ok(app.sb.storeSchedGate_(row('DZY201')) === true, '3d 開關 1：負責 A 區的督導 → 有排班管理');
+  ok(app.sb.storeSchedGate_(row('DZY203')) === true, '3d 開關 1：品牌總監 → 有排班管理');
+  ok(app.sb.storeSchedGate_(row('DZY202')) === false, '3d 未劃區督導 → 沒有');
+  ok(app.sb.storeSchedGate_(row('DZY204')) === false, '3d 品牌辦公室行政（ofs，沒有 hq 對照）→ 沒有');
+  ok(app.sb.storeSchedGate_(row('DZY260')) === false, '3d 停用督導 → 沒有');
+  ok(app.sb.storeSchedGate_(row('DZY211')) === false && app.sb.storeSchedGate_(row('DZY251')) === false, '3d 計時同仁、財務同仁 → 沒有');
+  app.props.REGIONS_ON = '0';
+  app.sb.regionCtxReset_();
+  ok(app.sb.storeSchedGate_(row('DZY201')) === false && app.sb.storeSchedGate_(row('DZY203')) === false, '3d 開關 0：督導、總監都沒有（只看名單也是空的）');
+  app.props.REGIONS_ON = '1';
+  app.sb.regionIndexLive_ = () => { throw new Error('boom'); };
+  ok(app.sb.storeSchedGate_(row('DZY201')) === false && app.sb.storeSchedGate_(row('DZY203')) === true, '3d 區域索引壞掉：督導 false（不拖垮登入），總監照常');
+  app.sb.regionIndexLive_ = () => idxA;
+  // 選單與 ident 一致：gate 為真 ⇔ view_people 非空
+  ['DZY201', 'DZY202', 'DZY203', 'DZY204', 'DZY231'].forEach((e) => ok(app.sb.storeSchedViewGate_(row(e)) === (V(e).length > 0), '3d gate ⇔ view_people 非空：' + e, { gate: app.sb.storeSchedViewGate_(row(e)), view: V(e) }));
+  // 區內門市都不在試點 → 只看名單空 → 沒有選單（不會出現點進去是空的）
+  const pilotKeep = app.props.STORE_SSO_UNITS;
+  app.props.STORE_SSO_UNITS = 'mala-gf';
+  ok(app.sb.storeSchedViewGate_(row('DZY201')) === false && V('DZY201').length === 0, '3d 區內門市不在試點 → 督導沒有選單');
+  app.props.STORE_SSO_UNITS = pilotKeep;
 })();
 
 // ============================================================
@@ -651,11 +788,11 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const mapRows = old.sheets.perm_map._data;
   const r20 = mapRows.findIndex((r, i) => i > 0 && r[3] === 'sm' && r[4] === 'store.void');
   mapRows.splice(r20, 1);                                       // 模擬少了店長 store.void 那一條
-  ok(old.sb.permLoadTables_().rules.length === 25, '6 模擬正式環境：perm_map 少一條（新預設規則不會自動生效）');
+  ok(old.sb.permLoadTables_().rules.length === 26, '6 模擬正式環境：perm_map 少一條（新預設規則不會自動生效）');
   ok(eq(old.ident('DZY001').void_units, []), '6 正式環境未補規則前：店長沒有 store.void');
   ok(old.sb.storeopsPermSeed_({ role: 'staff', id: 'u1' }).error === 'no_perm', '6 補規則函式只有 admin');
   const sd = old.sb.storeopsPermSeed_({ role: 'admin', id: 'a001' });
-  ok(sd.ok && eq(sd.added, ['R027']) && old.sheets.perm_map._data.length === 27, '6 補預設規則：只補缺的一條，流水號接在最大號後', sd);
+  ok(sd.ok && eq(sd.added, ['R028']) && old.sheets.perm_map._data.length === 28, '6 補預設規則：只補缺的一條，流水號接在最大號後', sd);
   ok(eq(old.ident('DZY001').void_units, ['mzt-gf']), '6 補完後店長有 store.void');
   ok(eq(old.sb.storeopsPermSeed_({ role: 'admin', id: 'a001' }).added, []), '6 重跑不重複');
   old.sheets.perm_map._data.find((r, i) => i > 0 && r[3] === 'sm' && r[4] === 'store.void')[5] = 'FALSE';
@@ -729,6 +866,66 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
 })();
 
 // ============================================================
+// 7c. platform.sched 衍生權限（排班管理，2026-10-24 Eason：只給能排班的人）
+// ============================================================
+(() => {
+  const app = world(BIG);
+  const { sb } = app;
+  const perms = (u) => { const r = post(sb, 'login', { username: u, password: PW }); return r.ok ? r.data.perms : null; };
+  const att_has = (s2, u) => { const r = post(s2, 'login', { username: u, password: PW }); return r.ok && has(r.data.perms, 'platform.att'); };
+  const sched = (u) => { const p = perms(u); return !!p && has(p, 'platform.sched'); };
+  ok(sb.STORE_SCHED_GATE_TITLES.slice().sort().join() === 'am,fm,sm', '7c STORE_SCHED_GATE_TITLES＝sm／fm／am');
+  ok(sb.STORE_SCHED_GATE_LADDERS.slice().sort().join() === 'hq,office', '7c STORE_SCHED_GATE_LADDERS＝hq／office（2026-10-25 總部自填排班）');
+  ok(sched('DZY001') && sched('DZY004') && sched('DZY008') && sched('DZY042'), '7c 店長（sm）有 platform.sched');
+  ok(sched('DZY006'), '7c 廠長（fm）有');
+  ok(sched('DZY020'), '7c 人資主管有');
+  ok(sched('DZY010') && sched('DZY014'), '7c 品牌辦公室總監（odir，ladder office）有（2026-10-25 起）');
+  ok(sched('DZY012') && sched('DZY013') && sched('DZY015') && sched('DZY011'), '7c 品牌辦公室區督導（osv）、行政（ofs）、舊資料 oam 有');
+  ok(sched('DZY022'), '7c 非人資的部門主管（hm，ladder hq）有');
+  ok(sched('DZY025') && sched('DZY026') && sched('DZY027'), '7c ceo／gm／chair（ladder hq）有');
+  ok(sched('DZY021') && sched('DZY023') && sched('DZY024'), '7c 總部人資同仁、部門同仁、管理部同仁（hs）有');
+  ok(!sched('DZY002') && !sched('DZY003') && !sched('DZY007') && !sched('DZY005') && !sched('DZY041'), '7c 門市／央廚正職、計時（ladder store 非 sm／fm／am）沒有');
+  ok(sched('DZY001') && att_has(sb, 'DZY010') && sched('DZY010'), '7c 對照：總監兩個都有');
+  ok(perms('DZY030') === null, '7c 停用（離職）者登入被擋、拿不到');
+  ok(has(perms('BOSS'), '*'), '7c admin 靠 * 全過');
+  ok(!sched('DZY040'), '7c 有 att.extra 之前沒有');
+  post(sb, 'permExSave', { emp_no: 'DZY040', perm: 'att.extra', mode: 'add', until: '', note: '額外核定' }, app.adminTok);
+  ok(!sched('DZY040') && att_has(sb, 'DZY040'), '7c att.extra 例外不給 platform.sched（只給 platform.att）');
+  const me = post(sb, 'me', {}, app.login('DZY001'));
+  ok(me.ok && has(me.data.perms, 'platform.sched'), '7c me 也回 platform.sched', me.data && me.data.perms);
+  ok(!app.sheets.roles._rows().some((r) => String(r[2]).indexOf('platform.sched') !== -1), '7c platform.sched 沒有寫進 roles 分頁');
+  ok(typeof sb.storeSchedGate_ === 'function', '7c storeSchedGate_ 存在');
+  // 停用 → 閘門直接 false（不經登入）
+  const row = BIG.find((p) => p[0] === 'DZY001');
+  const dead = staffRow(['DZY001', row[1], row[2], row[3], 'sm', 'disabled', row[6]], 0);
+  ok(sb.storeSchedGate_(dead) === false && sb.storeSchedGate_(null) === false, '7c 停用的店長、空列 → false');
+  const hqRow = BIG.find((p) => p[0] === 'DZY023');
+  ok(sb.storeSchedGate_(staffRow(hqRow, 0)) === true, '7c 總部同仁（ladder hq）→ true');
+  ok(sb.storeSchedGate_(staffRow([hqRow[0], hqRow[1], hqRow[2], hqRow[3], hqRow[4], 'disabled', hqRow[6]], 0)) === false, '7c 停用的總部同仁 → false');
+  // 總部／辦公室同仁還要有 hq 打卡對照（confirmed、roster_active 不是 FALSE、store_code=hq），跟 ident.self 同一套
+  const scd = app.sheets.staff_clock._data;
+  const hqIdx = (e) => scd.findIndex((r, i) => i > 0 && r[0] === e && r[1] === 'hq');
+  const i23 = hqIdx('DZY023');
+  ok(i23 > 0 && sched('DZY023'), '7c 總部同仁有 hq 對照 → 有');
+  scd[i23][6] = 'FALSE';
+  ok(!sched('DZY023') && sb.storeSchedGate_(staffRow(hqRow, 0)) === false, '7c hq 對照 roster_active=FALSE → 沒有');
+  scd[i23][6] = ''; scd[i23][4] = 'pending';
+  ok(!sched('DZY023'), '7c hq 對照還沒確認（pending）→ 沒有');
+  scd[i23][4] = 'confirmed';
+  ok(sched('DZY023'), '7c 對照恢復 → 又有');
+  const keep = scd.splice(i23, 1)[0];
+  ok(!sched('DZY023'), '7c 完全沒有 hq 對照 → 沒有選單');
+  ok(sched('DZY001') && sched('DZY020'), '7c 店長、人資主管不受 hq 對照影響');
+  scd.splice(i23, 0, keep);
+  // 總開關空 → 沒有
+  app.props.STORE_SSO_UNITS = '';
+  ok(!sched('DZY001') && !sched('DZY020') && !sched('DZY006') && !sched('DZY023') && !sched('DZY010'), '7c 試點空：店長、人資主管、廠長、總部同仁、辦公室總監都沒有');
+  ok(has(perms('BOSS'), '*'), '7c 試點空：admin 仍是 *');
+  app.props.STORE_SSO_UNITS = 'mzt-gf';
+  ok(sched('DZY001'), '7c 試點開回來：店長又有');
+})();
+
+// ============================================================
 // 7c. 主店打卡推算（2026-10-18 Eason 選 A）：沒單位職稱的同仁，用 staff_clock 的主店（role=home）推算單位
 // ============================================================
 (() => {
@@ -791,6 +988,43 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const pp = [me, { emp: 'DZY103', status: 'unclaimed', unit: '', dept: '', title: '' }];
   ok(eq(app.sb.storeAttTargets_(me, { admin: true }, pp, org, home).map((x) => x.emp), ['DZY103']), '7c 不能核自己的規則照舊（推算的人也不含自己）');
   ok(app.sb.storeAttTargets_({ emp: 'DZY101', status: 'active', unit: 'mala-gf', dept: '', title: 'sm' }, {}, pp, org, null).length === 0, '7c 沒給 home 對照就不推算');
+})();
+
+// ============================================================
+// 7d. ident.self（總部排班身分，2026-10-25 docs/schedule-hq/spec.md §3.1）
+// ============================================================
+(() => {
+  const app = world(BIG, { pilot: 'mala-gf', admins: [['u_admin01', 'BOSS', '系統管理員']] });   // 試點只有 mala-gf：總部不在試點內，self 也要照給
+  const sc = app.sheets.staff_clock._data;
+  sc.length = 1;
+  const row = (emp, store, id, role, state, active) => sc.push([emp, store, id, role, state, 'created', active, '', '', '', '']);
+  row('DZY023', 'hq', 'H023', 'staff', 'confirmed', 'TRUE');     // 部門同仁
+  row('DZY022', 'hq', 'H022', 'staff', 'confirmed', 'TRUE');     // 部門總監（hm）
+  row('DZY025', 'hq', 'H025', 'staff', 'confirmed', 'TRUE');     // 執行長
+  row('DZY024', 'hq', 'H024', 'home', 'confirmed', 'TRUE');      // 管理部同仁（role home 也算）
+  row('DZY021', 'hq', 'H021', 'staff', 'pending', 'TRUE');       // 未確認 → 不列
+  row('DZY015', 'hq', 'H015', 'staff', 'confirmed', 'FALSE');    // roster_active FALSE → 不列
+  row('DZY013', 'hq', 'H013', 'staff', 'confirmed', 'TRUE');     // 品牌辦公室行政
+  row('DZY013', 'hq', 'H013', 'staff', 'confirmed', 'TRUE');     // 重複列只算一筆
+  row('DZY001', 'mztgf', 'MZTGF01', 'staff', 'confirmed', 'TRUE');   // 只有門市打卡 → []
+  row('DZY020', 'hq', 'H020', 'staff', 'confirmed', 'TRUE');     // 人資主管
+  row('DZY020', 'hq', 'H020B', 'staff', 'confirmed', 'TRUE');
+  row('DZY020', 'gf', 'G020', 'staff', 'confirmed', 'TRUE');     // 非 hq 的對照不列
+  const self = (sub) => app.ident(sub).self;
+  ok(eq(self('DZY023'), [{ clock: 'hq', emp_id: 'H023', approval: true }]), '7d 部門同仁：self 一筆、approval true（同部門總監核）', self('DZY023'));
+  ok(eq(self('DZY022'), [{ clock: 'hq', emp_id: 'H022', approval: false }]), '7d 部門總監：approval false（考勤沒人核他）', self('DZY022'));
+  ok(eq(self('DZY025'), [{ clock: 'hq', emp_id: 'H025', approval: false }]), '7d 執行長：approval false', self('DZY025'));
+  ok(eq(self('DZY024'), [{ clock: 'hq', emp_id: 'H024', approval: true }]), '7d 管理部同仁（role home）：approval true（執行長以上核）', self('DZY024'));
+  ok(eq(self('DZY013'), [{ clock: 'hq', emp_id: 'H013', approval: true }]), '7d 品牌辦公室行政：approval true；重複對照只算一筆', self('DZY013'));
+  ok(eq(self('DZY021'), []), '7d 未確認（state≠confirmed）的對照不列');
+  ok(eq(self('DZY015'), []), '7d roster_active＝FALSE 的對照不列');
+  ok(eq(self('DZY001'), []), '7d 只有門市打卡、沒有 hq 對照 → []');
+  ok(eq(self('DZY020'), [{ clock: 'hq', emp_id: 'H020', approval: false }, { clock: 'hq', emp_id: 'H020B', approval: false }]), '7d 人資主管（hm）approval false；多筆 hq 依 emp_id 排序、非 hq（gf）不列', self('DZY020'));
+  ok(eq(self('U:u_admin01'), []), '7d admin 沒有同仁編號 → []');
+  ok(Array.isArray(app.ident('DZY023').self) && keysOf(app.ident('DZY023')).slice(-2).join() === 'att,self', '7d self 是 ident 最後一個欄位（att 之後）');
+  // 沒有任何同仁用打卡資料時（打卡分頁沒建）不炸
+  const sbNoClk = world(BIG, { pilot: 'mala-gf' });
+  ok(Array.isArray(sbNoClk.ident('DZY023').self), '7d 沒有任何對照列 → self 仍是陣列');
 })();
 
 // ============================================================

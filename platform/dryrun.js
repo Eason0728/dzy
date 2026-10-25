@@ -26,6 +26,10 @@ export const READ_ACTIONS = {
     'permMapGet', 'permExList', 'permStoreGet', 'myPerms', 'permAuditList', 'permWho',
     // 第三期表單簽核（2026-10-18）：純讀取；apvSubmit／apvResubmit／apvWithdraw／apvDecide／apvSign／apvHandle／apvReassign／apvVoid／apvThresholdSave 不列（寫入，試跑會攔）
     'apvThresholdGet', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta',
+    // 區域（2026-10-25，docs/regions/spec.md 第 9 節）：純讀取；regionSave（preview:false）／regionSwitch 不列（寫入，試跑會攔）
+    'regionList', 'regionCheck',
+    // LINE 認身分（2026-10-25）：同仁名單顯示最近 LINE 紀錄的純讀取；lineRevoke（寫入）不列，試跑會攔
+    'lineAuthLog',
     // 績效評核（2026-10-26，docs/eval/plan.md）：純讀取；evSetup／evPeerSubmit／evSelfSubmit／evNewbieSubmit／evSupSave／ev*Save／evFinalize／evUnfinalize／evImportCommit 不列
     // evImportPreview 只比對姓名、不寫資料
     'evMe', 'evMyScores', 'evNewbieList', 'evUnitResults', 'evPersonDetail', 'evBankGet', 'evImportPreview'],
@@ -34,7 +38,13 @@ export const READ_ACTIONS = {
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）
   payroll: ['payroll_month', 'payroll_get', 'payroll_group', 'payroll_trend', 'payroll_inputs', 'payroll_punch',
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
-    'payroll_attendance_export']
+    'payroll_attendance_export'],
+  // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：必須與 Auth.gs PROXY_READ_ACTIONS.attendance 一致；只回件數的純讀取
+  attendance: ['attAlerts'],
+  // 收支管理（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.cashbook 一致（test/proxy-authorize.test.mjs 比對）
+  cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet'],
+  // 排班管理首頁待辦（2026-10-24，hr-move-spec §5）：必須與 Auth.gs PROXY_READ_ACTIONS.schedule 一致；只回店名與期別的純讀取
+  schedule: ['schedAlerts']
 };
 
 /**
@@ -45,7 +55,8 @@ export const WRITE_ACTIONS = {
   audit: ['submitAudit', 'markRest', 'submitOpsAudit', 'addStore', 'setStoreStatus', 'renameStore'],
   dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign'],
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
-    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set']
+    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
+  cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock']
 };
 
 export const DRYRUN_MESSAGE = '試跑模式，未寫入';
@@ -85,6 +96,9 @@ export function isReadAction(backendId, action, payload) {
   // 2026-10-23 新增品牌發展部同一套：dryrun:true 預覽放行；dryrun:false 與 orgAddBranddevRollback202610 仍攔
   if (backendId === 'platform' && action === 'orgAddBranddev202610'
     && payload && payload.dryrun === true) return true;
+  // 區域存檔先 preview（只回差異、後端在寫入前就 return）視為讀取；真的存檔仍攔
+  if (backendId === 'platform' && action === 'regionSave'
+    && payload && payload.preview === true) return true;
   // 復職先 preview（只回舊對照清單、後端在寫入前就 return）視為讀取
   if (backendId === 'platform' && action === 'staffReinstate'
     && payload && payload.preview === true) return true;

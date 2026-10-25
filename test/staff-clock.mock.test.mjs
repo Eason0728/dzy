@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'StaffClock.gs', 'Perms.gs', 'PermActions.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'StaffClock.gs', 'Perms.gs', 'PermActions.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 
 let passed = 0;
 let failed = 0;
@@ -207,14 +207,14 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const { sb, sheets } = app;
   sb.setupStaff(); sb.setupStaff();
   ok(sheets.clock_stores._rows()[0].join() === 'store_code,store_name,unit_code,enabled,payroll_store', 'B1 clock_stores 表頭逐字（含 payroll_store）');
-  ok(sheets.staff_clock._rows()[0].join() === 'emp_no,store_code,emp_id,role,state,source,roster_active,last_punch,confirmed_by,confirmed_at,updated_at', 'B1 staff_clock 表頭逐字（spec §2.3）');
+  ok(sheets.staff_clock._rows()[0].join() === 'emp_no,store_code,emp_id,role,state,source,roster_active,last_punch,confirmed_by,confirmed_at,updated_at,line_h,line_kid,line_bound_at,line_ok_at', 'B1 staff_clock 表頭逐字（spec §2.3＋LINE 認身分四欄）');
   ok(sheets.clock_outbox._rows()[0].join() === 'job_id,kind,emp_no,store_code,emp_id,name,op_id,expect_json,state,tries,next_at,lease_until,last_error,created_at,updated_at,done_at', 'B1 clock_outbox 表頭逐字（spec §2.4 v2）');
   const stores = sheets.clock_stores._rows().slice(1);
   ok(stores.length === 6 && stores.map((r) => r[0]).join() === 'gf,mztjs,mztgf,mztlzl,hq,cf', 'B1 預設六列、store_code 照契約', stores);
   ok(stores.map((r) => r[2]).join('|') === 'mala-gf|mzt-js|mzt-gf|mzt-lzl|dzy-hq,mzt-hq,mala-hq,yiwu-hq|ck', 'B1 unit_code 依 org 預設單位對上（hq 一列放四個總部與品牌辦公室單位）', stores.map((r) => r[2]));
   ok(stores.every((r) => String(r[3]) === 'TRUE'), 'B1 預設全部啟用');
   const head = sheets.staff._rows()[0];
-  ok(head.length === 27 && head[24] === 'hire_date' && head[25] === 'last_day' && head[26] === 'extra_depts', 'B1 staff 右側補 hire_date、last_day、extra_depts');
+  ok(head.length === 28 && head[24] === 'hire_date' && head[25] === 'last_day' && head[26] === 'extra_depts' && head[27] === 'line_revoked_at', 'B1 staff 右側補 hire_date、last_day、extra_depts、line_revoked_at');
   ok(head.slice(0, 24).join() === sb.STF_HEADERS.join(), 'B1 staff 原 24 欄不變');
   // 只補不覆蓋
   sheets.clock_stores._data[1][3] = 'FALSE';
@@ -227,7 +227,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   old.sheets.staff._data[0].length = 24;          // 模擬舊版 24 欄表頭
   ['clock_stores', 'staff_clock', 'clock_outbox'].forEach((n) => delete old.sheets[n]);
   old.sb.setupStaff();
-  ok(old.sheets.staff._rows()[0].length === 27 && old.sheets.clock_outbox && old.sheets.clock_stores._rows().length === 7, 'B1 舊試算表（24 欄、無新分頁）跑 setupStaff 後補齊');
+  ok(old.sheets.staff._rows()[0].length === 28 && old.sheets.clock_outbox && old.sheets.clock_stores._rows().length === 7, 'B1 舊試算表（24 欄、無新分頁）跑 setupStaff 後補齊');
   // unit_code 查不到 → 留空（org 預設少了央廚單位時）
   const noCk = load(freshSeed(HASHER));
   noCk.sb.STF_DEFAULT_ORG = noCk.sb.STF_DEFAULT_ORG.filter((r) => !(r[0] === 'unit' && r[1] === 'ck'));
@@ -861,6 +861,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const px = dir.data.find((p) => p.emp_no === x.emp);
   ok(Array.isArray(dir.data) && px.name === '連同仁甲' && px.unit === 'mzt-gf' && px.active === true && px.clocks.map((c) => c.store_code + ':' + c.emp_id + ':' + c.role).sort().join() === 'mztgf:LX1:home,mztjs:LX2:support', 'B8 ★回 [{emp_no,name,unit,active,clocks:[{store_code,emp_id,role}]}]', px);
   ok(dir.data.find((p) => p.emp_no === nm.emp).clocks.length === 0, 'B8 ★只含 confirmed 對照（suggested／rejected 不給）');
+  ok(px.title === 'pt' && dir.data.find((p) => p.emp_no === mgrGF.emp).title === 'sm', 'B8 ★回職稱代碼 title（佈告欄依職稱決定看得到哪些品牌，2026-10-25）', px);
   const dirText = JSON.stringify(dir);
   ok(dirText.indexOf('0911222333') === -1 && dirText.indexOf('1995-05-05') === -1 && dirText.indexOf('測試路') === -1 && !/phone|birthday|address|password|hash|salt/.test(dirText), 'B8 ★svcDirectory 無手機、生日、地址（欄位與值都沒有）');
   post(sb, 'staffSetActive', { emp_no: x.emp, active: false }, tok);
