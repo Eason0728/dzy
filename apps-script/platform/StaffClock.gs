@@ -22,11 +22,14 @@ var CLK_SHEET_OUTBOX = 'clock_outbox';
 
 var CLK_STORES_HEADERS = ['store_code', 'store_name', 'unit_code', 'enabled', 'payroll_store'];
 var CLK_NAME_MAX = 20;   // 會進打卡的姓名上限（與打卡端 svc_add／mgr_add_employee 一致）
-var CLK_MAP_HEADERS = ['emp_no', 'store_code', 'emp_id', 'role', 'state', 'source', 'roster_active',
+var CLK_MAP_BASE = ['emp_no', 'store_code', 'emp_id', 'role', 'state', 'source', 'roster_active',
   'last_punch', 'confirmed_by', 'confirmed_at', 'updated_at'];
+// LINE 認身分（docs/line-auth/spec.md §3）：每晚由 svc_roster 同步進來；舊分頁表頭缺這四欄時由 clkEnsureMapExtra_ 自動補
+var CLK_MAP_LINE = ['line_h', 'line_kid', 'line_bound_at', 'line_ok_at'];
+var CLK_MAP_HEADERS = CLK_MAP_BASE.concat(CLK_MAP_LINE);
 var CLK_OUTBOX_HEADERS = ['job_id', 'kind', 'emp_no', 'store_code', 'emp_id', 'name', 'op_id', 'expect_json',
   'state', 'tries', 'next_at', 'lease_until', 'last_error', 'created_at', 'updated_at', 'done_at'];
-var CLK_STAFF_EXTRA = ['hire_date', 'last_day', 'extra_depts'];   // extra_depts＝兼任部門（組織改版 T2，Staff.gs 讀寫）；舊表只有前兩欄時自動補第三欄
+var CLK_STAFF_EXTRA = ['hire_date', 'last_day', 'extra_depts', 'line_revoked_at'];   // extra_depts＝兼任部門（組織改版 T2，Staff.gs 讀寫）；line_revoked_at＝人資停用 LINE 開通／重設的時間（毫秒，LineAuth.gs 讀寫）；舊表缺尾端欄時自動補
 
 // 預設六列：[store_code, store_name, [[品牌代碼, 單位名稱]…], payroll_store]；unit_code 由 STF_DEFAULT_ORG 依品牌＋單位名稱查（多個單位以逗號串起來），查不到的留空。
 // payroll_store＝薪資模組自己的門市代碼（SSLGF＝打卡 Payroll.gs PAY_DEFAULT_STORE；CF／HQ／MZTJS／MZTLZL 見 mala-clock-in、mala-payroll skill 的薪酬門市表紀錄）；
@@ -197,7 +200,23 @@ function clkDefaultStoreRows_() {
   });
 }
 
-/** staff 右側補 hire_date、last_day：兩格都空才寫表頭；已經一模一樣就略過；其他內容停下回錯 */
+/**
+ * 表頭尾端補欄共用：start＝起始欄號（1-based），want＝完整表頭。
+ * 已填的部分必須是 want 的前綴、其後全空才補（minFilled＝已填欄數至少要幾欄，0＝全空也可）；其他內容丟錯停下，免得資料錯位。
+ */
+function clkFillTailHeaders_(sh, start, want, minFilled, label) {
+  var cur = sh.getRange(1, start, 1, want.length).getValues()[0].map(function (v) { return String(v).trim(); });
+  var k = 0;
+  while (k < cur.length && cur[k] !== '') k++;
+  var tailEmpty = cur.slice(k).every(function (v) { return v === ''; });
+  var prefixOk = cur.slice(0, k).join('|') === want.slice(0, k).join('|');
+  if (!prefixOk || !tailEmpty || (k > 0 && k < minFilled)) {
+    throw new Error('分頁「' + label + '」右側的表頭與程式不一致，停止初始化以免資料錯位：' + cur.join(','));
+  }
+  if (k < want.length) sh.getRange(1, start + k, 1, want.length - k).setValues([want.slice(k)]);
+}
+
+/** staff 右側補 hire_date、last_day、extra_depts、line_revoked_at：空的或只缺尾端才補；已經一模一樣就略過；其他內容停下回錯 */
 function clkEnsureStaffExtra_(ss) {
   var sh = ss.getSheetByName(STF_SHEET);
   if (!sh) return;
@@ -206,16 +225,20 @@ function clkEnsureStaffExtra_(ss) {
   if (typeof sh.getMaxColumns === 'function' && sh.getMaxColumns() < need && typeof sh.insertColumnsAfter === 'function') {
     sh.insertColumnsAfter(sh.getMaxColumns(), need - sh.getMaxColumns());
   }
-  var cur = sh.getRange(1, start, 1, CLK_STAFF_EXTRA.length).getValues()[0].map(function (v) { return String(v).trim(); });
-  var empty = cur.every(function (v) { return v === ''; });
-  var full = cur.join('|') === CLK_STAFF_EXTRA.join('|');
-  // 舊表：只有 hire_date、last_day、第三格空白 → 只補第三個表頭
-  var legacy = cur[0] === CLK_STAFF_EXTRA[0] && cur[1] === CLK_STAFF_EXTRA[1] && cur.slice(2).every(function (v) { return v === ''; });
-  if (!empty && !full && !legacy) {
-    throw new Error('分頁「staff」右側的表頭與程式不一致，停止初始化以免資料錯位：' + cur.join(','));
+  clkFillTailHeaders_(sh, start, CLK_STAFF_EXTRA, 2, STF_SHEET);
+}
+
+/** staff_clock 尾端補 line_h、line_kid、line_bound_at、line_ok_at（前 11 欄必須是舊表頭才動；空表交給 stfEnsureSheet_） */
+function clkEnsureMapExtra_(ss) {
+  var sh = ss.getSheetByName(CLK_SHEET_MAP);
+  if (!sh) return;
+  var n = CLK_MAP_HEADERS.length;
+  var base = sh.getRange(1, 1, 1, CLK_MAP_BASE.length).getValues()[0].map(function (v) { return String(v).trim(); });
+  if (base.join('|') !== CLK_MAP_BASE.join('|')) return;   // 空表或不一致：交給 stfEnsureSheet_ 處理
+  if (typeof sh.getMaxColumns === 'function' && sh.getMaxColumns() < n && typeof sh.insertColumnsAfter === 'function') {
+    sh.insertColumnsAfter(sh.getMaxColumns(), n - sh.getMaxColumns());
   }
-  if (empty) sh.getRange(1, start, 1, CLK_STAFF_EXTRA.length).setValues([CLK_STAFF_EXTRA.slice()]);
-  else if (legacy && !full) sh.getRange(1, start + 2, 1, CLK_STAFF_EXTRA.length - 2).setValues([CLK_STAFF_EXTRA.slice(2)]);
+  clkFillTailHeaders_(sh, CLK_MAP_BASE.length + 1, CLK_MAP_LINE, 0, CLK_SHEET_MAP);
 }
 
 /** 由 setupStaff 呼叫（只補不覆蓋；表頭不一致丟錯停下） */
@@ -241,6 +264,7 @@ function clkEnsureStoresExtra_(ss) {
 
 function clkSetup_(ss) {
   clkEnsureStoresExtra_(ss);
+  clkEnsureMapExtra_(ss);
   stfEnsureSheet_(ss, CLK_SHEET_STORES, CLK_STORES_HEADERS, clkDefaultStoreRows_());
   stfEnsureSheet_(ss, CLK_SHEET_MAP, CLK_MAP_HEADERS, []);
   stfEnsureSheet_(ss, CLK_SHEET_OUTBOX, CLK_OUTBOX_HEADERS, []);
@@ -276,7 +300,7 @@ function clkHeaderProblem_() {
     var cur = sh.getRange(1, 1, 1, checks[i][1].length).getValues()[0].map(function (v) { return String(v).trim(); });
     if (cur.join('|') !== checks[i][1].join('|')) return '分頁「' + checks[i][0] + '」的表頭與程式不一致：' + cur.join(',');
   }
-  if (!clkStaffExtraReady_()) return '分頁「staff」右側缺 hire_date、last_day、extra_depts 表頭';
+  if (!clkStaffExtraReady_()) return '分頁「staff」右側缺 hire_date、last_day、extra_depts、line_revoked_at 表頭';
   return clkUnitConflict_() ? ('clock_stores 設定衝突：' + clkUnitConflict_()) : '';
 }
 
@@ -567,6 +591,7 @@ function clkDisableStaff_(s, by, detail, d) {
     setTokenAfter_(userRow.row);
   }
   stfWriteRow_(STF_SHEET, s.row, v, STF_COL_COUNT);
+  if (typeof lineAutoRevoke_ === 'function') lineAutoRevoke_(s.row);   // 停用＝LINE 開通／重設也收回（LineAuth.gs；失敗不擋停用）
   stfLog_(s.emp, 'disable', by, detail || '');
   if (typeof permAuditDisabled_ === 'function') permAuditDisabled_(by, v);   // 離職停用收回的權限留一筆異動紀錄
   return userRow ? { ok: true } : { ok: true, warn: 'user_missing' };
@@ -1471,6 +1496,32 @@ function clkFail_(j, code, message, retryable, d) {
 
 // ---- 名冊同步 ----
 
+/** 把 svc_roster 列的 LINE 四鍵寫進對照列 m（舊版名冊沒有這些鍵＝寫空字串）。回 true＝有變動 */
+/** 時間值（Date 或字串）→ 毫秒；空或不是時間 → NaN（本檔自帶，舊測試沙盒不一定載入 LineAuth.gs） */
+function clkLineMs_(x) {
+  if (x instanceof Date) return x.getTime();
+  var t = stfStr_(x);
+  return t ? Date.parse(t) : NaN;
+}
+
+function clkApplyLineCols_(m, r) {
+  var changed = false;
+  CLK_MAP_LINE.forEach(function (k) {
+    var v = stfStr_(r && r[k]);
+    var cur = m[k];
+    var same;
+    if (k === 'line_bound_at' || k === 'line_ok_at') {
+      // 試算表可能把時間字串轉成 Date：兩邊都轉毫秒比（同一時刻不重寫）；都不是時間才退回字串比對
+      var a = clkLineMs_(cur), b = clkLineMs_(v);
+      same = (isFinite(a) && isFinite(b)) ? a === b : stfStr_(cur) === v;
+    } else {
+      same = stfStr_(cur) === v;
+    }
+    if (!same) { m[k] = v; changed = true; }
+  });
+  return changed;
+}
+
 function clkSyncState_(store) { return clkGetState_(CLK_PROP_SYNC_PREFIX + store, { at: '', unmapped: [], name_diff: [], payroll_diff: [] }); }
 
 /**
@@ -1513,6 +1564,7 @@ function clockRosterApply_(store_code, rows, payrollNames, now) {
         var ra = clkBoolText_(active);
         if (m.roster_active !== ra) { m.roster_active = ra; changed = true; }
         if (punch && m.last_punch !== punch) { m.last_punch = punch; changed = true; }
+        if (clkApplyLineCols_(m, r)) changed = true;
         // 首次支援被 B 店主管移除：DZY 仍在職 → rejected，之後不再自動加回
         if (!active && m.state === 'confirmed' && m.source === 'auto_support' && s && clkStaffStatus_(s) !== 'disabled' && !s.last) {
           m.state = 'rejected'; changed = true; summary.rejected++;
@@ -1538,7 +1590,7 @@ function clockRosterApply_(store_code, rows, payrollNames, now) {
           return;
         }
         var nm = clkNewMap_(src.emp_no, store, eid, 'support', 'confirmed', 'auto_support', true, by, d);
-        nm.last_punch = punch; clkSave_(CLK_SHEET_MAP, CLK_MAP_HEADERS, nm);
+        nm.last_punch = punch; clkApplyLineCols_(nm, r); clkSave_(CLK_SHEET_MAP, CLK_MAP_HEADERS, nm);
         maps.push(nm);
         summary.created++;
         return;

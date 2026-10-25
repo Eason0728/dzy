@@ -27,7 +27,9 @@ export const READ_ACTIONS = {
     // 第三期表單簽核（2026-10-18）：純讀取；apvSubmit／apvResubmit／apvWithdraw／apvDecide／apvSign／apvHandle／apvReassign／apvVoid／apvThresholdSave 不列（寫入，試跑會攔）
     'apvThresholdGet', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta',
     // 區域（2026-10-25，docs/regions/spec.md 第 9 節）：純讀取；regionSave（preview:false）／regionSwitch 不列（寫入，試跑會攔）
-    'regionList', 'regionCheck'],
+    'regionList', 'regionCheck',
+    // LINE 認身分（2026-10-25）：同仁名單顯示最近 LINE 紀錄的純讀取；lineRevoke（寫入）不列，試跑會攔
+    'lineAuthLog'],
   audit: ['getAll'],
   dorm: ['rooms', 'list', 'contract', 'handover'],
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）

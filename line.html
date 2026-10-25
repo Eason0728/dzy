@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="robots" content="noindex">
+  <script>
+  // 防 clickjacking：被嵌進 iframe 時跳出框架（LIFF 是整頁開啟，不是 iframe）
+  if (top !== self) { document.documentElement.style.display = 'none'; try { top.location = self.location; } catch (e) {} }
+</script>
+  <title>用 LINE 認身分｜鼎兆元管理系統</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="platform/css/tokens.css">
+  <link rel="stylesheet" href="platform/css/base.css">
+  <link rel="stylesheet" href="platform/css/components.css">
+</head>
+<body>
+  <!--
+    LINE 重設密碼的 LIFF 小頁面（docs/line-auth/spec.md §6）。登入前、不進殼；
+    畫面全部由 platform/views/line-auth.js 產生（textContent，不用 innerHTML）。
+    LIFF endpoint＝https://dzy.mozhuting.com/line.html；入口是登入頁的按鈕（連 liff.line.me/<LIFF ID>?m=reset）。
+  -->
+  <div class="login-bg" data-hero="mala" id="line-bg">
+    <div class="login-blur" aria-hidden="true"></div>
+    <div class="login-card"><div class="login-card-form"><div id="line-app"></div></div></div>
+  </div>
+  <noscript>
+    <p style="padding:1rem">這個頁面需要 JavaScript 才能運作，請開啟後重新整理。</p>
+  </noscript>
+  <script>
+  (function () { var k = ['mala', 'mzt', 'yakiniku']; document.getElementById('line-bg').setAttribute('data-hero', k[Math.floor(Math.random() * k.length)]); })();
+</script>
+  <script type="module">
+    import { boot } from './platform/views/line-auth.js';
+    boot();
+  </script>
+</body>
+</html>

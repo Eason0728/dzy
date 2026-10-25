@@ -618,37 +618,21 @@ function stfCleanProfile_(payload, org, needPrivate) {
   return err ? { error: err } : { clean: v };
 }
 
-function handleClaimSubmit_(payload) {
-  payload = payload || {};
-  // 長度先擋（2026-10-12）：在碰全域額度 cache、讀名單之前
-  if (stfTooLong_(payload.name, STF_MAX.name) || stfTooLong_(payload.emp_no, STF_MAX.emp_no)) {
-    return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
-  }
-  if (stfTooLong_(payload.password, STF_MAX.password)) return { ok: false, error: STF_MSG.PW_TOO_LONG };
-  if (stfTooLong_(payload.phone, STF_MAX.phone)) return { ok: false, error: '手機要是 09 開頭的 10 碼數字' };
-  if (stfTooLong_(payload.birthday, STF_MAX.birthday)) return { ok: false, error: '生日格式要是 YYYY-MM-DD' };
-  if (stfTooLong_(payload.address, STF_MAX.address)) return { ok: false, error: '居住地址請填 5～100 個字' };
-  if (STF_ORG_FIELDS.some(function (f) { return stfTooLong_(payload[f], STF_MAX.org); })) {
-    return { ok: false, error: '請選擇品牌' };
-  }
-  var name = stfStr_(payload.name);
-  var empNo = stfNormEmp_(payload.emp_no);
-  if (!name || !STF_EMP_RE.test(empNo)) return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
-  if (stfGlobalFlood_('submit')) return { ok: false, error: STF_MSG.TOO_MANY };
-  var password = payload.password === undefined || payload.password === null ? '' : String(payload.password);
-
-  var hits = stfUnclaimedByName_(name);
-  if (hits.length !== 1 || stfNormEmp_(hits[0].values[STF_COL.emp_no]) !== empNo) {
-    return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
-  }
+/**
+ * 認領寫入共用（handleClaimSubmit_ 與 LineAuth.gs lineAuthClaim_）：驗密碼與組織／個資 → staff 寫 p_*、個資、claimed_at、status pending → users 寫 salt/hash → staff_log。
+ * 呼叫端先確認 hit 是這位 unclaimed 同仁。input 取 password、brand、unit、dept、title、phone、address、birthday。
+ * actor＝{ event, by }（staff_log 的事件與操作者）。回 {ok:false, error} 或 {ok:true, emp_no}；驗證失敗時什麼都沒寫。
+ */
+function stfClaimWrite_(hit, input, actor) {
+  var empNo = stfNormEmp_(hit.values[STF_COL.emp_no]);
+  var password = input.password === undefined || input.password === null ? '' : String(input.password);
   var pwErr = stfValidatePassword_(password, empNo);
   if (pwErr) return { ok: false, error: pwErr };
   var org = stfReadOrg_();
-  var res = stfCleanProfile_(payload, org, true);
+  var res = stfCleanProfile_(input, org, true);
   if (res.error) return { ok: false, error: res.error };
   var c = res.clean;
 
-  var hit = hits[0];
   var userRow = findUsrRowById_(stfStr_(hit.values[STF_COL.user_id]));
   if (!userRow) return { ok: false, error: STF_MSG.NOT_FOUND };
 
@@ -669,7 +653,35 @@ function handleClaimSubmit_(payload) {
   // users：設密碼（active 維持 TRUE）
   var salt = Utilities.getUuid();
   stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.salt + 1, 1, 2).setValues([[salt, hashPassword_(password, salt)]]);
-  stfLog_(empNo, 'claim', 'self', '');
+  stfLog_(empNo, actor.event, actor.by, '');
+  return { ok: true, emp_no: empNo };
+}
+
+function handleClaimSubmit_(payload) {
+  payload = payload || {};
+  // 長度先擋（2026-10-12）：在碰全域額度 cache、讀名單之前
+  if (stfTooLong_(payload.name, STF_MAX.name) || stfTooLong_(payload.emp_no, STF_MAX.emp_no)) {
+    return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
+  }
+  if (stfTooLong_(payload.password, STF_MAX.password)) return { ok: false, error: STF_MSG.PW_TOO_LONG };
+  if (stfTooLong_(payload.phone, STF_MAX.phone)) return { ok: false, error: '手機要是 09 開頭的 10 碼數字' };
+  if (stfTooLong_(payload.birthday, STF_MAX.birthday)) return { ok: false, error: '生日格式要是 YYYY-MM-DD' };
+  if (stfTooLong_(payload.address, STF_MAX.address)) return { ok: false, error: '居住地址請填 5～100 個字' };
+  if (STF_ORG_FIELDS.some(function (f) { return stfTooLong_(payload[f], STF_MAX.org); })) {
+    return { ok: false, error: '請選擇品牌' };
+  }
+  var name = stfStr_(payload.name);
+  var empNo = stfNormEmp_(payload.emp_no);
+  if (!name || !STF_EMP_RE.test(empNo)) return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
+  if (stfGlobalFlood_('submit')) return { ok: false, error: STF_MSG.TOO_MANY };
+
+  var hits = stfUnclaimedByName_(name);
+  if (hits.length !== 1 || stfNormEmp_(hits[0].values[STF_COL.emp_no]) !== empNo) {
+    return { ok: false, error: STF_MSG.CLAIM_MISMATCH };
+  }
+  var hit = hits[0];
+  var wrote = stfClaimWrite_(hit, payload, { event: 'claim', by: 'self' });
+  if (!wrote.ok) return wrote;
 
   // 2026-10-12 Eason：認領只是核對編號，送出後要等單位主管審核通過才開通——不回 token、不自動登入。
   // 回傳同時放頂層 pending 與 data.pending（平台 spec §4.8 形狀是 {ok,data}）
@@ -1129,6 +1141,7 @@ function handleUnitReject_(token, payload) {
   if (!t.ok) return t;
   var err = stfRejectClaim_(t.v, reason);
   if (err) return { ok: false, error: err };
+  if (typeof lineAutoRevoke_ === 'function') lineAutoRevoke_(t.hit.row);   // 退回認領＝LINE 開通／重設一併收回（LineAuth.gs）
   t.v[STF_COL.updated_at] = stfNowText_();
   stfWriteRow_(STF_SHEET, t.hit.row, t.v, STF_COL_COUNT);
   stfLog_(t.emp, 'reject', t.rv.user.id, 'unit_review');
@@ -1325,6 +1338,7 @@ function handleStaffReject_(token, payload) {
     // 不再停在 rejected（rejected 登不進去，也不能再認領，會卡死）
     var rjErr = stfRejectClaim_(t.v, reason);
     if (rjErr) return { ok: false, error: rjErr };
+    if (typeof lineAutoRevoke_ === 'function') lineAutoRevoke_(t.hit.row);   // 撤回認領＝LINE 開通／重設一併收回（LineAuth.gs）
     return stfSave_(t, 'reject', '');
   } else if (t.status === 'active' && hasP) {
     STF_ORG_FIELDS.forEach(function (f) { t.v[STF_COL['p_' + f]] = ''; });
@@ -1356,6 +1370,7 @@ function handleStaffSetActive_(token, payload) {
     stfSetBulletinAdmin_(t.emp, false);   // 停用收回公告管理權限（復職要重新勾；審查 #44-10）
     usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('FALSE');
     setTokenAfter_(userRow.row);
+    if (typeof lineAutoRevoke_ === 'function') lineAutoRevoke_(t.hit.row);   // 停用＝LINE 開通／重設一併收回（LineAuth.gs）
     var saved = stfSave_(t, 'disable', '');
     if (typeof permAuditDisabled_ === 'function') permAuditDisabled_(t.auth.user.id, t.v);   // 停用收回的權限留一筆異動紀錄
     // 員工名單統一：舊「停用」按鈕只停平台帳號——同時對他每個打卡對照發停用單（StaffClock.gs）
@@ -1381,6 +1396,7 @@ function handleStaffUnclaim_(token, payload) {
   stfSheet_(USR_SHEET_USERS).getRange(userRow.row, USR_COL.salt + 1, 1, 2).setValues([['', '']]);
   setTokenAfter_(userRow.row);
   stfClearClaim_(t.v);
+  if (typeof lineAutoRevoke_ === 'function') lineAutoRevoke_(t.hit.row);   // 撤回認領＝LINE 開通／重設一併收回（LineAuth.gs）
   return stfSave_(t, 'unclaim', '');
 }
 

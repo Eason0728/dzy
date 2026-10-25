@@ -34,6 +34,7 @@ import { loading, toast } from '../ui.js';
 import { esc } from '../fmt.js';
 import { renderClaim } from './claim.js';
 import { renderForgot } from './forgot.js';
+import { lineLoginLinks } from './line-auth.js';
 
 /** 連續失敗幾次後，前端先擋一段冷卻時間才讓使用者再送出（純體驗節流，見檔頭說明） */
 // Eason 2026-08-14 指定：連續輸入錯誤三次之後才擋。與後端 Auth.gs 的
@@ -102,6 +103,14 @@ function renderMode(el, app) {
   return function unmount() {};
 }
 
+/** 「用 LINE 重設密碼」連結（platform/config.js 的 LINE_LIFF_ID 空＝不顯示；網址只含公開的 LIFF ID） */
+function lineLinksHtml() {
+  const links = lineLoginLinks();
+  if (!links.length) return '';
+  return `<div class="login-links" data-role="line-links">${links.map((l) =>
+    `<a href="${esc(l.href)}" data-role="line-${esc(l.mode)}">${esc(l.label)}</a>`).join('')}</div>`;
+}
+
 function renderLoginForm(el, app) {
   const hero = pickHero();
   el.innerHTML = `
@@ -136,6 +145,7 @@ function renderLoginForm(el, app) {
           <a href="#/claim" data-role="to-claim">第一次使用</a>
           <a href="#/forgot" data-role="to-forgot">忘記密碼</a>
         </div>
+        ${lineLinksHtml()}
       </div>
         </div>
       </div>
