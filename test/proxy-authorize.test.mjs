@@ -762,6 +762,58 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '');
 }
 
+// ============================================================
+// 18. 損益系統（2026-10-24）：pnl.read／pnl.write／pnl.admin、等級由平台算、金鑰只在代轉時給
+// ============================================================
+{
+  const PNLK = 'FAKE-PNL-DZY-KEY-77';
+  const extra = { module_secrets: seed().module_secrets.concat([['pnl', 'read', PNLK], ['pnl', 'write', PNLK]]) };
+  const { sb, sheets } = fresh(extra);
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  const hasK = (o) => JSON.stringify(o).indexOf(PNLK) !== -1;
+
+  ok(JSON.stringify(sb.PROXY_READ_ACTIONS.pnl) === JSON.stringify(READ_ACTIONS.pnl), '18a: pnl 讀清單兩邊（Auth.gs／dryrun.js）一致');
+  ok(JSON.stringify(sb.PROXY_WRITE_ACTIONS.pnl) === JSON.stringify(WRITE_ACTIONS.pnl), '18b: pnl 寫入清單兩邊一致');
+  ok(['pnl.read', 'pnl.write', 'pnl.admin'].every((c) => sb.PERM_GRANTABLE.indexOf(c) !== -1), '18c: 三碼都可給');
+  ok(sb.PERM_LOCKED.indexOf('pnl.admin') !== -1 && sb.PERM_LOCKED.indexOf('pnl.write') === -1 && sb.PERM_LOCKED.indexOf('pnl.read') === -1, '18d: 只有 pnl.admin 是鎖碼（Q1 改判：財務部門自動有＝不鎖）');
+
+  const a = sb.proxyAuthorize_(boss, 'pnl', 'getSettings');
+  ok(a.ok && a.secret === PNLK && a.isWrite === false && a.level === 'admin' && a.account === 'BOSS' && a.operator === '系統管理者（BOSS）（管理系統）', '18e: admin（*）讀 → level admin、帶帳號與操作人', a);
+  ok(sb.proxyAuthorize_(boss, 'pnl', 'finalize').isWrite === true, '18f: finalize 是寫入');
+  for (const bad of ['login', 'createInvite', 'logout', 'changeMyPasscode', 'revokeSessions', 'dzyProxy', 'listInvites']) {
+    ok(sb.proxyAuthorize_(boss, 'pnl', bad).code === 'FORBIDDEN', '18g: 不代轉的 ' + bad + ' → FORBIDDEN');
+  }
+  ok(!('pnl' in sb.pickSecrets_(['*'])), '18h: pickSecrets_ 永不含 pnl');
+  ok(sb.proxyAuthorize_(boss, 'audit', 'getAll').level === undefined, '18i: 其他系統不帶 level');
+  ok(sb.proxyPnlLevel_(['pnl.read']) === 'read' && sb.proxyPnlLevel_(['pnl.read', 'pnl.write']) === 'write' && sb.proxyPnlLevel_(['pnl.read', 'pnl.admin']) === 'admin' && sb.proxyPnlLevel_([]) === '', '18j: 等級＝最高者');
+
+  for (const [u, pw] of [['acc1', PW.acc], ['lead1', PW.lead], ['mgr1', PW.mgr], ['viewer1', PW.viewer]]) {
+    const r = sb.proxyAuthorize_(tokenOf(sb, u, pw), 'pnl', 'getMonth');
+    ok(r.ok === false && r.code === 'FORBIDDEN' && !hasK(r), '18k: 沒有損益權限的 ' + u + ' → FORBIDDEN、不含金鑰', r);
+  }
+
+  // 同仁（PERMS_ON）：財務部門走 perm_map（Eason 在權限設定開），其他人走個別例外
+  const fin = mkStaff(sb, boss, '財務同仁甲', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' });
+  const ops = mkStaff(sb, boss, '營運同仁乙', { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs' });
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '18 前置：permInit_');
+  turnOn(sb);
+  // 財務部門預設有 pnl.write（PERM_DEFAULT_RULES；Eason：財務四模組都「財務部門自動有」）
+  const f = sb.proxyAuthorize_(fin.token, 'pnl', 'addEntry');
+  ok(f.ok && f.isWrite === true && f.level === 'write' && /財務同仁甲（DZY\d+）（管理系統）/.test(f.operator), '18m: 財務部門預設有 pnl.write → 可寫、level write、操作人是本人', f);
+  ok(sb.proxyAuthorize_(ops.token, 'pnl', 'getMonth').code === 'FORBIDDEN', '18n: 別部門仍 FORBIDDEN');
+  sheets.perm_ex.appendRow(['X911', ops.emp, 'pnl.read', 'add', '', 'Eason 開', 'TRUE', '', 'u001', '', '']);
+  const o = sb.proxyAuthorize_(ops.token, 'pnl', 'getMonth');
+  ok(o.ok && o.level === 'read' && o.secret === PNLK, '18o: 個別例外給 pnl.read → 可讀、level read', o);
+  ok(sb.proxyAuthorize_(ops.token, 'pnl', 'addEntry').code === 'FORBIDDEN', '18p: 只有看的人寫入 → FORBIDDEN');
+  for (const adm of ['finalize', 'unlock', 'saveSettings', 'createDraft', 'refreshConnectors', 'refreshFixed', 'loadGroupUnits']) {
+    ok(sb.proxyAuthorize_(fin.token, 'pnl', adm).code === 'FORBIDDEN', '18p2: 只有 pnl.write 打「管」級 ' + adm + ' → 平台就擋');
+  }
+  ok(/^DZY\d+$/.test(f.account), '18m2: 同仁的 account＝同仁編號', f.account);
+  sheets.perm_ex.appendRow(['X912', fin.emp, 'pnl.admin', 'add', '', 'Eason 開', 'TRUE', '', 'u001', '', '']);
+  const fa = sb.proxyAuthorize_(fin.token, 'pnl', 'saveSettings');
+  ok(fa.ok && fa.level === 'admin' && fa.isWrite === true, '18q: 再給 pnl.admin → level admin', fa);
+}
+
 if (failed > 0) {
   console.error('\n' + failed + ' 項測試失敗（共 ' + (passed + failed) + ' 項）');
   process.exit(1);

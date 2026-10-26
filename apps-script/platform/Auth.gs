@@ -324,6 +324,7 @@ function pickSecrets_(perms) {
     if (backendId === 'payroll') return;
     // 收支管理金鑰（2026-10-24）同理：會計級通道，絕不下發到瀏覽器
     if (backendId === 'cashbook') return;
+    if (backendId === 'pnl') return;   // 損益系統（2026-10-24）：只在代轉時給
     // 考勤／排班（2026-10-24）：只走代轉的首頁待辦，金鑰同樣絕不下發到瀏覽器（日後補 write 列也一樣）
     if (backendId === 'attendance' || backendId === 'schedule') return;
     var s = pickSecretFor_(perms, backendId, byBackend);
@@ -353,7 +354,9 @@ var PROXY_READ_ACTIONS = {
   // 收支管理（2026-10-24，Mac mini 現金帳伺服器的管理代轉通道）：只有 cashbook.write，讀寫都要它；分讀寫只為了試跑模式能照常讀
   cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet'],
   // 排班管理首頁待辦（2026-10-24，營運系統 docs/autoschedule/hr-move-spec.md §5）：與 platform/dryrun.js READ_ACTIONS.schedule 一致
-  schedule: ['schedAlerts']
+  schedule: ['schedAlerts'],
+  // 損益系統（2026-10-24，損益 Apps Script 的 dzyProxy 入口；損益後端 gas/dzyProxy.js DZY_PROXY_ACTIONS_ 另有一份第二道白名單）
+  pnl: ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment']
 };
 
 /**
@@ -368,7 +371,10 @@ var PROXY_WRITE_ACTIONS = {
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
     'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
   // 收支管理：不含改通行碼（adminSave 帶 newStorePass／newAdminPass 由 mini 現金帳伺服器拒絕）
-  cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock']
+  cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock'],
+  // 損益系統：「管」級動作另由 PROXY_PNL_ADMIN_ACTIONS 要求 pnl.admin，損益後端也依角色擋
+  pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
+    'refreshConnectors', 'refreshFixed', 'loadGroupUnits']
 };
 
 /**
@@ -405,6 +411,11 @@ function proxyAuthorize_(token, ns, action) {
 
   // 2／4. 授權
   var perms = sess.perms;
+  if (ns === 'pnl') {
+    perms = proxyPnlPerms_(perms);
+    // 「管」級動作平台也要求 pnl.admin（2026-10-24 Fable 審查建議 8：不只靠損益後端擋）
+    if (PROXY_PNL_ADMIN_ACTIONS.indexOf(action) !== -1 && !hasPerm_(perms, 'pnl.admin')) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+  }
 
   // 考勤管理首頁待辦（2026-10-24，考勤管理首頁待辦，營運系統 spec §17.5）：
   // 只認 platform.att（含衍生；admin 的 * 也算），action 只有 attAlerts（上面已把非讀取清單的擋成 FORBIDDEN）。
@@ -436,7 +447,7 @@ function proxyAuthorize_(token, ns, action) {
     }
     var sSecret = proxyPickSecret_(perms, ns, byBackend);
     if (!sSecret) return { ok: false, code: 'NO_SECRET', error: '這個系統尚未設定通行碼，請聯絡管理者' };
-    return proxyWithOperator_({ ok: true, secret: sSecret, filterNode: sNode, isWrite: isWrite }, ns, sess.user);
+    return proxyWithOperator_({ ok: true, secret: sSecret, filterNode: sNode, isWrite: isWrite }, ns, sess.user, perms);
   }
 
   var canWrite = hasPerm_(perms, ns + '.write');
@@ -453,7 +464,7 @@ function proxyAuthorize_(token, ns, action) {
   // 6. 店長裁切：沒有 <ns>.read 但有 <ns>.read.own → 只給自己節點（.write 不豁免）；'' ＝沒節點→空列
   var filterNode = (!canRead && canOwn) ? String(sess.user.node || '') : null;
 
-  return proxyWithOperator_({ ok: true, secret: secret, filterNode: filterNode, isWrite: isWrite }, ns, sess.user);
+  return proxyWithOperator_({ ok: true, secret: secret, filterNode: filterNode, isWrite: isWrite }, ns, sess.user, perms);
 }
 
 /**
@@ -461,12 +472,32 @@ function proxyAuthorize_(token, ns, action) {
  * 代轉時由平台依登入身分決定、mini 的 proxy-hook.js 一律覆寫上游 body.operator，瀏覽器送什麼都不採信。
  * 其他 ns 不加（舊後端不認這個欄位）。
  */
-function proxyWithOperator_(res, ns, user) {
-  if (ns !== 'payroll' && ns !== 'cashbook') return res;
+function proxyWithOperator_(res, ns, user, perms) {
+  if (ns !== 'payroll' && ns !== 'cashbook' && ns !== 'pnl') return res;
   var name = String((user && user.name) || '').trim();
   var uname = String((user && user.username) || '').trim();
   res.operator = (name || uname || '未知') + (uname ? '（' + uname + '）' : '') + '（管理系統）';
+  // 損益系統（2026-10-24）：level 決定損益影子帳號的角色；影子帳號鍵用 account（登入帳號本身），不從 operator 反解（Fable 審查必修 1）
+  if (ns === 'pnl') { res.level = proxyPnlLevel_(perms); res.account = uname; }
   return res;
+}
+
+/** 損益系統「管」級動作（定稿、解除定稿、設定、建草稿、重拉連接器、重帶固定值、載入集團單位） */
+var PROXY_PNL_ADMIN_ACTIONS = ['finalize', 'unlock', 'saveSettings', 'createDraft', 'refreshConnectors', 'refreshFixed', 'loadGroupUnits'];
+
+/** 損益系統：pnl.admin 隱含 pnl.write（讀寫閘門與挑金鑰沿用 <ns>.write／<ns>.read 的既有規則） */
+function proxyPnlPerms_(perms) {
+  var p = Array.isArray(perms) ? perms.slice() : [];
+  if (hasPerm_(p, 'pnl.admin') && !hasPerm_(p, 'pnl.write')) p.push('pnl.write');
+  return p;
+}
+
+/** 損益系統等級＝三碼中最高者；都沒有回 '' */
+function proxyPnlLevel_(perms) {
+  if (hasPerm_(perms, 'pnl.admin')) return 'admin';
+  if (hasPerm_(perms, 'pnl.write')) return 'write';
+  if (hasPerm_(perms, 'pnl.read')) return 'read';
+  return '';
 }
 
 // ============================================================

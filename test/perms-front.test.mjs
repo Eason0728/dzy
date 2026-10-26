@@ -41,11 +41,11 @@ const RULES = [
   { rule_id: 'R007', ladder: 'hq', dept: '', title: 'ceo', perm: 'audit.read' },
   { rule_id: 'R002', ladder: 'office', dept: '', title: 'osv', perm: 'audit.read.brand' }
 ];
-const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write'] }, ORG);
+const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin'] }, ORG);
 
-t('對照表 15 列、順序固定（2026-10-26 加公告管理）（不跟後端 grantable 順序）', () => {
+t('對照表 18 列、順序固定（2026-10-26 加公告管理）（不跟後端 grantable 順序）', () => {
   const rows = L.featureRows(DATA);
-  assert.equal(rows.length, 15);
+  assert.equal(rows.length, 18);
   assert.equal(rows[13].perm, 'platform.bulletin');
   assert.equal(rows[13].name, '公告管理');
   assert.deepEqual(rows.map((r) => r.perm), L.FEATURE_ORDER);
@@ -58,7 +58,7 @@ t('對照表 15 列、順序固定（2026-10-26 加公告管理）（不跟後�
 });
 t('鎖住的兩列', () => {
   const locked = L.featureRows(DATA).filter((r) => r.locked).map((r) => r.perm);
-  assert.deepEqual(locked.slice().sort(), ['audit.write', 'payroll.write', 'platform.permmap', 'platform.staff', 'platform.users']);
+  assert.deepEqual(locked.slice().sort(), ['audit.write', 'payroll.write', 'platform.permmap', 'platform.staff', 'platform.users', 'pnl.admin']);
 });
 t('同一列的 chip 依階梯→部門排', () => {
   const r = L.featureRows(DATA).find((x) => x.perm === 'audit.read');

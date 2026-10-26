@@ -28,6 +28,7 @@ export const MODULES = [
   { load: () => import('../modules/payroll/manifest.js') },
   { load: () => import('../modules/purchase/manifest.js') },
   { load: () => import('../modules/cashbook/manifest.js') },
+  { load: () => import('../modules/pnl/manifest.js') },   // 財務部門：損益系統（排在貨單核對、收支管理、調撥管理之後）
 ];
 
 /**
