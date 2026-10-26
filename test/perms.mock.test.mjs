@@ -111,12 +111,12 @@ function run(staff, extra) {
 const has = (res, p) => res.perms.indexOf(p) !== -1;
 
 // ===== T1-1 =====
-ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase']), 'PERM_GRANTABLE 與契約一致（含營運系統新增的 store.void、att.extra，薪酬系統 payroll.write，收支管理 cashbook.write，2026-10-26 加公告管理 platform.bulletin 共 14 碼）');
-ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write']), 'PERM_LOCKED 與契約一致（六碼，2026-10-19 加薪酬系統、2026-10-25 加收支管理；2026-10-26 公告管理不鎖）');
+ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin']), 'PERM_GRANTABLE 與契約一致（含營運系統新增的 store.void、att.extra，薪酬系統 payroll.write，收支管理 cashbook.write，2026-10-26 加公告管理 platform.bulletin 共 14 碼）');
+ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write', 'pnl.admin']), 'PERM_LOCKED 與契約一致（六碼，2026-10-19 加薪酬系統、2026-10-25 加收支管理；2026-10-26 公告管理不鎖）');
 ok(P.PERM_LOCKED.indexOf('platform.bulletin') === -1 && P.PERM_GRANTABLE.indexOf('platform.bulletin') !== -1, '公告管理可給、不在鎖碼（人資主管可在個別例外給）');
-ok(r0.ok === true && r0.rules_seeded === 34 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋33 條規則＋5 筆對照（2026-10-20 加 am／fm／rdd 六條、10-24 加收支管理、10-26 加公告管理六條）', r0);
+ok(r0.ok === true && r0.rules_seeded === 35 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋33 條規則＋5 筆對照（2026-10-20 加 am／fm／rdd 六條、10-24 加收支管理、10-26 加公告管理六條）', r0);
 ok(eq(r0.created, ['perm_map', 'perm_ex', 'perm_store_map', 'perm_audit']), '四張分頁都建出來', r0.created);
-ok(RULES.length === 34 && RULES[0].rule_id === 'R001' && RULES[19].rule_id === 'R020' && RULES[19].perm === 'store.void' && RULES[32].rule_id === 'R033', '規則編號 R001..R033（R020＝店長 store.void，既有編號不變）', [RULES[0], RULES[19], RULES[32]]);
+ok(RULES.length === 35 && RULES[0].rule_id === 'R001' && RULES[19].rule_id === 'R020' && RULES[19].perm === 'store.void' && RULES[32].rule_id === 'R033', '規則編號 R001..R033（R020＝店長 store.void，既有編號不變）', [RULES[0], RULES[19], RULES[32]]);
 // 2026-10-26：R028–R033 公告管理預設規則（總監 hm 不分部門、辦公室 odir、廚藝總監 rdd、執行長／總經理／董事長）
 ok(eq(RULES.slice(27, 33).map((r) => [r.rule_id, r.ladder, r.dept, r.title, r.perm]), [
   ['R028', 'hq', '', 'hm', 'platform.bulletin'], ['R029', 'office', '', 'odir', 'platform.bulletin'], ['R030', 'store', '', 'rdd', 'platform.bulletin'],
@@ -132,7 +132,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
 {
   const again = dbInit.sb.permInit_({ role: 'admin', id: 'boss' });
   ok(again.ok && again.rules_seeded === 0 && again.stores_seeded === 0 && again.created.length === 0, '重跑不重複建、不重複寫', again);
-  ok(dbInit.sheets.perm_map._data.length === 35 && dbInit.sheets.perm_store_map._data.length === 6, '重跑後列數不變（34+表頭、5+表頭）');
+  ok(dbInit.sheets.perm_map._data.length === 36 && dbInit.sheets.perm_store_map._data.length === 6, '重跑後列數不變（35+表頭、5+表頭）');
 }
 {
   const d = load({});
@@ -154,7 +154,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
   d.sheets.perm_map._data.push(['R020', 'store', '', 'ft', 'dorm.read', 'FALSE', '', '']);
   d.sheets.perm_ex._data.push(['X001', 'dzy001', 'dorm.read', 'ADD', new Date(Date.UTC(2026, 9, 31, 15, 59, 59)), 'x', true, '', '', '', '']);
   const t = d.sb.permLoadTables_();
-  ok(t.rules.length === 34, 'permLoadTables_ 只取 active=TRUE 的規則', t.rules.length);
+  ok(t.rules.length === 35, 'permLoadTables_ 只取 active=TRUE 的規則', t.rules.length);
   ok(t.exs.length === 1 && t.exs[0].emp_no === 'DZY001' && t.exs[0].mode === 'add' && t.exs[0].until === '2026-10-31', '例外：布林 TRUE、Date 物件正規化、大小寫', t.exs[0]);
 }
 {
@@ -198,7 +198,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
 // ===== 總部 =====
 {
   const cases = [
-    ['ops', 'hs', ['audit.read']], ['mgmt', 'hs', ['audit.read', 'audit.write']], ['fin', 'hm', ['audit.read', 'audit.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase']],
+    ['ops', 'hs', ['audit.read']], ['mgmt', 'hs', ['audit.read', 'audit.write']], ['fin', 'hm', ['audit.read', 'audit.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.write']],
     ['hr', 'hs', ['dorm.read', 'dorm.write', 'platform.staff']], ['hr', 'hm', ['dorm.read', 'dorm.write', 'platform.bulletin', 'platform.permmap', 'platform.staff']]
   ];
   for (const [dept, title, expect] of cases) {
@@ -223,7 +223,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
 // ===== 兼任 =====
 {
   const r = run({ brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs', extra_depts: ['fin'] });
-  ok(eq(r.perms, ['audit.read', 'audit.write', 'cashbook.write', 'platform.purchase']) && r.auditScope === 'all', '主部門 ops 兼 fin → 有 audit.write、貨單核對', r);
+  ok(eq(r.perms, ['audit.read', 'audit.write', 'cashbook.write', 'platform.purchase', 'pnl.write']) && r.auditScope === 'all', '主部門 ops 兼 fin → 有 audit.write、貨單核對', r);
   const s = r.sources.find((x) => x.perm === 'audit.write');
   ok(s.source === 'dept' && s.rule_id, 'audit.write 來源是部門', s);
   const r2 = run({ brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs', extra_depts: ['', 'hr'] });
