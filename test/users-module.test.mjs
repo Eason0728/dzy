@@ -496,6 +496,26 @@ await at('建立時間／最後登入：後端回已格式化的 "YYYY-MM-DD HH:
 // D. 新增／修改：送出的 payload 正確
 // ============================================================
 
+await at('節點下拉用後端給的清單（2026-10-26 A-14：原本 5 家＋店別對照裡啟用中的門市）；舊帳號已不在清單的節點仍顯示', async () => {
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  const existing = { id: 'u031', username: 'oldnode', name: '舊節點', role: 'storelead', node: 'st-09', active: 'TRUE' };
+  state.apiHandlers.listUsers = () => ({ ok: true, data: { users: [existing], nodes: [{ value: 'sxl-gf', label: '麻的小辛辣 光復店' }, { value: 'st-01', label: '一悟燒肉 竹北店' }] } });
+  const unmount = mountList(root, ctx);
+  await flush();
+  fireClick(byRole(root, 'add-user'));
+  await flush();
+  const overlay = byRole(fakeDocument.body, 'user-form-overlay');
+  try {
+    const opts = byField(overlay, 'node').children.map((o) => [o.getAttribute('value') !== null && o.getAttribute('value') !== undefined ? o.getAttribute('value') : o.value, o.textContent]);
+    assert.deepEqual(opts.map((o) => o[0]), ['', 'sxl-gf', 'st-01'], '不限節點＋後端給的清單：' + JSON.stringify(opts));
+    assert.equal(opts[2][1], '一悟燒肉 竹北店');
+  } finally {
+    unmount();   // unmount 會強制關掉彈窗，失敗時也不會把開著的彈窗留給下一個測試
+    await flush();
+  }
+});
+
 await at('新增使用者：填表送出，saveUser 收到不帶 id、帶 password 的 payload', async () => {
   const root = new FakeElement('div');
   const { ctx, state } = makeFakeCtx();

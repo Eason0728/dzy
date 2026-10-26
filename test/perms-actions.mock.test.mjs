@@ -423,6 +423,35 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
 }
 
 // ============================================================
+// 5b. 2026-10-26 審查 A-14（Eason 選「開放所有啟用中的門市」）：系統帳號的節點＝原本 5 家＋店別對照裡、門市還在啟用的稽核店代碼
+// ============================================================
+{
+  const app = scene();
+  init(app); on(app);
+  const { sb, sheets } = app;
+  const A = sb.__admin;
+  const save = (username, node) => post(sb, 'saveUser', { username, name: '節點測試', role: 'accountant', node, password: 'longenoughpw1A' }, A);
+  ok(save('nodea1', 'st-01').ok === false, '5b 前置：還沒對照的稽核店代碼 st-01 → 不能當節點');
+  ok(post(sb, 'permStoreSave', { unit: 'yiwu-js', audit_store: 'st-01' }, A).ok, '5b 前置：店別對照 一悟竹北 → st-01');
+  const lu = post(sb, 'listUsers', {}, A);
+  const opt = (lu.data.nodes || []).find((o) => o.value === 'st-01');
+  ok(lu.ok && opt && opt.label === sb.stfReadOrg_().unit['yiwu-js'].name, '5b listUsers 回節點清單，st-01 帶門市名', lu.data.nodes);
+  ok(['sxl-gf', 'ck', 'mzt-gf', 'mzt-js', 'mzt-lzl'].every((n) => lu.data.nodes.some((o) => o.value === n)), '5b 原本 5 家都在清單');
+  const r1 = save('nodeb1', 'st-01');
+  ok(r1.ok, '5b ★店別對照裡啟用中的門市 → 可以當節點', r1);
+  ok(save('nodec1', 'st-99').ok === false && save('nodec2', '=x').ok === false, '5b 亂填的代碼照樣擋');
+  ok(save('noded1', 'sxl-gf').ok, '5b 原本 5 家照舊可以');
+  sheets.org._data.find((r) => r[0] === 'unit' && r[1] === 'yiwu-js')[7] = 'FALSE';   // 門市停用
+  ok(save('nodee1', 'st-01').ok === false, '5b ★門市停用 → 它的稽核店代碼不能再設成節點');
+  ok(!post(sb, 'listUsers', {}, A).data.nodes.some((o) => o.value === 'st-01'), '5b 門市停用後清單也不再出現');
+  ok(sheets.users._rows().some((r) => r[1] === 'nodeb1' && r[4] === 'st-01'), '5b 已經設好的舊帳號節點不動');
+  const b1 = sheets.users._rows().find((r) => r[1] === 'nodeb1');
+  const ed = post(sb, 'saveUser', { id: b1[0], username: 'nodeb1', name: '改了名字', role: 'accountant', node: 'st-01' }, A);
+  ok(ed.ok && sheets.users._rows().find((r) => r[1] === 'nodeb1')[2] === '改了名字', '5b ★節點沒改（門市已停用）時，舊帳號照樣能改其他欄位', ed);
+  ok(post(sb, 'saveUser', { id: b1[0], username: 'nodeb1', name: '改了名字', role: 'accountant', node: 'st-77' }, A).ok === false, '5b 改成不合法的新節點照樣擋');
+}
+
+// ============================================================
 // 6. myPerms：sources
 // ============================================================
 {

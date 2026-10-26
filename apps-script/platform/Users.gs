@@ -215,8 +215,34 @@ function roleExists_(role) {
   return false;
 }
 
+// 原本 5 家的中文名（spec §4.4；與 modules/users/views/list.js 舊版硬編碼相同）
+var USR_NODE_LABELS = { 'sxl-gf': '麻的小辛辣 光復店', 'ck': '中央廚房', 'mzt-gf': '墨竹亭 光復店', 'mzt-js': '墨竹亭 金山店', 'mzt-lzl': '墨竹亭 六張犁店' };
+
+/**
+ * 系統帳號可選的節點（2026-10-26 審查 A-14，Eason 選「開放所有啟用中的門市」）：
+ * 原本 5 家＋權限設定「店別對照」（perm_store_map）裡、所屬門市還在啟用的稽核店代碼。
+ * 節點＝稽核系統的店代碼（代轉依它裁切店長看得到哪家店），所以來源只認店別對照，不認組織代碼本身。
+ * 回 [{value, label}]；權限表還沒建、Perms.gs／Staff.gs 不在（舊測試沙盒）就只有原本 5 家。
+ */
+function usrNodeOptions_() {
+  var out = USR_VALID_NODES.map(function (n) { return { value: n, label: USR_NODE_LABELS[n] || n }; });
+  if (typeof permLoadTables_ !== 'function' || typeof stfReadOrg_ !== 'function') return out;
+  var t, org;
+  try { t = permLoadTables_(); org = stfReadOrg_(); } catch (e) { return out; }
+  if (!t || !t.inited || !org || !org.unit) return out;
+  Object.keys(t.storeMap).forEach(function (unit) {
+    var code = String(t.storeMap[unit] || '').trim();
+    var u = org.unit[unit];
+    if (!code || !u || !u.active) return;   // 沒對照、門市不存在或已停用 → 不給選
+    if (out.some(function (o) { return o.value === code; })) return;
+    out.push({ value: code, label: u.name || code });
+  });
+  return out;
+}
+
 function isValidNode_(node) {
-  return node === '' || USR_VALID_NODES.indexOf(node) !== -1;
+  if (node === '' || USR_VALID_NODES.indexOf(node) !== -1) return true;
+  return usrNodeOptions_().some(function (o) { return o.value === node; });
 }
 
 /** 把格子設成純文字（'@'）；minikit 假表／舊測試沙盒沒有 setNumberFormat 就略過（帳號另有「要有英文字母」把關） */
@@ -261,7 +287,7 @@ function handleListUsers_(token) {
       last_login_at: r[USR_COL.last_login_at]
     };
   });
-  return { ok: true, data: { users: users } };
+  return { ok: true, data: { users: users, nodes: usrNodeOptions_() } };   // nodes：節點下拉（A-14）
 }
 
 // ============================================================
@@ -292,7 +318,10 @@ function handleSaveUser_(token, payload) {
   // 同仁帳號（role staff）只能經「同仁名單」建立／修改，否則 staff 分頁與 users 狀態會脫鉤（2026-10-12）
   if (role === 'staff') return { ok: false, error: USR_MSG_STAFF_ELSEWHERE };
   if (!roleExists_(role)) return { ok: false, error: USR_MSG_ROLE_NOT_FOUND };
-  if (!isValidNode_(node)) return { ok: false, error: USR_MSG_NODE_INVALID };
+  // 節點沒改就放行（2026-10-26 A-14）：門市停用、對照拿掉後，舊帳號改名字等其他欄位不該被節點卡住
+  var prevForNode = !isInsert && id ? findUsrRowById_(id) : null;
+  var nodeUnchanged = !!prevForNode && String(prevForNode.values[USR_COL.node] || '') === node;
+  if (!nodeUnchanged && !isValidNode_(node)) return { ok: false, error: USR_MSG_NODE_INVALID };
   var actorIsAdmin = usrActorIsAdmin_(auth);
   // 非 admin 不能建立或把帳號改成管理員／全權角色
   // （改自己且角色不變，例如改顯示名稱，不算指派高權限）
