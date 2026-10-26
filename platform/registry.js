@@ -26,6 +26,7 @@ export const MODULES = [
   { load: () => import('../modules/attendance/manifest.js') },
   { load: () => import('../modules/schedule/manifest.js') },
   { load: () => import('../modules/payroll/manifest.js') },
+  { load: () => import('../modules/eval/manifest.js') },   // 人資部門：績效評核（排在薪酬管理後）
   { load: () => import('../modules/purchase/manifest.js') },
   { load: () => import('../modules/cashbook/manifest.js') },
   { load: () => import('../modules/transfer-fin/manifest.js') },

@@ -31,14 +31,14 @@ def main():
 
             page.wait_for_selector('[data-role="module-card"]')
             cards = page.locator('[data-role="module-card"]')
-            check(cards.count() == 17, 'admin 首頁有十七組模組（2026-10-11 加同仁名單、我的資料；10-16 加公告專區；10-17 加權限設定；10-18 加表單簽核；10-19 加薪酬管理；10-24 加收支管理、排班管理、貨單核對、損益系統）')
+            check(cards.count() == 18, 'admin 首頁有十八組模組（2026-10-11 加同仁名單、我的資料；10-16 加公告專區；10-17 加權限設定；10-18 加表單簽核；10-19 加薪酬管理；10-24 加收支管理、排班管理、貨單核對、損益系統；10-26 加績效評核）')
 
             ids = [cards.nth(i).get_attribute('data-module') for i in range(cards.count())]
-            check(ids == ['users', 'perms', 'audit-stock', 'audit-ops', 'dorm', 'staff', 'me', 'bulletin', 'approvals', 'storeops', 'attendance', 'schedule', 'payroll', 'purchase', 'cashbook', 'transfer-fin', 'pnl'],
+            check(ids == ['users', 'perms', 'audit-stock', 'audit-ops', 'dorm', 'staff', 'me', 'bulletin', 'approvals', 'storeops', 'attendance', 'schedule', 'payroll', 'eval', 'purchase', 'cashbook', 'transfer-fin', 'pnl'],
                   '卡片順序＝registry 順序，實際：%s' % ids)
 
             titles = page.locator('[data-role="module-card"] .card-title').all_inner_texts()
-            check(titles == ['人員管理', '權限設定', '盤點抽查', '營運稽核', '宿舍合約', '同仁名單', '我的資料', '公告專區', '表單簽核', '門市營運', '考勤管理', '排班管理', '薪酬管理', '貨單核對', '收支管理', '調撥管理', '損益系統'],
+            check(titles == ['人員管理', '權限設定', '盤點抽查', '營運稽核', '宿舍合約', '同仁名單', '我的資料', '公告專區', '表單簽核', '門市營運', '考勤管理', '排班管理', '薪酬管理', '績效評核', '貨單核對', '收支管理', '調撥管理', '損益系統'],
                   '卡片標題顯示 manifest.name，實際：%s' % titles)
 
             # 圖示真的載入（不是 404 的裂圖）
@@ -46,7 +46,7 @@ def main():
                 """() => [...document.querySelectorAll('.module-icon')]
                        .map(img => img.complete && img.naturalWidth > 0)"""
             )
-            check(len(icons_ok) == 17 and all(icons_ok), '十七顆模組圖示全部載入成功（naturalWidth > 0）：%s' % icons_ok)
+            check(len(icons_ok) == 18 and all(icons_ok), '十八顆模組圖示全部載入成功（naturalWidth > 0）：%s' % icons_ok)
 
             # 待辦數字：fixture 只到 2026-07，本月（依系統日期）五店皆未稽核 → 盤點 badge = 5
             page.wait_for_function(

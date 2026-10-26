@@ -24,6 +24,7 @@ TESTS=(
   e2e_t14_line_auth.py
   e2e_t17_dorm_handover_give.py
   e2e_t16_transfer_fin.py
+  e2e_t18_eval.py
 )
 
 for i in "${!TESTS[@]}"; do
