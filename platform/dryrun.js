@@ -50,7 +50,7 @@ export const READ_ACTIONS = {
  */
 export const WRITE_ACTIONS = {
   audit: ['submitAudit', 'markRest', 'submitOpsAudit', 'addStore', 'setStoreStatus', 'renameStore'],
-  dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign'],
+  dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign', 'handoverPdf'],
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
     'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
   cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock']

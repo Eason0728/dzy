@@ -362,7 +362,8 @@ var PROXY_READ_ACTIONS = {
  */
 var PROXY_WRITE_ACTIONS = {
   audit: ['submitAudit', 'markRest', 'submitOpsAudit', 'addStore', 'setStoreStatus', 'renameStore'],
-  dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign'],
+  // handoverPdf（2026-10-26）：只讀，但內容是同仁點交單（姓名、賠償、簽名），比照寫入要 dorm.write
+  dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign', 'handoverPdf'],
   // 薪酬頁（mala-clock-in/payroll.html）實際會呼叫的寫入 action；後端還有 payroll_migrate_store 等維運動作，刻意不列
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
     'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],

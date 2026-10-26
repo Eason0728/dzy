@@ -15,7 +15,9 @@
  *   - ~/mala-dorm-contract/apps-script/Handover.gs
  *     createHandover() 10-36 行：requireAdmin、僅「在住」合約可開、已有未完成點交單
  *     直接回同一張（reused）、成功回 {handover_id, token, url}。
- *     getHandoverByToken() 38-72 行：回 {state, handover, equip:[{item,price}], cleaning_fee}；
+ *     getHandoverByToken() 38-72 行：未簽回 {state, handover, equip:[{item,price}], cleaning_fee}；
+ *     已簽（2026-10-12 起）只回 {state:'signed', handover:{signed_at}}，不回姓名、賠償、PDF 連結。
+ *     getHandoverPdf()（2026-10-26 新增，action handoverPdf）：管理端取回已完成點交單 PDF 本身（base64）。
  *     equip 只列「簽約時有點收」的設備（59-68 行），价格 `s['price.'+item]` 來自 settings。
  *     calcCompensation() 75-90 行：權威賠償計算——「異常＋未歸還」才計價（81-84 行，
  *     已歸還一律 0），勾選需清潔另加清潔費（85-88 行）。
@@ -98,6 +100,159 @@ function appendPdfLink(ctx, container, rawUrl) {
     return;
   }
   container.appendChild(escEl(ctx, 'a', { href: safe, target: '_blank', rel: 'noopener noreferrer', class: 'btn btn-secondary' }, '下載點交單 PDF'));
+}
+
+// ============================================================
+// 現場把點交 PDF 交給同仁（2026-10-26，Eason 選方案 A）
+// 雲端硬碟上的 PDF 沒開分享，同仁用自己手機打不開上面那個連結；這裡改由宿舍後端
+// handoverPdf（只給管理端、只給已完成的點交單）直接回檔案內容，在操作人員的裝置上：
+// 手機／平板 → 系統分享選單（LINE、AirDrop 直接傳給同仁），另有「直接下載」；電腦 → 直接下載。
+// 檔案在點交完成畫面一出現就先抓好：iOS 要求「按下按鈕當下」呼叫分享，按了才去抓會被擋。
+// ============================================================
+
+/** base64 → Uint8Array；格式不對回 null。 */
+export function b64ToBytes(b64) {
+  if (typeof b64 !== 'string' || !b64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return null;
+  try {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/** 下載檔名：拿掉路徑與控制字元，一律 .pdf 結尾，空的給預設名。 */
+export function safePdfName(name) {
+  let n = String(name || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').trim();
+  if (!n) n = '設備點交單.pdf';
+  if (!/\.pdf$/i.test(n)) n += '.pdf';
+  return n.slice(-120);
+}
+
+/** 檢查後端回的內容真的是 PDF（檔頭 %PDF）。 */
+export function isPdfBytes(bytes) {
+  return !!bytes && bytes.length > 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+}
+
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/** 這台是不是手機／平板（主要靠手指操作）：只有這種才走分享選單；電腦一律直接下載。 */
+export function preferShare(nav, mm) {
+  const coarse = typeof mm === 'function' && !!(mm('(pointer: coarse)') || {}).matches;
+  return coarse && !!nav && typeof nav.share === 'function' && typeof nav.canShare === 'function';
+}
+
+/** LINE 內建瀏覽器多半不能分享也不能存 Blob 檔，要提醒改用瀏覽器開。 */
+export function isLineInApp(ua) {
+  return / Line\//i.test(String(ua || ''));
+}
+
+/** 後端／代轉的錯誤碼轉成給人看的話。 */
+export function giveCopyErrorText(err) {
+  const e = String(err || '');
+  if (e === 'READONLY') return '系統維護中，暫時不能下載，請稍後再試';
+  if (!e) return '檔案還沒準備好，請按一下再試。';
+  return '檔案還沒準備好：' + e;
+}
+
+const GIVE_HINT_SHARE = '按「傳給同仁」會跳出分享選單，可直接用 LINE 或 AirDrop 傳給同仁；也可以按「直接下載」存到這台。';
+const GIVE_HINT_DOWNLOAD = '按下去會把點交單 PDF 下載到這台，再轉交同仁（LINE、列印都可以）。';
+const GIVE_HINT_LINE = '你現在是在 LINE 裡開的頁面，可能無法下載：請點右上角「⋯」→「用瀏覽器開啟」再按一次。';
+
+/**
+ * 畫「下載給同仁」按鈕並立刻預先抓檔。
+ * 手機／平板：主按鈕「傳給同仁（PDF）」走分享選單，旁邊另有「直接下載」；電腦：只有「下載給同仁（PDF）」直接下載
+ * （2026-10-26 Fable 審查：macOS Safari、Windows Chrome 也支援分享，只看 canShare 會讓電腦跳分享選單而不是下載）。
+ * 分享失敗（不是使用者自己取消）不在失敗後偷偷下載——那時已經不算「按下當下」，iOS 會擋——改提示按「直接下載」。
+ * @param {() => boolean} isDestroyed 分頁已卸載就不再動 DOM
+ */
+function appendGiveCopyButton(ctx, container, token, isDestroyed) {
+  const nav = typeof navigator !== 'undefined' ? navigator : null;
+  const mm = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia.bind(window) : null;
+  const share = preferShare(nav, mm);
+  const inLine = isLineInApp(nav && nav.userAgent);
+
+  const wrap = el('div', { class: 'field', 'data-role': 'handover-give' });
+  const btn = el('button', { type: 'button', class: 'btn btn-primary', 'data-act': 'handover-give' });
+  const dlBtn = share ? el('button', { type: 'button', class: 'btn btn-secondary', 'data-act': 'handover-download' }) : null;
+  const hint = el('p', { class: 'field-hint' });
+  wrap.appendChild(btn);
+  if (dlBtn) wrap.appendChild(dlBtn);
+  wrap.appendChild(hint);
+  container.appendChild(wrap);
+
+  const readyHint = inLine ? GIVE_HINT_LINE : (share ? GIVE_HINT_SHARE : GIVE_HINT_DOWNLOAD);
+  let file = null;   // { blob, name }
+  let loading = false;
+
+  function setBtns(text, disabled) {
+    btn.textContent = text;
+    btn.disabled = !!disabled;
+    if (dlBtn) { dlBtn.textContent = '直接下載'; dlBtn.disabled = !!disabled || !file; dlBtn.hidden = !file; }
+  }
+
+  async function prefetch() {
+    if (loading) return;
+    loading = true;
+    file = null;
+    hint.textContent = '';
+    setBtns('準備檔案中…', true);
+    let res;
+    try {
+      res = await ctx.api.call(BACKEND_ID, 'handoverPdf', { token });
+    } catch (err) {
+      res = { ok: false, error: (err && err.message) || '' };
+    }
+    loading = false;
+    if (isDestroyed()) return;
+    const data = (res && res.data) || {};
+    if (res && res.dryrun) {
+      setBtns('試跑模式不能下載點交單', true);
+      return;
+    }
+    const bytes = res && res.ok === true ? b64ToBytes(data.pdf_b64) : null;
+    if (!isPdfBytes(bytes)) {
+      setBtns('重新準備檔案', false);
+      hint.textContent = giveCopyErrorText(res && res.ok !== true ? res.error : '');
+      return;
+    }
+    file = { blob: new Blob([bytes], { type: 'application/pdf' }), name: safePdfName(data.name) };
+    setBtns(share ? '傳給同仁（PDF）' : '下載給同仁（PDF）', false);
+    hint.textContent = readyHint;
+  }
+
+  function doDownload() {
+    downloadBlob(file.blob, file.name);
+    ctx.ui.toast('已下載點交單', 'ok');
+  }
+
+  btn.addEventListener('click', () => {
+    if (!file) { prefetch(); return; }
+    if (!share) { doDownload(); return; }
+    let shareFile = null;
+    try { shareFile = new File([file.blob], file.name, { type: 'application/pdf' }); } catch { shareFile = null; }
+    if (!shareFile || !nav.canShare({ files: [shareFile] })) { doDownload(); return; }
+    nav.share({ files: [shareFile], title: file.name }).catch((err) => {
+      if (err && err.name === 'AbortError') return;   // 使用者自己關掉分享選單
+      if (isDestroyed()) return;
+      hint.textContent = '這台沒辦法用分享傳檔，請按「直接下載」。';
+    });
+  });
+  if (dlBtn) dlBtn.addEventListener('click', () => { if (file) doDownload(); });
+
+  prefetch();
 }
 
 // ============================================================
@@ -198,15 +353,20 @@ export function mountHandover(root, ctx) {
     container.appendChild(p);
   }
 
-  function renderSignedSummary(h) {
+  function renderSignedSummary(h, token) {
     clearContainer();
     container.appendChild(el('div', { class: 'card-title', text: '這張點交單已完成' }));
-    container.appendChild(escEl(ctx, 'p', {}, (h.name || '') + '　' + (h.room_bed || '')));
+    // 宿舍後端 2026-10-12 起已簽的點交單只回 signed_at（不回姓名、房床、賠償）：沒有的欄位就不畫，
+    // 免得畫出空白姓名與「賠償合計 0 元」（2026-10-26 Fable 審查）
+    if (h.name || h.room_bed) container.appendChild(escEl(ctx, 'p', {}, (h.name || '') + '　' + (h.room_bed || '')));
     container.appendChild(escEl(ctx, 'p', {}, '點交時間 ' + (h.signed_at || '')));
-    container.appendChild(el('p', {}, [
-      document.createTextNode('賠償合計 ' + ctx.fmt.money(h.compensation_total || 0) + ' 元')
-    ]));
+    if (h.compensation_total !== undefined && h.compensation_total !== null && h.compensation_total !== '') {
+      container.appendChild(el('p', {}, [
+        document.createTextNode('賠償合計 ' + ctx.fmt.money(h.compensation_total || 0) + ' 元')
+      ]));
+    }
     if (h.pdf_url) appendPdfLink(ctx, container, h.pdf_url);
+    if (token) appendGiveCopyButton(ctx, container, token, () => destroyed);
   }
 
   // ------------------------------------------------------------
@@ -391,6 +551,7 @@ export function mountHandover(root, ctx) {
       container.appendChild(el('p', {}, [
         document.createTextNode('應賠償金額合計 ' + ctx.fmt.money(data.compensation_total || 0) + ' 元')
       ]));
+      appendGiveCopyButton(ctx, container, token, () => destroyed);
       if (data.pdf_url) appendPdfLink(ctx, container, data.pdf_url);
       ctx.ui.toast('點交已送出', 'ok');
     }
@@ -477,7 +638,7 @@ export function mountHandover(root, ctx) {
 
       const data = dataRes.data || {};
       if (data.state === 'signed') {
-        renderSignedSummary(data.handover || {});
+        renderSignedSummary(data.handover || {}, token);
       } else {
         renderForm(token, Array.isArray(data.equip) ? data.equip : [], Number(data.cleaning_fee) || 0);
       }
