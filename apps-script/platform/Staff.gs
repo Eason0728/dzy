@@ -597,6 +597,16 @@ function stfCleanProfile_(payload, org, needPrivate) {
   return err ? { error: err } : { clean: v };
 }
 
+/** 只驗手機與地址（組織四欄原樣帶回，不驗）：給 handleSaveMyProfile_ 在組織沒改時用（審查 A-04） */
+function stfCleanContact_(payload) {
+  var v = {
+    brand: stfStr_(payload.brand), unit: stfStr_(payload.unit), dept: stfStr_(payload.dept), title: stfStr_(payload.title),
+    phone: stfPhone_(payload.phone), address: stfStr_(payload.address)
+  };
+  var err = stfValidatePhone_(v.phone) || stfValidateAddress_(v.address);
+  return err ? { error: err } : { clean: v };
+}
+
 /**
  * 認領寫入共用（handleClaimSubmit_ 與 LineAuth.gs lineAuthClaim_）：驗密碼與組織／個資 → staff 寫 p_*、個資、claimed_at、status pending → users 寫 salt/hash → staff_log。
  * 呼叫端先確認 hit 是這位 unclaimed 同仁。input 取 password、brand、unit、dept、title、phone、address、birthday。
@@ -789,7 +799,11 @@ function handleSaveMyProfile_(token, payload) {
   if (['pending', 'rejected', 'active'].indexOf(status) === -1) return { ok: false, error: STF_MSG.BAD_STATE };
 
   var org = stfReadOrg_();
-  var res = stfCleanProfile_(payload || {}, org, false);
+  // 2026-10-25 審查 A-04：已開通的人組織四欄沒改時不再重驗組織——所屬門市／職稱後來被停用的人，原本連改手機、地址都被擋
+  //（手機又是忘記密碼要用的）。組織有改才照舊驗、照舊寫 p_* 等後台確認
+  var p0 = payload || {};
+  var sameOrg = status === 'active' && STF_ORG_FIELDS.every(function (f) { return stfStr_(p0[f]) === stfStr_(hit.values[STF_COL[f]]); });
+  var res = sameOrg ? stfCleanContact_(p0) : stfCleanProfile_(p0, org, false);
   if (res.error) return { ok: false, error: res.error };
   var c = res.clean;
   var v = hit.values.slice();
@@ -1353,7 +1367,14 @@ function handleStaffSetActive_(token, payload) {
   }
   if (t.status !== 'disabled') return { ok: false, error: STF_MSG.BAD_STATE };
   var prev = stfStr_(t.v[STF_COL.prev_status]);
-  t.v[STF_COL.status] = STF_STATUSES.indexOf(prev) !== -1 && prev !== 'disabled' ? prev : 'pending';
+  if (STF_STATUSES.indexOf(prev) === -1 || prev === 'disabled') {
+    // 2026-10-25 審查 A-03：前狀態空白（舊列、或試算表被手動清掉）原本一律退成 pending，
+    // 但沒有 p_* 待確認資料的 pending 連人資確認都過不了（「請選擇品牌」），只能退回重認領。
+    // 改為推斷：確認過（confirmed_at 有值）＝active；有待確認的組織資料＝pending；其餘當作已開通
+    var hasP = STF_ORG_FIELDS.some(function (f) { return stfStr_(t.v[STF_COL['p_' + f]]) !== ''; });
+    prev = stfStr_(t.v[STF_COL.confirmed_at]) !== '' ? 'active' : (hasP ? 'pending' : 'active');
+  }
+  t.v[STF_COL.status] = prev;
   t.v[STF_COL.prev_status] = '';
   usersSheet.getRange(userRow.row, USR_COL.active + 1).setValue('TRUE');
   var savedOn = stfSave_(t, 'enable', '');

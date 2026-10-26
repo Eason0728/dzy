@@ -993,7 +993,22 @@ function handleApvMine_(token, payload) {
   payload = payload || {};
   var st = apvStr_(payload.status);
   var mine = apvSortNewest_(apvReadForms_().filter(function (fr) { return fr.f.sender === c.me.emp && (!st || fr.f.status === st); }));
-  return { ok: true, data: { forms: apvListViews_(c, mine) } };
+  var views = apvListViews_(c, mine);
+  // 2026-10-25 審查 A-11：被退回的單直接帶退回原因（該單最後一筆有 note 的 reject／handle 事件），
+  // 前端不必再對每張退回單各打一次 apvGet。事件表只讀一次
+  var rejected = {};
+  views.forEach(function (v) { if (v && v.status === 'rejected') rejected[v.id] = true; });
+  if (Object.keys(rejected).length) {
+    var last = {};
+    apvReadEvents_('').forEach(function (e) {
+      if (rejected[e.form_id] && (e.action === 'reject' || e.action === 'handle') && e.note) last[e.form_id] = e;
+    });
+    views.forEach(function (v) {
+      var e = v && last[v.id];
+      if (e) v.reject_note = { note: e.note, by: apvName_(c, e.actor) };
+    });
+  }
+  return { ok: true, data: { forms: views } };
 }
 
 function handleApvTodo_(token) {

@@ -139,6 +139,8 @@
 | `mzt-lzl` | 墨竹亭 六張犁店 |
 | `''`（空字串） | 不限節點（總部角色用） |
 
+**2026-10-26 擴充（全資料審查 A-14，Eason 選「開放所有啟用中的門市」）**：除了上表 5 家，權限設定「店別對照」（`perm_store_map`）裡、所屬門市在組織設定仍啟用的稽核店代碼（例：會計在門市管理新增的 `st-01`）也可以當節點。`listUsers` 回 `data.nodes`（`[{value,label}]`，label＝門市名）給人員管理的下拉；`saveUser` 以同一份清單驗證。門市停用後該代碼不能再新設，但已設好的舊帳號節點不動、改其他欄位不受影響。新門市要能指派系統帳號：會計在門市管理新增 → 人資在組織設定新增門市 → 人資在店別對照對應上稽核店代碼。
+
 ### 4.5 模組 manifest（每個模組必須 default export 這個物件）
 
 ```js
@@ -331,8 +333,8 @@ UI 元件一律使用 `platform/css/components.css` 既有的 class，不得自�
 
 > `listRoles` 是 2026-08-15 對抗審查後新增的：角色清單原本硬編碼在人員管理模組裡，
 > 與「roles 分頁可設定、加角色不改程式」互相矛盾——在試算表加一個角色，UI 認不得。
-> 角色一律由後端讀 `roles` 分頁回傳。**節點代號不同**：那是 spec §4.4 定死的五個，
-> 前端硬編碼是正確的，不要一併改掉。
+> 角色一律由後端讀 `roles` 分頁回傳。節點代號 2026-10-26 起也改由後端回傳（`listUsers` 的 `data.nodes`，見 §4.4）；
+> 前端硬編碼的五個只當後端還沒更新時的退路。
 
 **密碼長度規則（2026-08-15 補）**：`saveUser` 新增帳號與 `resetPassword` **都**必須檢查
 `newPassword`／`password` 至少 8 個字元。原本只有 `resetPassword` 檢查，
@@ -389,12 +391,19 @@ mini 執行器（kit/runner/proxy.js）：限流 → 在途上限 → 佇列內�
       ↓                   讀清單外的 action 一律要 <ns>.write；選碼；店長回 filterNode
 mini 佇列外帶通行碼打舊後端（網址在 mini .env：PROXY_URL_AUDIT／PROXY_URL_DORM）
       ↓  filterNode 不是 null → 裁成只剩自己節點（proxy-hook.js，規則＝前端 filterOwnNode_）
-      ↓  回應中整個字串＝通行碼的值一律換成 [REDACTED]
+      ↓  回應中含通行碼子字串的值一律換成 [REDACTED]（例外：dorm 的 pdf_b64，見下）
 回 200＋舊後端原本的扁平 JSON（前端 transformResponse_ 照用；前端裁切留著當第二道）
 ```
 
 - **讀清單**（`Auth.gs PROXY_READ_ACTIONS`＝`platform/dryrun.js READ_ACTIONS` 的 audit／dorm，兩邊要一起改，
   `test/proxy-authorize.test.mjs` 有比對）：audit `getAll`；dorm `rooms`／`list`／`contract`／`handover`。其餘一律算寫入。
+- **寫入白名單**（`Auth.gs PROXY_WRITE_ACTIONS`＝`platform/dryrun.js WRITE_ACTIONS`，同樣兩邊一起改、測試比對；不在表內一律 FORBIDDEN）：
+  dorm `create`／`terminate`／`handoverCreate`／`handoverSign`／**`handoverPdf`**。
+  `handoverPdf`（2026-10-26，宿舍後端 @19 起）＝點交完成後在現場把點交單 PDF 交給同仁：只讀、不改資料，但內容含同仁姓名、賠償與簽名，
+  所以比照寫入要 `dorm.write`（試跑模式下鎖鈕不送出）。後端只給已簽且有 PDF 的點交單、≤8MB，回 `{name, mime, pdf_b64}`；
+  前端 `modules/dorm/views/handover.js`：觸控手機走系統分享選單＋「直接下載」，電腦直接下載。
+  mini 代轉的通行碼遮蔽對 dorm 的 `pdf_b64` 例外（app.json `backends.dorm.redactSkipKeys`，只放過 `JVBERi0` 開頭的純 base64），
+  否則 PDF 內容碰巧含通行碼子字串會被換成 `[REDACTED]`、檔案壞掉。
 - **HTTP 狀態 → 前端訊息**（`platform/api.js`）：401 登入已失效（清本機 token、回登入頁，**不打後端 logout**）／
   403 沒有權限／429・503 系統忙碌／504 舊系統回應逾時／502 舊系統暫時無法連線／501 代轉尚未啟用。逾時 35 秒。
 - `sign.html`（簽約頁，簽署人只有簽約 token、本來就不帶通行碼）照舊直接打宿舍舊後端，不經代轉。

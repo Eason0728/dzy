@@ -50,7 +50,7 @@ export function mountAudit(el, ctx) {
       if (v.removed.length) parts.push(`<span class="tag tag-danger">少了</span> ${permsText(v.removed)}`);
       body = `<div>${esc(v.who)}　${parts.join('　')}</div>`;
     }
-    return `<div class="card stack" data-role="audit-item" data-row="${it.row}" data-seen="${it.seen ? '1' : '0'}"${it.seen ? ' style="opacity:.6"' : ''}>
+    return `<div class="card stack${it.seen ? ' is-dim' : ''}" data-role="audit-item" data-row="${it.row}" data-seen="${it.seen ? '1' : '0'}">
       <div class="card-row"><div class="card-title">${esc(String(it.at || ''))}</div>${it.seen ? '<span class="tag">已看過</span>' : '<span class="tag tag-warn">未看</span>'}</div>
       <div class="text-muted">誰改的：${esc(it.by)}　原因：${esc(v.causeText)}</div>
       ${body}

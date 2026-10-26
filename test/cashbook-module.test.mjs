@@ -42,11 +42,14 @@ t('manifest：財務部門、只認 cashbook.write、backend＝ns、四個分頁
   assert.ok(fs.existsSync(root('assets/icons/cashbook.png')), '選單圖示存在');
   assert.ok(fs.existsSync(root('modules/cashbook/vendor/xlsx.mini.min.js')), 'SheetJS mini 在 vendor');
 });
-t('registry：收支管理在清單裡，且是最後一列', () => {
+t('registry：收支管理在清單裡，排在貨單核對之後、損益系統之前（財務部門順序：貨單核對 → 收支管理 → 調撥管理 → 損益系統）', () => {
   assert.equal(MODULES.length >= 1, true);
   const src = fs.readFileSync(root('platform/registry.js'), 'utf8');
   const lines = src.split('\n').filter((l) => /load: \(\) => import\(/.test(l));
-  assert.ok(/cashbook\/manifest\.js/.test(lines[lines.length - 1]), lines[lines.length - 1]);
+  const at = (id) => lines.findIndex((l) => new RegExp(id + '\\/manifest\\.js').test(l));
+  assert.ok(at('cashbook') !== -1, '收支管理要在 registry');
+  if (at('purchase') !== -1) assert.ok(at('purchase') < at('cashbook'), '貨單核對在收支管理之前');
+  if (at('pnl') !== -1) assert.ok(at('cashbook') < at('pnl'), '收支管理在損益系統之前');
 });
 t('dryrun 白名單：讀四個、寫四個，兩邊不重疊', () => {
   assert.deepEqual(READ_ACTIONS.cashbook, ['adminStores', 'adminList', 'adminLocks', 'adminGet']);

@@ -12,6 +12,7 @@
 'use strict';
 
 import { BACKENDS } from '../../platform/config.js';
+import { getToken } from '../../platform/auth.js';
 
 export const MAX_EDGE = 1600;
 export const MAX_BYTES = 180 * 1024;
@@ -107,8 +108,10 @@ export function svcUrl(name) {
 }
 export function putUrl() { return svcUrl('apv-file-put'); }
 export function getUrl() { return svcUrl('apv-file-get'); }
+// token 一律跟平台拿（記憶體優先、再讀 localStorage），不自己讀 localStorage 的 key（2026-10-25 審查 A-10）：
+// 登出中途、token 已換新（改密碼）時，模組自己讀會拿到舊的
 function readToken() {
-  try { return (typeof localStorage !== 'undefined' && localStorage.getItem('dzy.token')) || ''; } catch (e) { return ''; }
+  try { return getToken() || ''; } catch (e) { return ''; }
 }
 function dryRun() {
   try { return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dryrun') === '1'; } catch (e) { return false; }

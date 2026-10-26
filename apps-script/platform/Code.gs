@@ -50,6 +50,8 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   // 2026-10-25：LINE 認身分的人資操作（LineAuth.gs；docs/line-auth/spec.md §3.2）。lineRevoke 寫入（上鎖）、lineAuthLog 讀取。
   // ⚠ 給 mini 路由用的 LINE 全域函式（LineAuth.gs 內結尾底線的那三支）刻意不在這裡，也不可加進來
   'lineRevoke', 'lineAuthLog',
+  // 2026-10-24：貨單核對（PurchaseSso.gs）；永遠不可列進 minikit readActions 與 dryrun READ_ACTIONS
+  'svcPurchaseRedeem', 'svcPurchaseWho',
   // 2026-10-26：績效評核（Eval.gs；docs/eval/plan.md）。寫入由 Eval.gs evWithLock_ 自己上鎖，刻意不列 MUTATING_ACTIONS（避免重複取鎖）
   'evSetup', 'evMe', 'evPeerSubmit', 'evSelfSubmit', 'evMyScores', 'evNewbieList', 'evNewbieSubmit', 'evUnitResults', 'evPersonDetail',
   'evSupSave', 'evBankGet', 'evBankSave', 'evTplSave', 'evWageSave', 'evGradeSave', 'evFinalize', 'evUnfinalize', 'evImportPreview', 'evImportCommit'];
@@ -251,6 +253,8 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'regionSwitch': return handleRegionSwitch_(token, payload);
     case 'lineRevoke': return handleLineRevoke_(token, payload);
     case 'lineAuthLog': return handleLineAuthLog_(token, payload);
+    case 'svcPurchaseRedeem': return handleSvcPurchaseRedeem_(payload);
+    case 'svcPurchaseWho': return handleSvcPurchaseWho_(payload);
     case 'evSetup': return handleEvSetup_(token);
     case 'evMe': return handleEvMe_(token);
     case 'evPeerSubmit': return handleEvPeerSubmit_(token, payload);

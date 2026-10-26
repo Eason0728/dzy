@@ -41,11 +41,13 @@ const RULES = [
   { rule_id: 'R007', ladder: 'hq', dept: '', title: 'ceo', perm: 'audit.read' },
   { rule_id: 'R002', ladder: 'office', dept: '', title: 'osv', perm: 'audit.read.brand' }
 ];
-const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write'] }, ORG);
+const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin'] }, ORG);
 
-t('對照表 14 列、順序固定（2026-10-26 加公告管理）（不跟後端 grantable 順序）', () => {
+t('對照表 18 列、順序固定（2026-10-26 加公告管理）（不跟後端 grantable 順序）', () => {
   const rows = L.featureRows(DATA);
-  assert.equal(rows.length, 14);
+  assert.equal(rows.length, 19);
+  assert.equal(rows[18].perm, 'transfer.write');
+  assert.equal(rows[18].name, '調撥管理');
   assert.equal(rows[13].perm, 'platform.bulletin');
   assert.equal(rows[13].name, '公告管理');
   assert.deepEqual(rows.map((r) => r.perm), L.FEATURE_ORDER);
@@ -58,7 +60,7 @@ t('對照表 14 列、順序固定（2026-10-26 加公告管理）（不跟後�
 });
 t('鎖住的兩列', () => {
   const locked = L.featureRows(DATA).filter((r) => r.locked).map((r) => r.perm);
-  assert.deepEqual(locked.slice().sort(), ['audit.write', 'payroll.write', 'platform.permmap', 'platform.staff', 'platform.users']);
+  assert.deepEqual(locked.slice().sort(), ['audit.write', 'payroll.write', 'platform.permmap', 'platform.staff', 'platform.users', 'pnl.admin']);
 });
 t('同一列的 chip 依階梯→部門排', () => {
   const r = L.featureRows(DATA).find((x) => x.perm === 'audit.read');
@@ -281,6 +283,23 @@ t('人資主管在個別例外只能選的三碼（2026-10-26 加公告管理）
   L.HR_EX_FEATURES.forEach((p) => assert.ok(L.FEATURE_ORDER.includes(p), p));
 });
 t('每個功能都有白話說明', () => L.FEATURE_ORDER.forEach((p) => assert.ok(L.FEATURE_DESC[p], p)));
+t('指定門市只看考勤（2026-10-26 docs/att-support/spec.md §2）：代碼、名稱、不在可給清單', () => {
+  assert.equal(L.attViewUnitOf('att.view@mala-gf'), 'mala-gf');
+  ['att.view@', 'att.view@a b', 'att.extra', 'att.view@x@y', '', null].forEach((c) => assert.equal(L.attViewUnitOf(c), '', String(c)));
+  assert.equal(L.attViewCode('mala-gf'), 'att.view@mala-gf');
+  assert.equal(L.attViewCode(' ck '), 'att.view@ck');
+  assert.equal(L.attViewCode(''), '');
+  assert.equal(L.attViewCode('a b'), '');
+  const units = [{ code: 'mala-gf', name: '麻的小辛辣 新竹光復' }];
+  assert.equal(L.featureName('att.view@mala-gf', units), '只看考勤（麻的小辛辣 新竹光復）');
+  assert.equal(L.featureName('att.view@mala-gf', { 'mala-gf': '光復' }), '只看考勤（光復）');
+  assert.equal(L.featureName('att.view@mzt-gf', units), '只看考勤（mzt-gf）');
+  assert.deepEqual(['att.view@ck'].map(L.featureName), ['只看考勤（ck）']);   // Array.map 傳 index 不會壞
+  assert.equal(L.featureName('att.extra', units), '額外考勤核定');
+  assert.ok(!L.FEATURE_ORDER.some((p) => p.indexOf('@') !== -1) && !L.HR_EX_FEATURES.includes(L.ATT_VIEW_CHOICE), '不在可給清單、也不在人資主管清單');
+  assert.equal(L.ATT_VIEW_CHOICE_NAME, '指定門市只看考勤');
+  assert.equal(L.attViewUnitOf(L.ATT_VIEW_CHOICE), '');
+});
 
 
 if (fails.length) {

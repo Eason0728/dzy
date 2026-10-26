@@ -371,7 +371,7 @@ export function mountClockMap(el, env) {
         <div class="text-muted">${esc(unitOf(x))}｜打卡：${esc(x.store_name || x.store_code)} 編號 ${esc(x.emp_id)}（${esc(ROLE_TEXT[x.role] || x.role)}）${x.last_punch ? `｜最近打卡 ${esc(x.last_punch)}` : ''}</div>
         ${confirmed ? '' : `<p class="field-hint">這個人在打卡系統的 ${esc(x.emp_id)}，就是 ${esc(x.name)} 本人嗎？</p>`}
         <div class="btn-row">
-          ${confirmed ? '' : `<button type="button" class="btn" style="background:var(--ok);border-color:var(--ok);color:var(--ink-inverse)" data-act="cm-yes" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">對</button>
+          ${confirmed ? '' : `<button type="button" class="btn btn-ok" data-act="cm-yes" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">對</button>
           <button type="button" class="btn btn-danger" data-act="cm-no" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">不對</button>`}
           ${homeAction(x, { isHq }) === 'btn' ? `<button type="button" class="btn btn-secondary" data-act="cm-home" data-emp="${esc(x.emp_no)}" data-store="${esc(x.store_code)}">設為主店</button>` : ''}
           ${homeAction(x, { isHq }) === 'mark' ? `<span class="tag tag-ok" data-role="home-mark">主店${x.pinned ? '（已指定）' : ''}</span>` : ''}

@@ -4,8 +4,9 @@
  */
 'use strict';
 
-/** 可給的 14 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
-export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin'];
+/** 可給的 19 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
+export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase',
+  'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write'];
 
 /** 人資主管（platform.permmap 但不是 admin）在個別例外只能動的三碼（2026-10-26 加公告管理）；對照後端 STORE_HR_GRANTABLE，真正擋的是後端，前端只是不顯示選不了的 */
 export const HR_EX_FEATURES = ['store.void', 'att.extra', 'platform.bulletin'];
@@ -24,7 +25,12 @@ export const FEATURE_NAMES = {
   'att.extra': '額外考勤核定',
   'payroll.write': '薪酬管理',
   'cashbook.write': '收支管理',
-  'platform.bulletin': '公告管理'
+  'platform.bulletin': '公告管理',
+  'platform.purchase': '貨單核對',
+  'pnl.read': '看損益',
+  'pnl.write': '填損益',
+  'pnl.admin': '損益定稿與設定',
+  'transfer.write': '調撥管理'
 };
 
 /** 其他會出現在 myPerms／異動裡的碼 */
@@ -33,8 +39,39 @@ const OTHER_NAMES = {
   'platform.login': '登入', '*': '全部功能'
 };
 
-export function featureName(code) {
+/**
+ * 功能碼 → 中文。units（選填）＝可設「只看考勤」的門市（permExList 的 att_view_units：[{code, name}]，或 {code: name}），
+ * 只用在 att.view@<單位>（2026-10-26 指定門市只看考勤）；不是物件（例如 Array.map 傳進來的 index）就忽略。
+ */
+export function featureName(code, units) {
+  const u = attViewUnitOf(code);
+  if (u) return `只看考勤（${attViewUnitName(u, units)}）`;
   return FEATURE_NAMES[code] || OTHER_NAMES[code] || code;
+}
+
+// ---- 指定門市只看考勤（att.view@<單位>，docs/att-support/spec.md §2；只有 admin 能設、只能多給、只能用個別例外） ----
+export const ATT_VIEW_PREFIX = 'att.view@';
+/** 功能下拉裡「指定門市只看考勤」那一項的值（不是權限碼；送出時換成 att.view@<門市>） */
+export const ATT_VIEW_CHOICE = '__att_view__';
+export const ATT_VIEW_CHOICE_NAME = '指定門市只看考勤';
+const ATT_VIEW_RE = /^att\.view@([A-Za-z0-9_-]{1,40})$/;
+/** att.view@<單位> → 單位代碼；其他 → '' */
+export function attViewUnitOf(code) {
+  const m = ATT_VIEW_RE.exec(String(code || ''));
+  return m ? m[1] : '';
+}
+/** 門市代碼 → 權限碼；代碼格式不對回 '' */
+export function attViewCode(unit) {
+  const c = ATT_VIEW_PREFIX + String(unit || '').trim();
+  return attViewUnitOf(c) ? c : '';
+}
+function attViewUnitName(unit, units) {
+  if (!units || typeof units !== 'object') return unit;
+  if (Array.isArray(units)) {
+    const hit = units.find((x) => x && x.code === unit);
+    return hit && hit.name ? hit.name : unit;
+  }
+  return units[unit] || unit;
 }
 
 const LADDER_FALLBACK = { store: '門市', office: '品牌辦公室', hq: '總部' };
@@ -238,7 +275,12 @@ export const FEATURE_DESC = {
   'att.extra': '額外核定本單位所有要考勤的人（只能在個別例外給，可設到期日）',
   'payroll.write': '進薪酬管理：看與改全集團薪資、鎖定月份（建議只用個別例外開給指定的人）',
   'cashbook.write': '進收支管理：會計跨店查現金收支、作廢、月結鎖定、改會計科目、匯出 Excel（財務部門預設有）',
-  'platform.bulletin': '進電子佈告欄的公告管理：新增、上架、下架、置頂公告與看簽名回條（總監級以上預設有）'
+  'platform.bulletin': '進電子佈告欄的公告管理：新增、上架、下架、置頂公告與看簽名回條（總監級以上預設有）',
+  'platform.purchase': '進貨單核對：核對入帳廠商貨單、看食材成本與單價報表（財務部門預設有）',
+  'pnl.read': '進損益系統，只能看儀表板',
+  'pnl.write': '進損益系統：看、填資料、匯入、確認為 0（財務部門預設有）',
+  'pnl.admin': '損益定稿、解除定稿、改設定（只有系統管理員能開）',
+  'transfer.write': '進調撥管理：看調撥月報、品項記憶、卡關總覽，產月報、改品項記憶（財務部門預設有）'
 };
 
 /** 總部高層（不分部門）的職稱代碼 */

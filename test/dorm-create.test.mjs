@@ -299,6 +299,16 @@ t('computeRent：沒有房間定義 → null（不是拋例外、不是 0）', (
   assert.equal(computeRent(null, '自住'), null);
 });
 
+t('computeTermEndPreview：月底起租取月底，與後端 Core.gs 一致（2026-10-26 Eason：8/31 → 2/28），不受時區影響', () => {
+  assert.equal(computeTermEndPreview('2026-08-31'), '2027-02-28');
+  assert.equal(computeTermEndPreview('2027-08-31'), '2028-02-29');
+  assert.equal(computeTermEndPreview('2026-08-29'), '2027-02-28');
+  assert.equal(computeTermEndPreview('2026-08-28'), '2027-02-27');
+  assert.equal(computeTermEndPreview('2026-03-31'), '2026-09-30');
+  assert.equal(computeTermEndPreview('2026-01-31'), '2026-07-30');
+  assert.equal(computeTermEndPreview('2026-12-15'), '2027-06-14');
+  assert.equal(computeTermEndPreview('2026-13-01'), '');
+});
 t('computeTermEndPreview：2026-08-01 起六個月 → 2027-01-31（與 Api.gs testPhase1() 的既有斷言同一組例子）', () => {
   assert.equal(computeTermEndPreview('2026-08-01'), '2027-01-31');
 });

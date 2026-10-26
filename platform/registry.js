@@ -26,8 +26,11 @@ export const MODULES = [
   { load: () => import('../modules/attendance/manifest.js') },
   { load: () => import('../modules/schedule/manifest.js') },
   { load: () => import('../modules/payroll/manifest.js') },
-  { load: () => import('../modules/eval/manifest.js') },
+  { load: () => import('../modules/eval/manifest.js') },   // 人資部門：績效評核（排在薪酬管理後）
+  { load: () => import('../modules/purchase/manifest.js') },
   { load: () => import('../modules/cashbook/manifest.js') },
+  { load: () => import('../modules/transfer-fin/manifest.js') },
+  { load: () => import('../modules/pnl/manifest.js') },   // 財務部門：損益系統（排在貨單核對、收支管理、調撥管理之後）
 ];
 
 /**

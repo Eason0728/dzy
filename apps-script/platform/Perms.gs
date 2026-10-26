@@ -14,10 +14,19 @@ var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit
   'payroll.write',              // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
   'cashbook.write',             // 2026-10-24 收支管理（會計跨店查帳、作廢、月結鎖定、改科目）；2026-10-25 改為鎖碼（審查 B-01：人資可整條職稱線開給全集團現金帳）
   'platform.bulletin',         // 2026-10-26 公告管理（電子佈告欄的公告管理／新增公告；原本同仁名單逐人勾 BULLETIN_ADMINS，Eason：搬進權限設定、不鎖碼、人資可設）
+  'platform.purchase',           // 2026-10-24 貨單核對（財務部門；不鎖碼，Eason：財務部門自動有、他可再用個別例外加人；docs/purchase-fin）
+  'pnl.read', 'pnl.write', 'pnl.admin',   // 2026-10-24 損益系統：看／填（財務部門預設）／管（定稿與設定，鎖碼）
+  'transfer.write',            // 2026-10-24 調撥管理（財務部門看調撥月報、品項記憶、卡關總覽；不鎖碼，Eason Q1 B：人資可在權限設定打開）
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin'];   // 2026-10-26 績效評核（docs/eval/spec.md §2.2；預設規則在 Eval.gs EV_PERM_DEFAULT_RULES，evSetup 補進 perm_map）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
-var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write'];   // 2026-10-19 加薪酬系統；2026-10-25 加收支管理
+var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write', 'pnl.admin'];   // 2026-10-19 加薪酬系統；2026-10-25 加收支管理
+// 2026-10-26 指定門市只看考勤（docs/att-support/spec.md §2，Eason 7A）：帶單位的功能碼 att.view@<單位代碼>，例 att.view@mala-gf。
+//   不在 PERM_GRANTABLE：對照表規則一律不收（permValidateRule_／permCompute_ 規則迴圈都只認 PERM_GRANTABLE），只能用個別例外給、只能「多給」；
+//   只有 admin 能設（不在 StoreOps.gs STORE_HR_GRANTABLE）；單位要存在、啟用、store 階梯（含央廚 ck）。效果在 StoreOps.gs（ident att.view_people、platform.att）。
+//   admin 專屬：人資調動同仁時若會改變某人有無這種碼，也比照鎖碼擋下（permStaffChangeCheck_／permNewRowBlock_）。
+var PERM_ATT_VIEW_PREFIX = 'att.view@';
+var PERM_ATT_VIEW_RE = /^att\.view@([A-Za-z0-9_-]{1,40})$/;
 
 var PERM_SHEET_MAP = 'perm_map';
 var PERM_SHEET_EX = 'perm_ex';
@@ -55,6 +64,11 @@ var PERM_DEFAULT_RULES = (function () {
   add('office', '', 'odir', ['platform.bulletin']);
   add('store', '', 'rdd', ['platform.bulletin']);
   ['ceo', 'gm', 'chair'].forEach(function (t) { add('hq', '', t, ['platform.bulletin']); });
+  // 2026-10-24（docs/purchase-fin，第 34 條）：財務部門預設可進貨單核對。正式環境 perm_map 早已初始化，由 Eason 在「權限設定 → 財務部門」打開同一個開關
+  add('hq', 'fin', '*', ['platform.purchase']);
+  // 2026-10-24（docs/pnl-fin）：財務部門預設損益系統「填」級；正式環境由 Eason 在權限設定打開
+  add('hq', 'fin', '*', ['pnl.write']);
+  add('hq', 'fin', '*', ['transfer.write']);   // 2026-10-24 調撥管理（第 36 條；正式環境 perm_map 已初始化不會自動補，由 Eason 在權限設定打開）
   return out;
 })();
 
@@ -108,6 +122,16 @@ function permNormDate_(v) {
 
 function permIdx_(perm) { return PERM_GRANTABLE.indexOf(perm); }
 function permIsGrantable_(perm) { return permIdx_(permStr_(perm)) !== -1; }
+/** att.view@<單位> → 單位代碼；不是這種碼（或格式不對）→ '' */
+function permAttViewUnit_(perm) {
+  var m = PERM_ATT_VIEW_RE.exec(permStr_(perm));
+  return m ? m[1] : '';
+}
+/** 只看考勤的單位合不合法：org＝permOrgIndex_ 形狀（units:{code:{ladder,parent,active}}）；存在、啟用、ladder 恰好 store（含 ck） */
+function permAttViewUnitOk_(unit, org) {
+  var u = unit && org && org.units ? org.units[unit] : null;
+  return !!(u && u.active !== false && permStr_(u.ladder) === 'store');
+}
 function permIsActive_(v) {
   if (v === true) return true;
   return permStr_(v).toUpperCase() === 'TRUE';
@@ -271,7 +295,10 @@ function permCompute_(input) {
     // 只採用「emp_no 非空且等於本人」的例外（fail closed）：沒填工號、或本人沒有工號 → 不生效
     if (!empNo || !permStr_(x.emp_no) || permStr_(x.emp_no).toUpperCase() !== empNo) return;
     var perm = permStr_(x.perm);
-    if (!permIsGrantable_(perm)) return;
+    var avu = permAttViewUnit_(perm);   // 2026-10-26 只看考勤 att.view@<單位>：只走例外、單位要合法（fail closed）、只認 add
+    if (avu) {
+      if (!permAttViewUnitOk_(avu, org) || permStr_(x.mode).toLowerCase() !== 'add') return;
+    } else if (!permIsGrantable_(perm)) return;
     var mode = permStr_(x.mode).toLowerCase();
     var rawUntil = permStr_(x.until);
     var until = permNormDate_(x.until);
@@ -375,14 +402,20 @@ function permValidateRule_(rule, org, isAdmin) {
 }
 
 /**
- * 例外驗證。ex={perm,mode,until,note}；today 為台北 YYYY-MM-DD。
- * 回 null＝合法；否則 {error:'bad_perm'|'bad_mode'|'bad_until'|'bad_note', message}
+ * 例外驗證。ex={perm,mode,until,note}；today 為台北 YYYY-MM-DD；org＝permOrgIndex_() 形狀（只有 att.view@<單位> 需要，沒給＝那種碼一律不合法）。
+ * 回 null＝合法；否則 {error:'bad_perm'|'bad_mode'|'bad_target'|'bad_until'|'bad_note', message}
+ * att.view@<單位>（2026-10-26）：單位存在、啟用、store 階梯（含 ck），且只能「多給」。誰能設（admin）由 PermActions.gs permAcExAuth_ 擋。
  */
-function permValidateEx_(ex, today) {
+function permValidateEx_(ex, today, org) {
   ex = ex || {};
-  if (!permIsGrantable_(ex.perm)) return permErr_('bad_perm', '這個功能不能設成例外');
+  var avu = permAttViewUnit_(ex.perm);
+  if (!avu && !permIsGrantable_(ex.perm)) return permErr_('bad_perm', '這個功能不能設成例外');
   var mode = permStr_(ex.mode);
   if (mode !== 'add' && mode !== 'remove') return permErr_('bad_mode', '請選擇多給或拿掉');
+  if (avu) {
+    if (mode !== 'add') return permErr_('bad_mode', '指定門市只看考勤只能「多給」；要收回請撤銷那筆例外');
+    if (!permAttViewUnitOk_(avu, org)) return permErr_('bad_target', '這個門市不存在、已停用，或不是門市／央廚');
+  }
   var rawUntil = ex.until;
   if (!(rawUntil === undefined || rawUntil === null || permStr_(rawUntil) === '')) {
     var n = permNormDate_(rawUntil);
@@ -483,10 +516,34 @@ var PERM_NAMES = {
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
   'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
-  'payroll.write': '薪酬系統', 'cashbook.write': '收支管理',
+  'payroll.write': '薪酬系統', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對',
+  'pnl.read': '損益系統：看', 'pnl.write': '損益系統：填', 'pnl.admin': '損益系統：管', 'transfer.write': '調撥管理',
   'platform.eval-manage': '績效評核：替所屬同仁打分', 'platform.eval-brand': '績效評核：看自己品牌各店', 'platform.eval-all': '績效評核：看全集團', 'platform.eval-admin': '績效評核：題目設定與定稿'
 };
-function permName_(code) { return PERM_NAMES[code] || code; }
+function permName_(code) {
+  if (PERM_NAMES[code]) return PERM_NAMES[code];
+  var avu = permAttViewUnit_(code);
+  if (avu) {
+    var org = null;
+    try { org = typeof stfReadOrg_ === 'function' ? stfReadOrg_() : null; } catch (e) { org = null; }
+    return '只看考勤（' + permAttViewLabel_(avu, org) + '）';
+  }
+  return code;
+}
+
+/**
+ * 只看考勤的單位顯示名（2026-10-26）：org＝stfReadOrg_() 形狀，可為 null。
+ * 兩個品牌都有「新竹光復」，所以門市前面加品牌名（單位名已含品牌名、或央廚 ck 就不加）；查不到單位 → 代碼本身。
+ */
+function permAttViewLabel_(unit, org) {
+  var u = org && org.unit ? org.unit[unit] : null;
+  if (!u) return unit;
+  var name = permStr_(u.name) || unit;
+  var b = org.brand ? org.brand[permStr_(u.parent)] : null;
+  var bn = b ? permStr_(b.name) : '';
+  if (!bn || permStr_(u.parent) === 'ck' || name.indexOf(bn) !== -1) return name;
+  return bn + ' ' + name;
+}
 
 /** 開關：Script Property PERMS_ON 恰好是 '1' 才開（預設關＝行為與第一期完全相同，不讀 perm 表） */
 function permEnabled_() {
@@ -571,11 +628,11 @@ function permSessionCompute_(base, staffValues) {
 
 var PERM_MSG_ADMIN_ONLY = '人資主管要請系統管理員設定';
 // 非 admin 的調動改變了對方的鎖碼：依實際變動的碼組出中文訊息（含 platform.permmap 沿用原句）
-var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理', 'payroll.write': '薪酬系統', 'cashbook.write': '收支管理' };
+var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理', 'payroll.write': '薪酬系統', 'cashbook.write': '收支管理', 'pnl.admin': '損益系統定稿與設定' };
 function permLockedMsg_(changedCodes) {
   if (changedCodes.indexOf('platform.permmap') !== -1) return PERM_MSG_ADMIN_ONLY;
   var ph = [];
-  changedCodes.forEach(function (c) { var t = PERM_LOCKED_PHRASE[c] || c; if (ph.indexOf(t) === -1) ph.push(t); });
+  changedCodes.forEach(function (c) { var t = PERM_LOCKED_PHRASE[c] || (permAttViewUnit_(c) ? '只看考勤' : c); if (ph.indexOf(t) === -1) ph.push(t); });
   return '這個調動會改變對方的' + ph.join('／') + '權限，請系統管理員處理';
 }
 var PERM_MSG_SELF_ORG = '不能修改自己的單位、部門或職稱，請找人資或系統管理員';
@@ -630,6 +687,11 @@ function permStaffChangeCheck_(isAdmin, beforeValues, beforeExtra, afterValues, 
   var lockedChanged = PERM_LOCKED.filter(function (c) {
     return (b.perms.indexOf(c) !== -1) !== (a.perms.indexOf(c) !== -1);
   });
+  // 2026-10-26 admin 專屬的 att.view@<單位>（例：單位停用後 permCompute_ 不再給）也比照鎖碼
+  b.perms.concat(a.perms).forEach(function (c) {
+    if (!permAttViewUnit_(c) || lockedChanged.indexOf(c) !== -1) return;
+    if ((b.perms.indexOf(c) !== -1) !== (a.perms.indexOf(c) !== -1)) lockedChanged.push(c);
+  });
   if (!isAdmin && lockedChanged.length) {
     res.block = { ok: false, error: permLockedMsg_(lockedChanged), code: 'perm_admin_only' };
     return res;
@@ -663,7 +725,8 @@ function permAuditEnabled_(by, values) {
 function permNewRowBlock_(isAdmin, values) {
   if (isAdmin) return null;
   var r = permComputeRow_(permLoadCtx_(true), permAsActive_(values), []);
-  var hit = PERM_LOCKED.filter(function (c) { return r.perms.indexOf(c) !== -1; });
+  var hit = PERM_LOCKED.filter(function (c) { return r.perms.indexOf(c) !== -1; })
+    .concat(r.perms.filter(function (c) { return permAttViewUnit_(c) !== ''; }));   // 2026-10-26 att.view@<單位> 比照鎖碼
   return hit.length ? { ok: false, error: permLockedMsg_(hit), code: 'perm_admin_only' } : null;
 }
 

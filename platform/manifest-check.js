@@ -20,7 +20,8 @@ export const PERM_RE = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*){1,2}$/;
 export const RESERVED_IDS = ['claim', 'forgot', 'home'];
 
 const REQUIRED_KEYS = ['id', 'ns', 'backend', 'name', 'desc', 'icon', 'requires', 'views', 'entry'];
-const KNOWN_KEYS = REQUIRED_KEYS.concat(['color', 'dept']);
+// keepAlive（切走後保留畫面的毫秒數）、dynamicTabs（頁頂分頁由模組動態決定）是 shell.js 實際會讀的欄位（2026-10-25 審查 A-08）
+const KNOWN_KEYS = REQUIRED_KEYS.concat(['color', 'dept', 'keepAlive', 'dynamicTabs']);
 
 /**
  * @param {object} m 模組 manifest

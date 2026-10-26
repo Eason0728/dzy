@@ -99,16 +99,23 @@ export function computeRent(roomDef, occupancy) {
 }
 
 /**
- * 租期迄日預覽：起日 + 6 個月 − 1 天（同舊版 admin.html 179-183 行、Core.gs
- * addMonthsMinusDay()）。真正寫進試算表的迄日一樣由後端權威計算，這裡只是預覽。
+ * 租期迄日預覽：起日 6 個月後的同一天 − 1 天，那個月沒有這一天取月底（同 Core.gs
+ * addMonthsMinusDay()，2026-10-26 起）。真正寫進試算表的迄日一樣由後端權威計算，這裡只是預覽。
  */
 export function computeTermEndPreview(startStr) {
   if (!startStr) return '';
-  const d = new Date(startStr);
-  if (Number.isNaN(d.getTime())) return '';
-  d.setMonth(d.getMonth() + DEFAULT_TERM_MONTHS);
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  // 規則與後端 Core.gs addMonthsMinusDay 一致（2026-10-26 Eason 定）：n 個月後的同一天減 1 天；
+  // 那個月沒有這一天就取月底（8/31 → 2/28、3/31 → 9/30）。用整數算，不受時區影響
+  const m0 = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(startStr));
+  if (!m0) return '';
+  const chk = new Date(Date.UTC(Number(m0[1]), Number(m0[2]) - 1, Number(m0[3])));   // 不存在的日期（13 月、2/30）回空字串，同舊版
+  if (chk.getUTCMonth() !== Number(m0[2]) - 1 || chk.getUTCDate() !== Number(m0[3])) return '';
+  const total = Number(m0[2]) - 1 + DEFAULT_TERM_MONTHS;
+  const y = Number(m0[1]) + Math.floor(total / 12), m = total % 12;
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const startDay = Number(m0[3]);
+  const day = startDay > last ? last : startDay - 1;
+  return new Date(Date.UTC(y, m, day)).toISOString().slice(0, 10);
 }
 
 /**
