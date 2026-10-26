@@ -159,6 +159,26 @@ function writeDevice(username, device) {
   }
 }
 
+/** 憑證屬於哪個使用者 id（只解開 payload 看 d，不驗簽章：驗章在後端）；解不開回 '' */
+function deviceUserId(device) {
+  try {
+    const part = String(device).split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(escape(atob(part + '==='.slice((part.length + 3) % 4))));
+    const d = JSON.parse(json).d;
+    return typeof d === 'string' ? d : '';
+  } catch {
+    return '';
+  }
+}
+
+/** 改密碼後舊憑證會失效：把這個使用者在本機的憑證換成後端新發的（找不到就不動，下次登入成功自然會存） */
+function replaceDeviceForUser(userId, device) {
+  if (!userId || typeof device !== 'string' || !device) return;
+  const m = readDeviceMap();
+  const key = Object.keys(m).find((k) => deviceUserId(m[k]) === String(userId));
+  if (key) writeDevice(key, device);
+}
+
 function clearTokenFromStorage() {
   try {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
@@ -419,6 +439,7 @@ export async function changePassword(oldPassword, newPassword) {
     currentToken = res.data.token;
     writeTokenToStorage(res.data.token);
   }
+  if (res.data && currentUser) replaceDeviceForUser(currentUser.id, res.data.device);   // 認得的手機（2026-10-25）
   return { ok: true };
 }
 

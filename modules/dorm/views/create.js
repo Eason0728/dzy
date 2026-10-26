@@ -104,10 +104,12 @@ export function computeRent(roomDef, occupancy) {
  */
 export function computeTermEndPreview(startStr) {
   if (!startStr) return '';
+  // 2026-10-25 審查 A-12：一律用 UTC 欄位運算——new Date('YYYY-MM-DD') 是 UTC 午夜，原本混用本地 setMonth 與
+  // toISOString，在台灣以西的時區會差一天。月底溢位（8/31 → 3/2）與後端 Core.gs（Asia/Taipei）算法一致，刻意不改
   const d = new Date(startStr);
   if (Number.isNaN(d.getTime())) return '';
-  d.setMonth(d.getMonth() + DEFAULT_TERM_MONTHS);
-  d.setDate(d.getDate() - 1);
+  d.setUTCMonth(d.getUTCMonth() + DEFAULT_TERM_MONTHS);
+  d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
 }
 

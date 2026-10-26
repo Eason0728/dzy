@@ -490,6 +490,10 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(ev.some((e) => e.action === 'reject' && e.note === '收據不清楚' && /^[0-9a-f]{64}$/.test(e.sha256)), 'reject 事件有原因與 sha256');
   const g = getForm(app, 'DZY901', id).data;
   ok(g.form.can.resubmit === true && g.form.can.withdraw === false, '送件人 can.resubmit');
+  // 2026-10-25 審查 A-11：apvMine 直接帶退回原因，前端不必逐張 apvGet
+  const mineRj = post(app, 'DZY901', 'apvMine', {}).data.forms.find((x) => x.id === id);
+  ok(mineRj.reject_note && mineRj.reject_note.note === '收據不清楚' && typeof mineRj.reject_note.by === 'string' && mineRj.reject_note.by !== '', 'apvMine 被退回的單帶 reject_note（原因＋退回人）', mineRj.reject_note);
+  ok(post(app, 'DZY901', 'apvMine', {}).data.forms.filter((x) => x.status !== 'rejected').every((x) => !('reject_note' in x)), 'apvMine 沒被退回的單不帶 reject_note');
   // 再送
   const f2 = upload(app, 'DZY901');
   ok(post(app, 'DZY902', 'apvResubmit', { id, rev: 1, step: null, body: expenseBody({ amount: 9000 }), files: [f2] }).error === 'forbidden', '只有送件人可再送');
