@@ -12,20 +12,24 @@ export function mountMine(el, ctx) {
   const opts = ['<option value="">全部狀態</option>'].concat(Object.keys(STATUS).map((k) => `<option value="${k}">${esc(STATUS[k][0])}</option>`)).join('');
   let alive = true;
 
-  // apvMine 的 Form 沒有退回原因欄位 → 對 rejected 的單逐張讀 apvGet，拿該版最後一筆 reject／handle 事件的 note
+  // 退回原因：後端 apvMine 直接帶 reject_note（2026-10-25 審查 A-11）；舊後端沒帶時才退回逐張讀 apvGet
   async function fillReasons(box, secs) {
     for (const s of secs) {
       for (const f of (s.forms || [])) {
         if (f.status !== 'rejected' || !alive) continue;
-        const r = await ctx.api.call('approvals', 'apvGet', { id: f.id });
-        if (!alive || !r || !r.ok || !r.data) continue;
-        const ev = (r.data.events || []).filter((e) => (e.action === 'reject' || e.action === 'handle') && e.note).pop();
+        let note = f.reject_note && f.reject_note.note ? { note: f.reject_note.note, by: f.reject_note.by || '' } : null;
+        if (!note) {
+          const r = await ctx.api.call('approvals', 'apvGet', { id: f.id });
+          if (!alive || !r || !r.ok || !r.data) continue;
+          const ev = (r.data.events || []).filter((e) => (e.action === 'reject' || e.action === 'handle') && e.note).pop();
+          if (ev) note = { note: ev.note, by: (ev.actor && ev.actor.name) || '' };
+        }
         const card = box.querySelector(`[data-role="apv-card"][data-id="${f.id}"]`);
-        if (ev && card && !card.querySelector('[data-role="reject-note"]')) {
+        if (note && card && !card.querySelector('[data-role="reject-note"]')) {
           const p = document.createElement('p');
           p.setAttribute('data-role', 'reject-note');
           p.className = 'field-hint';
-          p.textContent = `退回原因：${ev.note}（${(ev.actor && ev.actor.name) || ''}）`;
+          p.textContent = `退回原因：${note.note}（${note.by}）`;
           const thumbs = card.querySelector('[data-role="detail"]');
           card.insertBefore(p, thumbs);
         }

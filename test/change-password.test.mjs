@@ -236,6 +236,38 @@ await t('B7: token 無效／帳號已停用 → handleMe_ 的錯誤原樣回傳�
   assert.deepEqual(rows[0], before, '停用帳號不得改密碼');
 });
 
+// 2026-10-25 審查 B-04：新密碼套用與認領／忘記密碼同一套規則（Staff.gs stfValidatePassword_，這裡載入真的函式）
+function withRealPwRule(sb) {
+  const staffSrc = fs.readFileSync(path.join(ROOT, 'apps-script', 'platform', 'Staff.gs'), 'utf8');
+  const fn = /function stfValidatePassword_\([\s\S]*?\n}\n/.exec(staffSrc)[0];
+  sb.STF_MAX = { password: 128 }; sb.STF_MSG = { PW_TOO_LONG: '密碼太長' };
+  vm.runInContext(fn, sb);
+  return sb;
+}
+await t('B9: ★新密碼跟帳號一樣（不分大小寫）→ 拒絕，salt/hash 沒動（審查 B-04）', async () => {
+  const { sb, rows } = setupAs('u001', ['*']);
+  withRealPwRule(sb);
+  const before = rows[0].slice();
+  const res = sb.handleChangePassword_('tok', { oldPassword: 'alicepw123', newPassword: 'ALICE' + '' });
+  assert.equal(res.ok, false);
+  const res2 = sb.handleChangePassword_('tok', { oldPassword: 'alicepw123', newPassword: 'Alice' });
+  assert.equal(res2.ok, false);
+  // 長度夠、等於帳號（8 字以上的帳號才驗得到這條）
+  rows[0][1] = 'alice-store';
+  const res3 = sb.handleChangePassword_('tok', { oldPassword: 'alicepw123', newPassword: 'ALICE-STORE' });
+  assert.equal(res3.ok, false); assert.equal(res3.error, '密碼不能跟編號一樣');
+  assert.deepEqual(rows[0].slice(5, 7), before.slice(5, 7), '被拒絕時 salt/hash 不動');
+  const ok2 = sb.handleChangePassword_('tok', { oldPassword: 'alicepw123', newPassword: 'brandnew123' });
+  assert.equal(ok2.ok, true, '合規的新密碼照常成功');
+});
+await t('B10: 改密碼成功時一併換發「認得的手機」憑證（舊的因 token_after 失效）', async () => {
+  const { sb } = setupAs('u001', ['*']);
+  sb.issueDeviceToken_ = (u, min) => 'device-for-' + u.id + '-' + min;
+  const res = sb.handleChangePassword_('tok', { oldPassword: 'alicepw123', newPassword: 'brandnew123' });
+  assert.equal(res.ok, true);
+  assert.equal(res.data.device, 'device-for-u001-1001', '用撤銷時間 +1 簽發，才不會被自己的 token_after 擋掉');
+});
+
 await t('B8: changePassword 在 Code.gs 的 action 白名單裡，且分派到正確的 handler', async () => {
   const code = fs.readFileSync(path.join(ROOT, 'apps-script', 'platform', 'Code.gs'), 'utf8');
   assert.ok(/CODE_ALLOWED_ACTIONS\s*=\s*\[[^\]]*'changePassword'/.test(code), 'changePassword 應在白名單');

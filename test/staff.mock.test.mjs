@@ -292,6 +292,23 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
 })();
 
 // ============================================================
+// A5b 2026-10-25 審查 A-04：已開通同仁所屬門市被停用後，組織沒改時照樣能改手機／地址；組織有改照舊驗
+// ============================================================
+(() => {
+  const { sb, sheets } = fresh();
+  const tok = adminToken(sb);
+  const { claim } = seedAndClaim(sb, tok);
+  const me = claim.data.token;
+  const orgRow = sheets.org._data.find((r) => r[0] === 'unit' && r[1] === 'mzt-gf');
+  orgRow[7] = 'FALSE';   // 組織調整：光復店停用
+  const r1 = post(sb, 'saveMyProfile', Object.assign({}, PROFILE, { phone: '0912000111', current_password: 'fake-staff-pw-1' }), me);
+  ok(r1.ok && staffRow(sheets, 'DZY001')[COL('phone')] === '0912000111', 'A5b ★門市停用後，組織沒改照樣能改手機', r1);
+  ok(post(sb, 'saveMyProfile', Object.assign({}, PROFILE, { phone: '0912000111', address: '新竹市新地址二段2號' }), me).ok && staffRow(sheets, 'DZY001')[COL('address')] === '新竹市新地址二段2號', 'A5b 組織沒改照樣能改地址');
+  ok(post(sb, 'saveMyProfile', Object.assign({}, PROFILE, { phone: '0912000111', title: 'ft' }), me).ok === false, 'A5b 組織有改（改職稱）時照舊驗組織 → 停用的門市被擋');
+  ok(post(sb, 'saveMyProfile', Object.assign({}, PROFILE, { phone: 'abc' }), me).ok === false, 'A5b 組織沒改時手機格式照樣要驗');
+})();
+
+// ============================================================
 // A6 後台狀態轉移＋token 撤銷
 // ============================================================
 (() => {
@@ -321,6 +338,12 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   post(sb, 'staffSetActive', { emp_no: 'DZY004', active: false }, tok);
   post(sb, 'staffSetActive', { emp_no: 'DZY004', active: true }, tok);
   ok(staffRow(sheets, 'DZY004')[COL('status')] === 'unclaimed', 'A6 unclaimed 停用再啟用仍是 unclaimed（Fable 第 9 條）');
+  // 2026-10-25 審查 A-03：前狀態空白（舊列或被手動清掉）→ 依紀錄推斷，不再一律卡在 pending
+  post(sb, 'staffSetActive', { emp_no: 'DZY001', active: false }, tok);
+  staffRow(sheets, 'DZY001')[COL('prev_status')] = '';
+  post(sb, 'staffSetActive', { emp_no: 'DZY001', active: true }, tok);
+  ok(staffRow(sheets, 'DZY001')[COL('status')] === 'active', 'A6 ★前狀態空白＋確認過（confirmed_at 有值）→ 啟用回 active，不卡在待審');
+  ok(post(sb, 'login', { username: 'DZY001', password: 'fake-staff-pw-1' }).ok, 'A6 ★啟用後可以登入');
   // 冒用撤回：舊 token 不能讀真人重新認領後的資料
   const imp = claimAndApprove(sb, tok, '測試乙', 'impostor-pw-1').claim.data.token; // 冒用者騙過審核、已登入
   ok(post(sb, 'staffUnclaim', { emp_no: 'DZY002' }, tok).ok && staffRow(sheets, 'DZY002')[COL('status')] === 'unclaimed' && staffRow(sheets, 'DZY002')[COL('phone')] === '', 'A6 撤回認領：回 unclaimed、清個資');

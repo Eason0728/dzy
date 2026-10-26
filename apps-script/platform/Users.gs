@@ -465,6 +465,11 @@ function handleChangePassword_(token, payload) {
   if (newPassword === oldPassword) {
     return { ok: false, error: USR_MSG_PASSWORD_SAME };
   }
+  // 2026-10-25 審查 B-04：與認領／忘記密碼同一套規則（長度上限、不能跟帳號／員編一樣）
+  if (typeof stfValidatePassword_ === 'function') {
+    var pwErr = stfValidatePassword_(newPassword, String(found.values[USR_COL.username]));
+    if (pwErr) return { ok: false, error: pwErr };
+  }
 
   var newSalt = Utilities.getUuid();
   var newHash = hashPassword_(newPassword, newSalt);
@@ -475,7 +480,11 @@ function handleChangePassword_(token, payload) {
   // 本次這台換發新 token，前端收到後替換，不必重新登入
   var revokedAt = setTokenAfter_(found.row);
   var fresh = findUserById_(me.data.user.id);
-  return { ok: true, data: { token: issueToken_(rowToUser_(fresh.values), revokedAt + 1) } };
+  // device：改密碼會讓舊的「認得的手機」憑證失效（token_after），這台換發一張新的，免得自己的手機也不被認得
+  var freshUser = rowToUser_(fresh.values);
+  var out = { token: issueToken_(freshUser, revokedAt + 1) };
+  if (typeof issueDeviceToken_ === 'function') out.device = issueDeviceToken_(freshUser, revokedAt + 1);
+  return { ok: true, data: out };
 }
 
 // ============================================================

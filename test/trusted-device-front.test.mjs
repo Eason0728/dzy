@@ -55,5 +55,24 @@ backend(() => null);
 await Auth.login('DZY004', 'x');
 ok(JSON.parse(store.get(KEY))['dzy004'] === undefined, '9 後端沒回 device（舊後端）：不存、登入照常');
 
+// 10. 改密碼：後端換發新憑證，把這個使用者在本機的那張換掉（用憑證裡的使用者 id 找）
+{
+  store.clear();
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const devOld = b64({ d: 'u7', i: 1, e: 9e9 }) + '.sigOLD';
+  const devNew = b64({ d: 'u7', i: 2, e: 9e9 }) + '.sigNEW';
+  const devOther = b64({ d: 'u8', i: 1, e: 9e9 }) + '.sigX';
+  Auth.__setTransport(async (req) => {
+    if (req.action === 'login') return { ok: true, data: { token: 'T7', user: { id: req.payload.username === 'DZY007' ? 'u7' : 'u8', name: '假', role: 'staff', node: '' }, perms: [], device: req.payload.username === 'DZY007' ? devOld : devOther } };
+    if (req.action === 'changePassword') return { ok: true, data: { token: 'T7b', device: devNew } };
+    return { ok: true, data: {} };
+  });
+  await Auth.login('DZY008', 'x');
+  await Auth.login('DZY007', 'x');
+  const r = await Auth.changePassword('old-pw-1234', 'new-pw-5678');
+  const mm = JSON.parse(store.get(KEY));
+  ok(r.ok && mm['dzy007'] === devNew && mm['dzy008'] === devOther, '10 ★改密碼後本機換上新憑證，別人的不動', mm);
+}
+
 console.log(`通過 ${passed}／${passed + failed}`);
 if (failed) process.exit(1);

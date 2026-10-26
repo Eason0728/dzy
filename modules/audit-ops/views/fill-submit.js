@@ -101,9 +101,13 @@ export function validate({ auditor, details }) {
   return mErr ? [mErr.message] : [];
 }
 
+// 稽核的日期／月份一律用台灣時間（2026-10-25 審查 A-09）：原本用瀏覽器本地時區，手機時區設錯或人在境外時
+// 月初第 1 天的單會記到上個月。台灣沒有日光節約，+8 小時後取 UTC 欄位＝台北的年月日，不受執行環境時區影響
+const taipei = (d) => new Date((d || new Date()).getTime() + 8 * 3600e3);
+
 export function todayStr(d) {
-  d = d || new Date();
-  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  const t = taipei(d);
+  return t.getUTCFullYear() + '-' + pad2(t.getUTCMonth() + 1) + '-' + pad2(t.getUTCDate());
 }
 
 /** 建送出的 record（照抄舊版 submit() 組 record 那段，逐欄位對照）。 */
@@ -263,6 +267,6 @@ export function loadEntriesFor(owner, store, month, data) {
 
 /** 今天所在的年月（同舊版 currentMonth()）。 */
 export function currentMonth(d) {
-  d = d || new Date();
-  return d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+  const t = taipei(d);
+  return t.getUTCFullYear() + '-' + pad2(t.getUTCMonth() + 1);
 }
