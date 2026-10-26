@@ -29,7 +29,7 @@
 
 ## 3. 權限
 
-- 新權限碼 `cashbook.write`，中文「收支管理」。進 `PERM_GRANTABLE`，**不進** `PERM_LOCKED`（Q1 B）。
+- 新權限碼 `cashbook.write`，中文「收支管理」。進 `PERM_GRANTABLE`。原定**不進** `PERM_LOCKED`（Q1 B）；**2026-10-25 改為進 `PERM_LOCKED`**（全資料審查 B-01：非 admin 的人資可用 permMapSave 把全集團現金帳整條職稱線開出去，與同等敏感的 `payroll.write` 不一致）。之後只有 role admin 能新增／刪除含此碼的規則、改變某人有無此碼；已開出去的權限不受影響。
 - 預設：`PERM_DEFAULT_RULES` 加 `add('hq','fin','*',['cashbook.write'])`（新環境用）。**正式環境 perm_map 已初始化，改陣列不生效** → 上線步驟裡由 Eason 在「人資部門 → 權限設定」把財務部門各身分的「收支管理」打開（permMapSave，會先預覽名單）。
 - 個別例外照舊可另外加人（S3 選 B 時就靠這個）。
 - manifest：`id/ns/backend = 'cashbook'`、`dept: 'fin'`、`requires: ['cashbook.write']`、`keepAlive: 30*60*1000`、views＝`rows` 收支明細／`lock` 月結鎖定／`export` 匯出 Excel／`subjects` 會計科目（全部 requires cashbook.write）。

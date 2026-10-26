@@ -113,6 +113,19 @@ def main():
             done_text = page.locator('[data-role="view-content"]').inner_text()
             check('1,300' in done_text, '點交完成畫面顯示賠償合計 1,300 元')
 
+            # ---- 3b. 現場下載給同仁（2026-10-26）：按鈕先抓好檔，按下去下載 PDF ----
+            give = page.locator('[data-act="handover-give"]')
+            page.wait_for_function(
+                "() => { const b = document.querySelector('[data-act=handover-give]'); return b && !b.disabled; }",
+                timeout=8000)
+            check('下載給同仁' in give.inner_text(), '點交完成後出現「下載給同仁（PDF）」，實際：%r' % give.inner_text())
+            with page.expect_download(timeout=8000) as dl_info:
+                give.click()
+            dl = dl_info.value
+            check(dl.suggested_filename.endswith('.pdf'), '下載的檔名是 PDF：%r' % dl.suggested_filename)
+            with open(dl.path(), 'rb') as fh:
+                check(fh.read(5) == b'%PDF-', '下載內容是 PDF 檔頭')
+
             # ---- 4. 收尾：清單狀態變「已退宿」 ----
             page.click('[data-role="view-nav"] .nav-item:has-text("合約清單")')
             page.wait_for_selector('[data-role="contract-row"]', timeout=8000)

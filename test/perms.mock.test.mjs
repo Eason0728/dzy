@@ -111,11 +111,16 @@ function run(staff, extra) {
 const has = (res, p) => res.perms.indexOf(p) !== -1;
 
 // ===== T1-1 =====
-ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin']), 'PERM_GRANTABLE 與契約一致（含營運系統新增的 store.void、att.extra，薪酬系統 payroll.write，收支管理 cashbook.write，績效評核四碼）');
-ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write']), 'PERM_LOCKED 與契約一致（五碼，2026-10-19 加薪酬系統）');
-ok(r0.ok === true && r0.rules_seeded === 27 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋27 條規則＋5 筆對照（2026-10-20 加 am／fm／rdd 六條、10-24 加收支管理）', r0);
+ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin']), 'PERM_GRANTABLE 與契約一致（績效評核四碼 2026-10-26；含營運系統新增的 store.void、att.extra，薪酬系統 payroll.write，收支管理 cashbook.write，2026-10-26 加公告管理 platform.bulletin 共 18 碼）');
+ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write']), 'PERM_LOCKED 與契約一致（六碼，2026-10-19 加薪酬系統、2026-10-25 加收支管理；2026-10-26 公告管理不鎖）');
+ok(P.PERM_LOCKED.indexOf('platform.bulletin') === -1 && P.PERM_GRANTABLE.indexOf('platform.bulletin') !== -1, '公告管理可給、不在鎖碼（人資主管可在個別例外給）');
+ok(r0.ok === true && r0.rules_seeded === 33 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋33 條規則＋5 筆對照（2026-10-20 加 am／fm／rdd 六條、10-24 加收支管理、10-26 加公告管理六條）', r0);
 ok(eq(r0.created, ['perm_map', 'perm_ex', 'perm_store_map', 'perm_audit']), '四張分頁都建出來', r0.created);
-ok(RULES.length === 27 && RULES[0].rule_id === 'R001' && RULES[19].rule_id === 'R020' && RULES[19].perm === 'store.void', '規則編號 R001..R027（R020＝店長 store.void，既有編號不變）', [RULES[0], RULES[19]]);
+ok(RULES.length === 33 && RULES[0].rule_id === 'R001' && RULES[19].rule_id === 'R020' && RULES[19].perm === 'store.void' && RULES[32].rule_id === 'R033', '規則編號 R001..R033（R020＝店長 store.void，既有編號不變）', [RULES[0], RULES[19], RULES[32]]);
+// 2026-10-26：R028–R033 公告管理預設規則（總監 hm 不分部門、辦公室 odir、廚藝總監 rdd、執行長／總經理／董事長）
+ok(eq(RULES.slice(27).map((r) => [r.rule_id, r.ladder, r.dept, r.title, r.perm]), [
+  ['R028', 'hq', '', 'hm', 'platform.bulletin'], ['R029', 'office', '', 'odir', 'platform.bulletin'], ['R030', 'store', '', 'rdd', 'platform.bulletin'],
+  ['R031', 'hq', '', 'ceo', 'platform.bulletin'], ['R032', 'hq', '', 'gm', 'platform.bulletin'], ['R033', 'hq', '', 'chair', 'platform.bulletin']]), 'R028–R033：公告管理的預設規則（順序固定）', RULES.slice(27));
 ok(['am', 'fm', 'rdd'].every((t) => ['audit.read.own', 'store.void'].every((p) => RULES.slice(20).some((r) => r.ladder === 'store' && r.title === t && r.perm === p && r.dept === ''))), '第 21–26 條：am／fm／rdd 與店長同一套（audit.read.own、store.void）', RULES.slice(20));
 ok(eq(tables.storeMap, STORE_MAP), '店別對照 5 筆讀回一致', tables.storeMap);
 ok(tables.inited === true && tables.exs.length === 0, 'permLoadTables_ inited，例外為空');
@@ -127,7 +132,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
 {
   const again = dbInit.sb.permInit_({ role: 'admin', id: 'boss' });
   ok(again.ok && again.rules_seeded === 0 && again.stores_seeded === 0 && again.created.length === 0, '重跑不重複建、不重複寫', again);
-  ok(dbInit.sheets.perm_map._data.length === 28 && dbInit.sheets.perm_store_map._data.length === 6, '重跑後列數不變（27+表頭、5+表頭）');
+  ok(dbInit.sheets.perm_map._data.length === 34 && dbInit.sheets.perm_store_map._data.length === 6, '重跑後列數不變（33+表頭、5+表頭）');
 }
 {
   const d = load({});
@@ -149,7 +154,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
   d.sheets.perm_map._data.push(['R020', 'store', '', 'ft', 'dorm.read', 'FALSE', '', '']);
   d.sheets.perm_ex._data.push(['X001', 'dzy001', 'dorm.read', 'ADD', new Date(Date.UTC(2026, 9, 31, 15, 59, 59)), 'x', true, '', '', '', '']);
   const t = d.sb.permLoadTables_();
-  ok(t.rules.length === 27, 'permLoadTables_ 只取 active=TRUE 的規則', t.rules.length);
+  ok(t.rules.length === 33, 'permLoadTables_ 只取 active=TRUE 的規則', t.rules.length);
   ok(t.exs.length === 1 && t.exs[0].emp_no === 'DZY001' && t.exs[0].mode === 'add' && t.exs[0].until === '2026-10-31', '例外：布林 TRUE、Date 物件正規化、大小寫', t.exs[0]);
 }
 {
@@ -181,7 +186,8 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
   ok(eq(ofs.perms, []) && ofs.auditScope === 'none', '品牌辦公室行政同仁：無權限', ofs);
   for (const t of ['oam', 'osv', 'odir']) {
     const r = run({ unit: 'mala-hq', title: t });
-    ok(eq(r.perms, ['audit.read.brand']), `辦公室 ${t}：audit.read.brand`, r);
+    // 2026-10-26：odir（總監）另有預設規則 R029 公告管理；oam／osv 沒有
+    ok(eq(r.perms, t === 'odir' ? ['audit.read.brand', 'platform.bulletin'] : ['audit.read.brand']), `辦公室 ${t}：audit.read.brand${t === 'odir' ? '＋platform.bulletin' : ''}`, r);
   }
   const osv = run({ unit: 'mala-hq', title: 'osv' });
   ok(eq(osv.auditScope, ['sxl-gf']), '小辛辣區督導 scope 只含小辛辣有對照的店（美村南昌無對照被略過）', osv.auditScope);
@@ -192,8 +198,8 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
 // ===== 總部 =====
 {
   const cases = [
-    ['ops', 'hs', ['audit.read']], ['mgmt', 'hs', ['audit.read', 'audit.write']], ['fin', 'hm', ['audit.read', 'audit.write', 'cashbook.write']],
-    ['hr', 'hs', ['dorm.read', 'dorm.write', 'platform.staff']], ['hr', 'hm', ['dorm.read', 'dorm.write', 'platform.permmap', 'platform.staff']]
+    ['ops', 'hs', ['audit.read']], ['mgmt', 'hs', ['audit.read', 'audit.write']], ['fin', 'hm', ['audit.read', 'audit.write', 'cashbook.write', 'platform.bulletin']],
+    ['hr', 'hs', ['dorm.read', 'dorm.write', 'platform.staff']], ['hr', 'hm', ['dorm.read', 'dorm.write', 'platform.bulletin', 'platform.permmap', 'platform.staff']]
   ];
   for (const [dept, title, expect] of cases) {
     const r = run({ brand: 'dzy', unit: 'dzy-hq', dept, title });
@@ -206,9 +212,13 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
   for (const t of ['ceo', 'gm', 'chair']) {
     const r = run({ brand: 'dzy', unit: 'dzy-hq', dept: 'mgmt', title: t });
     ok(has(r, 'audit.read') && has(r, 'dorm.read') && !has(r, 'platform.users'), `${t} 有 audit.read、dorm.read`, r.perms);
+    ok(has(r, 'platform.bulletin'), `${t} 有 platform.bulletin（2026-10-26 預設規則）`, r.perms);
   }
+  // 2026-10-26：公告管理只給總監級以上；總部一般同仁、各部門主管以外的職稱沒有
+  ok(!has(run({ brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' }), 'platform.bulletin') && !has(run({ unit: 'mala-gf', title: 'sm' }), 'platform.bulletin') && !has(run({ unit: 'mala-hq', title: 'osv' }), 'platform.bulletin'), '人資同仁／店長／區督導沒有 platform.bulletin');
   const it = run({ brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hm' });
-  ok(eq(it.perms, []), '資訊部主管沒有任何預設權限（it 不在表）', it);
+  // 2026-10-26：總監 hm 不分部門有公告管理（R028）；其他預設權限 it 仍不在表
+  ok(eq(it.perms, ['platform.bulletin']), '資訊部主管只有公告管理（it 不在表；hm 不分部門的 R028）', it);
 }
 // ===== 兼任 =====
 {
@@ -370,6 +380,8 @@ ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'platform.permmap' }, f
 ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'platform.users' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 users');
 ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'audit.write' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 audit.write');
 ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'platform.staff' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 platform.staff');
+ok(code(vr({ ladder: 'store', dept: '', title: 'sm', perm: 'cashbook.write' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 cashbook.write（2026-10-25 審查 B-01）');
+ok(vr({ ladder: 'store', dept: '', title: 'sm', perm: 'cashbook.write' }, true) === null, 'admin 可碰 cashbook.write');
 ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'audit.write' }, true)) === null, 'admin 可碰 audit.write');
 ok(vr({ ladder: 'hq', dept: 'hr', title: 'hm', perm: 'platform.permmap' }, true) === null, 'admin 碰鎖碼合法');
 ok(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'dorm.read' }, false) === null, '非 admin 碰非鎖碼合法');

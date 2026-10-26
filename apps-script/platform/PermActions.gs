@@ -29,7 +29,7 @@ function permAcAdmin_(token) {
   return sess;
 }
 /**
- * 個別例外專用：admin 放行所有碼；人資主管（stfIsHrHead_）只能動 STORE_HR_GRANTABLE 兩碼（store.void、att.extra），
+ * 個別例外專用：admin 放行所有碼；人資主管（stfIsHrHead_）只能動 STORE_HR_GRANTABLE 三碼（store.void、att.extra、platform.bulletin），
  * 且不能對自己設。其他碼、其他人一律 no_perm。perm＝這次要動的權限碼（列表時傳空字串＝只驗身分）。
  * 回 session（附 hrOnly:true 表示非 admin）或錯誤物件。
  */
@@ -348,7 +348,7 @@ function handlePermExList_(token, payload) {
   permReadTable_(ss, PERM_SHEET_EX, PERM_EX_HEADERS).rows.forEach(function (r) {
     var emp = permStr_(r[1]).toUpperCase();
     if (want && emp !== want) return;
-    if (sess.hrOnly && STORE_HR_GRANTABLE.indexOf(permStr_(r[2])) === -1) return;   // 人資主管只看得到自己能管的兩碼
+    if (sess.hrOnly && STORE_HR_GRANTABLE.indexOf(permStr_(r[2])) === -1) return;   // 人資主管只看得到自己能管的三碼
     var active = permIsActive_(r[6]);
     var until = permNormDate_(r[4]);
     items.push({

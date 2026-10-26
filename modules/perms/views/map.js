@@ -191,7 +191,7 @@ export function mountMap(el, ctx) {
   }
 
   async function onInit() {
-    const yes = await ctx.ui.confirm('初始化會建立四張權限分頁（對照表、個別例外、店別對照、權限異動），並放入 20 條預設規則。確定要初始化嗎？');
+    const yes = await ctx.ui.confirm('初始化會建立四張權限分頁（對照表、個別例外、店別對照、權限異動），並放入預設規則（依職稱給的起始設定，之後可改）。確定要初始化嗎？');
     if (!yes || !alive) return;
     ctx.ui.loading(true);
     let r;

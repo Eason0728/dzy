@@ -377,6 +377,20 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
 })();
 
 // ============================================================
+// A7b 後台解除登入鎖定（2026-10-25 審查 A-01：別人用你的員編錯 3 次就能鎖你）
+// ============================================================
+(() => {
+  const { sb } = fresh();
+  const tok = adminToken(sb);
+  seedAndClaim(sb, tok);
+  for (let i = 0; i < 3; i++) post(sb, 'login', { username: 'DZY001', password: 'wrong-pw-000' });
+  ok(post(sb, 'login', { username: 'DZY001', password: 'fake-staff-pw-1' }).error === '嘗試次數過多，請 15 分鐘後再試', 'A7b 別人錯 3 次 → 本人正確密碼也被擋');
+  const u = post(sb, 'staffUnlockReset', { emp_no: 'DZY001' }, tok);
+  ok(u.ok, 'A7b 人資按「解除鎖定」成功', u);
+  ok(post(sb, 'login', { username: 'DZY001', password: 'fake-staff-pw-1' }).ok, 'A7b 解除後本人馬上能登入');
+})();
+
+// ============================================================
 // A8 Code.gs
 // ============================================================
 (() => {

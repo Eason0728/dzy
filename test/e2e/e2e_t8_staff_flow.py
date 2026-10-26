@@ -113,12 +113,12 @@ def main():
             staff.wait_for_selector('[data-role="module-card"]')
             check(staff.locator('[data-role="module-card"]').count() == 4, '★通過後可登入，同仁只看得到「我的資料」「公告專區」「表單簽核」「績效評核」四個模組')
             check(staff.evaluate('location.hash') in ('', '#/home'), '登入後網址不停在 #/claim')
-            # 2026-10-26 側邊欄只顯示有權限的部門；績效評核（人人可填，Eason Q10 A：入口在人資部門）讓一般同仁只看到「人資部門 → 績效評核」
+            # 2026-10-26 側邊欄只顯示有權限的部門；績效評核（人人可填，Eason Q10 A＋10-26 確認「維持人資部門」）讓一般同仁只看到「人資部門 → 績效評核」
             depts = staff.locator('[data-role="nav-desktop"] .nav-dept')
             check(depts.count() == 1 and depts.first.get_attribute('data-dept') == 'hr' and depts.first.locator('[data-nav="eval"]').count() == 1,
                   '★一般同仁側邊欄只有「人資部門 → 績效評核」一個部門')
-            staff.wait_for_function("() => { const r = document.querySelector('[data-role=\"nav-desktop\"] .rl') || document.querySelector('.su-main .rl'); return r && r.textContent === '計時同仁'; }", timeout=5000)
-            check(True, '★2026-10-26 名字下方顯示職稱「計時同仁」（不是「員工」）')
+            staff.wait_for_function("() => { const r = document.querySelector('[data-role=\"nav-desktop\"] .rl') || document.querySelector('.su-main .rl'); return r && r.textContent === '墨竹亭 計時同仁'; }", timeout=5000)
+            check(True, '★2026-10-26 名字下方顯示品牌＋職稱「墨竹亭 計時同仁」（不是「員工」）')
             staff.goto(base + '/index.html#/claim')
             staff.wait_for_selector('[data-role="module-card"]')
             check(staff.locator('.toast-warn:has-text("沒有權限")').count() == 0, '已登入打開 #/claim 不跳「沒有權限」')

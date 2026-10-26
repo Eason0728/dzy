@@ -12,7 +12,7 @@
 | 項目 | 位置 | 現況 |
 |---|---|---|
 | 角色權限 | `Auth.gs getRolePerms_` :197-212 | 讀 roles 分頁；staff 角色＝`platform.self` |
-| 衍生權限 | `Auth.gs authPermsWithGate_` :699-711 | role staff 才算：`platform.review`（審核者）、`platform.bulletin`（公告管理）；gate 來自 `Staff.gs stfLoginGate_` :822-833 |
+| 衍生權限 | `Auth.gs authPermsWithGate_` :699-711 | role staff 才算：`platform.review`（審核者）（`platform.bulletin` 公告管理 2026-10-26 起改為可給的功能，見 §13.3）；gate 來自 `Staff.gs stfLoginGate_` :822-833 |
 | 回傳 | `handleLogin_` :600-609、`handleMe_` :667-677 | `{token, user:{id,name,role,node}, perms}`；me 每次開頁都重算 |
 | 前端判斷 | `platform/auth.js can()` :305-315；`platform/shell.js` :191-201 | 精確比對、`*` 萬用、`platform.login` 恆真；模組 requires 任一符合即顯示 |
 | 稽核代轉授權 | `Auth.gs proxyAuthorize_` :298-333 | `filterNode = (!canRead && canOwn) ? user.node : null`（單一店字串） |
@@ -36,7 +36,7 @@
 | `platform.permex` | 設個別例外 | **新**，**只給 role admin，不進對照表** |
 
 - **鎖**＝只有 role `admin` 能在對照表裡新增或刪除含這個碼的規則（需求 3.1 第 1 件）。
-- 對照表、例外**都不能**給 `*`、`platform.self`、`platform.login`、`platform.review`、`platform.bulletin`、`platform.permex`（後兩者另有來源，前兩者人人有）。可給的碼＝上表除 `platform.permex` 以外的 9 個，寫死成白名單 `PERM_GRANTABLE`。
+- 對照表、例外**都不能**給 `*`、`platform.self`、`platform.login`、`platform.review`、`platform.permex`（後兩者另有來源，前兩者人人有；`platform.bulletin` 2026-10-26 起可給，見 §13.3）。可給的碼＝上表除 `platform.permex` 以外的 9 個，寫死成白名單 `PERM_GRANTABLE`。
 - `audit.read.brand` 只在**同仁帳號**出現；系統帳號的角色不給它（roles 分頁不動）。
 
 ## 3. 資料（三張新分頁，在 mini 的平台資料庫）
@@ -212,5 +212,17 @@ manifest 只改 requires：模組＝`['audit.read','audit.read.brand','audit.rea
 
 ### 13.2 全面審視決定（2026-10-17）
 - **擴大鎖碼**：`PERM_LOCKED` 由兩碼擴為四碼 `platform.users`、`platform.permmap`、`audit.write`、`platform.staff`。非 admin 在對照表新增／刪除含這四碼的規則 → `perm_locked`；非 admin 改同仁組織欄（含 staffConfirm／unitApprove／新建列）造成對方這四碼任一有無改變 → `perm_admin_only`，訊息依實際變動的碼組出（稽核填單／同仁名單／系統管理；涉及 `platform.permmap` 沿用「人資主管要請系統管理員設定」）。例：人資把人調進或調出財務部、管理部、人資部會被擋。`permMapGet` 回傳的 `locked` 即前端鎖列依據（前端不寫死）。預設 19 條規則不變。`roles` 分頁「含高權限碼的角色只有 admin 能指派」與鎖碼同一份清單（2026-10-17 複驗）：含 `*` 或與 `PERM_LOCKED` 四碼有交集的角色都算。
+- **再擴鎖碼（2026-10-25，全資料審查 B-01）**：`PERM_LOCKED` 現為六碼＝上述四碼＋`payroll.write`（2026-10-19）＋`cashbook.write`。被擋時訊息依碼組出「薪酬系統」「收支管理」。已開出去的權限不收回，只是之後只有 admin 能改。
 - **登入鎖依裝置**：失敗計數與鎖定以「帳號＋來源（ipHash）」為鍵，鎖定只擋該來源；次數與時間（3 次、15 分鐘）不變。ipHash 取不到（空字串）時退回以帳號為鍵；來源全域桶照舊。
+- **認得的手機（2026-10-25，全資料審查 MB-03，Eason 定 90 天）**：原本「同帳號各來源合計 15 分鐘錯 30 次 → 所有來源一起鎖、連正確密碼也擋」，攻擊者換 10 個以上來源就能把人鎖在門外。改為：登入成功時回 `data.device`（手機憑證，90 天；簽章前綴 `device|`，與登入 token 不同、不能當 token 用），前端按帳號存在 `localStorage['dzy.device']`（最多 20 個帳號、登出不清），登入時帶 `payload.device`。帶有效憑證者跳過「整個帳號鎖」（各來源合計 30 次；以及取不到 ipHash 時以帳號為鍵的 3 次鎖），**密碼照樣要對、有 ipHash 時的單一來源鎖照樣有效**。憑證簽發時間早於 `users.token_after`（改密碼、重設、撤回認領、救回管理員）即失效。沒憑證的（攻擊者、新手機）仍受 30 次上限；新手機被鎖時由人資「解除鎖定」。
 - **救回管理員**：Apps Script 全域函式 `rescueAdmin()`（讀暫時屬性 `BOOTSTRAP_USERNAME`／`BOOTSTRAP_PASSWORD`，只重設既有帳號、不新建；啟用、role admin、換密碼、舊 token 失效、清登入鎖定），**不進** Code.gs 分派表，只能由 mini 的 run-fn 白名單或編輯器執行。
+
+## 13.3 公告管理搬進權限設定（2026-10-26，Eason；優先於前文第 15、39 行對 platform.bulletin 的描述）
+
+- `platform.bulletin`（公告專區「公告管理」「新增公告」、佈告欄管理入場券 bulletin-admin）改為**可給的功能**：加進 `PERM_GRANTABLE`（第 14 碼），對照表與個別例外都能給。
+- **不鎖碼**：有 `platform.permmap` 的人可改對照表；人資主管的個別例外可設（`STORE_HR_GRANTABLE` 加這碼）。自己給自己照舊擋（perm_self）。
+- **舊名單不轉移**：Script Property `BULLETIN_ADMINS` 不再讀寫（Eason 選「清空，我自己重設」）；同仁名單的「可管理公告」勾選框與標籤拿掉，`staffEdit` 帶 `bulletin_admin` 一律回「公告管理已改到權限設定」。
+- **預設規則**（只在空表 permInit 時寫入；正式環境已初始化，由 Eason 在權限設定手動打開）：總部 總監（全部部門，`hq||hm`）、品牌辦公室 總監 odir、門市 廚藝總監 rdd、執行長、總經理、董事長（R028–R033）。
+- 權限設定左側「總部（不分部門）」多一個身分「總監（全部部門）」＝一條規則涵蓋每個部門的總監；各部門的「○○部・總監」那列不會顯示由這條規則來的開關（查同仁仍看得到來源）。
+- 系統帳號（非 staff 角色）只能靠 roles 分頁拿這碼；`PERMS_ON` 關時，同仁帳號一律沒有公告管理（只剩 admin）。
+- 離職／停用／撤回認領：不再個別收回；非 active 本來就算不到任何權限、也登不進來。個別例外照其他功能一樣保留在 perm_ex。

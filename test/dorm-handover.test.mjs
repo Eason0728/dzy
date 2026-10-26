@@ -21,7 +21,7 @@ globalThis.fetch = async (url) => {
 
 import assert from 'node:assert/strict';
 import { esc, datetime, date, roc, money } from '../platform/fmt.js';
-import { safePdfUrl } from '../modules/dorm/views/handover.js';
+import { safePdfUrl, b64ToBytes, safePdfName, isPdfBytes, preferShare, isLineInApp, giveCopyErrorText } from '../modules/dorm/views/handover.js';
 
 // ============================================================
 // 0／1. 最小 DOM stub（做法照抄 test/dorm-create.test.mjs）
@@ -611,6 +611,51 @@ for (const fromSummary of [false, true]) {
     assert.equal(r.links[0].getAttribute('rel'), 'noopener noreferrer');
   });
 }
+
+// ============================================================
+// G2. 現場下載給同仁（2026-10-26）：純函式
+// ============================================================
+t('b64ToBytes：正確解碼，格式不對回 null', () => {
+  const b = b64ToBytes(Buffer.from('%PDF-1.4').toString('base64'));
+  assert.equal(String.fromCharCode(...b), '%PDF-1.4');
+  for (const bad of ['', null, undefined, 123, '不是base64', 'abc$', '<script>']) assert.equal(b64ToBytes(bad), null, 'bad=' + bad);
+});
+t('isPdfBytes：只認 %PDF 檔頭', () => {
+  assert.equal(isPdfBytes(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d])), true);
+  assert.equal(isPdfBytes(new Uint8Array([0x3c, 0x68, 0x74, 0x6d, 0x6c])), false);
+  assert.equal(isPdfBytes(null), false);
+  assert.equal(isPdfBytes(new Uint8Array([0x25, 0x50])), false);
+});
+t('safePdfName：去掉路徑與危險字元、補 .pdf、空的給預設', () => {
+  assert.equal(safePdfName('2026-09-01_王_設備點交.pdf'), '2026-09-01_王_設備點交.pdf');
+  assert.equal(safePdfName('../../etc/passwd'), '....etcpasswd.pdf');
+  assert.equal(safePdfName(''), '設備點交單.pdf');
+  assert.equal(safePdfName(null), '設備點交單.pdf');
+  assert.equal(safePdfName('a\u0000b:c'), 'abc.pdf');
+  assert.ok(safePdfName('x'.repeat(500)).length <= 120);
+  assert.ok(safePdfName('x'.repeat(500)).endsWith('.pdf'));
+});
+
+t('preferShare：只有觸控（pointer: coarse）且支援分享才走分享；電腦就算支援分享也下載', () => {
+  const nav = { share() {}, canShare() { return true; } };
+  const coarse = () => ({ matches: true });
+  const fine = () => ({ matches: false });
+  assert.equal(preferShare(nav, coarse), true);
+  assert.equal(preferShare(nav, fine), false);
+  assert.equal(preferShare({}, coarse), false);
+  assert.equal(preferShare(nav, null), false);
+  assert.equal(preferShare(null, coarse), false);
+});
+t('isLineInApp：認得 LINE 內建瀏覽器', () => {
+  assert.equal(isLineInApp('Mozilla/5.0 (iPhone) AppleWebKit Mobile/15E148 Safari Line/13.18.0'), true);
+  assert.equal(isLineInApp('Mozilla/5.0 (iPhone) AppleWebKit Version/17.0 Mobile Safari/604.1'), false);
+  assert.equal(isLineInApp(''), false);
+});
+t('giveCopyErrorText：READONLY 中文化、空的給預設', () => {
+  assert.match(giveCopyErrorText('READONLY'), /維護中/);
+  assert.match(giveCopyErrorText(''), /請按一下再試/);
+  assert.equal(giveCopyErrorText('沒有權限'), '檔案還沒準備好：沒有權限');
+});
 
 // ============================================================
 // H. 真實網路守衛總量斷言

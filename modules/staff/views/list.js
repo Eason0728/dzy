@@ -10,6 +10,7 @@
 import { orgFieldsHtml, bindOrgFields, readOrgFields } from '../../staff-shared/org-fields.js';
 import { personFilter, ymd } from '../../staff-shared/clock-lib.js';
 import { clockTagsHtml, clockButtonsHtml, isClockAct, handleClockAct, openAddFlow } from '../../staff-shared/clock-ui.js';
+import { CARD_CSS } from './list-cards.js';
 
 const STATUS = {
   unclaimed: ['tag', '未開通'],
@@ -27,6 +28,8 @@ export const FILTERS = [
 const FLAG_TEXT = { unit_inactive: '所屬門市已停用', title_ladder: '職稱需重選', dept_inactive: '部門已停用', exec_misplaced: '建議改到鼎兆元總部／管理部' };
 // LINE 重設密碼紀錄（apps-script/platform/LineAuth.gs 寫進 staff_log 的 line_* 事件；docs/line-auth/spec.md §6）
 export const LINE_LOG_TEXT = { line_claim_ok: '用 LINE 送出開通（已停用）', line_reset_ok: '用 LINE 重設密碼', line_revoke: '停用 LINE', line_fail: '失敗' };
+// 手機卡片（≤860px，2026-10-26 Eason 選 B 版）：只露這些主要按鈕，其餘加 stf-sec 收進「更多」；電腦版整排照舊
+export const PRIMARY_ACTS = ['confirm', 'reject', 'edit', 'unlock', 'rename', 'enable', 'reinstate', 'add-home'];
 const CLOCK_TEXT = { updated: '會更新（補上一悟總部）', skipped: '不用更新', custom: '有自訂值，保留不動' };
 
 export function mountList(el, ctx) {
@@ -71,35 +74,43 @@ export function mountList(el, ctx) {
     const a = [];
     if (p.status === 'pending' || (p.status === 'active' && p.has_pending_change)) a.push(b('confirm', '確認', 'btn-primary'), b('reject', '退回'));
     if (p.status !== 'unclaimed' && p.status !== 'disabled') a.push(b('edit', '改資料'));
-    if (p.reset_locked) a.push(b('unlock', '解鎖忘記密碼'));
+    // 登入鎖定存在後台快取、名單看不到，所以已開通的同仁一律給這顆（2026-10-25 審查 A-01）
+    if (p.reset_locked || p.status === 'active') a.push(b('unlock', '解除鎖定'));
     if (['pending', 'rejected', 'active'].indexOf(p.status) !== -1) a.push(b('unclaim', '撤回認領', 'btn-danger'));
     if (p.status === 'unclaimed') a.push(b('rename', '改姓名'));
     if (canExtra) a.push(b('line', 'LINE 重設密碼'));   // 看紀錄＋停用此人的 LINE 重設密碼（platform.staff）
     a.push(p.status === 'disabled' ? b('enable', '啟用') : b('disable', '停用', 'btn-danger'));
     const extra = clockButtonsHtml(p, viewer); // 員工名單統一：離職／撤銷離職／打卡連結／改名／復職
-    return a.join(' ') + (extra ? ' ' + extra : '');
+    // 手機只露主要按鈕，其餘加上 stf-sec 收進「更多」（電腦版順序、顯示都不變）
+    const all = a.concat(extra ? extra.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) || [] : []);
+    const actOf = (h) => (/data-act="([^"]+)"/.exec(h) || [])[1];
+    let sec = 0;
+    // 解除鎖定：忘記密碼被鎖（名單看得到）才是主要按鈕；其他已開通同仁的這顆收進「更多」，不然每張卡片都多一顆（2026-10-25）
+    const primary = (h) => PRIMARY_ACTS.indexOf(actOf(h)) !== -1 && !(actOf(h) === 'unlock' && !p.reset_locked);
+    const out = all.map((h) => (primary(h) ? h : (sec++, h.replace('class="btn ', 'class="btn stf-sec '))));
+    return out.join(' ') + (sec ? ' <button type="button" class="btn btn-secondary stf-more" data-more="1" aria-expanded="false">更多 ▾</button>' : '');
   }
 
   function rowsHtml() {
     const list = staff.filter(match);
-    if (!list.length) return '<tr><td colspan="6">沒有符合的同仁</td></tr>';
+    if (!list.length) return '<tr><td class="c-none" colspan="6">沒有符合的同仁</td></tr>';
     return list.map((p) => {
       const [cls, txt] = STATUS[p.status] || ['tag', p.status];
       const change = p.has_pending_change ? `<div class="text-muted">${p.status === 'active' ? '要改成' : '填的是'}：${esc(orgText(p, 'p_'))}</div>` : '';
       const reason = p.reject_reason && (p.status === 'rejected' || p.status === 'unclaimed')
         ? `<div class="text-muted">${p.status === 'unclaimed' ? '上次退回' : '原因'}：${esc(p.reject_reason)}</div>` : '';
       const extra = (p.extra_dept_names || []).length ? `<div class="text-muted" data-role="extra-depts">兼任：${esc(p.extra_dept_names.join('、'))}</div>` : '';
-      const bul = p.bulletin_admin ? '<span class="tag tag-ok" data-role="bulletin-admin-tag">可管理公告</span>' : '';
-      const flagTags = bul + (p.flags || []).map((f) => `<span class="tag tag-warn" data-role="flag-tag">${esc(FLAG_TEXT[f] || f)}</span>`).join(' ');
+      const flagTags = (p.flags || []).map((f) => `<span class="tag tag-warn" data-role="flag-tag">${esc(FLAG_TEXT[f] || f)}</span>`).join(' ');
       const priv = showPrivate && p.status !== 'unclaimed'
         ? `<div class="text-muted">生日 ${esc(p.birthday)}・手機 ${esc(p.phone)}・${esc(p.address)}</div>` : '';
+      // class c-*：手機版卡片排版用（list-cards.js），電腦版表格不受影響
       return `<tr>
-        <td>${esc(p.emp_no)}</td>
-        <td>${esc(p.name)}${flagTags ? ' ' + flagTags : ''}${priv}</td>
-        <td>${esc(orgText(p, '') || '—')}${extra}${change}</td>
-        <td><span class="${cls}">${esc(txt)}</span>${p.reset_locked ? ' <span class="tag tag-danger">密碼鎖住</span>' : ''} ${clockTagsHtml(p)}${reason}</td>
-        <td>${esc(p.claimed_at || '')}</td>
-        <td>${actionsHtml(p)}</td></tr>`;
+        <td class="c-emp">${esc(p.emp_no)}</td>
+        <td class="c-name">${esc(p.name)}${flagTags ? ' ' + flagTags : ''}${priv}</td>
+        <td class="c-org">${esc(orgText(p, '') || '—')}${extra}${change}</td>
+        <td class="c-status"><span class="${cls}">${esc(txt)}</span>${p.reset_locked ? ' <span class="tag tag-danger">密碼鎖住</span>' : ''} ${clockTagsHtml(p)}${reason}</td>
+        <td class="c-claim">${esc(p.claimed_at || '')}</td>
+        <td class="c-act">${actionsHtml(p)}</td></tr>`;
     }).join('');
   }
 
@@ -111,7 +122,7 @@ export function mountList(el, ctx) {
     const orgTools = showOrgTools();
     const counts = {};
     staff.forEach((p) => { counts[p.status] = (counts[p.status] || 0) + 1; });
-    el.innerHTML = `
+    el.innerHTML = `<style>${CARD_CSS}</style>
       <div class="card stack">
         <div class="card-row"><div class="card-title">同仁名單（${staff.length} 位）</div>
           <span>${orgTools ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-add-branddev-2610">新增品牌發展部（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-branddev-2610">退回品牌發展部</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
@@ -127,7 +138,7 @@ export function mountList(el, ctx) {
           <div class="checkbox-row"><input type="checkbox" id="stf-priv"${showPrivate ? ' checked' : ''}><label for="stf-priv">顯示個資（生日、手機、地址）</label></div>
         </div>
       </div>
-      <div class="card"><div class="table-wrap"><table class="table">
+      <div class="card"><div class="table-wrap stf-wrap"><table class="table stf-table">
         <thead><tr><th>編號</th><th>姓名</th><th>品牌／單位／職稱</th><th>狀態</th><th>認領時間</th><th>動作</th></tr></thead>
         <tbody data-role="rows">${rowsHtml()}</tbody></table></div></div>`;
     const redraw = () => { el.querySelector('[data-role="rows"]').innerHTML = rowsHtml(); };
@@ -135,7 +146,23 @@ export function mountList(el, ctx) {
     el.querySelector('#stf-f').addEventListener('change', (e) => { state.f = e.target.value; redraw(); });
     el.querySelector('#stf-brand').addEventListener('change', (e) => { state.brand = e.target.value; redraw(); });
     el.querySelector('#stf-priv').addEventListener('change', (e) => { showPrivate = e.target.checked; redraw(); });
-    el.querySelector('[data-role="rows"]').addEventListener('click', onAction);
+    el.querySelector('[data-role="rows"]').addEventListener('click', (e) => {
+      const more = e.target.closest ? e.target.closest('[data-more]') : null;
+      if (more) { const tr = more.closest('tr'); const open = tr.classList.toggle('stf-open'); more.setAttribute('aria-expanded', String(open)); more.textContent = open ? '收起 ▴' : '更多 ▾'; return; }
+      onAction(e);
+    });
+    // 「更多」展開後按 Esc、或點同仁名單其他地方都會收起（2026-10-26 Fable 複查建議）；el 跨重畫共用，只綁一次
+    if (!el.__stfMoreBound) {
+      el.__stfMoreBound = true;
+      const closeMore = (keep) => el.querySelectorAll('tr.stf-open').forEach((tr) => {
+        if (tr === keep) return;
+        tr.classList.remove('stf-open');
+        const b = tr.querySelector('[data-more]');
+        if (b) { b.setAttribute('aria-expanded', 'false'); b.textContent = '更多 ▾'; }
+      });
+      el.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMore(null); });
+      el.addEventListener('click', (e) => { closeMore(e.target.closest ? e.target.closest('tr.stf-open') : null); }, true);
+    }
     el.querySelector('[data-role="add-staff"]').addEventListener('click', () => openAddFlow(clockEnv()));
     if (orgTools) {
       el.querySelector('[data-role="org-upgrade"]').addEventListener('click', upgradeFlow);
@@ -188,11 +215,6 @@ export function mountList(el, ctx) {
     const boxes = all.map((c, i) => `<div class="checkbox-row"><input type="checkbox" id="ed-x-${i}" data-code="${esc(c.code)}"${have.indexOf(c.code) !== -1 ? ' checked' : ''}><label for="ed-x-${i}">${esc(c.name)}</label></div>`).join('');
     const hidden = '';
     return `<div class="field" data-role="extra-wrap"><span class="field-label">兼任部門</span>${boxes}${hidden}<p class="field-hint">兼任不影響審核，審核只看主要部門。</p></div>`;
-  }
-
-  // 公告管理權限（2026-10-17）：勾了＝管理系統「公告專區」多出「公告管理」「新增公告」分頁
-  function bulletinHtml(p) {
-    return `<div class="field" data-role="bulletin-wrap"><span class="field-label">電子佈告欄</span><div class="checkbox-row"><input type="checkbox" id="ed-bul"${p.bulletin_admin ? ' checked' : ''}><label for="ed-bul">可管理公告（公告專區多出「公告管理」「新增公告」）</label></div></div>`;
   }
 
   const li = (items) => (items.length ? `<ul>${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="text-muted">（無）</p>');
@@ -455,7 +477,7 @@ export function mountList(el, ctx) {
     } else if (act === 'edit') {
       const body = domOf(`${field('ed-name', '姓名', p.name)}${orgFieldsHtml('ed')}
         <div class="form-grid-2">${field('ed-birthday', '生日', p.birthday, 'date')}${field('ed-phone', '手機', p.phone, 'tel')}</div>
-        ${field('ed-address', '居住地址', p.address)}${canExtra ? extraHtml(p) + (p.status === 'active' ? bulletinHtml(p) : '') : ''}<p class="field-hint">後台直接改正式資料，不必再確認。</p>`);
+        ${field('ed-address', '居住地址', p.address)}${canExtra ? extraHtml(p) : ''}<p class="field-hint">後台直接改正式資料，不必再確認。</p>`);
       bindOrgFields(body, 'ed', org, { brand: p.brand, unit: p.unit, dept: p.dept, title: p.title });
       const v = await ctx.ui.dialog({ title: `改資料 ${who}`, body, actions: [{ label: '取消', value: null, variant: 'secondary' }, { label: '儲存', value: 'ok', variant: 'primary' }] });
       if (v !== 'ok') return;
@@ -477,9 +499,6 @@ export function mountList(el, ctx) {
         const next = order.filter((c) => checked.indexOf(c) !== -1);
         const before = p.extra_depts || [];
         if (next.length !== before.length || next.some((c) => before.indexOf(c) === -1)) payload.extra_depts = next;
-        // 只有已開通的同仁有這個勾選框（後端也只接受 active；審查 dzy-bulletin#44-12）
-        const bulEl = body.querySelector('#ed-bul');
-        if (bulEl && bulEl.checked !== !!p.bulletin_admin) payload.bulletin_admin = bulEl.checked;
       }
       run('staffEdit', payload, '已儲存');
     } else if (act === 'rename') {
@@ -487,7 +506,7 @@ export function mountList(el, ctx) {
       const v = await ctx.ui.dialog({ title: `改姓名 ${p.emp_no}`, body, actions: [{ label: '取消', value: null, variant: 'secondary' }, { label: '儲存', value: 'ok', variant: 'primary' }] });
       if (v === 'ok') run('staffEdit', { emp_no: p.emp_no, name: body.querySelector('#rn-name').value.trim() }, '已改名');
     } else if (act === 'unlock') {
-      if (await ctx.ui.confirm(`解鎖 ${who} 的忘記密碼？`)) run('staffUnlockReset', { emp_no: p.emp_no }, '已解鎖');
+      if (await ctx.ui.confirm(`解除 ${who} 的登入鎖定與忘記密碼鎖定？`)) run('staffUnlockReset', { emp_no: p.emp_no }, '已解鎖');
     } else if (act === 'unclaim') {
       if (await ctx.ui.confirm(`撤回 ${who} 的認領？他的密碼與個資會清空，所有登入立刻失效，名字可以重新認領。用在發現被別人冒用時。`)) {
         run('staffUnclaim', { emp_no: p.emp_no }, '已撤回');

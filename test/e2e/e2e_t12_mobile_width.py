@@ -7,6 +7,7 @@
   ② #/staff/clockmap（總部打卡對照：很多筆待確認，姓名／店名很長）
   ③ #/me/clock（店長打卡對照：同上，自己單位）
   ⑤ #/me/unit（2026-10-25 單位通訊錄多生日、地址：長地址、空值「—」）
+  ⑥ #/staff/list（2026-10-26 同仁名單手機一人一張卡，375／320 寬按鈕不用滑、「更多」展開收回、桌機維持表格）
 ④（2026-10-18）登入前畫面：375 寬所有輸入框 computed font-size ≥16px（iPhone 不自動放大）、桌機 1280 寬維持 15px；
    #/claim 在 375×812 輸入框頂端 <450px（表單緊接照片下方，不沉到底），375×667 表單與按鈕完整可見、無橫向捲動。
 另外量每個畫面裡所有元素的右緣都不超過視窗寬，抓得出是哪一顆撐出來。
@@ -56,6 +57,12 @@ def main():
                            'hire_date': '2026-01-05', 'last_day': '', 'phone': '0912000%03d' % n,
                         'birthday': '' if i % 3 == 0 else '1990-02-03', 'address': '' if i % 3 == 0 else '新竹市測試區測試超級長的路名一段一百二十三巷四十五弄六號七樓之八'})
         mock.maps.append({'emp_no': emp, 'store_code': 'mztgf', 'emp_id': 'E%02d' % (30 + i), 'role': 'home', 'state': 'suggested', 'roster_active': True, 'last_punch': '2026-10-12'})
+    # ⑥ 同仁名單：一位待確認＋改資料＋密碼鎖住、一位已停用（按鈕最多的兩種）
+    mock.staff.append({'emp_no': 'DZY060', 'name': LONG + '待確認', 'status': 'active', 'unit': 'mzt-gf', 'brand': 'mzt', 'title': 'sm',
+                       'p_brand': 'mzt', 'p_unit': 'mzt-gf', 'p_title': 'pt', 'reset_fail': 5, 'hire_date': '2026-01-05', 'last_day': '',
+                       'phone': '0912000060', 'birthday': '1990-02-03', 'address': '新竹市測試區測試超級長的路名一段一百二十三巷四十五弄六號七樓之八'})
+    mock.staff.append({'emp_no': 'DZY061', 'name': '測試已停用', 'status': 'disabled', 'unit': 'mzt-gf', 'brand': 'mzt', 'title': 'pt',
+                       'hire_date': '2026-01-05', 'last_day': '', 'phone': '0912000061'})
     # 營運稽核：店名加長、多加幾家
     stores = mock.audit_fixture['config']['stores']
     for i in range(6):
@@ -119,6 +126,47 @@ def main():
             check(lead.evaluate("[...document.querySelectorAll('[data-keep=\\'me\\'] [data-field=address]')].every(e=>e.getBoundingClientRect().right<=innerWidth)"), '⑤長地址在畫面內換行')
             measure(lead, '⑤ #/me/unit')
             lead.screenshot(path=os.path.join(SHOTS, 't12_me_unit_375.png'), full_page=True)
+
+            # ⑥（2026-10-26）同仁名單手機版一人一張卡（Eason 選 B：次要按鈕收進「更多」）：
+            #    375／320 寬無橫向捲動、看得到的按鈕都在畫面內不用滑；按「更多」後次要按鈕也都在畫面內；桌機維持表格、沒有「更多」
+            VIS_BTNS = "[...document.querySelectorAll('[data-keep=\\'staff\\'] [data-role=rows] button, [data-host=\\'staff\\'] [data-role=rows] button')].filter(b=>b.offsetParent!==null)"
+            for vw in (W, 320):
+                sp = adm if vw == W else page_for('admin')
+                if vw != W:
+                    sp.set_viewport_size({'width': 320, 'height': 800})
+                sp.goto(base + '/index.html#/staff/list')
+                sp.wait_for_selector('[data-act="confirm"][data-emp="DZY060"]', timeout=10000)
+                check(sp.evaluate("getComputedStyle(document.querySelector('.stf-table thead')).display") == 'none', '⑥%d 寬同仁名單不顯示表頭（卡片）' % vw)
+                n_vis, n_out = sp.evaluate("(()=>{const v=%s;return [v.length,v.filter(b=>{const r=b.getBoundingClientRect();return r.left<0||r.right>innerWidth}).length]})()" % VIS_BTNS)
+                check(n_vis >= 30 and n_out == 0, '⑥%d 寬按鈕都在畫面內不用滑：%d 顆可見、%d 顆超出' % (vw, n_vis, n_out))
+                for act in ('confirm', 'reject', 'edit', 'unlock'):
+                    check(sp.locator('[data-act="%s"][data-emp="DZY060"]' % act).is_visible(), '⑥%d 寬待確認卡片直接看得到 %s' % (vw, act))
+                check(not sp.locator('[data-act="unclaim"][data-emp="DZY060"]').is_visible(), '⑥%d 寬撤回認領收在更多裡' % vw)
+                check(sp.locator('[data-act="enable"][data-emp="DZY061"]').is_visible(), '⑥%d 寬已停用卡片直接看得到「啟用」' % vw)
+                measure(sp, '⑥ #/staff/list %d 寬' % vw) if vw == W else check(sp.evaluate('document.documentElement.scrollWidth') <= 320, '⑥320 寬 scrollWidth ≤320')
+                card = sp.locator('tr', has=sp.locator('[data-act="confirm"][data-emp="DZY060"]'))
+                card.locator('[data-more]').click()
+                for act in ('unclaim', 'line', 'disable', 'leave'):
+                    check(sp.locator('[data-act="%s"][data-emp="DZY060"]' % act).is_visible(), '⑥%d 寬按「更多」後看得到 %s' % (vw, act))
+                n_vis2, n_out2 = sp.evaluate("(()=>{const v=%s;return [v.length,v.filter(b=>{const r=b.getBoundingClientRect();return r.left<0||r.right>innerWidth}).length]})()" % VIS_BTNS)
+                check(n_vis2 > n_vis and n_out2 == 0, '⑥%d 寬展開後按鈕變多（%d→%d）且都在畫面內' % (vw, n_vis, n_vis2))
+                sp.screenshot(path=os.path.join(SHOTS, 't12_staff_list_%d.png' % vw), full_page=True)
+                card.locator('[data-more]').click()
+                check(not sp.locator('[data-act="unclaim"][data-emp="DZY060"]').is_visible(), '⑥%d 寬再按「收起」收回去' % vw)
+            dsk = browser.new_context(viewport={'width': 1280, 'height': 800}).new_page()
+            mock.install(dsk)
+            dsk.goto(base + '/index.html')
+            dsk.fill('#login-username', 'admin'); dsk.fill('#login-password', USERS['admin']['password'])
+            dsk.click('[data-role="submit"]')
+            dsk.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
+            dsk.goto(base + '/index.html#/staff/list')
+            dsk.wait_for_selector('[data-act="confirm"][data-emp="DZY060"]', timeout=10000)
+            check(dsk.evaluate("getComputedStyle(document.querySelector('.stf-table thead')).display") != 'none'
+                  and dsk.locator('[data-more]').filter(visible=True).count() == 0
+                  and dsk.locator('[data-act="unclaim"][data-emp="DZY060"]').count() == 1
+                  and dsk.evaluate("getComputedStyle(document.querySelector('[data-act=unclaim][data-emp=DZY060]')).display") != 'none',
+                  '⑥桌機 1280 維持表格：有表頭、沒有「更多」、撤回認領照常顯示')
+            dsk.context.close()
 
             # ④ 登入前畫面：輸入框字級（手機 ≥16px、桌機 15px）與表單位置
             for hero_seed in (0.1, 0.5, 0.9):  # 隨機挑照片的三張都測
