@@ -44,12 +44,13 @@
  * 時呼叫 ctx.api.call('users', 'listRoles', {})（spec §5.2），用回傳的 name_zh
  * 當顯示名、role 當選項值。listRoles 失敗或格式不符時不讓畫面壞掉：roleLabel()
  * 退回顯示原始代號（角色欄不會空白／不會炸），表單的角色下拉退回顯示手上已有的
- * 資料（見下面 loadRoles()／roleLabel() 的註解）。節點代號（NODE_OPTIONS）維持
- * 硬編碼——那是 spec §4.4 定死的五個，不受這次修正影響，不要跟著角色一起改掉。
+ * 資料（見下面 loadRoles()／roleLabel() 的註解）。節點代號 2026-10-26 起也由後端回傳
+ * （listUsers 的 data.nodes，審查 A-14）；NODE_OPTIONS 只是後端還沒更新時的退路。
  */
 'use strict';
 
-// ── §4.4 節點代號 → 中文（spec 定死的五個 + 空字串，前端硬編碼是正確的）──
+// ── §4.4 節點代號 → 中文：原本 5 家＋空字串（後端還沒回 nodes 時的退路）──
+// 2026-10-26 審查 A-14：listUsers 會回 data.nodes＝原本 5 家＋店別對照裡啟用中門市的稽核店代碼，有就用後端的
 const NODE_OPTIONS = [
   { value: '', label: '不限節點' },
   { value: 'sxl-gf', label: '麻的小辛辣 光復店' },
@@ -162,11 +163,12 @@ function makeSelectField(container, { label, options, value, name }) {
  * @param {object|null} existingUser 修改時傳現有使用者物件；新增傳 null
  * @param {Array<{value:string,label:string}>} roleOptions 目前的角色選項（來自 listRoles，
  *   可能是空陣列——例如 listRoles 還沒回來或失敗，這時下拉會沒有選項可選，但不會拋錯）
+ * @param {Array<{value,label}>} [nodeOpts] 節點下拉（含「不限節點」）；沒給用原本 5 家（A-14）
  * @param {object} [handle] 呼叫端（mountList 的 unmount）用來強制關閉這個彈窗的把手，
  *   會被設成 handle.close = close（見檔頭「為什麼還是模組自己刻」的說明）
  * @returns {Promise<{username, name, role, node, password?}|null>} 取消或被強制關閉回 null
  */
-function openUserFormDialog(existingUser, roleOptions, handle) {
+function openUserFormDialog(existingUser, roleOptions, nodeOpts, handle) {
   const isEdit = !!existingUser;
   const options = Array.isArray(roleOptions) ? roleOptions : [];
   // 修改時，就算目前使用者的角色代號已經不在最新的角色清單裡（試算表刪掉了這個角色、
@@ -198,8 +200,12 @@ function openUserFormDialog(existingUser, roleOptions, handle) {
       label: '角色', options: formRoleOptions, name: 'role',
       value: isEdit ? existingUser.role : (formRoleOptions[0] ? formRoleOptions[0].value : '')
     });
+    // 編輯時目前的節點若已不在清單（門市停用、對照拿掉）仍要顯示，不然下拉會悄悄跳回「不限節點」
+    const curNode = isEdit ? (existingUser.node || '') : '';
+    const baseNodes = Array.isArray(nodeOpts) && nodeOpts.length ? nodeOpts : NODE_OPTIONS;
+    const formNodeOptions = baseNodes.some((o) => o.value === curNode) ? baseNodes : baseNodes.concat([{ value: curNode, label: nodeLabel(curNode) + '（已不在店別對照）' }]);
     const nodeSelect = makeSelectField(bodyEl, {
-      label: '所屬節點', options: NODE_OPTIONS, name: 'node',
+      label: '所屬節點', options: formNodeOptions, name: 'node',
       value: isEdit ? (existingUser.node || '') : ''
     });
     bodyEl.appendChild(errorEl);
@@ -343,6 +349,7 @@ const COLUMNS = ['ID', '帳號', '姓名', '角色', '所屬節點', '狀態', '
 export function mountList(root, ctx) {
   let destroyed = false;
   let users = [];
+  let nodeOptions = NODE_OPTIONS;   // 節點下拉；loadUsers 拿到後端的 nodes 就換掉（A-14）
   let roleOptions = []; // [{value, label}]，由 loadRoles() 動態填入（spec §5.2 listRoles）
   let roleMap = {};     // role -> name_zh，同上；找不到就在 roleLabel() 退回顯示原始代號
 
@@ -463,6 +470,12 @@ export function mountList(root, ctx) {
       const res = await callBackend('listUsers', {});
       if (destroyed) return;
       users = (res && res.data && Array.isArray(res.data.users)) ? res.data.users : [];
+      const fromServer = res && res.data && Array.isArray(res.data.nodes)
+        ? res.data.nodes.filter((o) => o && typeof o.value === 'string' && o.value && typeof o.label === 'string') : null;
+      if (fromServer && fromServer.length) {
+        nodeOptions = [NODE_OPTIONS[0]].concat(fromServer);
+        fromServer.forEach((o) => { NODE_LABEL[o.value] = o.label; });
+      }
       renderRows();
     } finally {
       ctx.ui.loading(false);
@@ -483,7 +496,7 @@ export function mountList(root, ctx) {
       return;
     }
 
-    const payload = await trackDialog(openUserFormDialog, null, roleOptions);
+    const payload = await trackDialog(openUserFormDialog, null, roleOptions, nodeOptions);
     if (!payload) return;
     ctx.ui.loading(true);
     try {
@@ -504,7 +517,7 @@ export function mountList(root, ctx) {
       await loadRoles();
       if (destroyed) return;
     }
-    const payload = await trackDialog(openUserFormDialog, user, roleOptions);
+    const payload = await trackDialog(openUserFormDialog, user, roleOptions, nodeOptions);
     if (!payload) return;
     ctx.ui.loading(true);
     try {

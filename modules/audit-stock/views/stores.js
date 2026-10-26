@@ -12,9 +12,8 @@
  * - 門市清單是兩個稽核模組共用的，所以這裡寫入成功後 submit() 會 invalidate 共用快取，
  *   營運稽核表那邊下次讀到的也是新清單。
  *
- * 已知限制：dzy「人員管理」的所屬節點選單（apps-script/platform/Users.gs 的
- * USR_VALID_NODES、modules/users/views/list.js）仍是寫死的五店，
- * 新門市暫時不能指派店長帳號——那要動平台層，另案處理。
+ * 新門市指派系統帳號（2026-10-26 審查 A-14 起）：人資在權限設定「店別對照」把組織門市對應到這裡的店代碼後，
+ * 「人員管理」的所屬節點選單就會出現（Users.gs usrNodeOptions_）；原本「寫死五店」的限制已解除。
  */
 'use strict';
 
