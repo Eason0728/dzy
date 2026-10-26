@@ -974,7 +974,13 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(has(sm, 'DZY110'), '7c 單位代碼已停用也算不完整，改用主店推算', sm);
   ok(has(sm, 'DZY104') && has(sm, 'DZY101'), '7c 正式資料的計時與店長自己照舊在名單');
   ok(!has(sm, 'DZY103') && !has(sm, 'DZY105') && !has(sm, 'DZY106') && !has(sm, 'DZY108') && !has(sm, 'DZY109'), '7c 店長名單不含：主店 hq、主店 cf、無主店、責任制、離職', sm);
-  ok(!has(sm, 'DZY107'), '7c 有正式單位職稱的人不受推算影響（正式資料是 mzt-gf，不會冒進光復名單）');
+  // 2026-10-26 支援打卡（docs/att-support/spec.md §1）：DZY107 正式單位 mzt-gf、打卡帳號在 gf（mala-gf）＝支援帳號 → 改由打卡店 mala-gf 店長核。
+  //   推算本身仍不影響他：以人為單位的名單（storeAttTargets_）沒有他；他出現在光復店長名單是因為支援規則，不是推算。
+  const org7 = app.sb.stfReadOrg_();
+  const pp7 = () => app.sb.storePeople_();
+  const smMe = pp7().find((x) => x.emp === 'DZY101');
+  ok(!app.sb.storeAttTargets_(smMe, {}, pp7(), org7, app.sb.storeHomeFn_(), 'hours').some((x) => x.emp === 'DZY107'), '7c 有正式單位職稱的人不受推算影響（以人為單位的名單不含正式資料是 mzt-gf 的人）');
+  ok(has(sm, 'DZY107') && app.people('DZY101').filter((x) => x.sub === 'DZY107').every((x) => x.clock === 'gf'), '7c （2026-10-26 起）他在 gf 的打卡帳號是支援帳號 → 由光復店長核（支援規則，不是推算）');
   const inf = app.people('DZY101').find((x) => x.sub === 'DZY102');
   ok(inf && inf.clock === 'gf' && inf.emp_id === 'GF102', '7c 推算出的人換成打卡帳號（店別 gf、編號 GF102）', inf);
   // 只有人資主管與管理員看得到不推算的人
@@ -987,7 +993,9 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // 補上正式單位＋職稱後完全用正式資料：DZY102 改成 mzt-gf 正職 → 不再出現在光復名單
   const row = app.sheets.staff._data.find((r) => r[0] === 'DZY102');
   row[3] = 'active'; row[5] = 'mzt-gf'; row[7] = 'ft';
-  ok(!has(app.subs('DZY101'), 'DZY102'), '7c 補上正式 unit＋title 後不再推算（不再出現在 mala-gf 店長名單）');
+  // 2026-10-26：補完後他在 gf 的帳號變成「支援帳號」（正式單位 mzt-gf），仍由打卡店光復店長核——但已不是推算（inferred），以人為單位的名單沒有他
+  ok(!app.sb.storeAttTargets_(smMe, {}, pp7(), org7, app.sb.storeHomeFn_(), 'hours').some((x) => x.emp === 'DZY102'), '7c 補上正式 unit＋title 後不再推算（以人為單位的 mala-gf 店長名單沒有他）');
+  ok(app.sb.storeEffectiveTarget_(pp7().find((x) => x.emp === 'DZY102'), org7, app.sb.storeHomeFn_()).inferred !== true && has(app.subs('DZY101'), 'DZY102'), '7c （2026-10-26 起）補完後他的 gf 帳號是支援帳號 → 光復店長照支援規則核');
   // 推算單位不在試點清單 → 不出現
   const app2 = build('mzt-gf');
   ok(!has(app2.subs('U:a001'), 'DZY102') && !has(app2.subs('U:a001'), 'DZY105') && !has(app2.subs('DZY120'), 'DZY103'), '7c 推算單位不在試點清單時不出現（admin 與人資主管也一樣）');
@@ -1037,6 +1045,322 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // 沒有任何同仁用打卡資料時（打卡分頁沒建）不炸
   const sbNoClk = world(BIG, { pilot: 'mala-gf' });
   ok(Array.isArray(sbNoClk.ident('DZY023').self), '7d 沒有任何對照列 → self 仍是陣列');
+})();
+
+// ============================================================
+// 9. 支援打卡誰來核（2026-10-26 Eason 定案，docs/att-support/spec.md §1）：名單依「每一個打卡帳號所在的店」算
+// ============================================================
+(() => {
+  const P = (emp, name, unit, dept, title, status) => ({ emp, name, unit, dept, title, status: status || 'active' });
+  const BASE = [
+    P('DZY301', '辛光店長', 'mala-gf', '', 'sm'),
+    P('DZY302', '辛光計時', 'mala-gf', '', 'pt'),
+    P('DZY303', '墨光店長', 'mzt-gf', '', 'sm'),
+    P('DZY304', '墨光計時', 'mzt-gf', '', 'pt'),
+    P('DZY305', '金山店長', 'mzt-js', '', 'sm'),
+    P('DZY306', '金山區經理', 'mzt-js', '', 'am'),
+    P('DZY307', '六張犁計時', 'mzt-lzl', '', 'pt'),
+    P('DZY308', '墨督導', 'mzt-hq', '', 'osv'),
+    P('DZY309', '墨總監', 'mzt-hq', '', 'odir'),
+    P('DZY310', '央廚廠長', 'ck', '', 'fm'),
+    P('DZY311', '廚藝總監', 'ck', '', 'rdd'),
+    P('DZY312', '央廚計時', 'ck', '', 'pt'),
+    P('DZY313', '資訊同仁', 'dzy-hq', 'it', 'hs'),
+    P('DZY314', '資訊總監', 'dzy-hq', 'it', 'hm'),
+    P('DZY315', '人資主管', 'dzy-hq', 'hr', 'hm'),
+    P('DZY316', '辛總監', 'mala-hq', '', 'odir'),
+    P('DZY317', '辛行政', 'mala-hq', '', 'ofs'),
+    P('DZY318', '墨光額外核定', 'mzt-gf', '', 'ft')
+  ];
+  const M = (emp, store, id) => ({ emp_no: emp, store_code: store, emp_id: id, role: 'staff', state: 'confirmed', roster_active: 'TRUE' });
+  const MAPS = [
+    M('DZY301', 'gf', 'GF01'), M('DZY302', 'gf', 'GF02'), M('DZY302', 'mztgf', 'MG02'),
+    M('DZY303', 'mztgf', 'MG03'), M('DZY303', 'mztjs', 'MJ03'),
+    M('DZY304', 'mztgf', 'MG04'), M('DZY304', 'mztlzl', 'ML04'),
+    M('DZY305', 'mztjs', 'MJ05'), M('DZY306', 'mztjs', 'MJ06'), M('DZY307', 'mztlzl', 'ML07'),
+    M('DZY308', 'hq', 'H08'), M('DZY310', 'cf', 'CF10'), M('DZY311', 'cf', 'CF11'), M('DZY312', 'cf', 'CF12'), M('DZY312', 'mztgf', 'MG12'),
+    M('DZY313', 'hq', 'H13'), M('DZY313', 'gf', 'GF13'), M('DZY314', 'hq', 'H14'), M('DZY317', 'hq', 'H17'), M('DZY318', 'mztgf', 'MG18')
+  ];
+  const app = world([['DZY399', '佔位', 'mala-gf', '', 'pt', 'active', '2026-01-01']]);
+  const sb = app.sb;
+  const org = sb.stfReadOrg_();
+  const SU = sb.storeClockUnits_();
+  ok(eq(SU.gf, ['mala-gf']) && eq(SU.mztgf, ['mzt-gf']) && eq(SU.cf, ['ck']) && SU.hq.indexOf('mzt-hq') !== -1, '9 預設 clock_stores：gf=mala-gf、mztgf=mzt-gf、cf=ck、hq 多單位', SU);
+  const ALL = ['ck', 'dzy-hq', 'mala-gf', 'mala-hq', 'mzt-gf', 'mzt-hq', 'mzt-js', 'mzt-lzl'];
+  const keys = (arr) => arr.map((x) => x.clock + ':' + x.emp_id);
+  const run = (meEmp, o) => {
+    o = o || {};
+    const people = o.people || BASE;
+    const me = meEmp ? people.find((p) => p.emp === meEmp) : { emp: '', status: 'active', unit: '', dept: '', title: '' };
+    const r = sb.storeAttLists_(me, o.flags || {}, people, org, null, o.maps || MAPS, o.su || SU, o.rctx || null, o.pilot || ALL, o.opt || {});
+    return { h: keys(r.people), r: keys(r.req_people), v: keys(r.view_people), raw: r };
+  };
+  const g = (label, got, want) => ok(eq(got, want), label, { got, want });
+
+  // 9a. 支援帳號判斷
+  const T = (unit, extra) => Object.assign({ emp: 'X', unit }, extra || {});
+  ok(sb.storeAttIsSupport_(T('mala-gf'), 'mztgf', ['mzt-gf']) === true, '9a 打卡店單位不含本人單位 → 支援（不看 role）');
+  ok(sb.storeAttIsSupport_(T('mzt-gf'), 'mztgf', ['mzt-gf']) === false, '9a 在自己單位的店打卡 → 不是支援');
+  ok(sb.storeAttIsSupport_(T('dzy-hq'), 'hq', ['mzt-hq']) === false && sb.storeAttIsSupport_(T('mala-gf'), 'hq', ['dzy-hq', 'mzt-hq', 'mala-hq']) === false, '9a ★總部打卡 hq 一律不算支援（就算單位不在 hq 的清單裡）');
+  ok(sb.storeAttIsSupport_(T('mala-gf', { inferred: true }), 'mztgf', ['mzt-gf']) === false && sb.storeAttIsSupport_(T('', { orphan: true }), 'mztgf', ['mzt-gf']) === false, '9a 推算／orphan 的人不套支援規則');
+  ok(sb.storeAttIsSupport_(T('mzt-js'), 'mztlzl', ['mzt-lzl', 'mzt-js']) === false && sb.storeAttIsSupport_(T('mzt-gf'), 'mztlzl', ['mzt-lzl', 'mzt-js']) === true, '9a 多單位的店：本人單位在清單任一個 → 不是支援；都不在 → 支援');
+  ok(sb.storeAttIsSupport_(T('mzt-gf'), 'zz', []) === false, '9a 打卡店沒填單位（或不在 clock_stores）→ 照舊不算支援');
+  const ac = sb.storeAttAccounts_(BASE, org, null, MAPS.concat([Object.assign(M('DZY301', 'mztgf', 'MGX'), { state: 'pending' }), Object.assign(M('DZY301', 'mztjs', 'MJX'), { roster_active: 'FALSE' })]), SU);
+  ok(!ac.some((a) => a.m.emp_id === 'MGX' || a.m.emp_id === 'MJX'), '9a 帳號只算 confirmed、roster_active 不是 FALSE');
+  ok(eq(ac.filter((a) => a.support).map((a) => a.m.emp_id).sort(), ['GF13', 'MG02', 'MG12', 'MJ03', 'ML04']), '9a 這份資料的支援帳號：辛光計時在墨光、墨光店長在金山、墨光計時在六張犁、央廚計時在墨光、資訊同仁在辛光');
+
+  // 9b. 支援帳號由打卡店主管核（工時＋申請）、原單位主管只看
+  const s301 = run('DZY301');
+  g('9b 辛光店長 工時：自己、本店計時、到本店支援的資訊同仁（總部同仁到門市也一樣，5A）；不含本店計時在墨光的帳號', s301.h, ['gf:GF01', 'gf:GF02', 'gf:GF13']);
+  g('9b 辛光店長 申請：本店計時、資訊同仁在本店的帳號（不含自己）', s301.r, ['gf:GF02', 'gf:GF13']);
+  g('9b ★原單位主管只看（4B）：辛光店長看得到本店計時在墨光的帳號，只看不核', s301.v, ['mztgf:MG02']);
+  const s303 = run('DZY303');
+  g('9b 墨光店長 工時：自己、本店計時、到墨光支援的辛光計時與央廚計時；不含自己在金山的支援帳號', s303.h, ['mztgf:MG02', 'mztgf:MG03', 'mztgf:MG04', 'mztgf:MG12', 'mztgf:MG18']);
+  g('9b 墨光店長 申請：同上但不含自己', s303.r, ['mztgf:MG02', 'mztgf:MG04', 'mztgf:MG12', 'mztgf:MG18']);
+  g('9b 墨光店長 只看：本店計時在六張犁的支援帳號；自己的支援帳號不列', s303.v, ['mztlzl:ML04']);
+  const s305 = run('DZY305');
+  g('9b ★店長去別店支援：金山店長核墨光店長在金山的工時', s305.h, ['mztjs:MJ03', 'mztjs:MJ05', 'mztjs:MJ06']);
+  g('9b ★店長去別店支援：申請也由金山店長核（2A）；店長本人與區經理的申請照舊不歸他', s305.r, ['mztjs:MJ03']);
+  g('9b 區經理：第一層有店長就不輪到區經理；自己店店長的申請照舊', [run('DZY306').h, run('DZY306').r, run('DZY306').v], [[], ['mztjs:MJ05'], []]);
+  g('9b ★總部同仁去門市：資訊總監只核總部帳號，門市那個帳號只看', [run('DZY314').h, run('DZY314').r, run('DZY314').v], [['hq:H13'], ['hq:H13'], ['gf:GF13']]);
+  g('9b 一般同仁沒有名單', [run('DZY302').h, run('DZY302').r, run('DZY302').v], [[], [], []]);
+
+  // 9c. 打卡店沒有店長時往上找（3A）：六張犁沒有店長／區經理
+  const s309 = run('DZY309');
+  ok(has(s309.h, 'mztlzl:ML04') && has(s309.r, 'mztlzl:ML04'), '9c 第 4 層：店長、區經理都沒有、區域開關關 → 品牌總監核（工時＋申請）', s309);
+  ok(!has(run('DZY308').h, 'mztlzl:ML04') && !has(run('DZY308').r, 'mztlzl:ML04'), '9c 區域開關關：督導不核支援帳號（跳過第 3 層）');
+  const idx = { byStore: { 'mzt-lzl': 'r1' }, byRegion: { r1: { code: 'r1', stores: ['mzt-lzl'], supervisorEmp: 'DZY308' } }, bySupervisor: { DZY308: ['r1'] } };
+  const on = { on: true, idx };
+  g('9c 第 3 層：區域開關開、負責那區的督導 → 督導核（工時＋申請）', [run('DZY308', { rctx: on }).h, run('DZY308', { rctx: on }).r], [['mztlzl:ML04'], ['mztlzl:ML04']]);
+  ok(!has(run('DZY309', { rctx: on }).h, 'mztlzl:ML04') && !has(run('DZY309', { rctx: on }).r, 'mztlzl:ML04'), '9c 第 3 層有人 → 總監不核');
+  const noSup = { on: true, idx: { byStore: { 'mzt-lzl': 'r1' }, byRegion: { r1: { code: 'r1', stores: ['mzt-lzl'], supervisorEmp: '' } }, bySupervisor: {} } };
+  ok(has(run('DZY309', { rctx: noSup }).h, 'mztlzl:ML04') && !has(run('DZY308', { rctx: noSup }).h, 'mztlzl:ML04'), '9c 區沒督導（或沒劃區）→ 跳過第 3 層，總監核');
+  const otherReg = { on: true, idx: { byStore: { 'mzt-lzl': 'r2' }, byRegion: { r2: { code: 'r2', stores: ['mzt-lzl'], supervisorEmp: 'DZY399' } }, bySupervisor: { DZY399: ['r2'] } } };
+  ok(!has(run('DZY308', { rctx: otherReg }).h, 'mztlzl:ML04') && has(run('DZY309', { rctx: otherReg }).h, 'mztlzl:ML04'), '9c 那區的督導是別人且不在職（不在 people）→ 本督導不核；第 3 層沒人 → 總監核');
+  const plusAm = BASE.concat([P('DZY320', '六張犁區經理', 'mzt-lzl', '', 'am')]);
+  g('9c 第 2 層：沒有店長、有區經理 → 區經理核（工時＋申請）', [run('DZY320', { people: plusAm }).h, run('DZY320', { people: plusAm }).r], [['mztlzl:ML04'], ['mztlzl:ML04']]);
+  ok(!has(run('DZY309', { people: plusAm }).h, 'mztlzl:ML04'), '9c 第 2 層有人 → 總監不核');
+  const plusSm = plusAm.concat([P('DZY321', '六張犁店長', 'mzt-lzl', '', 'sm')]);
+  ok(has(run('DZY321', { people: plusSm }).h, 'mztlzl:ML04') && !has(run('DZY320', { people: plusSm }).h, 'mztlzl:ML04') && !has(run('DZY320', { people: plusSm }).r, 'mztlzl:ML04'), '9c 第 1 層：有店長 → 只有店長核（區經理不核支援帳號）');
+  const offSm = plusSm.map((p) => (p.emp === 'DZY321' ? Object.assign({}, p, { status: 'disabled' }) : p));
+  ok(has(run('DZY320', { people: offSm }).h, 'mztlzl:ML04'), '9c 店長已停用 → 不算有人，往下一層（區經理）');
+  // 央廚：廠長 → 廚藝總監；沒有就只剩人資主管／admin（央廚沒有督導、總監這兩層）
+  const ckMaps = MAPS.concat([M('DZY302', 'cf', 'CF02')]);
+  ok(has(run('DZY310', { maps: ckMaps }).h, 'cf:CF02') && has(run('DZY310', { maps: ckMaps }).r, 'cf:CF02') && !has(run('DZY311', { maps: ckMaps }).h, 'cf:CF02'), '9c 門市同仁去央廚：廠長核（工時＋申請），廚藝總監不核');
+  const noFm = BASE.filter((p) => p.emp !== 'DZY310');
+  ok(has(run('DZY311', { people: noFm, maps: ckMaps }).h, 'cf:CF02') && has(run('DZY311', { people: noFm, maps: ckMaps }).r, 'cf:CF02'), '9c 央廚沒有廠長 → 廚藝總監核');
+  const noCk = noFm.filter((p) => p.emp !== 'DZY311');
+  ok(!has(run('DZY309', { people: noCk, maps: ckMaps }).h, 'cf:CF02') && !has(run('DZY316', { people: noCk, maps: ckMaps }).h, 'cf:CF02') && has(run('DZY315', { people: noCk, maps: ckMaps, flags: { hrHead: true } }).h, 'cf:CF02'), '9c 央廚兩層都沒人 → 品牌總監不補，只剩人資主管');
+  g('9c 央廚同仁去門市：墨光店長核（工時＋申請）', [has(s303.h, 'mztgf:MG12'), has(s303.r, 'mztgf:MG12'), has(run('DZY310').h, 'mztgf:MG12')], [true, true, false]);
+  ok(has(run('DZY310').v, 'mztgf:MG12'), '9c 央廚同仁去門市：廠長（原單位）只看');
+
+  // 9d. 多單位的店：每一層把店的所有單位合起來看
+  const su2 = Object.assign({}, SU, { mztlzl: ['mzt-lzl', 'mzt-js'] });
+  ok(has(run('DZY305', { su: su2 }).h, 'mztlzl:ML04') && !has(run('DZY309', { su: su2 }).h, 'mztlzl:ML04'), '9d 店有兩個單位：任一單位有店長就是第 1 層（金山店長核），總監不核');
+  ok(has(run('DZY305', { su: su2 }).h, 'mztlzl:ML07') === false && has(run('DZY305', { su: su2 }).h, 'mztjs:MJ05'), '9d 六張犁計時在自己單位的店（多單位）→ 不是支援，照舊（金山店長不核他）');
+
+  // 9e. 試點看打卡店單位
+  const noGf = ALL.filter((u) => u !== 'mzt-gf');
+  ok(!has(run('DZY303', { pilot: noGf }).h, 'mztgf:MG02') && !has(run('DZY301', { pilot: noGf }).v, 'mztgf:MG02'), '9e 打卡店單位不在試點 → 支援帳號不列（核定與只看都不列）');
+  g('9e 試點只有墨光：墨光店長仍核辛光計時在墨光的帳號（不看人所屬單位）', run('DZY303', { pilot: ['mzt-gf'] }).h, ['mztgf:MG02', 'mztgf:MG03', 'mztgf:MG04', 'mztgf:MG12', 'mztgf:MG18']);
+  g('9e 試點只有墨光：辛光店長的本店名單照舊被試點擋掉', [run('DZY301', { pilot: ['mzt-gf'] }).h, run('DZY301', { pilot: ['mzt-gf'] }).v], [[], ['mztgf:MG02']]);
+  g('9e 試點空 → 全空', [run('DZY303', { pilot: [] }).h, run('DZY303', { pilot: [] }).v], [[], []]);
+
+  // 9f. 人資主管／admin：全部帳號（含支援），不含自己；自己是店長時「核自己工時」不適用於支援帳號
+  const hr = run('DZY315', { flags: { hrHead: true } });
+  ok(['gf:GF13', 'mztgf:MG02', 'mztjs:MJ03', 'mztlzl:ML04', 'mztgf:MG12'].every((k) => has(hr.h, k) && has(hr.r, k)) && hr.v.length === 0, '9f 人資主管：支援帳號工時與申請都可核、沒有只看', hr);
+  const adm = run('', { flags: { admin: true } });
+  ok(eq(adm.h, hr.h) && eq(adm.r, hr.r), '9f admin（沒有同仁編號）與人資主管同一批');
+  const smAdm = run('DZY303', { flags: { admin: true } });
+  ok(has(smAdm.h, 'mztgf:MG03') && !has(smAdm.h, 'mztjs:MJ03') && !has(smAdm.r, 'mztjs:MJ03') && !has(smAdm.v, 'mztjs:MJ03'), '9f ★兼 admin 的店長：自己本店帳號照舊可核；自己的支援帳號不核也不列', smAdm);
+  ok(!has(run('DZY313', { flags: { hrHead: true } }).h, 'gf:GF13') && !has(run('DZY313', { flags: { hrHead: true } }).h, 'hq:H13'), '9f 人資主管旗標＋自己有支援帳號 → 不含自己');
+
+  // 9g. 任何人都不核自己（防呆）：讓墨光店長同時是六張犁的唯一第一層（多單位店），他在六張犁的帳號也是支援帳號
+  const su3 = Object.assign({}, SU, { mztlzl: ['mzt-lzl', 'mzt-gf'] });
+  const selfMaps = MAPS.concat([M('DZY305', 'mztlzl', 'ML05')]);
+  const su4 = Object.assign({}, SU, { mztlzl: ['mzt-lzl', 'mzt-js'] });
+  ok(!has(run('DZY305', { maps: selfMaps, su: su3 }).h, 'mztlzl:ML05') && has(run('DZY303', { maps: selfMaps, su: su3 }).h, 'mztlzl:ML05'), '9g 支援帳號：打卡店（多單位）的店長核得到、本人（不是那家店的主管）核不到');
+  ok(has(run('DZY305', { maps: selfMaps, su: su4 }).h, 'mztlzl:ML05') && !has(run('DZY305', { maps: selfMaps, su: su4 }).r, 'mztlzl:ML05'), '9g 多單位店含自己單位 → 不是支援帳號，照舊（店長核自己工時、不核自己申請）');
+  // 督導（要考勤的職稱）在六張犁打卡，自己又是六張犁那區的第 3 層 → 不能核自己；同一層沒有別人 → 這個帳號只剩人資主管／admin
+  const osvMaps = MAPS.concat([M('DZY308', 'mztlzl', 'ML08')]);
+  const o308 = run('DZY308', { maps: osvMaps, rctx: on });
+  ok(!has(o308.h, 'mztlzl:ML08') && !has(o308.r, 'mztlzl:ML08') && !has(o308.v, 'mztlzl:ML08') && has(o308.h, 'mztlzl:ML04'), '9g ★督導是自己支援帳號那層的核定人 → 仍不能核自己（同店別人照核）', o308);
+  ok(has(run('DZY315', { maps: osvMaps, rctx: on, flags: { hrHead: true } }).h, 'mztlzl:ML08') && !has(run('DZY309', { maps: osvMaps, rctx: on }).h, 'mztlzl:ML08') && has(run('DZY309', { maps: osvMaps, rctx: on }).h, 'hq:H08'), '9g 那個帳號由人資主管核；總監照舊核督導的總部帳號（第 3 層有人，不往下補）');
+  const odirClock = MAPS.concat([M('DZY309', 'mztlzl', 'ML09')]);
+  ok(!has(run('DZY309', { maps: odirClock }).h, 'mztlzl:ML09') && !has(run('DZY309', { maps: odirClock }).v, 'mztlzl:ML09'), '9g 責任制職稱就算有門市打卡帳號也不列（不用核）、總監是第 4 層也不核自己');
+
+  // 9h. att.extra：支援帳號看「打卡店單位＝我的單位」
+  const ex = run('DZY318', { flags: { attExtra: true } });
+  g('9h att.extra 工時：同單位的人（照舊）＋到本店支援的帳號；不含本人', ex.h, ['mztgf:MG02', 'mztgf:MG03', 'mztgf:MG04', 'mztgf:MG12']);
+  g('9h att.extra 申請：同上', ex.r, ['mztgf:MG02', 'mztgf:MG03', 'mztgf:MG04', 'mztgf:MG12']);
+  g('9h att.extra 只看：同單位的人在別店的支援帳號', ex.v, ['mztjs:MJ03', 'mztlzl:ML04']);
+
+  // 9i. 督導／總監只看（REGIONS_ON）：看打卡店單位
+  const mzStores = sb.attViewUnitsOf_(BASE.find((p) => p.emp === 'DZY309'), org, null);
+  const v309 = run('DZY309', { opt: { viewUnits: mzStores } });
+  ok(has(v309.v, 'mztgf:MG02') && has(v309.v, 'mztgf:MG03') && has(v309.v, 'mztjs:MJ03'), '9i ★墨竹亭總監：看得到小辛辣同仁在墨竹亭的支援帳號（依打卡店）', v309.v);
+  ok(!has(v309.v, 'mztlzl:ML04') && has(v309.h, 'mztlzl:ML04'), '9i 總監自己是第 4 層核定人的帳號只在核定名單');
+  const v316 = run('DZY316', { opt: { viewUnits: ['mala-gf'] } });
+  g('9i ★小辛辣總監：只看辛光這家店的帳號（含資訊同仁支援），不再看到小辛辣同仁在墨竹亭的打卡', v316.v, ['gf:GF01', 'gf:GF02', 'gf:GF13']);
+  ok(eq(v316.h, ['hq:H17']), '9i 品牌辦公室行政在總部打卡（hq）→ 照舊由總監核', v316.h);
+
+  // 9j. 非支援帳號完全照舊：沒有任何支援帳號時，新算法＝舊算法（storeAttTargets_／storeAttViewTargets_ 再逐人展開所有帳號，即 10-26 前的 storeAttPeople_）逐筆相同
+  const homeMaps = MAPS.filter((m) => ['MG02', 'MJ03', 'ML04', 'MG12', 'GF13'].indexOf(m.emp_id) === -1);
+  const legacy = (me, flags, units, mode) => {
+    const ts = mode === 'view' ? sb.storeAttViewTargets_(me, BASE, org, null, units) : sb.storeAttTargets_(me, flags, BASE, org, null, mode, null);
+    const seen = {}, out = [];
+    ts.forEach((t) => {
+      if (!(t.pilotUnits || [t.unit]).some((u) => ALL.indexOf(u) !== -1)) return;
+      homeMaps.forEach((m) => { if (m.emp_no !== t.emp) return; const k = m.store_code + '|' + m.emp_id; if (seen[k]) return; seen[k] = true; out.push(m.store_code + ':' + m.emp_id); });
+    });
+    return out.sort();
+  };
+  let same = 0, diff = [];
+  BASE.concat([{ emp: '', status: 'active', unit: '', dept: '', title: '', admin: true }]).forEach((me) => {
+    [{}, { hrHead: true }, { attExtra: true }, { admin: true }].forEach((flags) => {
+      const units = sb.attViewUnitsOf_(me, org, null);
+      const r = sb.storeAttLists_(me, flags, BASE, org, null, homeMaps, SU, null, ALL, { viewUnits: units });
+      const got = [keys(r.people).sort(), keys(r.req_people).sort(), keys(r.view_people).sort()];
+      const want = [legacy(me, flags, units, 'hours'), legacy(me, flags, units, 'req'), legacy(me, {}, units, 'view')];
+      if (eq(got, want)) same++; else diff.push({ me: me.emp, flags, got, want });
+    });
+  });
+  ok(diff.length === 0 && same === (BASE.length + 1) * 4, '9j ★沒有支援帳號時：每個人 × 四種旗標，三份名單與舊算法逐筆相同', diff.slice(0, 3));
+})();
+
+// ============================================================
+// 9k. 支援打卡接到 ident（整條路：staff_clock＋clock_stores＋試點＋區域開關）
+// ============================================================
+(() => {
+  const cast = [
+    ['DZY331', '辛光店長', 'mala-gf', '', 'sm', 'active', '2026-01-01'],
+    ['DZY332', '辛光計時', 'mala-gf', '', 'pt', 'active', '2026-01-01'],
+    ['DZY333', '墨光店長', 'mzt-gf', '', 'sm', 'active', '2026-01-01'],
+    ['DZY334', '墨光計時', 'mzt-gf', '', 'pt', 'active', '2026-01-01'],
+    ['DZY335', '墨總監', 'mzt-hq', '', 'odir', 'active', '2026-01-01'],
+    ['DZY336', '辛總監', 'mala-hq', '', 'odir', 'active', '2026-01-01'],
+    ['DZY337', '人資主管', 'dzy-hq', 'hr', 'hm', 'active', '2026-01-01'],
+    ['DZY338', '資訊同仁', 'dzy-hq', 'it', 'hs', 'active', '2026-01-01'],
+    ['DZY339', '資訊總監', 'dzy-hq', 'it', 'hm', 'active', '2026-01-01']
+  ];
+  const app = world(cast, { pilot: 'mala-gf,mzt-gf,dzy-hq,mzt-hq,mala-hq' });
+  const sc = app.sheets.staff_clock._data;
+  sc.push(['DZY332', 'mztgf', 'MZTGF332', 'support', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
+  sc.push(['DZY338', 'gf', 'GF338', 'support', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
+  const K = (s, k) => app.ident(s).att[k].map((x) => x.clock + ':' + x.emp_id);
+  const g = (label, got, want) => ok(eq(got, want), label, { got, want });
+  g('9k ident 墨光店長 people：多了辛光計時在墨光的帳號', K('DZY333', 'people'), ['mztgf:MZTGF332', 'mztgf:MZTGF333', 'mztgf:MZTGF334']);
+  g('9k ident 墨光店長 req_people', K('DZY333', 'req_people'), ['mztgf:MZTGF332', 'mztgf:MZTGF334']);
+  g('9k ident 辛光店長：本店兩人＋資訊同仁在本店；辛光計時在墨光的帳號只看', [K('DZY331', 'people'), K('DZY331', 'req_people'), K('DZY331', 'view_people')],
+    [['gf:GF331', 'gf:GF332', 'gf:GF338'], ['gf:GF332', 'gf:GF338'], ['mztgf:MZTGF332']]);
+  g('9k ident 資訊總監：總部帳號照核、門市帳號只看', [K('DZY339', 'people'), K('DZY339', 'view_people')], [['hq:HQ338'], ['gf:GF338']]);
+  const vp = app.ident('DZY331').att;
+  ok(['people', 'req_people', 'view_people'].every((k) => vp[k].every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name']))) && vp.view_people[0].sub === 'DZY332' && vp.view_people[0].name === '辛光計時', '9k ident 名單項目形狀不變 {clock, emp_id, sub, name}');
+  ok(has(K('DZY337', 'people'), 'mztgf:MZTGF332') && has(K('DZY337', 'people'), 'gf:GF338') && has(K('U:a001', 'req_people'), 'mztgf:MZTGF332'), '9k ident 人資主管、admin 核得到支援帳號');
+  // REGIONS_ON：總監依打卡店看
+  app.props.REGIONS_ON = '1';
+  app.sb.regionCtxReset_();
+  ok(has(K('DZY335', 'view_people'), 'mztgf:MZTGF332') && !has(K('DZY336', 'view_people'), 'mztgf:MZTGF332') && has(K('DZY336', 'view_people'), 'gf:GF338') && has(K('DZY336', 'view_people'), 'gf:GF332'), '9k ident REGIONS_ON：墨總監看得到辛光計時在墨光的帳號、辛總監看不到；辛總監看得到資訊同仁在辛光的帳號');
+  // 試點只開墨光：辛光計時在墨光的帳號仍給墨光店長
+  app.props.STORE_SSO_UNITS = 'mzt-gf';
+  g('9k ident 試點只開墨光：支援帳號依打卡店單位列入', K('DZY333', 'people'), ['mztgf:MZTGF332', 'mztgf:MZTGF333', 'mztgf:MZTGF334']);
+  // 營運系統契約 fixture 沒有支援帳號 → 原本兩份 ident fixture 不受影響（第 1 節逐欄比對仍通過）
+})();
+
+// ============================================================
+// 10. 指定門市只看考勤 att.view@<單位>（2026-10-26 spec §2，Eason 7A）
+// ============================================================
+(() => {
+  const cast = [
+    ['DZY351', '辛光店長', 'mala-gf', '', 'sm', 'active', '2026-01-01'],
+    ['DZY352', '辛光計時', 'mala-gf', '', 'pt', 'active', '2026-01-01'],
+    ['DZY353', '墨光計時', 'mzt-gf', '', 'pt', 'active', '2026-01-01'],
+    ['DZY354', '總部總監', 'dzy-hq', 'it', 'hm', 'active', '2026-01-01'],
+    ['DZY355', '人資主管', 'dzy-hq', 'hr', 'hm', 'active', '2026-01-01'],
+    ['DZY356', '財務同仁', 'dzy-hq', 'fin', 'hs', 'active', '2026-01-01'],
+    ['DZY357', '辛總監', 'mala-hq', '', 'odir', 'active', '2026-01-01']
+  ];
+  const app = world(cast);
+  const { sb } = app;
+  const sc = app.sheets.staff_clock._data;
+  sc.push(['DZY353', 'gf', 'GF353', 'support', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);   // 墨光計時到辛光支援
+  sc.push(['DZY354', 'gf', 'GF354', 'support', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);   // 總監本人在辛光也有帳號（不用核）
+  const exSave = (tok, emp, perm, extra) => post(sb, 'permExSave', Object.assign({ emp_no: emp, perm, mode: 'add', until: '', note: '只看考勤' }, extra || {}), tok);
+  const pidx = sb.permOrgIndex_();
+  const ve = (perm, mode, o) => sb.permValidateEx_({ perm, mode: mode || 'add', until: '', note: '原因' }, '2026-10-26', o === undefined ? pidx : o);
+  // 驗證
+  ok(ve('att.view@mala-gf') === null && ve('att.view@ck') === null && ve('att.view@mzt-gf') === null, '10 合法：門市與央廚 ck');
+  ok(['att.view@mzt-wx', 'att.view@mala-hq', 'att.view@dzy-hq', 'att.view@no-such'].every((c) => (ve(c) || {}).error === 'bad_target'), '10 ★單位停用、品牌辦公室、總部、不存在 → bad_target');
+  ok((ve('att.view@mala-gf', 'remove') || {}).error === 'bad_mode', '10 只能「多給」（remove → bad_mode）');
+  ok((ve('att.view@mala-gf', 'add', null) || {}).error === 'bad_target', '10 沒給 org → 不合法（fail closed）');
+  ok(['att.view@', 'att.view@a b', 'att.view', 'att.view@x@y', 'att.view@' + 'a'.repeat(41)].every((c) => (ve(c) || {}).error === 'bad_perm'), '10 格式不對 → bad_perm');
+  ok(sb.permIsGrantable_('att.view@mala-gf') === false && sb.PERM_GRANTABLE.every((p) => p.indexOf('@') === -1), '10 不在 PERM_GRANTABLE（對照表與權限開關畫面不會出現）');
+  ok((sb.permValidateRule_({ ladder: 'store', dept: '', title: 'sm', perm: 'att.view@mala-gf' }, pidx, true) || {}).error === 'bad_perm', '10 ★對照表規則不收（admin 也一樣）');
+  const ms = post(sb, 'permMapSave', { add: [{ ladder: 'hq', dept: 'it', title: 'hm', perm: 'att.view@mala-gf' }] }, app.adminTok);
+  ok(ms.ok === false && ms.code === 'bad_perm', '10 ★permMapSave 加 att.view@ 規則 → bad_perm', ms);
+  ok(sb.STORE_HR_GRANTABLE.every((p) => p.indexOf('att.view') === -1), '10 不在 STORE_HR_GRANTABLE');
+  // 誰能設
+  const hrTok = app.login('DZY355');
+  ok(exSave(hrTok, 'DZY354', 'att.view@mala-gf').code === 'no_perm', '10 ★人資主管不能設');
+  ok(exSave(app.login('DZY351'), 'DZY354', 'att.view@mala-gf').code === 'no_perm', '10 店長不能設');
+  const bad = exSave(app.adminTok, 'DZY354', 'att.view@mala-hq');
+  ok(bad.ok === false && bad.code === 'bad_target', '10 admin 設品牌辦公室 → bad_target', bad);
+  ok(exSave(app.adminTok, 'DZY354', 'att.view@mala-gf', { mode: 'remove' }).code === 'bad_mode', '10 admin 設 remove → bad_mode');
+  // 設之前
+  const perms = (u) => { const r = post(sb, 'login', { username: u, password: PW }); return r.ok ? r.data.perms : null; };
+  ok(!has(perms('DZY356'), 'platform.att') && eq(app.ident('DZY356').att.view_people, []), '10 設之前：財務同仁沒有考勤管理、沒有只看名單');
+  const s1 = exSave(app.adminTok, 'DZY356', 'att.view@mala-gf');
+  ok(s1.ok, '10 admin 能設 att.view@mala-gf', s1);
+  ok(app.sheets.perm_audit._rows().slice(-1)[0][3] === 'att.view@mala-gf', '10 寫 perm_audit（added＝att.view@mala-gf）');
+  // permCompute_ 把它帶進 perms
+  const who = post(sb, 'permWho', { q: 'DZY356' }, app.adminTok);
+  ok(who.ok && has(who.data.items[0].perms, 'att.view@mala-gf') && who.data.items[0].sources.some((x) => x.perm === 'att.view@mala-gf' && x.source === 'exception'), '10 permCompute_：perms 帶出 att.view@mala-gf（來源個別例外）', who.data);
+  // 效果：只看名單＝辛光店的全部帳號（含到辛光支援的人；不含不用核的總監帳號）、不進核定名單
+  const id = app.ident('DZY356');
+  ok(eq(id.att.view_people.map((x) => x.clock + ':' + x.emp_id), ['gf:GF351', 'gf:GF352', 'gf:GF353']) && eq(id.att.people, []) && eq(id.att.req_people, []), '10 ★ident：view_people＝辛光打卡帳號全部（含支援、不含責任制），只看不核', id.att);
+  ok(has(perms('DZY356'), 'platform.att'), '10 ★持有者有考勤管理（platform.att）');
+  app.props.PERMS_ON = '1';
+  const meR = post(sb, 'myPerms', {}, app.login('DZY356'));
+  delete app.props.PERMS_ON;
+  ok(meR.ok && meR.data.items.some((i) => i.perm === 'att.view@mala-gf' && i.name_zh === '只看考勤（麻的小辛辣 新竹光復）'), '10 myPerms 中文名「只看考勤（麻的小辛辣 新竹光復）」', meR.data);
+  ok(sb.permName_('att.view@ck') === '只看考勤（中央工廠（央廚））' && sb.permName_('att.view@nope') === '只看考勤（nope）', '10 permName_：央廚不加品牌、查不到顯示代碼');
+  // 不看本人
+  exSave(app.adminTok, 'DZY352', 'att.view@mala-gf');
+  ok(!app.ident('DZY352').att.view_people.some((x) => x.sub === 'DZY352'), '10 只看名單不含本人');
+  // 試點不含那家店 → 沒有（考勤管理仍給，選單照營運系統）
+  app.props.STORE_SSO_UNITS = 'mzt-gf';
+  ok(eq(app.ident('DZY356').att.view_people, []), '10 那家店不在試點 → 只看名單空');
+  app.props.STORE_SSO_UNITS = PERMS_ALL_PILOT;
+  // 單位之後停用 → permCompute_ 不給、閘門也關
+  const orgRow = app.sheets.org._data.find((r) => r[0] === 'unit' && r[1] === 'mala-gf');
+  orgRow[7] = 'FALSE';
+  ok(!has(perms('DZY356'), 'platform.att'), '10 單位停用後 → 不再有考勤管理');
+  orgRow[7] = 'TRUE';
+  // 人資主管看不到這種例外；admin 的列表多回可選門市
+  const lsHr = post(sb, 'permExList', {}, hrTok);
+  ok(lsHr.ok && !lsHr.data.items.some((i) => i.perm.indexOf('att.view@') === 0) && lsHr.data.att_view_units === undefined, '10 人資主管 permExList 看不到 att.view@、也不回門市清單');
+  const lsAd = post(sb, 'permExList', {}, app.adminTok);
+  const codes = (lsAd.data.att_view_units || []).map((u) => u.code);
+  ok(has(codes, 'mala-gf') && has(codes, 'ck') && has(codes, 'mzt-gf') && !has(codes, 'mala-hq') && !has(codes, 'dzy-hq') && !has(codes, 'mzt-wx') && lsAd.data.att_view_units.find((u) => u.code === 'mzt-gf').name === '墨竹亭 新竹光復', '10 admin permExList.att_view_units：active 門市＋央廚（名稱含品牌）', lsAd.data.att_view_units);
+  const hrEx = lsAd.data.items.find((i) => i.perm === 'att.view@mala-gf' && i.emp_no === 'DZY356');
+  ok(post(sb, 'permExRevoke', { ex_id: hrEx.ex_id }, hrTok).code === 'no_perm', '10 人資主管不能撤銷');
+  ok(post(sb, 'permExRevoke', { ex_id: hrEx.ex_id }, app.adminTok).ok && !has(perms('DZY356'), 'platform.att') && eq(app.ident('DZY356').att.view_people, []), '10 admin 撤銷後 → 沒有考勤管理、只看名單空');
+  // admin／人資主管：已經全核，不另外加只看
+  exSave(app.adminTok, 'DZY355', 'att.view@mala-gf');
+  ok(eq(app.ident('DZY355').att.view_people, []), '10 人資主管持有也不另外列只看（本來就全部可核）');
+  // 已有考勤職稱的人（辛總監）持有：多看那家店
+  exSave(app.adminTok, 'DZY357', 'att.view@mzt-gf');
+  ok(eq(app.ident('DZY357').att.view_people.map((x) => x.emp_id), ['MZTGF353']), '10 總監持有墨光的只看 → 多看墨光店的帳號');
+  // 鎖碼家族：非 admin 的調動若會改變有無 att.view@ → 擋；訊息有「只看考勤」
+  ok(sb.permLockedMsg_(['att.view@mala-gf']).indexOf('只看考勤') !== -1, '10 鎖碼訊息：只看考勤');
+  // 純函式：storeAttViewExUnits_ 過濾不合法單位
+  ok(eq(sb.storeAttViewExUnits_(['att.view@mala-gf', 'att.view@mala-gf', 'att.view@mala-hq', 'att.view@mzt-wx', 'att.view@ck', 'store.void'], sb.stfReadOrg_()), ['ck', 'mala-gf']), '10 storeAttViewExUnits_：只留存在、啟用、store 階梯的單位，排序去重');
+  // permCompute_：只走例外、只認 add、單位要合法
+  const base = { staff: { status: 'active', unit: 'dzy-hq', dept: 'fin', title: 'hs', emp_no: 'DZY356' }, org: pidx, rules: [{ rule_id: 'R1', ladder: 'hq', dept: '', title: '*', perm: 'att.view@mala-gf' }], today: '2026-10-26' };
+  const pc = (exs) => sb.permCompute_(Object.assign({}, base, { exs })).perms;
+  ok(eq(pc([]), []), '10 permCompute_：規則裡的 att.view@ 一律不採用');
+  ok(eq(pc([{ emp_no: 'DZY356', perm: 'att.view@mala-gf', mode: 'add', until: '' }]), ['att.view@mala-gf']), '10 permCompute_：例外 add → perms 有');
+  ok(eq(pc([{ emp_no: 'DZY356', perm: 'att.view@mala-gf', mode: 'remove', until: '' }, { emp_no: 'DZY356', perm: 'att.view@mala-hq', mode: 'add', until: '' }, { emp_no: 'DZY999', perm: 'att.view@ck', mode: 'add', until: '' }, { emp_no: 'DZY356', perm: 'att.view@ck', mode: 'add', until: '2020-01-01' }]), []), '10 permCompute_：remove、不合法單位、別人的、過期 → 都不給');
 })();
 
 // ============================================================

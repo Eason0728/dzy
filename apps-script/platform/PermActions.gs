@@ -358,7 +358,19 @@ function handlePermExList_(token, payload) {
       created_at: permStr_(r[7]), created_by: permStr_(r[8]), revoked_at: permStr_(r[9]), revoked_by: permStr_(r[10])
     });
   });
-  return { ok: true, data: { inited: true, items: items } };
+  var data = { inited: true, items: items };
+  // 2026-10-26「指定門市只看考勤」（att.view@<單位>，只有 admin 能設）：admin 才多回可選的門市（active、store 階梯含 ck），名稱同 permAttViewLabel_
+  if (!sess.hrOnly) data.att_view_units = permAcAttViewUnits_();
+  return { ok: true, data: data };
+}
+
+/** 可設「只看考勤」的單位：[{code, name}]（org 分頁順序；name 已含品牌，給下拉與清單顯示） */
+function permAcAttViewUnits_() {
+  var org = stfReadOrg_();
+  var pidx = permOrgIndex_();
+  return org.list.unit.filter(function (u) { return permAttViewUnitOk_(u.code, pidx); }).map(function (u) {
+    return { code: u.code, name: permAttViewLabel_(u.code, org) };
+  });
 }
 
 function handlePermExSave_(token, payload) {
@@ -373,7 +385,8 @@ function handlePermExSave_(token, payload) {
   if (!hit) return permAcFail_('no_staff', '找不到這位同仁');
   var today = permTodayTaipei_();
   var ex = { perm: permStr_(payload.perm), mode: permStr_(payload.mode), until: payload.until, note: typeof payload.note === 'string' ? payload.note : '' };
-  var verr = permValidateEx_(ex, today);
+  var org = permOrgIndex_();   // 2026-10-26：att.view@<單位> 要驗單位
+  var verr = permValidateEx_(ex, today, org);
   if (verr) return permAcFail_(verr.error, verr.message);
   var until = permNormDate_(payload.until);   // 驗證已通過：空＝不到期
   var ss = SpreadsheetApp.getActive();
@@ -384,7 +397,6 @@ function handlePermExSave_(token, payload) {
   var note = authSafeCell_(permStr_(payload.note));
 
   // 事前／事後權限（寫 perm_audit 用）
-  var org = permOrgIndex_();
   var extra = stfSplitCodes_(stfReadExtraMap_()[emp]);
   var newEx = { ex_id: exId, emp_no: emp, perm: ex.perm, mode: ex.mode.toLowerCase(), until: until, note: permStr_(payload.note) };
   var pb = permAcPerms_(tables, org, today, hit.values, extra, tables.rules, tables.exs);
