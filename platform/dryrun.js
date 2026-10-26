@@ -41,7 +41,9 @@ export const READ_ACTIONS = {
   // 收支管理（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.cashbook 一致（test/proxy-authorize.test.mjs 比對）
   cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet'],
   // 排班管理首頁待辦（2026-10-24，hr-move-spec §5）：必須與 Auth.gs PROXY_READ_ACTIONS.schedule 一致；只回店名與期別的純讀取
-  schedule: ['schedAlerts']
+  schedule: ['schedAlerts'],
+  // 損益系統（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.pnl 一致
+  pnl: ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment']
 };
 
 /**
@@ -53,7 +55,9 @@ export const WRITE_ACTIONS = {
   dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign', 'handoverPdf'],
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
     'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
-  cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock']
+  cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock'],
+  pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
+    'refreshConnectors', 'refreshFixed', 'loadGroupUnits']
 };
 
 export const DRYRUN_MESSAGE = '試跑模式，未寫入';
