@@ -253,6 +253,23 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(eq(gotO, fxO), '1 契約 ident_osv_view：整份逐欄相同（含 pilot_units、att.req_people、att.view_people）', { got: gotO, want: fxO });
   ok(eq(keysOf(gotO), keysOf(fxO)) && FIX.responses.ident_osv_view.ok === true, '1 契約 ident_osv_view：欄位名與順序逐字相同');
 
+  // 1a3. ident_support（2026-10-26 營運系統「支援（原單位）」標示）：墨光店長＋辛光計時到墨光支援 → 那一筆多 support／home_unit／home_unit_name
+  const cast3 = [
+    ['DZY023', '陳小明', 'mzt-gf', '', 'sm', 'active', '2026-03-01'],
+    ['DZY031', '李計時', 'mzt-gf', '', 'pt', 'active', '2026-05-01'],
+    ['DZY045', '王支援', 'mala-gf', '', 'pt', 'active', '2026-05-02']
+  ];
+  const app3 = world(cast3, { pilot: 'mzt-gf', admins: [['u_admin01', 'BOSS', '系統管理員']] });
+  app3.sheets.staff_clock._data.length = 1;
+  app3.sheets.staff_clock._data.push(['DZY023', 'mztgf', 'MZTGF03', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app3.sheets.staff_clock._data.push(['DZY031', 'mztgf', 'MZTGF07', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app3.sheets.staff_clock._data.push(['DZY045', 'gf', 'GF45', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  app3.sheets.staff_clock._data.push(['DZY045', 'mztgf', 'MZTGF09', 'support', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  const fxS = FIX.responses.ident_support.data;
+  const gotS = app3.ident('DZY023');
+  ok(eq(gotS, fxS), '1 契約 ident_support：整份逐欄相同（支援帳號多 support／home_unit／home_unit_name，其他筆形狀不變）', { got: gotS, want: fxS });
+  ok(eq(keysOf(gotS), keysOf(fxS)) && FIX.responses.ident_support.ok === true && typeof FIX.rules.att_support === 'string', '1 契約 ident_support：欄位名與順序逐字相同；rules.att_support 有說明');
+
   // 1b. admin 沒有同仁編號：整份逐欄相同（試點 mala-gf，那邊沒有人 → att.people 空）
   app.props.STORE_SSO_UNITS = 'mala-gf';
   const adm = app.ident('U:u_admin01');
@@ -1264,7 +1281,22 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
     [['gf:GF331', 'gf:GF332', 'gf:GF338'], ['gf:GF332', 'gf:GF338'], ['mztgf:MZTGF332']]);
   g('9k ident 資訊總監：總部帳號照核、門市帳號只看', [K('DZY339', 'people'), K('DZY339', 'view_people')], [['hq:HQ338'], ['gf:GF338']]);
   const vp = app.ident('DZY331').att;
-  ok(['people', 'req_people', 'view_people'].every((k) => vp[k].every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name']))) && vp.view_people[0].sub === 'DZY332' && vp.view_people[0].name === '辛光計時', '9k ident 名單項目形狀不變 {clock, emp_id, sub, name}');
+  const SUPK = ['clock', 'emp_id', 'sub', 'name', 'support', 'home_unit', 'home_unit_name'];
+  const isSup = (x) => (x.clock === 'mztgf' && x.emp_id === 'MZTGF332') || (x.clock === 'gf' && x.emp_id === 'GF338');
+  ok(['people', 'req_people', 'view_people'].every((k) => vp[k].every((x) => eq(Object.keys(x), isSup(x) ? SUPK : ['clock', 'emp_id', 'sub', 'name']))) && vp.view_people[0].sub === 'DZY332' && vp.view_people[0].name === '辛光計時',
+    '9k ident 名單項目：非支援帳號形狀不變 {clock, emp_id, sub, name}；支援帳號多 support／home_unit／home_unit_name（接在後面）', vp);
+  // 9k2. 營運系統「支援（原單位）」標示（2026-10-26 Eason）：只在支援帳號；三份名單都帶；名稱同 att.view@ 的「品牌 單位」
+  const sup = (s, k, ck, id) => app.ident(s).att[k].find((x) => x.clock === ck && x.emp_id === id);
+  ok(eq(sup('DZY333', 'people', 'mztgf', 'MZTGF332'), { clock: 'mztgf', emp_id: 'MZTGF332', sub: 'DZY332', name: '辛光計時', support: true, home_unit: 'mala-gf', home_unit_name: '麻的小辛辣 新竹光復' }),
+    '9k2 ★墨光店長核的辛光計時（支援）：support:true、home_unit mala-gf、home_unit_name「麻的小辛辣 新竹光復」', sup('DZY333', 'people', 'mztgf', 'MZTGF332'));
+  ok(eq(sup('DZY333', 'req_people', 'mztgf', 'MZTGF332'), sup('DZY333', 'people', 'mztgf', 'MZTGF332')), '9k2 申請名單同一筆、同樣帶標示');
+  ok(sup('DZY331', 'view_people', 'mztgf', 'MZTGF332').home_unit_name === '麻的小辛辣 新竹光復' && sup('DZY331', 'view_people', 'mztgf', 'MZTGF332').support === true, '9k2 原單位主管只看的那筆也帶標示');
+  const it338 = sup('DZY331', 'people', 'gf', 'GF338');
+  ok(it338.support === true && it338.home_unit === 'dzy-hq' && typeof it338.home_unit_name === 'string' && it338.home_unit_name.length > 0 && it338.home_unit_name.indexOf('dzy-hq') === -1, '9k2 總部同仁到門市：home_unit dzy-hq、名稱是中文（不是代碼）', it338);
+  ok(['gf:GF331', 'gf:GF332'].every((k) => eq(Object.keys(app.ident('DZY331').att.people.find((x) => x.clock + ':' + x.emp_id === k)), ['clock', 'emp_id', 'sub', 'name'])) && !('support' in sup('DZY339', 'people', 'hq', 'HQ338')),
+    '9k2 本店同仁、總部打卡（hq）帳號不帶 support 欄位');
+  const org9 = app.sb.stfReadOrg_();
+  ok(app.sb.storeUnitLabel_('mzt-gf', org9) === '墨竹亭 新竹光復' && app.sb.storeUnitLabel_('ck', org9) === '中央工廠（央廚）' && app.sb.storeUnitLabel_('nope', org9) === 'nope' && app.sb.storeUnitLabel_('', org9) === '', '9k2 storeUnitLabel_：品牌＋單位、央廚不加品牌、查不到＝代碼、空＝空');
   ok(has(K('DZY337', 'people'), 'mztgf:MZTGF332') && has(K('DZY337', 'people'), 'gf:GF338') && has(K('U:a001', 'req_people'), 'mztgf:MZTGF332'), '9k ident 人資主管、admin 核得到支援帳號');
   // REGIONS_ON：總監依打卡店看
   app.props.REGIONS_ON = '1';

@@ -382,9 +382,17 @@ function storeAttIsSupport_(t, storeCode, units, org) {
   return units.indexOf(stfStr_(t.unit)) === -1;
 }
 
+/** 單位顯示名稱（同 att.view@ 的「品牌 單位」，例「麻的小辛辣 新竹光復」；央廚與已含品牌名的不加；查不到＝代碼）。Perms.gs 沒載入時只給單位名稱 */
+function storeUnitLabel_(unit, org) {
+  if (!unit) return '';
+  if (typeof permAttViewLabel_ === 'function') return permAttViewLabel_(unit, org);
+  var u = org && org.unit ? org.unit[unit] : null;
+  return (u && stfStr_(u.name)) || unit;
+}
+
 /**
  * 全部打卡帳號（staff_clock state=confirmed、roster_active 不是 FALSE），依 people 順序、maps 順序：
- * [{t, m, units, support}]；t＝storeEffectiveTarget_（null 的人整個略過），units＝打卡店的單位清單（storeUnits[store_code]，沒有＝[]）。
+ * [{t, m, units, support, homeUnit?, homeName?}]（homeUnit／homeName 只在支援帳號：本人單位代碼與顯示名稱，2026-10-26 營運系統「支援」標示）；t＝storeEffectiveTarget_（null 的人整個略過），units＝打卡店的單位清單（storeUnits[store_code]，沒有＝[]）。
  */
 function storeAttAccounts_(people, org, home, maps, storeUnits) {
   var byEmp = {};
@@ -401,7 +409,9 @@ function storeAttAccounts_(people, org, home, maps, storeUnits) {
       var units = ((storeUnits && storeUnits[m.store_code]) || []).filter(function (c) {
         var u = org.unit[c]; return !!(u && u.active && (u.ladder || 'store') === 'store');
       });
-      out.push({ t: t, m: m, units: units, support: storeAttIsSupport_(t, m.store_code, units, org) });
+      var a = { t: t, m: m, units: units, support: storeAttIsSupport_(t, m.store_code, units, org) };
+      if (a.support) { a.homeUnit = stfStr_(t.unit); a.homeName = storeUnitLabel_(a.homeUnit, org); }
+      out.push(a);
     });
   });
   return out;
@@ -442,12 +452,17 @@ function storeSupportApprovers_(units, people, org, rctx) {
   return out;
 }
 
-/** 打卡帳號 → 契約的一筆 {clock, emp_id, sub, name}；同一份名單以 clock|emp_id 去重，最後依 clock、emp_id 排序 */
+/**
+ * 打卡帳號 → 契約的一筆 {clock, emp_id, sub, name}；同一份名單以 clock|emp_id 去重，最後依 clock、emp_id 排序。
+ * 支援帳號多三個選填欄位 support:true、home_unit（本人單位代碼）、home_unit_name（例「麻的小辛辣 新竹光復」），營運系統在名字旁標「支援（…）」；非支援帳號形狀不變。
+ */
 function storeAttListAdd_(list, a) {
   var k = a.m.store_code + '|' + a.m.emp_id;
   if (list.seen[k]) return;
   list.seen[k] = true;
-  list.rows.push({ clock: a.m.store_code, emp_id: a.m.emp_id, sub: a.t.emp, name: a.t.name });
+  var row = { clock: a.m.store_code, emp_id: a.m.emp_id, sub: a.t.emp, name: a.t.name };
+  if (a.support) { row.support = true; row.home_unit = a.homeUnit || ''; row.home_unit_name = a.homeName || ''; }
+  list.rows.push(row);
 }
 function storeAttListOut_(list) {
   return list.rows.sort(function (a, b) {
@@ -461,7 +476,7 @@ function storeAttListOut_(list) {
  * me／flags／people／org／home／rctx 同 storeAttTargets_；maps＝clkMaps_()；storeUnits＝{打卡店代碼: clkUnitsOf_}；pilot＝試點單位陣列。
  * opt＝{viewUnits: 督導／總監只看的單位（attViewUnitsOf_，呼叫端只在 REGIONS_ON 且非 admin／人資主管才給），
  *       exViewUnits: 指定門市只看考勤 att.view@<單位> 的單位（呼叫端只在非 admin／人資主管才給）, origView: 原單位主管只看支援帳號（預設 true）}。
- * 回 {people, req_people, view_people}，每份都是 {clock, emp_id, sub, name}、依 clock、emp_id 排序。
+ * 回 {people, req_people, view_people}，每份都是 {clock, emp_id, sub, name}（支援帳號另加 support／home_unit／home_unit_name）、依 clock、emp_id 排序。
  *
  * 非支援帳號：完全照舊（人在 storeAttTargets_ 名單內、人所屬單位在試點 → 他所有非支援帳號；只看＝人所屬單位在 viewUnits）。
  * 支援帳號（storeAttIsSupport_）：試點看打卡店單位；核定＝storeSupportApprovers_ 那層、人資主管、admin、att.extra（打卡店單位＝我的單位）；
