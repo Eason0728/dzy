@@ -29,7 +29,10 @@ export const READ_ACTIONS = {
     // 區域（2026-10-25，docs/regions/spec.md 第 9 節）：純讀取；regionSave（preview:false）／regionSwitch 不列（寫入，試跑會攔）
     'regionList', 'regionCheck',
     // LINE 認身分（2026-10-25）：同仁名單顯示最近 LINE 紀錄的純讀取；lineRevoke（寫入）不列，試跑會攔
-    'lineAuthLog'],
+    'lineAuthLog',
+    // 績效評核（2026-10-26，docs/eval/plan.md）：純讀取；evSetup／evPeerSubmit／evSelfSubmit／evNewbieSubmit／evSupSave／ev*Save／evFinalize／evUnfinalize／evImportCommit 不列
+    // evImportPreview 只比對姓名、不寫資料
+    'evMe', 'evMyScores', 'evNewbieList', 'evUnitResults', 'evPersonDetail', 'evBankGet', 'evImportPreview'],
   audit: ['getAll'],
   dorm: ['rooms', 'list', 'contract', 'handover'],
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）

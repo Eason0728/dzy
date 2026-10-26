@@ -51,7 +51,10 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   // ⚠ 給 mini 路由用的 LINE 全域函式（LineAuth.gs 內結尾底線的那三支）刻意不在這裡，也不可加進來
   'lineRevoke', 'lineAuthLog',
   // 2026-10-24：貨單核對（PurchaseSso.gs）；永遠不可列進 minikit readActions 與 dryrun READ_ACTIONS
-  'svcPurchaseRedeem', 'svcPurchaseWho'];
+  'svcPurchaseRedeem', 'svcPurchaseWho',
+  // 2026-10-26：績效評核（Eval.gs；docs/eval/plan.md）。寫入由 Eval.gs evWithLock_ 自己上鎖，刻意不列 MUTATING_ACTIONS（避免重複取鎖）
+  'evSetup', 'evMe', 'evPeerSubmit', 'evSelfSubmit', 'evMyScores', 'evNewbieList', 'evNewbieSubmit', 'evUnitResults', 'evPersonDetail',
+  'evSupSave', 'evBankGet', 'evBankSave', 'evTplSave', 'evWageSave', 'evGradeSave', 'evFinalize', 'evUnfinalize', 'evImportPreview', 'evImportCommit'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -252,6 +255,25 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'lineAuthLog': return handleLineAuthLog_(token, payload);
     case 'svcPurchaseRedeem': return handleSvcPurchaseRedeem_(payload);
     case 'svcPurchaseWho': return handleSvcPurchaseWho_(payload);
+    case 'evSetup': return handleEvSetup_(token);
+    case 'evMe': return handleEvMe_(token);
+    case 'evPeerSubmit': return handleEvPeerSubmit_(token, payload);
+    case 'evSelfSubmit': return handleEvSelfSubmit_(token, payload);
+    case 'evMyScores': return handleEvMyScores_(token);
+    case 'evNewbieList': return handleEvNewbieList_(token);
+    case 'evNewbieSubmit': return handleEvNewbieSubmit_(token, payload);
+    case 'evUnitResults': return handleEvUnitResults_(token, payload);
+    case 'evPersonDetail': return handleEvPersonDetail_(token, payload);
+    case 'evSupSave': return handleEvSupSave_(token, payload);
+    case 'evBankGet': return handleEvBankGet_(token, payload);
+    case 'evBankSave': return handleEvBankSave_(token, payload);
+    case 'evTplSave': return handleEvTplSave_(token, payload);
+    case 'evWageSave': return handleEvWageSave_(token, payload);
+    case 'evGradeSave': return handleEvGradeSave_(token, payload);
+    case 'evFinalize': return handleEvFinalize_(token, payload);
+    case 'evUnfinalize': return handleEvUnfinalize_(token, payload);
+    case 'evImportPreview': return handleEvImportPreview_(token, payload);
+    case 'evImportCommit': return handleEvImportCommit_(token, payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };
