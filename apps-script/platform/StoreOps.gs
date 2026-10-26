@@ -370,11 +370,14 @@ function storeAnyIn_(arr, set) {
 
 /**
  * 這個打卡帳號算不算支援（spec §1）。t＝storeEffectiveTarget_ 的結果；units＝打卡店的 clkUnitsOf_。
- * 推算（inferred）／orphan 的人、總部打卡 hq、打卡店沒有填單位（或不在 clock_stores）→ 不算（照舊）。
+ * 推算（inferred）／orphan 的人、總部打卡 hq、打卡店沒有填單位（或不在 clock_stores）、品牌辦公室同仁（給了 org 時）→ 不算（照舊）。
  */
-function storeAttIsSupport_(t, storeCode, units) {
+function storeAttIsSupport_(t, storeCode, units, org) {
   if (!t || t.inferred || t.orphan) return false;
   if (storeCode === STORE_SELF_CLOCK) return false;
+  // 2026-10-26 Eason：品牌辦公室同仁（區督導、行政、區經理 oam）到門市打卡不算支援，照原規則由辦公室總監核（不讓店長核督導）
+  var tu = org && org.unit ? org.unit[stfStr_(t.unit)] : null;
+  if (tu && tu.ladder === 'office') return false;
   if (!units || !units.length) return false;
   return units.indexOf(stfStr_(t.unit)) === -1;
 }
@@ -398,7 +401,7 @@ function storeAttAccounts_(people, org, home, maps, storeUnits) {
       var units = ((storeUnits && storeUnits[m.store_code]) || []).filter(function (c) {
         var u = org.unit[c]; return !!(u && u.active && (u.ladder || 'store') === 'store');
       });
-      out.push({ t: t, m: m, units: units, support: storeAttIsSupport_(t, m.store_code, units) });
+      out.push({ t: t, m: m, units: units, support: storeAttIsSupport_(t, m.store_code, units, org) });
     });
   });
   return out;

@@ -1105,6 +1105,15 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(sb.storeAttIsSupport_(T('mala-gf', { inferred: true }), 'mztgf', ['mzt-gf']) === false && sb.storeAttIsSupport_(T('', { orphan: true }), 'mztgf', ['mzt-gf']) === false, '9a 推算／orphan 的人不套支援規則');
   ok(sb.storeAttIsSupport_(T('mzt-js'), 'mztlzl', ['mzt-lzl', 'mzt-js']) === false && sb.storeAttIsSupport_(T('mzt-gf'), 'mztlzl', ['mzt-lzl', 'mzt-js']) === true, '9a 多單位的店：本人單位在清單任一個 → 不是支援；都不在 → 支援');
   ok(sb.storeAttIsSupport_(T('mzt-gf'), 'zz', []) === false, '9a 打卡店沒填單位（或不在 clock_stores）→ 照舊不算支援');
+  ok(sb.storeAttIsSupport_(T('mzt-hq'), 'mztgf', ['mzt-gf'], org) === false && sb.storeAttIsSupport_(T('mzt-hq'), 'mztgf', ['mzt-gf']) === true,
+    '9a ★2026-10-26 品牌辦公室同仁到門市打卡不算支援（給 org 時）');
+  {
+    const maps = MAPS.concat([M('DZY308', 'mztgf', 'MG08'), M('DZY317', 'gf', 'GF17')]);
+    const s303 = run('DZY303', { maps }), s309 = run('DZY309', { maps }), s301 = run('DZY301', { maps }), s316 = run('DZY316', { maps });
+    ok(s303.h.indexOf('mztgf:MG08') === -1 && s303.r.indexOf('mztgf:MG08') === -1 && s303.v.indexOf('mztgf:MG08') === -1, '9a ★督導在墨光打卡：墨光店長不核也不看', s303);
+    ok(s309.h.indexOf('mztgf:MG08') !== -1 && s309.r.indexOf('mztgf:MG08') !== -1, '9a ★督導在墨光打卡：照原規則由墨竹亭總監核（工時與申請）', s309);
+    ok(s301.h.indexOf('gf:GF17') === -1 && s316.h.indexOf('gf:GF17') !== -1, '9a ★小辛辣行政在光復打卡：光復店長不核、小辛辣總監核', { s301: s301.h, s316: s316.h });
+  }
   const ac = sb.storeAttAccounts_(BASE, org, null, MAPS.concat([Object.assign(M('DZY301', 'mztgf', 'MGX'), { state: 'pending' }), Object.assign(M('DZY301', 'mztjs', 'MJX'), { roster_active: 'FALSE' })]), SU);
   ok(!ac.some((a) => a.m.emp_id === 'MGX' || a.m.emp_id === 'MJX'), '9a 帳號只算 confirmed、roster_active 不是 FALSE');
   ok(eq(ac.filter((a) => a.support).map((a) => a.m.emp_id).sort(), ['GF13', 'MG02', 'MG12', 'MJ03', 'ML04']), '9a 這份資料的支援帳號：辛光計時在墨光、墨光店長在金山、墨光計時在六張犁、央廚計時在墨光、資訊同仁在辛光');
@@ -1185,7 +1194,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const osvMaps = MAPS.concat([M('DZY308', 'mztlzl', 'ML08')]);
   const o308 = run('DZY308', { maps: osvMaps, rctx: on });
   ok(!has(o308.h, 'mztlzl:ML08') && !has(o308.r, 'mztlzl:ML08') && !has(o308.v, 'mztlzl:ML08') && has(o308.h, 'mztlzl:ML04'), '9g ★督導是自己支援帳號那層的核定人 → 仍不能核自己（同店別人照核）', o308);
-  ok(has(run('DZY315', { maps: osvMaps, rctx: on, flags: { hrHead: true } }).h, 'mztlzl:ML08') && !has(run('DZY309', { maps: osvMaps, rctx: on }).h, 'mztlzl:ML08') && has(run('DZY309', { maps: osvMaps, rctx: on }).h, 'hq:H08'), '9g 那個帳號由人資主管核；總監照舊核督導的總部帳號（第 3 層有人，不往下補）');
+  ok(has(run('DZY315', { maps: osvMaps, rctx: on, flags: { hrHead: true } }).h, 'mztlzl:ML08') && has(run('DZY309', { maps: osvMaps, rctx: on }).h, 'mztlzl:ML08') && has(run('DZY309', { maps: osvMaps, rctx: on }).h, 'hq:H08'), '9g 那個帳號由人資主管核；2026-10-26 起督導在門市打卡不算支援 → 辦公室總監照原規則核（含總部帳號）');
   const odirClock = MAPS.concat([M('DZY309', 'mztlzl', 'ML09')]);
   ok(!has(run('DZY309', { maps: odirClock }).h, 'mztlzl:ML09') && !has(run('DZY309', { maps: odirClock }).v, 'mztlzl:ML09'), '9g 責任制職稱就算有門市打卡帳號也不列（不用核）、總監是第 4 層也不核自己');
 
