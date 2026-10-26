@@ -127,3 +127,11 @@ dzy 殼 ctx.api.call('pnl', action, payload) → POST <平台>/platform/proxy {t
 損益假後端（mala-pnl-auto tools/dev-embed-server.js，8912）＋ mini 平台複本（kit/runner/server.js，8798，假帳號）＋ 管理系統複本（devserver，8787，config 指 8798）。
 四種身分：系統管理者（管）、會計角色加 pnl.write（填）、總監角色加 pnl.read（看）、店長（無）。結果：管＝九分頁含設定、可定稿；
 填＝八分頁、確認為 0 寫入成功（記成影子帳號）、定稿被平台擋；看＝只有儀表板、可看全部合計；店長＝選單沒有、硬打網址回首頁。
+
+## 11. 上線紀錄（2026-10-26）
+
+- 損益 Apps Script @27（dzyProxy 入口）；mini 平台 affddca（module_secrets pnl/read＋pnl/write、.env PROXY_URL_PNL）；損益試算表 Script Property PNL_DZY_KEY（同一把）。
+- dzy main：6ff6b0b（平台後端，先推，供 sync-gas）→ 3c349ba（前端：模組、選單、權限設定頁）。損益網頁 mala-pnl.github.io 897fe4d。
+- Eason 在權限設定打開「總部・財務部・全部職稱 → 填損益」。
+- 驗證：外網 /platform/proxy ns pnl 回 NO_TOKEN；manifest 與損益網頁都是新版。
+- **待辦（約 2026-11-09）**：舊入口退場（舊網址改搬家說明頁、停發邀請碼、停用舊帳號）——Q5 選 A 的兩週過渡期結束；記在 mala-pnl-auto docs/progress.md。
