@@ -30,18 +30,9 @@
  * 幾次網路請求換來畫面可能顯示過期的合約狀態。所以這三個函式都是單純的
  * passthrough，不設快取、不設 TTL、不合併 in-flight 呼叫。
  *
- * 【⚠ 讀 Api.gs 時發現的既有後端缺口，記在這裡供之後的任務參照】
- * Api.gs 的 rooms／list／contract 三個 action 只定義在 doGet()（第 22-41 行）的
- * switch 裡；doPost()（第 43-85 行）的 switch 只有 create/sign/handoverCreate/
- * handoverSign/terminate/delete/cleanupTest/setSetting 這些寫入類 case，沒有這
- * 三個讀取 action。而 platform/api.js 的 call() 一律用 POST 送出（postJson_()
- * 固定 method:'POST'，spec §4.8 也明講送出格式是 POST），也就是說目前透過
- * ctx.api.call('dorm', 'rooms'/'list'/'contract', ...) 打到「真的」Api.gs 後端時，
- * 會落進 doPost() 的 default case，被當成「未知的 action」打回 {ok:false}——
- * 這三個 action 實際上打不通。這是既有後端（Api.gs，本任務唯讀不准改）的缺口，
- * 不是本檔或 platform 層的問題，本任務的測試全程 mock ctx.api.call，不會暴露
- * 這個問題，但這支模組要在正式環境真的動起來，需要另開任務在 Api.gs 的
- * doPost() 補上這三個 action 的 case（或改成也接受 GET）。
+ * 【已解決】原本這裡記著「Api.gs 的 rooms／list／contract 只在 doGet()，平台一律 POST 會打不通」。
+ * 2026-10-25 全資料審查 A-16 查證：宿舍後端 doPost() 已有 rooms、list、contract 三個 case（dzy-minikit
+ * apps/dorm/gas/Api.gs），這個缺口已補上，舊註解刪除。
  */
 
 'use strict';

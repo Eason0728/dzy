@@ -31,7 +31,7 @@ export function mountEx(el, ctx) {
     return sortExItems(items).map((x) => {
       const st = exStatus(x);
       const modeTag = x.mode === 'remove' ? '<span class="tag tag-danger">拿掉</span>' : '<span class="tag tag-ok">多給</span>';
-      return `<div class="card stack" data-role="ex-item" data-ex="${esc(x.ex_id)}" data-status="${esc(x.status)}"${st.dim ? ' style="opacity:.55"' : ''}>
+      return `<div class="card stack${st.dim ? ' is-dim' : ''}" data-role="ex-item" data-ex="${esc(x.ex_id)}" data-status="${esc(x.status)}">
         <div class="card-row"><div class="card-title">${esc(x.name || '')} ${esc(x.emp_no)}</div><span class="tag${st.dim ? '' : ' tag-ok'}">${st.text}</span></div>
         <div>${modeTag} ${esc(featureName(x.perm))}　<span class="text-muted">${esc(untilText(x.until))}</span></div>
         <div class="text-muted">原因：${esc(x.note)}　建立者：${esc(x.created_by)}${x.created_at ? `（${esc(String(x.created_at).slice(0, 10))}）` : ''}</div>

@@ -28,7 +28,7 @@ export function mountRows(el, ctx) {
   function detailHtml(r, locked) {
     const url = safeUrl(r.photo);
     const photo = url
-      ? `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="收據照片" loading="lazy" style="max-width:160px;max-height:160px;border-radius:6px;border:1px solid #ddd"></a>`
+      ? `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="收據照片" loading="lazy" class="thumb"></a>`
       : '<span class="text-muted">沒有收據照片</span>';
     const voided = r.status === '作廢';
     const info = [
@@ -48,8 +48,8 @@ export function mountRows(el, ctx) {
     const lockTag = locked ? '<span class="tag tag-warn" data-role="cb-locked">本月已月結鎖定</span>' : '<span class="tag" data-role="cb-locked">本月未鎖定</span>';
     const body = rows.length ? rows.map((r) => {
       const voided = r.status === '作廢';
-      const strike = voided ? ' style="text-decoration:line-through;opacity:.6"' : '';
-      return `<tr data-role="cb-row" data-id="${esc(r.id)}" style="cursor:pointer">
+      const strike = voided ? ' class="is-void"' : '';
+      return `<tr data-role="cb-row" class="is-clickable" data-id="${esc(r.id)}">
         <td${strike}>${esc(r.date)}</td>
         <td${strike}>${esc(r.kind)}・${esc(r.subject)}・${esc(r.name)}</td>
         <td${strike}>${esc(money(r.amount))}</td>
