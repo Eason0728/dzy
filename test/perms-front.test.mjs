@@ -45,7 +45,9 @@ const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().re
 
 t('對照表 18 列、順序固定（2026-10-26 加公告管理）（不跟後端 grantable 順序）', () => {
   const rows = L.featureRows(DATA);
-  assert.equal(rows.length, 18);
+  assert.equal(rows.length, 19);
+  assert.equal(rows[18].perm, 'transfer.write');
+  assert.equal(rows[18].name, '調撥管理');
   assert.equal(rows[13].perm, 'platform.bulletin');
   assert.equal(rows[13].name, '公告管理');
   assert.deepEqual(rows.map((r) => r.perm), L.FEATURE_ORDER);

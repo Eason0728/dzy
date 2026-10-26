@@ -4,9 +4,9 @@
  */
 'use strict';
 
-/** 可給的 18 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
+/** 可給的 19 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
 export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase',
-  'pnl.read', 'pnl.write', 'pnl.admin'];
+  'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write'];
 
 /** 人資主管（platform.permmap 但不是 admin）在個別例外只能動的三碼（2026-10-26 加公告管理）；對照後端 STORE_HR_GRANTABLE，真正擋的是後端，前端只是不顯示選不了的 */
 export const HR_EX_FEATURES = ['store.void', 'att.extra', 'platform.bulletin'];
@@ -29,7 +29,8 @@ export const FEATURE_NAMES = {
   'platform.purchase': '貨單核對',
   'pnl.read': '看損益',
   'pnl.write': '填損益',
-  'pnl.admin': '損益定稿與設定'
+  'pnl.admin': '損益定稿與設定',
+  'transfer.write': '調撥管理'
 };
 
 /** 其他會出現在 myPerms／異動裡的碼 */
@@ -278,7 +279,8 @@ export const FEATURE_DESC = {
   'platform.purchase': '進貨單核對：核對入帳廠商貨單、看食材成本與單價報表（財務部門預設有）',
   'pnl.read': '進損益系統，只能看儀表板',
   'pnl.write': '進損益系統：看、填資料、匯入、確認為 0（財務部門預設有）',
-  'pnl.admin': '損益定稿、解除定稿、改設定（只有系統管理員能開）'
+  'pnl.admin': '損益定稿、解除定稿、改設定（只有系統管理員能開）',
+  'transfer.write': '進調撥管理：看調撥月報、品項記憶、卡關總覽，產月報、改品項記憶（財務部門預設有）'
 };
 
 /** 總部高層（不分部門）的職稱代碼 */

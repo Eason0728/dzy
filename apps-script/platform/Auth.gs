@@ -325,6 +325,8 @@ function pickSecrets_(perms) {
     // 收支管理金鑰（2026-10-24）同理：會計級通道，絕不下發到瀏覽器
     if (backendId === 'cashbook') return;
     if (backendId === 'pnl') return;   // 損益系統（2026-10-24）：只在代轉時給
+    // 調撥管理金鑰（會計密碼，2026-10-24）同理：絕不下發到瀏覽器
+    if (backendId === 'transfer') return;
     // 考勤／排班（2026-10-24）：只走代轉的首頁待辦，金鑰同樣絕不下發到瀏覽器（日後補 write 列也一樣）
     if (backendId === 'attendance' || backendId === 'schedule') return;
     var s = pickSecretFor_(perms, backendId, byBackend);
@@ -356,7 +358,9 @@ var PROXY_READ_ACTIONS = {
   // 排班管理首頁待辦（2026-10-24，營運系統 docs/autoschedule/hr-move-spec.md §5）：與 platform/dryrun.js READ_ACTIONS.schedule 一致
   schedule: ['schedAlerts'],
   // 損益系統（2026-10-24，損益 Apps Script 的 dzyProxy 入口；損益後端 gas/dzyProxy.js DZY_PROXY_ACTIONS_ 另有一份第二道白名單）
-  pnl: ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment']
+  pnl: ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment'],
+  // 調撥管理（2026-10-24）：只有 transfer.write，讀寫都要它；分讀寫只為了試跑模式能照常讀。與 platform/dryrun.js READ_ACTIONS.transfer 一致
+  transfer: ['bootstrap', 'adminData', 'adminOverview', 'getDoc']
 };
 
 /**
@@ -374,7 +378,9 @@ var PROXY_WRITE_ACTIONS = {
   cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock'],
   // 損益系統：「管」級動作另由 PROXY_PNL_ADMIN_ACTIONS 要求 pnl.admin，損益後端也依角色擋
   pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
-    'refreshConnectors', 'refreshFixed', 'loadGroupUnits']
+    'refreshConnectors', 'refreshFixed', 'loadGroupUnits'],
+  // 調撥管理：adminUpdate 只准 op＝memoryEdit／memoryDelete，由 mini 的 proxy-hook 再限（其餘 op 一律 OP_FORBIDDEN）
+  transfer: ['buildMonthlyReport', 'adminUpdate']
 };
 
 /**
@@ -468,12 +474,12 @@ function proxyAuthorize_(token, ns, action) {
 }
 
 /**
- * 薪酬系統、收支管理（2026-10-24 加）的操作人（2026-10-19）：薪資後端的 payroll_audit.operator 原本是呼叫端自填（共用金鑰時無法證明誰做的）。
+ * 薪酬系統、收支管理、調撥管理（2026-10-24 加）的操作人（2026-10-19）：薪資後端的 payroll_audit.operator 原本是呼叫端自填（共用金鑰時無法證明誰做的）。
  * 代轉時由平台依登入身分決定、mini 的 proxy-hook.js 一律覆寫上游 body.operator，瀏覽器送什麼都不採信。
  * 其他 ns 不加（舊後端不認這個欄位）。
  */
 function proxyWithOperator_(res, ns, user, perms) {
-  if (ns !== 'payroll' && ns !== 'cashbook' && ns !== 'pnl') return res;
+  if (ns !== 'payroll' && ns !== 'cashbook' && ns !== 'pnl' && ns !== 'transfer') return res;
   var name = String((user && user.name) || '').trim();
   var uname = String((user && user.username) || '').trim();
   res.operator = (name || uname || '未知') + (uname ? '（' + uname + '）' : '') + '（管理系統）';

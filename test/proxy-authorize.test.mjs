@@ -814,6 +814,63 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   ok(fa.ok && fa.level === 'admin' && fa.isWrite === true, '18q: 再給 pnl.admin → level admin', fa);
 }
 
+// ============================================================
+// 19. 調撥管理（2026-10-24）：transfer.write 一個開關（不是鎖碼）、財務部門預設有、會計密碼只在代轉時給、操作人由平台決定
+// ============================================================
+{
+  const TR = 'FAKE-TRANSFER-PIN-77';
+  const extra = { module_secrets: seed().module_secrets.concat([['transfer', 'write', TR]]) };
+  const { sb, sheets } = fresh(extra);
+  const boss = tokenOf(sb, 'BOSS', PW.boss);
+  const hasTr = (o) => JSON.stringify(o).indexOf(TR) !== -1;
+  const READ = ['bootstrap', 'adminData', 'adminOverview', 'getDoc'];
+  const WRITE = ['buildMonthlyReport', 'adminUpdate'];
+
+  ok(JSON.stringify(sb.PROXY_READ_ACTIONS.transfer) === JSON.stringify(READ) && JSON.stringify(READ_ACTIONS.transfer) === JSON.stringify(READ), '19a: transfer 讀清單兩邊（Auth.gs／dryrun.js）一致，且就是 bootstrap／adminData／adminOverview／getDoc');
+  ok(JSON.stringify(sb.PROXY_WRITE_ACTIONS.transfer) === JSON.stringify(WRITE) && JSON.stringify(WRITE_ACTIONS.transfer) === JSON.stringify(WRITE), '19b: transfer 寫入清單兩邊一致，且就是 buildMonthlyReport／adminUpdate');
+  ok(sb.PERM_GRANTABLE.indexOf('transfer.write') !== -1 && sb.PERM_LOCKED.indexOf('transfer.write') === -1, '19c: transfer.write 可給、且不是鎖碼');
+  ok(sb.permName_('transfer.write') === '調撥管理', '19d: 中文名「調撥管理」');
+  ok(sb.PERM_DEFAULT_RULES.some((r) => r.join('|') === 'hq|fin|*|transfer.write'), '19e: 財務部門預設規則 hq／fin／*／transfer.write');
+
+  for (const act of READ) {
+    const a = sb.proxyAuthorize_(boss, 'transfer', act);
+    ok(a.ok && a.secret === TR && a.isWrite === false && a.filterNode === null, '19f: admin ' + act + ' → 讀、給密碼、不裁切', a);
+  }
+  ok(sb.proxyAuthorize_(boss, 'transfer', 'bootstrap').operator === '系統管理者（BOSS）（管理系統）', '19g: 操作人＝登入者姓名＋帳號（平台決定）');
+  for (const act of WRITE) {
+    const w = sb.proxyAuthorize_(boss, 'transfer', act);
+    ok(w.ok && w.isWrite === true && w.secret === TR && /（管理系統）$/.test(w.operator), '19h: admin ' + act + ' → 寫入、帶操作人', w);
+  }
+  for (const bad of ['wipeData', 'deleteConfig', 'adminSave', 'list', '']) {
+    ok(sb.proxyAuthorize_(boss, 'transfer', bad).code === 'FORBIDDEN', '19i: 不在白名單的 action「' + bad + '」→ FORBIDDEN');
+  }
+  for (const [u, pw] of [['acc1', PW.acc], ['lead1', PW.lead], ['mgr1', PW.mgr], ['viewer1', PW.viewer]]) {
+    const t = tokenOf(sb, u, pw);
+    for (const act of ['bootstrap', 'adminUpdate']) {
+      const r = sb.proxyAuthorize_(t, 'transfer', act);
+      ok(r.ok === false && r.code === 'FORBIDDEN' && !hasTr(r), '19j: 沒有 transfer.write 的 ' + u + ' ' + act + ' → FORBIDDEN、不含密碼', r);
+    }
+  }
+  ok(sb.proxyAuthorize_('', 'transfer', 'bootstrap').code === 'NO_TOKEN', '19k: 沒登入 → NO_TOKEN');
+  ok(sb.proxyAuthorize_(boss, 'audit', 'getAll').operator === undefined, '19l: audit 仍不帶 operator');
+
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '1');
+  const lg = post(sb, 'login', { username: 'BOSS', password: PW.boss });
+  ok(lg.ok && !hasTr(lg) && !hasTr(post(sb, 'me', {}, lg.data.token)), '19m: LEGACY_SECRETS=1 時 admin 的 login／me 仍不含調撥密碼', lg.data && lg.data.secrets);
+  ok(!('transfer' in sb.pickSecrets_(['*'])) && !('transfer' in sb.pickSecrets_(['transfer.write'])), '19n: pickSecrets_ 永不含 transfer');
+  sb.PropertiesService.getScriptProperties().setProperty('LEGACY_SECRETS', '');
+
+  const finStaff = mkStaff(sb, boss, '財務同仁己', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' });
+  const hrStaff = mkStaff(sb, boss, '人資同仁庚', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
+  ok(sb.permInit_({ role: 'admin', id: 'u001' }).ok === true, '18 前置：permInit_');
+  turnOn(sb);
+  const r = sb.proxyAuthorize_(finStaff.token, 'transfer', 'adminUpdate');
+  ok(r.ok && r.secret === TR && r.isWrite === true && /^財務同仁己（DZY\d+）（管理系統）$/.test(r.operator), '19o: 財務部門同仁預設可寫、操作人是本人', r);
+  ok(sb.proxyAuthorize_(hrStaff.token, 'transfer', 'bootstrap').code === 'FORBIDDEN', '19p: 人資同仁沒有調撥管理 → FORBIDDEN');
+  sheets.perm_ex.appendRow(['X904', hrStaff.emp, 'transfer.write', 'add', '', 'Eason 開', 'TRUE', '', 'u001', '', '']);
+  ok(sb.proxyAuthorize_(hrStaff.token, 'transfer', 'bootstrap').ok === true, '19q: 個別例外給了 transfer.write → 放行');
+}
+
 if (failed > 0) {
   console.error('\n' + failed + ' 項測試失敗（共 ' + (passed + failed) + ' 項）');
   process.exit(1);

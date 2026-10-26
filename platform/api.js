@@ -47,9 +47,9 @@ import { isDryRun, isReadAction, notifyDryRun } from './dryrun.js';
 // 代轉逾時 35 秒：mini 對舊後端等 30 秒，再留 5 秒餘裕（PROXY.md 第 3 節）
 const PROXY_TIMEOUT_MS = 35000;
 // 薪酬系統（2026-10-19）：重算整月、出勤紀錄表匯出可能超過 30 秒，mini 對薪資後端等 120 秒（app.json backends.payroll.timeoutMs），這裡多留 5 秒
-const PROXY_TIMEOUT_BY_NS = { payroll: 125000, pnl: 65000 };   // 損益（2026-10-24）：Apps Script 偶發卡 10 秒以上
+const PROXY_TIMEOUT_BY_NS = { payroll: 125000, pnl: 65000, transfer: 65000 };   // 損益（2026-10-24）：Apps Script 偶發卡 10 秒以上；調撥管理：mini 對調撥後端等 60 秒，多留 5 秒
 // attendance＝考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）；cashbook＝收支管理（2026-10-24）；schedule＝排班管理首頁待辦（hr-move-spec §5）
-const PROXY_NS = { audit: true, dorm: true, payroll: true, attendance: true, cashbook: true, schedule: true, pnl: true };
+const PROXY_NS = { audit: true, dorm: true, payroll: true, attendance: true, cashbook: true, schedule: true, pnl: true, transfer: true };
 
 // 45 秒（2026-08-17 由 15 秒放寬，與 auth.js 同一個理由：Apps Script 本來就慢，
 // 稽核 getAll 還要一次讀回五個分頁的整年資料，行動網路上 15 秒不夠用）。
