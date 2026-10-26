@@ -175,7 +175,10 @@ class Mock11(MockBackend):
                                'detail': {'rules_added': added, 'rules_removed': list(rem), 'affected': 3, 'people': [{'emp_no': 'DZY002', 'name': '李大華', 'added': ['dorm.write'], 'removed': []}]}})
             return {'ok': True, 'data': {'added': added, 'removed': list(rem), 'affected': 3}}
         if action == 'permExList':
-            return {'ok': True, 'data': {'inited': True, 'items': [dict(x) for x in self.exs if is_admin or x['perm'] in ('store.void', 'att.extra', 'platform.bulletin')]}}
+            data = {'inited': True, 'items': [dict(x) for x in self.exs if is_admin or x['perm'] in ('store.void', 'att.extra', 'platform.bulletin')]}
+            if is_admin:   # 2026-10-26 指定門市只看考勤：只有 admin 拿到可選門市（PermActions.gs permAcAttViewUnits_）
+                data['att_view_units'] = [{'code': 'mala-gf', 'name': '麻的小辛辣 新竹光復'}, {'code': 'mzt-gf', 'name': '墨竹亭 新竹光復'}, {'code': 'ck', 'name': '中央工廠（央廚）'}]
+            return {'ok': True, 'data': data}
         if action == 'permExSave':
             if not (p.get('note') or '').strip():
                 return self._err('bad_note', '原因必填，1 到 50 個字')
@@ -444,6 +447,25 @@ def main():
             dlg(ad, '確定')
             ad.wait_for_selector('[data-role="ex-item"][data-ex="X003"][data-status="revoked"]')
             check(mock.exs[-1]['active'] is False and ad.locator('[data-role="ex-item"][data-ex="X003"] [data-act="revoke"]').count() == 0, '★撤銷後標「已撤銷」並移除撤銷鈕')
+            # 2026-10-26 指定門市只看考勤（docs/att-support/spec.md §2）：admin 選了才出現門市下拉，送出 att.view@<門市>、只能多給
+            check(ad.locator('[data-role="ex-unit-field"]').is_hidden(), '門市下拉預設不顯示')
+            ad.select_option('[data-role="ex-perm"]', '__att_view__')
+            check(ad.locator('[data-role="ex-unit-field"]').is_visible(), '★選「指定門市只看考勤」→ 出現門市下拉')
+            check(ad.locator('[data-role="ex-unit"] option').all_inner_texts() == ['請選擇門市', '麻的小辛辣 新竹光復', '墨竹亭 新竹光復', '中央工廠（央廚）'], '門市下拉＝後端回的門市')
+            check(ad.input_value('[data-role="ex-mode"]') == 'add' and ad.locator('[data-role="ex-mode"]').is_disabled(), '只看考勤只能多給（模式鎖住）')
+            ad.fill('[data-role="ex-who"]', 'DZY002 李大華')
+            ad.fill('[data-role="ex-until"]', '')
+            ad.fill('[data-role="ex-note"]', '總部看光復考勤')
+            ad.click('[data-role="ex-submit"]')
+            check('請選擇門市' in ad.inner_text('[data-role="ex-error"]'), '沒選門市 → 「請選擇門市」')
+            ad.select_option('[data-role="ex-unit"]', 'mala-gf')
+            ad.click('[data-role="ex-submit"]')
+            ad.wait_for_selector('[data-role="ex-item"][data-ex="X004"]')
+            lx = mock.last_ex
+            check(lx['perm'] == 'att.view@mala-gf' and lx['mode'] == 'add' and lx['emp_no'] == 'DZY002', '★送出 att.view@mala-gf、mode add：%s' % lx)
+            check('只看考勤（麻的小辛辣 新竹光復）' in ad.inner_text('[data-role="ex-item"][data-ex="X004"]'), '清單顯示「只看考勤（麻的小辛辣 新竹光復）」')
+            ad.select_option('[data-role="ex-perm"]', 'dorm.read')
+            check(ad.locator('[data-role="ex-unit-field"]').is_hidden() and not ad.locator('[data-role="ex-mode"]').is_disabled(), '換回其他功能 → 門市下拉收起、模式可選')
 
             # ============ ④ 店別對照 ============
             ad.evaluate("() => { window.location.hash = '#/perms/stores'; }")
@@ -531,6 +553,7 @@ def main():
             hr.wait_for_selector('[data-role="ex-perm"]')
             opts = hr.locator('[data-role="ex-perm"] option').all_inner_texts()
             check(opts == ['收支作廢', '額外考勤核定', '公告管理'], '★人資主管個別例外只能選三碼（含公告管理）：%s' % opts)
+            check(hr.locator('[data-role="ex-unit-field"]').count() == 0, '★人資主管沒有「指定門市只看考勤」（也沒有門市下拉）')
             check(hr.locator('[data-role="ex-item"]').count() == 0 and hr.locator('[data-role="ex-empty"]').count() == 1, '人資主管看不到別的碼的例外（照後端回傳顯示）')
             hr.evaluate("() => { window.location.hash = '#/perms/stores'; }")
             hr.wait_for_function("() => window.location.hash === '#/home'", timeout=5000)

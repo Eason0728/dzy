@@ -33,8 +33,39 @@ const OTHER_NAMES = {
   'platform.login': '登入', '*': '全部功能'
 };
 
-export function featureName(code) {
+/**
+ * 功能碼 → 中文。units（選填）＝可設「只看考勤」的門市（permExList 的 att_view_units：[{code, name}]，或 {code: name}），
+ * 只用在 att.view@<單位>（2026-10-26 指定門市只看考勤）；不是物件（例如 Array.map 傳進來的 index）就忽略。
+ */
+export function featureName(code, units) {
+  const u = attViewUnitOf(code);
+  if (u) return `只看考勤（${attViewUnitName(u, units)}）`;
   return FEATURE_NAMES[code] || OTHER_NAMES[code] || code;
+}
+
+// ---- 指定門市只看考勤（att.view@<單位>，docs/att-support/spec.md §2；只有 admin 能設、只能多給、只能用個別例外） ----
+export const ATT_VIEW_PREFIX = 'att.view@';
+/** 功能下拉裡「指定門市只看考勤」那一項的值（不是權限碼；送出時換成 att.view@<門市>） */
+export const ATT_VIEW_CHOICE = '__att_view__';
+export const ATT_VIEW_CHOICE_NAME = '指定門市只看考勤';
+const ATT_VIEW_RE = /^att\.view@([A-Za-z0-9_-]{1,40})$/;
+/** att.view@<單位> → 單位代碼；其他 → '' */
+export function attViewUnitOf(code) {
+  const m = ATT_VIEW_RE.exec(String(code || ''));
+  return m ? m[1] : '';
+}
+/** 門市代碼 → 權限碼；代碼格式不對回 '' */
+export function attViewCode(unit) {
+  const c = ATT_VIEW_PREFIX + String(unit || '').trim();
+  return attViewUnitOf(c) ? c : '';
+}
+function attViewUnitName(unit, units) {
+  if (!units || typeof units !== 'object') return unit;
+  if (Array.isArray(units)) {
+    const hit = units.find((x) => x && x.code === unit);
+    return hit && hit.name ? hit.name : unit;
+  }
+  return units[unit] || unit;
 }
 
 const LADDER_FALLBACK = { store: '門市', office: '品牌辦公室', hq: '總部' };
