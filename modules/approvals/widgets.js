@@ -56,7 +56,7 @@ export function createPhotoPicker(ctx, { max = MAX_PHOTOS, initial = [], onChang
   function draw() {
     list.innerHTML = items.map((it, i) => `
       <span style="position:relative;display:inline-block">
-        <img ${it.previewUrl ? `src="${it.previewUrl}"` : `data-file="${ctx.fmt.esc(it.id)}"`} alt="照片 ${i + 1}" data-big="1"
+        <img ${it.previewUrl ? `src="${ctx.fmt.esc(it.previewUrl)}"` : `data-file="${ctx.fmt.esc(it.id)}"`} alt="照片 ${i + 1}" data-big="1"
           style="width:72px;height:72px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--line);background:var(--bg)">
         <button type="button" class="btn btn-danger" data-remove="${i}" aria-label="移除第 ${i + 1} 張" style="position:absolute;top:-8px;right:-8px;padding:0 var(--space-2);min-height:0;line-height:1.6">✕</button>
       </span>`).join('');

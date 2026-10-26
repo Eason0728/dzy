@@ -1524,6 +1524,13 @@ textarea.input:disabled {
 .login-card .card-title .nowrap { white-space: nowrap; }
 
 /* 2026-10-26：320 寬手機頁首，按鈕縮小、名字至少留三個字（原本被擠到只剩一個字） */
+/* 模組共用的小狀態（2026-10-25 審查 A-15：原本各模組內嵌 style、寫死色碼，換主題不會跟著變） */
+.btn-ok { background: var(--ok); border-color: var(--ok); color: var(--ink-inverse); }
+.is-dim { opacity: .6; }                       /* 已看過、已停用的卡片 */
+.is-void { text-decoration: line-through; opacity: .6; }   /* 作廢的列 */
+.is-clickable { cursor: pointer; }
+.thumb { max-width: 160px; max-height: 160px; border-radius: var(--radius); border: 1px solid var(--line); }
+
 @media (max-width: 360px) {
   .side-user .su-main { min-width: 3.4em; }
   .su-act { gap: 4px; }
