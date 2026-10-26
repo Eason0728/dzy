@@ -2283,7 +2283,7 @@ function handleSvcDirectory_(payload) {
 // ============================================================
 var SSO_TTL_SEC = 60;
 var SSO_CACHE_PREFIX = 'sso_tkt:';
-var SSO_AUDS = { bulletin: 1, 'bulletin-admin': 1, store: 1 };
+var SSO_AUDS = { bulletin: 1, 'bulletin-admin': 1, store: 1, purchase: 1 };   // purchase：貨單核對（PurchaseSso.gs，2026-10-24）
 
 /**
  * 換一張入場券。aud：
@@ -2302,6 +2302,12 @@ function handleSsoTicket_(token, payload) {
     var storeSub = storeSubForUser_(res.user);
     if (!storeSub) return clkErr_('no_emp', '這個帳號沒有同仁編號');
     rec = { sub: storeSub, aud: aud };
+  } else if (aud === 'purchase') {
+    // 貨單核對（PurchaseSso.gs）：要有 platform.purchase（財務部門預設有、可個別例外加人；不鎖碼）；sub＝DZY 編號或 'U:'+users.id
+    if (!hasPerm_(res.perms, 'platform.purchase')) return clkErr_('no_perm', '沒有貨單核對權限');
+    var purSub = purchaseSubForUser_(res.user);
+    if (!purSub) return clkErr_('no_emp', '這個帳號沒有同仁編號');
+    rec = { sub: purSub, aud: aud };
   } else if (aud === 'bulletin') {
     if (res.user.role !== 'staff' || !STF_EMP_RE.test(emp)) return clkErr_('no_emp', '這個帳號沒有同仁編號');
     rec = { emp: emp, aud: aud };

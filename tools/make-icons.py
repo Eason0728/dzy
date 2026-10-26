@@ -20,6 +20,7 @@ ICONS = {
     'payroll': ('#b5462f', f'<rect {S} x="40" y="56" width="100" height="68" rx="10"/><circle {S} cx="90" cy="90" r="16"/><path {S} d="M56 74 V106 M124 74 V106"/><path {S} d="M52 138 H128"/>'),
     'cashbook': ('#2f7d5b', f'<rect {S} x="46" y="46" width="88" height="88" rx="12"/><path {S} d="M62 74 H118 M62 94 H118 M62 114 H98"/><path {S} d="M108 106 L118 116 L132 98"/>'),
     'schedule': ('#6a4fc0', f'<rect {S} x="42" y="52" width="96" height="84" rx="10"/><path {S} d="M42 76 H138 M70 42 V60 M110 42 V60"/><path {S} d="M62 96 H74 M84 96 H96 M106 96 H118 M62 116 H74 M84 116 H96"/>'),
+    'purchase': ('#2b6c8f', f'<path {S} d="M56 40 H124 V140 L112 130 L100 140 L90 130 L80 140 L68 130 L56 140 Z"/><path {S} d="M72 70 H108 M72 90 H108"/><path {S} d="M74 112 L84 120 L104 100"/>'),
     'attendance': ('#1f8a5b', f'<circle {S} cx="90" cy="88" r="42"/><path {S} d="M90 62 V90 L108 102"/><path {S} d="M70 140 H110"/>'),
 }
 

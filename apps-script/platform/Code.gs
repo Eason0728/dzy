@@ -49,7 +49,9 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'regionList', 'regionSave', 'regionCheck', 'regionSwitch',
   // 2026-10-25：LINE 認身分的人資操作（LineAuth.gs；docs/line-auth/spec.md §3.2）。lineRevoke 寫入（上鎖）、lineAuthLog 讀取。
   // ⚠ 給 mini 路由用的 LINE 全域函式（LineAuth.gs 內結尾底線的那三支）刻意不在這裡，也不可加進來
-  'lineRevoke', 'lineAuthLog'];
+  'lineRevoke', 'lineAuthLog',
+  // 2026-10-24：貨單核對（PurchaseSso.gs）；永遠不可列進 minikit readActions 與 dryrun READ_ACTIONS
+  'svcPurchaseRedeem', 'svcPurchaseWho'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -248,6 +250,8 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'regionSwitch': return handleRegionSwitch_(token, payload);
     case 'lineRevoke': return handleLineRevoke_(token, payload);
     case 'lineAuthLog': return handleLineAuthLog_(token, payload);
+    case 'svcPurchaseRedeem': return handleSvcPurchaseRedeem_(payload);
+    case 'svcPurchaseWho': return handleSvcPurchaseWho_(payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };

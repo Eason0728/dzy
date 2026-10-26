@@ -43,9 +43,9 @@ const RULES = [
 ];
 const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write'] }, ORG);
 
-t('對照表 14 列、順序固定（2026-10-26 加公告管理）（不跟後端 grantable 順序）', () => {
+t('對照表 15 列、順序固定（2026-10-26 加公告管理）（不跟後端 grantable 順序）', () => {
   const rows = L.featureRows(DATA);
-  assert.equal(rows.length, 14);
+  assert.equal(rows.length, 15);
   assert.equal(rows[13].perm, 'platform.bulletin');
   assert.equal(rows[13].name, '公告管理');
   assert.deepEqual(rows.map((r) => r.perm), L.FEATURE_ORDER);

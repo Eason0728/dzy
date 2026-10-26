@@ -13,7 +13,8 @@ var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit
   'store.void', 'att.extra',   // 2026-10-18 營運系統：收支作廢、額外考勤核定（人資主管也能設這兩碼的個別例外，PermActions.gs）
   'payroll.write',              // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
   'cashbook.write',             // 2026-10-24 收支管理（會計跨店查帳、作廢、月結鎖定、改科目）；2026-10-25 改為鎖碼（審查 B-01：人資可整條職稱線開給全集團現金帳）
-  'platform.bulletin'];         // 2026-10-26 公告管理（電子佈告欄的公告管理／新增公告；原本同仁名單逐人勾 BULLETIN_ADMINS，Eason：搬進權限設定、不鎖碼、人資可設）
+  'platform.bulletin',         // 2026-10-26 公告管理（電子佈告欄的公告管理／新增公告；原本同仁名單逐人勾 BULLETIN_ADMINS，Eason：搬進權限設定、不鎖碼、人資可設）
+  'platform.purchase'];           // 2026-10-24 貨單核對（財務部門；不鎖碼，Eason：財務部門自動有、他可再用個別例外加人；docs/purchase-fin）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
 var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write'];   // 2026-10-19 加薪酬系統；2026-10-25 加收支管理
@@ -54,6 +55,8 @@ var PERM_DEFAULT_RULES = (function () {
   add('office', '', 'odir', ['platform.bulletin']);
   add('store', '', 'rdd', ['platform.bulletin']);
   ['ceo', 'gm', 'chair'].forEach(function (t) { add('hq', '', t, ['platform.bulletin']); });
+  // 2026-10-24（docs/purchase-fin，第 34 條）：財務部門預設可進貨單核對。正式環境 perm_map 早已初始化，由 Eason 在「權限設定 → 財務部門」打開同一個開關
+  add('hq', 'fin', '*', ['platform.purchase']);
   return out;
 })();
 
@@ -482,7 +485,7 @@ var PERM_NAMES = {
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
   'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
-  'payroll.write': '薪酬系統', 'cashbook.write': '收支管理'
+  'payroll.write': '薪酬系統', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對'
 };
 function permName_(code) { return PERM_NAMES[code] || code; }
 

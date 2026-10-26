@@ -4,8 +4,8 @@
  */
 'use strict';
 
-/** 可給的 14 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
-export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin'];
+/** 可給的 15 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
+export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase'];
 
 /** 人資主管（platform.permmap 但不是 admin）在個別例外只能動的三碼（2026-10-26 加公告管理）；對照後端 STORE_HR_GRANTABLE，真正擋的是後端，前端只是不顯示選不了的 */
 export const HR_EX_FEATURES = ['store.void', 'att.extra', 'platform.bulletin'];
@@ -24,7 +24,8 @@ export const FEATURE_NAMES = {
   'att.extra': '額外考勤核定',
   'payroll.write': '薪酬管理',
   'cashbook.write': '收支管理',
-  'platform.bulletin': '公告管理'
+  'platform.bulletin': '公告管理',
+  'platform.purchase': '貨單核對'
 };
 
 /** 其他會出現在 myPerms／異動裡的碼 */
@@ -238,7 +239,8 @@ export const FEATURE_DESC = {
   'att.extra': '額外核定本單位所有要考勤的人（只能在個別例外給，可設到期日）',
   'payroll.write': '進薪酬管理：看與改全集團薪資、鎖定月份（建議只用個別例外開給指定的人）',
   'cashbook.write': '進收支管理：會計跨店查現金收支、作廢、月結鎖定、改會計科目、匯出 Excel（財務部門預設有）',
-  'platform.bulletin': '進電子佈告欄的公告管理：新增、上架、下架、置頂公告與看簽名回條（總監級以上預設有）'
+  'platform.bulletin': '進電子佈告欄的公告管理：新增、上架、下架、置頂公告與看簽名回條（總監級以上預設有）',
+  'platform.purchase': '進貨單核對：核對入帳廠商貨單、看食材成本與單價報表（財務部門預設有）'
 };
 
 /** 總部高層（不分部門）的職稱代碼 */
