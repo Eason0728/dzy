@@ -95,7 +95,10 @@ async function defaultTransport(requestBody) {
   // 那種訊息（Unexpected token '<'）對現場的人完全沒有意義。
   const text = await res.text();
   try {
-    return JSON.parse(text);
+    const o = JSON.parse(text);
+    // transient 只能由本 transport 自己標；伺服器回應帶的一律拿掉（2026-10-28 複驗：否則回應自帶 transient:true 就能讓失效的 token 留著）
+    if (o && typeof o === 'object') delete o.transient;
+    return o;
   } catch {
     return { ok: false, error: '伺服器回應格式錯誤，請稍後再試', transient: true };
   }
@@ -268,7 +271,7 @@ export async function restore() {
   }
 
   if (!res || res.ok !== true || !res.data || !res.data.user) {
-    // 只有後端明確判定 token 失效才清；連線失敗、逾時、格式錯誤、後端忙碌都保留 token（下次開頁再試，不用重新登入；2026-10-28 審查 #9）
+    // 只有連線失敗、逾時、格式錯誤（transient）保留 token；後端回的任何錯誤都清（下次開頁再試，不用重新登入；2026-10-28 審查 #9）
     if (isTokenRejected(res)) clearTokenFromStorage();
     clearSession();
     return false;
@@ -278,11 +281,13 @@ export async function restore() {
   return true;
 }
 
-/** 後端對 me 明確說「這個 token 不能用」的錯誤（Auth.gs AUTH_MSG_INVALID_TOKEN／AUTH_MSG_DISABLED 等，逐字） */
-const TOKEN_REJECTED_ERRORS = ['登入已失效，請重新登入', '帳號已停用', '此帳號不在同仁名單，請聯絡人資', 'unauthorized'];
+/**
+ * 要不要清掉 token：只有「連線層」失敗（transport 自己標的 transient）才保留，
+ * 後端回的任何 ok:false（失效、停用、待審核、被退回、忙碌…）一律清——往安全的方向失敗，
+ * 不靠逐字比對後端中文訊息（2026-10-28 複驗）。
+ */
 function isTokenRejected(res) {
-  if (!res || typeof res !== 'object' || res.transient === true || res.ok === true) return false;
-  return TOKEN_REJECTED_ERRORS.indexOf(String(res.error || '')) !== -1 || res.code === 'unauthorized';
+  return !(res && typeof res === 'object' && res.transient === true);
 }
 
 /** 登出後端的等待上限（毫秒）：逾時就不等了，照樣清本機 */
