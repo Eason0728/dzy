@@ -23,6 +23,7 @@ export const MODULES = [
   { load: () => import('../modules/bulletin/manifest.js') },
   { load: () => import('../modules/approvals/manifest.js') },
   { load: () => import('../modules/storeops/manifest.js') },
+  { load: () => import('../modules/inspection/manifest.js') },   // 營運部門：營運巡檢（排在門市營運後）
   { load: () => import('../modules/attendance/manifest.js') },
   { load: () => import('../modules/schedule/manifest.js') },
   { load: () => import('../modules/payroll/manifest.js') },

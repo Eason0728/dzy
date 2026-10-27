@@ -25,6 +25,7 @@ TESTS=(
   e2e_t17_dorm_handover_give.py
   e2e_t16_transfer_fin.py
   e2e_t18_eval.py
+  e2e_t19_inspection.py
 )
 
 for i in "${!TESTS[@]}"; do
@@ -37,4 +38,4 @@ for i in "${!TESTS[@]}"; do
 done
 
 echo
-echo "e2e 十九支全部通過"
+echo "e2e 二十支全部通過"
