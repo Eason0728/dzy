@@ -320,7 +320,9 @@ function storeAttTargets_(me, flags, people, org, home, mode, rctx) {
     else if (t.orphan) ok = false;
     else {
       ok = attApproverOf_(me, t, org, mode, rctx);
-      if (!ok && flags.attExtra && notSelf && stfStr_(me.unit) && stfStr_(me.unit) === stfStr_(t.unit)) ok = true;
+      // 值班主管本人的申請（req）：同店也是值班主管的 att.extra 例外一樣不核（docs/req-upper）
+      var extraDutyBlock = mode === 'req' && storeIsDuty_(t) && storeDutyHas_(me, stfStr_(t.unit));
+      if (!ok && flags.attExtra && notSelf && stfStr_(me.unit) && stfStr_(me.unit) === stfStr_(t.unit) && !extraDutyBlock) ok = true;
     }
     if (ok) out.push(t);
   });
@@ -437,7 +439,7 @@ function storeAttAccounts_(people, org, home, maps, storeUnits) {
 /**
  * 支援帳號的核定人（不含人資主管、admin、att.extra）：回 {emp: true}。units＝打卡店單位清單（只取 org 裡 active 的 store 階梯）。
  * 多單位的店：每一層把所有單位的人合起來看，取第一層有人的那層（不逐單位各自往上找）。
- * excludeDuty（選填，值班主管本人的 req 申請用）：打卡店單位的值班主管（duty_units 含任一 units）先剔除，再取第一層有人的那層。
+ * excludeDuty（選填，值班主管本人的 req 申請用）：店長／廠長層整層跳過（值班主管的單不給店長）；打卡店單位的值班主管（duty_units 含任一 units）先剔除，再取第一層有人的那層。
  * people 只認 status=active、單位職稱合法（storeOrgOf_）、有同仁編號的人；推算出來的人不當核定人。
  */
 function storeSupportApprovers_(units, people, org, rctx, excludeDuty) {
@@ -453,7 +455,7 @@ function storeSupportApprovers_(units, people, org, rctx, excludeDuty) {
   });
   var shops = su.filter(function (c) { return c !== STF_EXTRA_CK && org.unit[c].parent !== STF_EXTRA_CK; });   // 第 3、4 層只給門市（央廚沒有督導／總監這兩層）
   var layers = [
-    function (c) { return c.ladder === 'store' && STORE_SUP_L1.indexOf(c.title) !== -1 && su.indexOf(c.unit) !== -1; },
+    function (c) { return !excludeDuty && c.ladder === 'store' && STORE_SUP_L1.indexOf(c.title) !== -1 && su.indexOf(c.unit) !== -1; },   // excludeDuty（對象是值班主管）：店長層整層跳過
     function (c) { return c.ladder === 'store' && STORE_SUP_L2.indexOf(c.title) !== -1 && su.indexOf(c.unit) !== -1; },
     function (c) {
       if (!rctx || !rctx.on || c.ladder !== 'office' || STORE_SUP_L3_OFFICE.indexOf(c.title) === -1) return false;
@@ -532,9 +534,11 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
       var dutyT = storeIsDuty_(t);
       var keyR = dutyT ? key + '|duty' : key;   // 值班主管本人的申請（req）：打卡店單位的值班主管不核，往上找
       if (!apprCache[keyR]) apprCache[keyR] = storeSupportApprovers_(a.units, people, org, rctx, true);
-      var base = !!flags.admin || !!flags.hrHead || (!!flags.attExtra && !!myUnit && a.units.indexOf(myUnit) !== -1);
-      var apprH = base || (!!myEmp && !!apprCache[key][myEmp]);
-      var apprR = base || (!!myEmp && !!apprCache[keyR][myEmp]);
+      var base = !!flags.admin || !!flags.hrHead;
+      var extra = !!flags.attExtra && !!myUnit && a.units.indexOf(myUnit) !== -1;
+      var extraBlockR = dutyT && a.units.some(function (u) { return storeDutyHas_(me, u); });   // 值班主管的申請：打卡店單位的值班主管（含 att.extra 例外）不核
+      var apprH = base || extra || (!!myEmp && !!apprCache[key][myEmp]);
+      var apprR = base || (extra && !extraBlockR) || (!!myEmp && !!apprCache[keyR][myEmp]);
       if (apprH || apprR) {
         if (apprH && needH) storeAttListAdd_(L.hours, a);
         if (apprR && !t.orphan && attNeedOf_(t, org, 'req')) storeAttListAdd_(L.req, a);
@@ -581,7 +585,7 @@ function storeUpperGaps_(people, org, rctx, maps, storeUnits) {
 
 /**
  * 讀取 action attUpperGaps（docs/req-upper）：只有「有 platform.att 且是人資主管或 admin」的人看得到，其他一律回空。
- * 回 { ok:true, data:{ items:[{emp, name, unit_name}] } }；unit_name＝單位顯示名稱。
+ * 回 { ok:true, data:{ items:[{emp, name, unit_name}], unmapped:[{store_code, emp_id, reason:'unmapped'}] } }；unit_name＝單位顯示名稱。
  */
 function handleAttUpperGaps_(token) {
   var me = handleMe_(token);
@@ -598,10 +602,12 @@ function handleAttUpperGaps_(token) {
   if (!clkSheetsReady_()) return empty;
   var org = stfReadOrg_();
   var rctx = typeof regionCtx_ === 'function' ? regionCtx_() : null;
-  var items = storeUpperGaps_(storePeople_(), org, rctx, clkMaps_(), storeClockUnits_()).map(function (g) {
+  var maps = clkMaps_();
+  var items = storeUpperGaps_(storePeople_(), org, rctx, maps, storeClockUnits_()).map(function (g) {
     return { emp: g.emp, name: g.name, unit_name: storeUnitLabel_(g.unit, org) };
   });
-  return { ok: true, data: { items: items } };
+  // 值班主管但管理系統沒有 confirmed 對照的打卡帳號：打卡開關開了也沒人能核（不含姓名）
+  return { ok: true, data: { items: items, unmapped: clkDutyUnmapped_(maps) } };
 }
 
 /** perms 裡的 att.view@<單位> → 合法單位（org 存在、active、store 階梯含 ck）排序去重；Perms.gs 沒載入＝[] */

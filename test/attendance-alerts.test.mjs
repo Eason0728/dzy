@@ -85,6 +85,11 @@ await t('toGapAlert：有項目→一列 warn，view=request；空或形狀不�
   assert.equal(toGapAlert({ ok: true, data: { items: [{ kind: 'approve', count: 3 }] } }), null);
   assert.equal(toGapAlert({ ok: false }), null); assert.equal(toGapAlert(null), null);
 });
+await t('toGapAlert：items＋unmapped 合併計數（只有 unmapped 也提醒）', () => {
+  assert.equal(toGapAlert({ ok: true, data: { items: [{ emp: 'DZY001' }], unmapped: [{ store_code: 'gf', emp_id: 'GF1', reason: 'unmapped' }] } }).text, '2 位值班主管的申請找不到上層，由人資主管審');
+  assert.equal(toGapAlert({ ok: true, data: { items: [], unmapped: [{ store_code: 'gf', emp_id: 'GF1', reason: 'unmapped' }] } }).text, '1 位值班主管的申請找不到上層，由人資主管審');
+  assert.equal(toGapAlert({ ok: true, data: { items: [], unmapped: [] } }), null);
+});
 await t('alerts()：有 gap 時多一行；沒有／失敗時維持原樣', async () => {
   routedFetch({ ok: true, data: { items: [{ emp: 'DZY001', name: '測試一', unit_name: 'X' }] } });
   const a = await mod.alerts(ctx);

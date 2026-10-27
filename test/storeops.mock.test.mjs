@@ -1517,6 +1517,30 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
     ok(keys(hr.req_people).indexOf('mztgf:MG07') !== -1, '13g 人資主管仍可核值班支援帳號的申請');
   }
 
+  // 13g2. att.extra 例外也套「同店值班主管不核值班主管的申請」（只 req）；支援帳號店長層整層跳過
+  {
+    const extraMe = D('DZY420', '額外核定值班', 'mzt-gf', 'ft', ['mzt-gf']);
+    const extraOk = D('DZY421', '額外核定非值班', 'mzt-gf', 'ft', []);
+    const people = BASE.concat([extraMe, extraOk]);
+    const tg = (me, mode) => sb.storeAttTargets_(me, { attExtra: true }, people, org, null, mode, null).map((x) => x.emp);
+    ok(tg(extraMe, 'req').indexOf('DZY401') === -1 && tg(extraMe, 'req').indexOf('DZY405') === -1, '13g2 ★att.extra（本人是同店值班主管）：不核同店值班主管的申請');
+    ok(tg(extraMe, 'hours').indexOf('DZY401') !== -1, '13g2 hours 不變');
+    ok(tg(extraOk, 'req').indexOf('DZY401') !== -1 && tg(extraOk, 'req').indexOf('DZY405') !== -1, '13g2 att.extra（非值班）：仍可核');
+    const M = (emp, store, id) => ({ emp_no: emp, store_code: store, emp_id: id, role: 'staff', state: 'confirmed', roster_active: 'TRUE' });
+    const MAPS2 = [M('DZY407', 'gf', 'GF07'), M('DZY407', 'mztgf', 'MG07')];
+    const ALL = ['ck', 'dzy-hq', 'mala-gf', 'mala-hq', 'mzt-gf', 'mzt-hq', 'mzt-js', 'mzt-lzl'];
+    const lst = (me, flags) => sb.storeAttLists_(me, flags, people, org, null, MAPS2, sb.storeClockUnits_(), null, ALL, {}).req_people.map((x) => x.clock + ':' + x.emp_id);
+    ok(lst(extraMe, { attExtra: true }).indexOf('mztgf:MG07') === -1, '13g2 ★支援帳號：att.extra 的值班主管不核');
+    ok(lst(extraOk, { attExtra: true }).indexOf('mztgf:MG07') !== -1, '13g2 支援帳號：att.extra 非值班仍可核');
+    // 打卡店店長（非值班）也不核值班主管的支援帳號（店長層整層跳過）
+    const smNon = D('DZY422', '非值班店長', 'mzt-gf', 'sm', []);
+    const ppl2 = BASE.filter((x) => x.emp !== 'DZY401' && x.emp !== 'DZY402').concat([smNon]);
+    const l2 = sb.storeAttLists_(smNon, {}, ppl2, org, null, MAPS2, sb.storeClockUnits_(), null, ALL, {}).req_people.map((x) => x.clock + ':' + x.emp_id);
+    ok(l2.indexOf('mztgf:MG07') === -1, '13g2 ★值班主管的支援帳號：打卡店店長（非值班）不核（L1 跳過）', l2);
+    const l3 = sb.storeAttLists_(P.DZY404, {}, ppl2, org, null, MAPS2, sb.storeClockUnits_(), null, ALL, {}).req_people.map((x) => x.clock + ':' + x.emp_id);
+    ok(l3.indexOf('mztgf:MG07') !== -1, '13g2 往上由總監核', l3);
+  }
+
   // 13h. storeUpperGaps_：找不到上層
   {
     const gaps = (people, rctx) => sb.storeUpperGaps_(people, org, rctx || null, [], {}).map((x) => x.emp);
@@ -1563,6 +1587,12 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(sm.ok && eq(sm.data.items, []), '13i attUpperGaps：一般主管（有 platform.att 但不是人資主管）回空', sm);
   ok(post(app.sb, 'attUpperGaps', {}, '').ok === false, '13i attUpperGaps：沒登入 → 失敗');
   ok(has(app.sb.CODE_ALLOWED_ACTIONS, 'attUpperGaps'), '13i attUpperGaps 在 CODE_ALLOWED_ACTIONS');
+  ok(Array.isArray(adm.data.unmapped) && adm.data.unmapped.length === 0, '13i attUpperGaps.unmapped 預設空陣列', adm);
+  { const row = app.sheets.staff_clock._data.find((r) => r[0] === 'DZY041' && r[1] === 'gf'); while (row.length < 16) row.push(''); row[4] = 'suggested'; row[15] = 'TRUE'; }
+  const adm2 = gapsOf(app.adminTok);
+  ok(eq(adm2.data.unmapped, [{ store_code: 'gf', emp_id: 'GF041', reason: 'unmapped' }]), '13i ★attUpperGaps.unmapped：值班主管但對照不是 confirmed → 列出（無姓名）', adm2);
+  ok(eq(gapsOf(app.login('DZY001')).data, { items: [] }) || gapsOf(app.login('DZY001')).data.items.length === 0, '13i 一般主管仍回空');
+  { const row = app.sheets.staff_clock._data.find((r) => r[0] === 'DZY041' && r[1] === 'gf'); row[4] = 'confirmed'; row[15] = 'FALSE'; }
   // 有人核了就不列：小辛辣加一位督導
   app.props.REGIONS_ON = '0';
   const staffN = app.sheets.staff._data;

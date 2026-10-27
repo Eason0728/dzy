@@ -61,6 +61,8 @@ export function toBadge(data) {
 export function toGapAlert(r) {
   if (!r || r.ok !== true || !r.data || !Array.isArray(r.data.items)) return null;
   const n = r.data.items.filter((it) => it && typeof it.emp === 'string' && it.emp !== '').length;
-  if (n <= 0) return null;
-  return { level: 'warn', text: `${n} 位值班主管的申請找不到上層，由人資主管審`, view: 'request' };
+  const un = Array.isArray(r.data.unmapped) ? r.data.unmapped.filter((it) => it && typeof it.emp_id === 'string' && it.emp_id !== '').length : 0;
+  const total = n + un;
+  if (total <= 0) return null;
+  return { level: 'warn', text: `${total} 位值班主管的申請找不到上層，由人資主管審`, view: 'request' };
 }

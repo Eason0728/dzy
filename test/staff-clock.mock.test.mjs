@@ -529,6 +529,22 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   sb.clockRosterApply_('mztjs', [rosterRow('J1', '值班甲'), rosterRow('J2', '一般乙', { duty_mgr: true })], undefined, nowT(3));
   const u3 = sb.clockUpperEmps_();
   ok(u3.stores.mztjs.indexOf('J2') === -1, 'DM suggested 對照不進名單（沒生效）', u3.stores);
+  // 值班主管沒有 confirmed 對照：duty_mgr=TRUE 的非 confirmed 列、以及同步記下的「打卡上有沒對照」且 duty 的帳號 → clockUpperEmps_.unmapped 計數
+  {
+    const a5 = fresh();
+    const eX = claimApprove(a5, '未對照甲', 'pw-un-0001', MZT_GF('pt')).emp;
+    giveMap(a5, eX, 'mztgf', 'U1', 'home', { state: 'suggested' });
+    giveMap(a5, eX, 'mztjs', 'U2', 'home', { state: 'suggested', roster_active: 'FALSE' });
+    const r5 = a5.sb.clockRosterApply_('mztgf', [rosterRow('U1', '未對照甲', { duty_mgr: true }), rosterRow('U9', '沒對照乙', { duty_mgr: true }), rosterRow('U8', '沒對照丙')], undefined, nowT(0));
+    ok(r5.ok, 'DM unmapped 套用成功', r5);
+    const up = a5.sb.clockUpperEmps_();
+    ok(up.unmapped === 2 && eq6(up.stores.mztgf, []), 'DM ★clockUpperEmps_.unmapped＝suggested 的值班列(1)＋同步記下沒對照的值班帳號(1)；roster_active=FALSE 與非值班不算', up);
+    const un = a5.sb.clkDutyUnmapped_(a5.sb.clkMaps_()).map((x) => x.store_code + ':' + x.emp_id + ':' + x.reason).sort();
+    ok(eq6(un, ['mztgf:U1:unmapped', 'mztgf:U9:unmapped']), 'DM clkDutyUnmapped_ 項目形狀（無姓名）', un);
+    const al = post(a5.sb, 'clockAlerts', {}, a5.tok);
+    ok(al.data.unmapped.some((u) => u.emp_id === 'U9') && al.data.unmapped.some((u) => u.emp_id === 'U8'), 'DM 原有 alerts.unmapped 不受影響（duty 欄不外洩影響）');
+    ok(a5.sb.clockUpperEmps_().unmapped === 2 && u0.unmapped === 0, 'DM 沒有時 unmapped=0');
+  }
   // 不進分派表
   ok(post(sb, 'clockUpperEmps_', {}, app.tok).ok === false && post(sb, 'clockUpperEmps', {}, app.tok).ok === false, 'DM clockUpperEmps_ 不進 Code.gs 分派表');
   // 舊 15 欄表直接跑 clockRosterApply_（沒先跑 setupStaff）→ 自動補成 16 欄、duty_mgr 正確、其他欄不動
