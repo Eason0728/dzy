@@ -54,7 +54,9 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'svcPurchaseRedeem', 'svcPurchaseWho',
   // 2026-10-26：績效評核（Eval.gs；docs/eval/plan.md）。寫入由 Eval.gs evWithLock_ 自己上鎖，刻意不列 MUTATING_ACTIONS（避免重複取鎖）
   'evSetup', 'evMe', 'evPeerSubmit', 'evSelfSubmit', 'evMyScores', 'evNewbieList', 'evNewbieSubmit', 'evUnitResults', 'evPersonDetail',
-  'evSupSave', 'evBankGet', 'evBankSave', 'evTplSave', 'evWageSave', 'evGradeSave', 'evFinalize', 'evUnfinalize', 'evImportPreview', 'evImportCommit'];
+  'evSupSave', 'evBankGet', 'evBankSave', 'evTplSave', 'evWageSave', 'evGradeSave', 'evFinalize', 'evUnfinalize', 'evImportPreview', 'evImportCommit',
+  // 2026-10-27：營運巡檢（Inspect.gs；docs/inspection/spec.md）。inspMe／inspList／inspGet 讀取；inspSetup／inspSubmit／inspVoid 寫入（inspWithLock_ 自己上鎖）
+  'inspSetup', 'inspMe', 'inspList', 'inspGet', 'inspSubmit', 'inspVoid', 'inspBankGet', 'inspBankSave'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -274,6 +276,15 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'evUnfinalize': return handleEvUnfinalize_(token, payload);
     case 'evImportPreview': return handleEvImportPreview_(token, payload);
     case 'evImportCommit': return handleEvImportCommit_(token, payload);
+    // 2026-10-27：營運巡檢（Inspect.gs；docs/inspection/spec.md）。寫入由 inspWithLock_ 自己上鎖，不列 MUTATING_ACTIONS
+    case 'inspSetup': return handleInspSetup_(token);
+    case 'inspMe': return handleInspMe_(token);
+    case 'inspList': return handleInspList_(token, payload);
+    case 'inspGet': return handleInspGet_(token, payload);
+    case 'inspSubmit': return handleInspSubmit_(token, payload);
+    case 'inspVoid': return handleInspVoid_(token, payload);
+    case 'inspBankGet': return handleInspBankGet_(token, payload);
+    case 'inspBankSave': return handleInspBankSave_(token, payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };

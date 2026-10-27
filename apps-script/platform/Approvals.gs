@@ -1130,6 +1130,8 @@ function handleApvFileMeta_(token, payload) {
 /** 這個人能不能看這個檔案：沒綁單＝只有擁有者（與 platform 管理者）；綁了單＝看得到那張單的人 */
 function apvFileAccess_(c, fileRow) {
   if (!fileRow.o.form_id) return (!!c.me && c.me.emp === fileRow.o.owner) || c.isStaffPerm || c.isAdmin;
+  // 2026-10-27 營運巡檢的照片（form_id 'INSP:<巡檢編號>'）：看得到那筆巡檢的人才看得到（Inspect.gs）
+  if (fileRow.o.form_id.indexOf('INSP:') === 0) return typeof inspFileCanView_ === 'function' && inspFileCanView_(c, fileRow.o.form_id.slice(5));
   var fr = apvFindForm_(fileRow.o.form_id);
   if (!fr) return false;
   return apvCanView_(c, fr.f, apvEffOf_(c, fr.f), apvReadEvents_(fr.f.id));
