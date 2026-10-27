@@ -8,6 +8,7 @@
 - Q2 ✅ 核准者＝考勤「核定他工時」的主管（推薦）。
 - Q3 ✅ **總監、執行長以上（考勤沒有人核他們工時的人）：送出就生效**，不用核准（非推薦）。
 - Q4 ✅ **央廚現在就開始（含 11 月）**（非推薦）。Q5 ✅（2026-10-25 主對話轉達）週六＝休息日、週日＝例假；國定假日、補假＝國定假日假（推薦）。
+- **2026-10-27 改設計「央廚用 T01」**（確認稿 https://claude.ai/artifact/H4o6U21sxaDx9jzUFFhTq4 ，Eason 回 1C 2A 3A 4A 5B）：央廚的畫面**與自動產生**都改成四週一期——1C 每期開始前 10 天 06:00 產下一期（取代每月 20 號產下個月；非推薦）；2A ‹ T01 › 換期、預設今天所在的期；3A 每月 1 號那欄粗線＋「12月」；4A「重新產生這一期」；5B 一期一張 A4、上方印期別與列印日期。總部自填（self）仍以月份為單位，不受影響。實作：營運系統 mala-store-ops 分支 cf-fixed-period。
 
 原題目：
 | # | 題目 | 推薦 |
@@ -21,7 +22,7 @@
 ## 1. 架構決定（照需求「資料跟門市班表放一起」）
 - 三種方式共用營運系統的排班資料庫（`sch_*`），以「店」區分：門市＝各門市帳號；**總部＝服務帳號 `HQ`**（打卡店別 `hq`）；**央廚＝門市帳號 `CF`**（打卡店別 `cf`）。
 - 新增每店排班方式 `sch_store_cfg.mode`：`store`（預設，門市排班）｜`self`（總部自填）｜`fixed`（央廚固定）。HQ 設 `self`、CF 設 `fixed`（Q4：CF 從 12 月起）。
-- **月份是畫面與核准的單位；送 LINE 仍用四週一期**。打卡系統 `SchedPub.gs` 只收 28 天一期（`period ^T\d{2,}$`、`days===28`）且 LINE 依日期換算期別讀（`schedPubDaysFor_`），所以**打卡系統一行都不改**：某月核准後，重送與該月重疊的每個 T 期（payload 只放已核准的日子，其餘格子留空＝LINE 顯示「未排班」）。
+- **月份是畫面與核准的單位（總部 self）；送 LINE 仍用四週一期**。央廚 fixed 自 2026-10-27 起畫面與產生都以期為單位（見 §0 最後一條、§4）。打卡系統 `SchedPub.gs` 只收 28 天一期（`period ^T\d{2,}$`、`days===28`）且 LINE 依日期換算期別讀（`schedPubDaysFor_`），所以**打卡系統一行都不改**：某月核准後，重送與該月重疊的每個 T 期（payload 只放已核准的日子，其餘格子留空＝LINE 顯示「未排班」）。
 - 考勤比對：`dayPlan` 依日期讀 `sch_days`；`self` 模式只回**已核准**的格子（草稿、待核准不顯示）。
 
 ## 2. 資料（營運系統 DB 版本＋1）
@@ -68,7 +69,7 @@ CREATE TABLE sch_self_pending (
 
 ## 4. 央廚排班（mode=fixed）
 - 同仁設定「固定班別」（`sch_staff.fixed_shift`，廠長在同仁頁設）。
-- **每月 20 號 06:00**（營運系統伺服器內的每日檢查，跟 `flush` 同一個計時器）自動產生下個月：平日＝`W`＋固定班別；週六＝`H`、週日＝`R`（Q5）；國定假日、補假（`holidays.json days`＋`gov.off`）＝`L`＋`國`。已存在的格子（廠長改過的、`source='manual'`）不覆蓋。沒設固定班別的人只排休假、平日留空並在畫面提醒。
+- ~~每月 20 號 06:00 自動產生下個月~~ → **2026-10-27 起：每期開始前 10 天 06:00**（`GEN_LEAD`；例 T02 11/29 開始 → 11/19 06:00）自動產生下一期；掉線補產＝mode_from 所在期到下一期沒產過的期都補。產生紀錄 `sch_log fixed_autogen` 記期別（T01…）；10/27 以前記的是月份，整期每天的月份都產過也算產過（mini 上的 11 月紀錄＝T01 已產、T02 照新規則 11/19 產）。每期產生內容同原規則（營運系統伺服器內的每日檢查，跟 `flush` 同一個計時器）：平日＝`W`＋固定班別；週六＝`H`、週日＝`R`（Q5）；國定假日、補假（`holidays.json days`＋`gov.off`）＝`L`＋`國`。已存在的格子（廠長改過的、`source='manual'`）不覆蓋。沒設固定班別的人只排休假、平日留空並在畫面提醒。
 - 廠長改例外：直接改格子＝立即生效（寫 `sch_days`，source manual），並自動重送該日所在的 T 期 LINE（延遲 1 分鐘合併多次修改再送）。不需要鎖定。
 - 檢查：沿用門市規則中與固定排法相容的（換班間隔、單日上限、例假），只提醒不擋（廠長改例外要能存）。
 - 起用日（2026-10-25 Eason 選 B「上線就自動切換」，否決 §12 原提的廠長按啟用）：遷移設 CF `mode='fixed'`、`mode_from='2026-11-01'`；伺服器第一次 tick 自動切換：刪 [11/1, 下個月月底] 非請假格、依固定規則重產（沒設固定班別的人平日空白）、重送 T01／T02；完成記在 `sch_store_cfg`、冪等。**廠長設或改某人固定班別時，自動重產那人從明天起的非手改平日格並重送 LINE**。CF 還有人沒設固定班別時，首頁提醒廠長（管理系統排班管理首頁讀 sched-alerts 的 `fixed`，導到「固定班別」）。2026-10-25 Fable 複驗後補三條：切換的刪除與重產起點＝max(mode_from, 明天)（mini 若晚於 11/1 才更新，已過去的日子不改）；設班別自動補只補已產生過的月份（不提早產下個月、不超過國定假日表）；國定假日表不夠長時先不切換、不寫完成記號；DB v14 給跑過舊版 v13 的資料庫補 mode_from。Eason 已知：更新後到廠長設好之前，11 月央廚 LINE 班表平日是空白。
@@ -85,7 +86,7 @@ CREATE TABLE sch_self_pending (
   - 權限：選單 `platform.sched` 擴大＝店長同等職＋人資主管＋管理員＋**總部同仁**（`ladder hq` 或 `office` 的 active staff）。各分頁內容由營運系統判斷（沒權限＝沒有該分頁）。
 - **營運系統畫面**（`web/modules/schedule/`）新增兩個入口：
   - `self.js`（總部排班）：上方月份切換＋狀態列（草稿／已送出／已核准／退回原因）；月曆每格點了選「班別／休息日／例假／特休／事假…／國定假日假」；按「送出」；主管看到「部屬」清單（每人一列狀態），點進去看月曆，按「核准」「退回」（必填原因）。
-  - `fixed.js`（央廚排班）：月曆總表（人×日），只有廠長能改格子；同仁頁設固定班別；「重新產生下個月」按鈕（不覆蓋手改）。
+  - `fixed.js`（央廚排班）：一期 28 天總表（人×日，‹ T01 › 換期，2026-10-27 起），只有廠長能改格子；同仁頁設固定班別（不分期）；「重新產生這一期」按鈕（不覆蓋手改）。
 - 首頁提醒（`modules/schedule/alerts.js`）多三種：`self_due`（本人下月未送出，25 號起）、`self_wait`（主管：N 位等核准）、`self_missing`（主管：N 位未送出，25 號起）；營運系統 `svc/sched-alerts` 回傳加 `self:{due:[month], wait:N, missing:N}`。
 
 ## 6. 跨系統契約變更
@@ -124,9 +125,10 @@ CREATE TABLE sch_self_pending (
 | `selfWithdraw` | `{month, emp_id, version}` | `{status:'draft', version}` | 本人，限 `submitted` |
 | `selfApprove` | `{month, emp_id, version}` | `{status:'approved', version}` | `emp_id ∈ schedApprove`（或人資主管／管理員）；不能核准自己；把 pending 搬進 `sch_days`；enqueue 重疊 T 期 |
 | `selfReject` | `{month, emp_id, version, reason}`（reason 1–200 字必填） | `{status:'rejected', version}` | 同上；有 pending 時只退 pending（月份維持 approved） |
-| `fixedLoad` | `{month}` | `{month, mode:'fixed', canEdit:bool, shifts, holidays, staff:[{emp_id,name,fixed_shift}], cells:{emp_id:{date:{t,s?,l?,src}}}, results}` | CF 可看的人；`canEdit`＝scheduleAdmin |
-| `fixedSave` | `{month, version, cells:{emp_id:{date:{t,s?,l?}}}}` | `{version, results}` | scheduleAdmin；寫 `source='manual'`；1 分鐘後合併重送 |
-| `fixedGenerate` | `{month}` | `{generated:N, kept:N}` | scheduleAdmin；不覆蓋 `manual`；同一月重按冪等 |
+| `fixedLoad` | `{period}`（2026-10-27 起；舊 `{month}` 仍收） | `{month, period, from, to, curPeriod, mode:'fixed', canEdit:bool, shifts, holidays, staff:[{emp_id,name,fixed_shift}], cells:{emp_id:{date:{t,s?,l?,src}}}, results}` | CF 可看的人；`canEdit`＝scheduleAdmin |
+| `fixedSave` | `{period\|month, version, cells:{emp_id:{date:{t,s?,l?}}}}` | `{version, results}` | scheduleAdmin；寫 `source='manual'`；1 分鐘後合併重送 |
+| `fixedGenerate` | `{period\|month}` | `{generated:N, kept:N}` | scheduleAdmin；不覆蓋 `manual`；同一期重按冪等 |
+| `fixedStation` | `{period\|month, version, cells:[{emp_id,date,station_id}]}` | `{version, changed}` | scheduleAdmin；格子要在這一期（或這個月）內 |
 | `fixedShift` | `{emp_id, shift_id\|null}` | `{ok:true}` | scheduleAdmin |
 - 版本：`sch_self_month.version`（每人每月）；fixed 用 `sch_periods` 不適用 → 新增 `sch_store_cfg.fixed_version`（整店）。
 - 錯誤碼沿用：`FORBIDDEN`／`BAD_INPUT`／`CONFLICT`（版本不符）／`LOCKED`（不用）。
