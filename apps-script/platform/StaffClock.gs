@@ -1550,6 +1550,17 @@ function clockRosterApply_(store_code, rows, payrollNames, now) {
     var st = clkStoreByCode_(store);
     if (!st) return clkErr_('bad_input', '不認得的店代碼');
     if (!Array.isArray(rows)) return clkErr_('bad_input', CLK_MSG.BAD_INPUT);
+    // 先自己確保 staff_clock 表頭（舊 15 欄表補 duty_mgr；冪等），不依賴人先跑 setupStaff；補完表頭仍不一致就不寫，免得寫到錯欄
+    try {
+      var mapSh = stfSheet_(CLK_SHEET_MAP);
+      if (mapSh) {
+        clkEnsureMapExtra_(SpreadsheetApp.getActive());
+        var hd = mapSh.getRange(1, 1, 1, CLK_MAP_HEADERS.length).getValues()[0].map(function (v) { return String(v).trim(); });
+        if (hd.join('|') !== CLK_MAP_HEADERS.join('|')) return clkErr_('bad_input', '分頁「' + CLK_SHEET_MAP + '」表頭與程式不一致，停止寫入以免資料錯位');
+      }
+    } catch (e) {
+      return clkErr_('bad_input', '分頁「' + CLK_SHEET_MAP + '」表頭無法補齊，停止寫入');
+    }
     var d = clkDate_(now), nowText = clkNowText_(d);
     var maps = clkMaps_();
     // 空名冊而這家店已有生效對照 → 視為抓取失敗（分頁改名、網址指錯），不套用，否則整店對照會被標成停用

@@ -531,6 +531,26 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(u3.stores.mztjs.indexOf('J2') === -1, 'DM suggested 對照不進名單（沒生效）', u3.stores);
   // 不進分派表
   ok(post(sb, 'clockUpperEmps_', {}, app.tok).ok === false && post(sb, 'clockUpperEmps', {}, app.tok).ok === false, 'DM clockUpperEmps_ 不進 Code.gs 分派表');
+  // 舊 15 欄表直接跑 clockRosterApply_（沒先跑 setupStaff）→ 自動補成 16 欄、duty_mgr 正確、其他欄不動
+  {
+    const a3 = fresh();
+    a3.sb.setupStaff();
+    const sd = a3.sheets.staff_clock._data;
+    sd[0] = sd[0].slice(0, 15);
+    const e3 = claimApprove(a3, '舊表甲', 'pw-old-0001', MZT_GF('pt')).emp;
+    sd.push([e3, 'mztgf', 'G1', 'home', 'confirmed', 'created', 'TRUE', '', 'tester', 'c0', 'u0', 'h', 'k', 'b', 'o']);
+    const r3 = a3.sb.clockRosterApply_('mztgf', [rosterRow('G1', '舊表甲', { duty_mgr: true, last_punch: '' })], undefined, nowT(0));
+    const row = sd[sd.length - 1];
+    ok(r3.ok && sd[0].length === 16 && sd[0][15] === 'duty_mgr' && row[15] === 'TRUE', 'DM ★舊 15 欄表直接 clockRosterApply_：補成 16 欄、duty_mgr=TRUE', [r3, sd[0], row]);
+    ok(row.slice(0, 15).join('|') === [e3, 'mztgf', 'G1', 'home', 'confirmed', 'created', 'TRUE', '', 'tester', 'c0', 'u0', 'h', 'k', 'b', 'o'].join('|') || row[10] !== 'u0', 'DM 其他欄不動（updated_at 可更新）');
+    ok(row[0] === e3 && row[1] === 'mztgf' && row[2] === 'G1' && row[3] === 'home' && row[8] === 'tester' && row[9] === 'c0', 'DM 識別欄與確認欄不動');
+    // 表頭亂掉 → 不寫
+    const a4 = fresh();
+    a4.sb.setupStaff();
+    a4.sheets.staff_clock._data[0][3] = 'zzz';
+    const r4 = a4.sb.clockRosterApply_('mztgf', [rosterRow('G1', 'x')], undefined, nowT(0));
+    ok(r4.ok === false, 'DM 表頭不一致 → 拒絕寫入', r4);
+  }
   // 舊表（沒有 duty_mgr 表頭）→ clkSetup_ 補表頭、不動既有資料
   const app2 = fresh();
   app2.sb.setupStaff();
