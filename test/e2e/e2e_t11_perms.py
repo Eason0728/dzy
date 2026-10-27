@@ -415,7 +415,9 @@ def main():
             first = ad.locator('[data-role="ex-item"]').first
             check(first.get_attribute('data-ex') == 'X001', '生效中排前面、過期排後面')
             exp = ad.locator('[data-role="ex-item"][data-ex="X002"]')
-            check('已過期' in exp.inner_text() and 'opacity' in (exp.get_attribute('style') or ''), '過期那筆灰掉並標「已過期」')
+            # 2026-10-26 A-15 起改用 .is-dim class（components.css opacity .6），不再是內嵌 style；看 class＋實際算出來的透明度
+            check('已過期' in exp.inner_text() and 'is-dim' in (exp.get_attribute('class') or '')
+                  and float(exp.evaluate("el => getComputedStyle(el).opacity")) < 1, '過期那筆灰掉並標「已過期」')
             check('王小明' in first.inner_text() and '看宿舍清單' in first.inner_text() and '多給' in first.inner_text() and '到 2099-12-31' in first.inner_text()
                   and '代理宿舍業務' in first.inner_text() and 'u-admin' in first.inner_text(), '清單欄位：同仁、功能、多給、到期、原因、建立者')
             # 驗證：原因必填
