@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 class MemoryStorage { constructor() { this._m = new Map(); } getItem(k) { return this._m.has(k) ? this._m.get(k) : null; } setItem(k, v) { this._m.set(k, String(v)); } removeItem(k) { this._m.delete(k); } clear() { this._m.clear(); } }
 globalThis.localStorage = new MemoryStorage();
 
-const { toAlerts, toBadge } = await import('../modules/attendance/alerts.js');
+const { toAlerts, toBadge, toGapAlert } = await import('../modules/attendance/alerts.js');
 const mod = (await import('../modules/attendance/index.js')).default;
 const manifest = (await import('../modules/attendance/manifest.js')).default;
 const { call } = await import('../platform/api.js');
@@ -68,6 +68,40 @@ await t('代轉 403／網路錯誤 → null', async () => {
   assert.equal(await mod.alerts(ctx), null);
   globalThis.fetch = async () => { throw new Error('boom'); };
   assert.equal(await mod.alerts(ctx), null); assert.equal(await mod.badge(ctx), null);
+});
+
+// ---- 值班主管本人的申請找不到上層（2026-10-28，docs/req-upper）：平台後端 attUpperGaps ----
+function routedFetch(gaps) {
+  globalThis.fetch = async (url, opts) => {
+    const b = JSON.parse(opts.body);
+    sent = { url, body: b };
+    return { status: 200, json: async () => (b.action === 'attUpperGaps' ? gaps : upstream) };
+  };
+}
+await t('toGapAlert：有項目→一列 warn，view=request；空或形狀不對→null', () => {
+  assert.deepEqual(toGapAlert({ ok: true, data: { items: [{ emp: 'DZY001', name: '測試一', unit_name: 'X' }, { emp: 'DZY002', name: '測試二', unit_name: 'X' }] } }),
+    { level: 'warn', text: '2 位值班主管的申請找不到上層，由人資主管審', view: 'request' });
+  assert.equal(toGapAlert({ ok: true, data: { items: [] } }), null);
+  assert.equal(toGapAlert({ ok: true, data: { items: [{ kind: 'approve', count: 3 }] } }), null);
+  assert.equal(toGapAlert({ ok: false }), null); assert.equal(toGapAlert(null), null);
+});
+await t('alerts()：有 gap 時多一行；沒有／失敗時維持原樣', async () => {
+  routedFetch({ ok: true, data: { items: [{ emp: 'DZY001', name: '測試一', unit_name: 'X' }] } });
+  const a = await mod.alerts(ctx);
+  assert.equal(a.length, 4);
+  assert.deepEqual(a[3], { level: 'warn', text: '1 位值班主管的申請找不到上層，由人資主管審', view: 'request' });
+  assert.equal(sent.body.action === 'attUpperGaps' || sent.body.ns === 'attendance', true);
+  routedFetch({ ok: true, data: { items: [] } });
+  assert.equal((await mod.alerts(ctx)).length, 3);
+  routedFetch({ ok: false, error: 'no_perm' });
+  assert.equal((await mod.alerts(ctx)).length, 3);
+});
+await t('pending 時不加 gap 行', async () => {
+  globalThis.fetch = async (url, opts) => {
+    const b = JSON.parse(opts.body);
+    return { status: 200, json: async () => (b.action === 'attUpperGaps' ? { ok: true, data: { items: [{ emp: 'DZY001' }] } } : { ok: true, data: { items: [], pending: true } }) };
+  };
+  assert.deepEqual(await mod.alerts(ctx), [{ level: 'info', text: '出勤待辦統計中，稍後回首頁就會看到' }]);
 });
 await t('manifest ns／backend＝attendance，requires 不變', () => {
   assert.equal(manifest.ns, 'attendance'); assert.equal(manifest.backend, 'attendance');

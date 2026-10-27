@@ -53,3 +53,14 @@ export function toBadge(data) {
   if (data.pending === true) return null;
   return countOf(data.items, 'approve') + countOf(data.items, 'request');
 }
+
+/**
+ * attUpperGaps（平台後端，人資主管／管理員才有內容）的結果 → 一列提醒或 null。
+ * 值班主管本人的申請找不到上層時，由人資主管審（docs/req-upper）；只認 items 裡有 emp 字串的列（別的形狀不算）。
+ */
+export function toGapAlert(r) {
+  if (!r || r.ok !== true || !r.data || !Array.isArray(r.data.items)) return null;
+  const n = r.data.items.filter((it) => it && typeof it.emp === 'string' && it.emp !== '').length;
+  if (n <= 0) return null;
+  return { level: 'warn', text: `${n} 位值班主管的申請找不到上層，由人資主管審`, view: 'request' };
+}

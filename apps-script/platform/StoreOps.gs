@@ -73,6 +73,11 @@ var STORE_SUP_L2 = ['am', 'rdd'];
 var STORE_SUP_L3_OFFICE = ['osv'];
 var STORE_SUP_L4_OFFICE = ['odir'];
 
+// ── 值班主管本人的申請改由上層審（2026-10-28 Eason 照推薦，docs/req-upper）──
+// 人物物件的 duty_units（storePeople_ 由 staff_clock.duty_mgr＋clock_stores 算出）：這位同仁是值班主管的那些打卡店 → 單位清單。
+// 只影響 mode 'req'：target 是值班主管 → 計時／正職改走店長的鏈（head）；approver 在同單位也拿主管鑰匙（duty_units 含 need.unit）的一律不算。
+// 人資主管、admin 照舊全可核；核定工時 hours 完全不變。
+
 var STORE_MSG = {
   UNAUTHORIZED: '服務金鑰錯誤或未設定',
   BAD_AUD: '不支援的系統',
@@ -137,6 +142,12 @@ function storeOrgOf_(p, org) {
   return { unit: u, title: t, ladder: ladder };
 }
 
+/** p.duty_units 是不是非空陣列（值班主管） */
+function storeIsDuty_(p) { return !!p && Array.isArray(p.duty_units) && p.duty_units.length > 0; }
+
+/** p 的值班店單位是否含 unit */
+function storeDutyHas_(p, unit) { return !!unit && storeIsDuty_(p) && p.duty_units.indexOf(unit) !== -1; }
+
 /** mode 只認 'req'，其他（含省略）一律當 'hours' */
 function storeAttMode_(mode) { return mode === 'req' ? 'req' : 'hours'; }
 
@@ -160,7 +171,11 @@ function attNeedOf_(target, org, mode) {
   if (o.ladder === 'store') {
     var clocks = title === 'pt' || title === 'ft' || STORE_ATT_HEAD_TITLES.indexOf(title) !== -1;
     if (!clocks) return null;
-    if (mode === 'hours' || title === 'pt' || title === 'ft') return { kind: 'unit', unit: unit };
+    if (mode === 'hours') return { kind: 'unit', unit: unit };
+    if (title === 'pt' || title === 'ft') {
+      // 值班主管兼的計時／正職：不給同店店長（也拿主管鑰匙），往上走店長的鏈
+      return storeIsDuty_(target) ? { kind: 'head', unit: unit, brand: o.unit.parent } : { kind: 'unit', unit: unit };
+    }
     if (STORE_REQ_UNIT_HEAD_TITLES.indexOf(title) !== -1) return { kind: 'head', unit: unit, brand: o.unit.parent };
     if (title === 'am') return { kind: 'brand_office', brand: o.unit.parent, unit: unit };   // unit：區域限區用
     if (title === 'rdd') return { kind: 'hq_exec' };
@@ -201,6 +216,8 @@ function attApproverOf_(approver, target, org, mode, rctx) {
   var title = stfStr_(approver.title);
   var aUnit = stfStr_(approver.unit);
   var sameMan = stfStr_(approver.emp) !== '' && stfStr_(approver.emp) === stfStr_(target.emp);
+  // 值班主管本人的申請：同單位也拿主管鑰匙的人（含區經理）不核，往上找
+  if (mode === 'req' && storeIsDuty_(target) && need.unit && storeDutyHas_(approver, need.unit)) return false;
   var heads = mode === 'hours' ? STORE_HOURS_UNIT_HEAD_TITLES : STORE_REQ_UNIT_HEAD_TITLES;
   if (need.kind === 'unit') {
     if (sameMan && mode !== 'hours') return false;
@@ -420,9 +437,10 @@ function storeAttAccounts_(people, org, home, maps, storeUnits) {
 /**
  * 支援帳號的核定人（不含人資主管、admin、att.extra）：回 {emp: true}。units＝打卡店單位清單（只取 org 裡 active 的 store 階梯）。
  * 多單位的店：每一層把所有單位的人合起來看，取第一層有人的那層（不逐單位各自往上找）。
+ * excludeDuty（選填，值班主管本人的 req 申請用）：打卡店單位的值班主管（duty_units 含任一 units）先剔除，再取第一層有人的那層。
  * people 只認 status=active、單位職稱合法（storeOrgOf_）、有同仁編號的人；推算出來的人不當核定人。
  */
-function storeSupportApprovers_(units, people, org, rctx) {
+function storeSupportApprovers_(units, people, org, rctx, excludeDuty) {
   var su = units.filter(function (c) { var u = org.unit[c]; return !!(u && u.active && (u.ladder || 'store') === 'store'); });
   var out = {};
   if (!su.length) return out;
@@ -430,6 +448,7 @@ function storeSupportApprovers_(units, people, org, rctx) {
   people.forEach(function (p) {
     if (stfStr_(p.status) !== 'active' || !stfStr_(p.emp)) return;
     var o = storeOrgOf_(p, org);
+    if (o && excludeDuty && su.some(function (c) { return storeDutyHas_(p, c); })) return;   // 值班主管本人的申請：打卡店單位的值班主管不核
     if (o) cand.push({ emp: stfStr_(p.emp), title: stfStr_(p.title), unit: stfStr_(p.unit), ladder: o.ladder, brand: o.unit.parent });
   });
   var shops = su.filter(function (c) { return c !== STF_EXTRA_CK && org.unit[c].parent !== STF_EXTRA_CK; });   // 第 3、4 層只給門市（央廚沒有督導／總監這兩層）
@@ -510,11 +529,15 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
     } else if (storeAnyIn_(a.units, pilot) && !self) {
       var key = a.units.join(',');
       if (!apprCache[key]) apprCache[key] = storeSupportApprovers_(a.units, people, org, rctx);
-      var appr = !!flags.admin || !!flags.hrHead || (!!myEmp && !!apprCache[key][myEmp]) ||
-        (!!flags.attExtra && !!myUnit && a.units.indexOf(myUnit) !== -1);
-      if (appr) {
-        if (needH) storeAttListAdd_(L.hours, a);
-        if (!t.orphan && attNeedOf_(t, org, 'req')) storeAttListAdd_(L.req, a);
+      var dutyT = storeIsDuty_(t);
+      var keyR = dutyT ? key + '|duty' : key;   // 值班主管本人的申請（req）：打卡店單位的值班主管不核，往上找
+      if (!apprCache[keyR]) apprCache[keyR] = storeSupportApprovers_(a.units, people, org, rctx, true);
+      var base = !!flags.admin || !!flags.hrHead || (!!flags.attExtra && !!myUnit && a.units.indexOf(myUnit) !== -1);
+      var apprH = base || (!!myEmp && !!apprCache[key][myEmp]);
+      var apprR = base || (!!myEmp && !!apprCache[keyR][myEmp]);
+      if (apprH || apprR) {
+        if (apprH && needH) storeAttListAdd_(L.hours, a);
+        if (apprR && !t.orphan && attNeedOf_(t, org, 'req')) storeAttListAdd_(L.req, a);
       } else if (viewable && ((origView && (hrsT[t.emp] || reqT[t.emp])) || storeAnyIn_(a.units, viewUnits))) {
         storeAttListAdd_(L.view, a);
       }
@@ -526,6 +549,59 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
     }
   });
   return done();
+}
+
+/**
+ * 找不到上層的值班主管（純函式；docs/req-upper，首頁提醒用）。
+ * 值班主管（duty_units 非空）且在職、要考勤，但「依表」（req 模式，不計人資主管／admin）找不到任何在職核准人：
+ * 本單位那一條 attApproverOf_ 全沒人，或他有支援帳號（storeAttIsSupport_）而該打卡店單位照支援規則（剔除值班主管）沒人。
+ * people／org／rctx 同 storeAttTargets_；maps／storeUnits 同 storeAttLists_。回 [{emp, name, unit}]（依 emp 排序）。
+ */
+function storeUpperGaps_(people, org, rctx, maps, storeUnits) {
+  var out = [];
+  var acct = {};
+  storeAttAccounts_(people, org, null, maps || [], storeUnits || {}).forEach(function (a) {
+    if (a.support) (acct[a.t.emp] = acct[a.t.emp] || []).push(a);
+  });
+  people.forEach(function (t) {
+    if (!storeIsDuty_(t) || stfStr_(t.status) !== 'active' || !stfStr_(t.emp)) return;
+    if (!attNeedOf_(t, org, 'req')) return;
+    var has = people.some(function (ap) { return attApproverOf_(ap, t, org, 'req', rctx); });
+    var gap = !has;
+    if (!gap) {
+      (acct[t.emp] || []).forEach(function (a) {
+        var ap = storeSupportApprovers_(a.units, people, org, rctx, true);
+        if (!Object.keys(ap).length) gap = true;
+      });
+    }
+    if (gap) out.push({ emp: t.emp, name: stfStr_(t.name), unit: stfStr_(t.unit) });
+  });
+  return out.sort(function (a, b) { return a.emp < b.emp ? -1 : (a.emp > b.emp ? 1 : 0); });
+}
+
+/**
+ * 讀取 action attUpperGaps（docs/req-upper）：只有「有 platform.att 且是人資主管或 admin」的人看得到，其他一律回空。
+ * 回 { ok:true, data:{ items:[{emp, name, unit_name}] } }；unit_name＝單位顯示名稱。
+ */
+function handleAttUpperGaps_(token) {
+  var me = handleMe_(token);
+  if (!me.ok) return me;
+  var empty = { ok: true, data: { items: [] } };
+  if (!hasPerm_(me.data.perms, 'platform.att')) return empty;
+  var admin = String(me.data.user.role) === 'admin';
+  var hr = false;
+  if (!admin) {
+    var self = stfFindByUserId_(me.data.user.id);
+    hr = !!self && stfIsHrHead_({ status: stfStr_(self.values[STF_COL.status]), dept: stfStr_(self.values[STF_COL.dept]), title: stfStr_(self.values[STF_COL.title]) });
+  }
+  if (!admin && !hr) return empty;
+  if (!clkSheetsReady_()) return empty;
+  var org = stfReadOrg_();
+  var rctx = typeof regionCtx_ === 'function' ? regionCtx_() : null;
+  var items = storeUpperGaps_(storePeople_(), org, rctx, clkMaps_(), storeClockUnits_()).map(function (g) {
+    return { emp: g.emp, name: g.name, unit_name: storeUnitLabel_(g.unit, org) };
+  });
+  return { ok: true, data: { items: items } };
 }
 
 /** perms 裡的 att.view@<單位> → 合法單位（org 存在、active、store 階梯含 ck）排序去重；Perms.gs 沒載入＝[] */
@@ -552,11 +628,31 @@ function storeClockUnits_() {
 // 3. 讀資料（碰試算表）
 // ============================================================
 
+/**
+ * 值班主管的打卡店單位（純函式）：maps＝staff_clock 列；storeUnits＝{打卡店代碼: 單位清單}。
+ * 回 {emp_no: [單位…]}（排序去重）：只算 state=confirmed、roster_active 不是 FALSE、duty_mgr=TRUE 的對照；店沒有填單位＝不貢獻單位。
+ */
+function storeDutyUnitsMap_(maps, storeUnits) {
+  var out = {};
+  (maps || []).forEach(function (m) {
+    if (m.state !== 'confirmed' || m.roster_active === 'FALSE') return;
+    if (String(m.duty_mgr === undefined || m.duty_mgr === null ? '' : m.duty_mgr).trim().toUpperCase() !== 'TRUE') return;
+    var us = (storeUnits && storeUnits[m.store_code]) || [];
+    out[m.emp_no] = storeUniqSorted_((out[m.emp_no] || []).concat(us));
+  });
+  return out;
+}
+
 function storePeople_() {
   var extraMap = stfReadExtraMap_();
+  var dutyMap = {};
+  try {
+    if (clkSheetsReady_()) dutyMap = storeDutyUnitsMap_(clkMaps_(), storeClockUnits_());
+  } catch (e) { dutyMap = {}; }
   return clkStaffAll_().map(function (s) {
     var v = s.values;
     return {
+      duty_units: dutyMap[s.emp] || [],
       emp: s.emp, name: stfStr_(v[STF_COL.name]), status: stfStr_(v[STF_COL.status]),
       unit: stfStr_(v[STF_COL.unit]), dept: stfStr_(v[STF_COL.dept]), title: stfStr_(v[STF_COL.title]),
       userId: stfStr_(v[STF_COL.user_id]), hire: s.hire, confirmedAt: storeDatePart_(v[STF_COL.confirmed_at]),

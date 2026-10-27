@@ -34,7 +34,9 @@ export const READ_ACTIONS = {
     // evImportPreview 只比對姓名、不寫資料
     'evMe', 'evMyScores', 'evNewbieList', 'evUnitResults', 'evPersonDetail', 'evBankGet', 'evImportPreview',
     // 營運巡檢（2026-10-27，docs/inspection/spec.md）：純讀取；inspSetup／inspSubmit／inspVoid／inspBankSave 不列（寫入，試跑會攔）
-    'inspMe', 'inspList', 'inspGet', 'inspBankGet'],
+    'inspMe', 'inspList', 'inspGet', 'inspBankGet',
+    // 值班主管本人的申請改由上層審（2026-10-28，docs/req-upper）：找不到上層的提醒，純讀取
+    'attUpperGaps'],
   audit: ['getAll'],
   dorm: ['rooms', 'list', 'contract', 'handover'],
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）

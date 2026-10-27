@@ -308,7 +308,7 @@ const fulltext = (app) => sheetText(app) + '\n' + JSON.stringify(app.props);
 (() => {
   const app = fresh();
   const { sb, sheets } = app;
-  ok(sheets.staff_clock._rows()[0].join() === 'emp_no,store_code,emp_id,role,state,source,roster_active,last_punch,confirmed_by,confirmed_at,updated_at,line_h,line_kid,line_bound_at,line_ok_at', '3a 新建 staff_clock 表頭尾端有 line_h,line_kid,line_bound_at,line_ok_at');
+  ok(sheets.staff_clock._rows()[0].join() === 'emp_no,store_code,emp_id,role,state,source,roster_active,last_punch,confirmed_by,confirmed_at,updated_at,line_h,line_kid,line_bound_at,line_ok_at,duty_mgr', '3a 新建 staff_clock 表頭尾端有 line_h,line_kid,line_bound_at,line_ok_at（再加 duty_mgr）');
   ok(sheets.staff._rows()[0].slice(24).join() === 'hire_date,last_day,extra_depts,line_revoked_at', '3b staff 尾端有 line_revoked_at');
 
   // 舊分頁（11 欄表頭＋已有資料）→ setupStaff 自動補欄、資料不動
@@ -319,11 +319,11 @@ const fulltext = (app) => sheetText(app) + '\n' + JSON.stringify(app.props);
   old.sheets.staff._data[0].length = 27;   // 舊 staff：沒有 line_revoked_at
   const rd = old.sb.clkReady_();
   ok(rd.ok === true, '3c 舊表頭（11 欄）→ clkReady_ 自動補欄後回 ok', J(rd));
-  ok(old.sheets.staff_clock._rows()[0].length === 15 && old.sheets.staff_clock._rows()[0].slice(11).join() === 'line_h,line_kid,line_bound_at,line_ok_at', '3d 補上尾端四個表頭');
+  ok(old.sheets.staff_clock._rows()[0].length === 16 && old.sheets.staff_clock._rows()[0].slice(11).join() === 'line_h,line_kid,line_bound_at,line_ok_at,duty_mgr', '3d 補上尾端五個表頭（LINE 四欄＋duty_mgr）');
   ok(old.sheets.staff_clock._rows()[1].slice(0, 11).join('|') === oldRow.join('|'), '3e ★既有資料列原封不動');
   ok(old.sheets.staff._rows()[0][27] === 'line_revoked_at' && old.sheets.staff._rows()[0].length === 28, '3f staff 缺 line_revoked_at 也自動補');
   const again = old.sb.setupStaff();
-  ok(J(again).ok && old.sheets.staff_clock._rows()[0].length === 15, '3g 重跑 setupStaff 冪等');
+  ok(J(again).ok && old.sheets.staff_clock._rows()[0].length === 16, '3g 重跑 setupStaff 冪等');
   // 表頭被改過 → 停
   const bad = fresh();
   bad.sheets.staff_clock._data[0][12] = 'oops';
