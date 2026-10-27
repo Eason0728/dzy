@@ -24,6 +24,26 @@ const LOGOUT_FLUSH_MS = 150;
 const TICKET_RE = /^[0-9a-f]{64}$/;
 const NAV_ID_RE = /^[a-z][a-z0-9-]{0,30}$/;
 
+/** 試跑模式（網址 ?dryrun=1）只擋管理系統自己的 API；嵌入的子系統照常寫入，所以 iframe 上方要明顯提示（2026-10-28 審查 #8）。
+ *  行為（照常發入場券）不變。模組不 import platform/，直接看網址。 */
+export const DRYRUN_EMBED_WARN = '試跑模式只保護管理系統本身；這個嵌入的子系統按送出會真的寫入，請勿送出';
+function isDryRunPage() {
+  try {
+    return typeof location !== 'undefined' && !!location && new URLSearchParams(location.search || '').get('dryrun') === '1';
+  } catch (e) {
+    return false;
+  }
+}
+function dryRunWarn() {
+  const n = document.createElement('div');
+  n.className = 'card';
+  n.setAttribute('data-role', 'dryrun-embed-warn');
+  n.setAttribute('role', 'alert');
+  n.setAttribute('style', 'border-left:4px solid var(--warn);background:var(--warn-light);font-weight:700');
+  n.textContent = DRYRUN_EMBED_WARN;
+  return n;
+}
+
 /** 營運系統送來的選單 → ctx.tabs 的格式；不合格回 null */
 export function navTabs(d) {
   if (!d || d.type !== 'dzy-store-nav' || d.v !== 1 || !Array.isArray(d.items) || d.items.length > 20) return null;
@@ -192,6 +212,7 @@ export function createEmbed(cfg) {
 
       state = { el, ctx, frame: null, down: null, timer: null, returning: false, noTicket: null, cur: '', synced: false, forced: '' };
       window.addEventListener('message', onMessage);
+      if (isDryRunPage()) el.appendChild(dryRunWarn());
       el.appendChild(bar);
       enter(ctx);
       return async function unmount() {

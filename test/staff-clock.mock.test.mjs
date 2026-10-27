@@ -1930,6 +1930,19 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const r2 = rd({ svc_key: 'fake-bulletin-key-0001', ticket: t2, aud: 'bulletin' });
   ok(r2.ok && r2.data.emp_no === st.emp && Object.keys(r2.data).join() === 'emp_no', 'SSO ★兌換成功只回 emp_no', r2);
   ok(rd({ svc_key: 'fake-bulletin-key-0001', ticket: t2, aud: 'bulletin' }).code === 'ticket_invalid', 'SSO ★同一張券只能換一次');
+  // 兌換要上鎖（2026-10-28 #5，比照 PurchaseSso）：拿不到鎖 → busy、券不動；拿得到鎖才取出並作廢
+  {
+    const t5 = tk(st.token).data.ticket;
+    const realLock = sb.LockService;
+    let tries = 0, releases = 0;
+    sb.LockService = { getScriptLock: () => ({ tryLock: () => { tries++; return false; }, releaseLock() { releases++; } }) };
+    const busy = rd({ svc_key: 'fake-bulletin-key-0001', ticket: t5, aud: 'bulletin' });
+    ok(busy.code === 'busy' && tries === 1 && cache.has('sso_tkt:' + t5), 'SSO ★兌換拿不到鎖 → busy、券沒被用掉', busy);
+    sb.LockService = { getScriptLock: () => ({ tryLock: () => { tries++; return true; }, releaseLock() { releases++; } }) };
+    const got = rd({ svc_key: 'fake-bulletin-key-0001', ticket: t5, aud: 'bulletin' });
+    ok(got.ok && tries === 2 && releases === 1 && !cache.has('sso_tkt:' + t5), 'SSO ★兌換在鎖內取出並作廢、用完放鎖', { got, tries, releases });
+    sb.LockService = realLock;
+  }
   ok(rd({ svc_key: 'fake-bulletin-key-0001', ticket: 'abc', aud: 'bulletin' }).code === 'ticket_invalid' && rd({ svc_key: 'fake-bulletin-key-0001', ticket: ['x'], aud: 'bulletin' }).code === 'ticket_invalid', 'SSO 券格式不對 → ticket_invalid');
   // 過期
   const t3 = tk(st.token).data.ticket;

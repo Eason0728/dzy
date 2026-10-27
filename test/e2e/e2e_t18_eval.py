@@ -10,6 +10,7 @@
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -47,23 +48,28 @@ def set_today(d):
 
 def install_routes(page, urls):
     # 用 context.route：page.route('https://**') 攔不到殼裡其他模組打的代轉請求，會真的打到 Mac mini（審查 #14）
+    # 2026-10-28 審查 #10：'https://**' 這個 glob 實測攔不到 → 改用 regex（同 e2e_t19_inspection.py），本機以外一律先過 guard
     target = page.context
     real = urls['platform']
+    proxy = urls['proxy']   # <平台主機>/platform/proxy：殼的其他模組（稽核提醒等）打代轉，也導回本機假後端
 
-    def handle(route):
-        req = route.request
-        data = req.post_data.encode('utf-8') if req.post_data else b''
-        r = urllib.request.Request('http://127.0.0.1:%d/platform/api' % BACKEND_PORT, data=data, headers={'Content-Type': 'text/plain'})
-        body = urllib.request.urlopen(r, timeout=20).read()
-        route.fulfill(status=200, headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'}, body=body)
-    target.route(real, handle)
+    def fwd(path):
+        def handle(route):
+            req = route.request
+            data = req.post_data.encode('utf-8') if req.post_data else b''
+            r = urllib.request.Request('http://127.0.0.1:%d/platform%s' % (BACKEND_PORT, path), data=data, headers={'Content-Type': 'text/plain'})
+            body = urllib.request.urlopen(r, timeout=20).read()
+            route.fulfill(status=200, headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'}, body=body)
+        return handle
     leaks = []
     def guard(route):
-        if route.request.url.split('?')[0] == real:
-            return route.fallback()   # 交給上面的本機後端轉送
+        if route.request.url.split('?')[0] in (real, proxy):
+            return route.fallback()   # 交給下面的本機後端轉送
         leaks.append(route.request.url)
         return route.abort()
-    target.route('https://**', guard)
+    target.route(re.compile(r'^https?://(?!127\.0\.0\.1)'), guard)   # 先註冊＝最後才跑；Playwright 後註冊的先處理
+    target.route(proxy, fwd('/proxy'))
+    target.route(real, fwd('/api'))
     return leaks
 
 

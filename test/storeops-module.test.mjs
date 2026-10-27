@@ -229,4 +229,34 @@ await t('manifest：dept／requires／名稱符合規格，且過 manifest 驗�
   [s, a].forEach((m) => { const r = validateManifest(m); assert.ok(r.ok, r.errors.join(';')); });
 });
 
+
+// 試跑模式（?dryrun=1）只擋管理系統自己的 API；嵌入的營運系統照常寫入 → iframe 上方要有明顯提示（2026-10-28 #8）。行為（照常發券）不變。
+for (const [label, mod] of [['門市營運', storeops], ['考勤管理', attendance], ['排班管理', schedule]]) {
+  for (const dry of [true, false]) {
+    await t(label + '：' + (dry ? '★?dryrun=1 → iframe 上方顯示「嵌入的子系統會真的寫入」提示，照常發券' : '沒有 ?dryrun=1 → 不顯示試跑提示'), async () => {
+      const prevLoc = globalThis.location;
+      globalThis.location = { hostname: 'dzy.mozhuting.com', search: dry ? '?dryrun=1' : '' };
+      const root = new El('div');
+      sent.length = 0; calls.length = 0; ticketReply = { ok: true, data: { ticket: TICKET } };
+      const un = mod.mount(root, mkCtx());
+      await tick();
+      const warn = root.all((n) => n.attrs['data-role'] === 'dryrun-embed-warn');
+      const frame = root.all((n) => n.tagName === 'iframe')[0];
+      if (dry) {
+        assert.equal(warn.length, 1);
+        assert.equal(warn[0].textContent, '試跑模式只保護管理系統本身；這個嵌入的子系統按送出會真的寫入，請勿送出');
+        assert.ok(root.children.indexOf(warn[0]) < root.children.indexOf(frame), '提示在 iframe 上方');
+        await winListeners.message({ origin: ORIGIN, source: frame.contentWindow, data: { type: 'dzy-store-ready', v: 1 } });
+        assert.deepEqual(sent.map((x) => x.m.type), ['dzy-store-sso'], '照常發入場券');
+      } else {
+        assert.equal(warn.length, 0);
+      }
+      const p = un();
+      timers.filter((x) => x.live && x.ms === 150).forEach((x) => x.fn());
+      await p;
+      if (prevLoc === undefined) delete globalThis.location; else globalThis.location = prevLoc;
+    });
+  }
+}
+
 process.exit(failed ? 1 : 0);

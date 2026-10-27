@@ -721,7 +721,8 @@ function handleApvSubmit_(token, payload) {
   if (!c.me || !c.me.opened) return apvForbidden_('只有已開通帳號的同仁可以送單');
   payload = payload || {};
   var clientId = apvStr_(payload.client_id);
-  if (!/^[A-Za-z0-9_-]{8,64}$/.test(clientId)) return apvFail_('bad_request', '缺少 client_id');
+  // 至少一個非數字字元：全數字會被試算表轉成數字，重送比對（字串 ===）會失準（審查 2026-10-28 #6）；前端 UUID 一定含 -
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(clientId) || !/[^0-9]/.test(clientId)) return apvFail_('bad_request', '缺少 client_id');
   var type = payload.type;
   if (APV_TYPES.indexOf(type) === -1) return apvFail_('bad_request', 'type 不合法');
   var forms = apvReadForms_();

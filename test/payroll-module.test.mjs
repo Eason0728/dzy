@@ -28,6 +28,9 @@ t('成功：data 攤平＋ok:true', () => {
 t('上游錯誤：保留 error／message 與其他欄位', () => {
   assert.deepEqual(toPageResult({ ok: false, error: 'locked', data: { message: '本月已鎖定', ym: '2026-09' } }), { message: '本月已鎖定', ym: '2026-09', ok: false, error: 'locked' });
 });
+t('試跑模式（平台攔下寫入，回 ok:true＋dryrun）→ 薪酬頁收到失敗＋中文提示，不會以為存好了（2026-10-28 #7）', () => {
+  assert.deepEqual(toPageResult({ ok: true, dryrun: true, data: { dryRun: true, action: 'payroll_save' } }), { ok: false, error: 'dryrun', message: '試跑模式，未寫入' });
+});
 t('代轉層錯誤（沒權限、逾時）：補 message 讓薪酬頁顯示', () => {
   assert.deepEqual(toPageResult({ ok: false, error: '沒有權限', status: 403 }), { ok: false, error: '沒有權限', message: '沒有權限' });
   assert.equal(toPageResult(null).ok, false);
