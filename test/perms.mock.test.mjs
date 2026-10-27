@@ -112,7 +112,7 @@ const has = (res, p) => res.perms.indexOf(p) !== -1;
 
 // ===== T1-1 =====
 ok(eq(P.PERM_GRANTABLE, ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin']), 'PERM_GRANTABLE 與契約一致（2026-10-26 績效評核四碼；含營運系統新增的 store.void、att.extra，薪酬系統 payroll.write，收支管理 cashbook.write，2026-10-26 加公告管理 platform.bulletin 共 14 碼）');
-ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write', 'pnl.admin']), 'PERM_LOCKED 與契約一致（六碼，2026-10-19 加薪酬系統、2026-10-25 加收支管理；2026-10-26 公告管理不鎖）');
+ok(eq(P.PERM_LOCKED, ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin']), 'PERM_LOCKED 與契約一致（六碼，2026-10-19 加薪酬系統；2026-10-26 公告管理不鎖；2026-10-27 收支管理改回不鎖）');
 ok(P.PERM_LOCKED.indexOf('platform.bulletin') === -1 && P.PERM_GRANTABLE.indexOf('platform.bulletin') !== -1, '公告管理可給、不在鎖碼（人資主管可在個別例外給）');
 ok(r0.ok === true && r0.rules_seeded === 36 && r0.stores_seeded === 5, 'permInit_ admin：空庫建表＋33 條規則＋5 筆對照（2026-10-20 加 am／fm／rdd 六條、10-24 加收支管理、10-26 加公告管理六條）', r0);
 ok(eq(r0.created, ['perm_map', 'perm_ex', 'perm_store_map', 'perm_audit']), '四張分頁都建出來', r0.created);
@@ -381,7 +381,7 @@ ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'platform.permmap' }, f
 ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'platform.users' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 users');
 ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'audit.write' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 audit.write');
 ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'platform.staff' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 platform.staff');
-ok(code(vr({ ladder: 'store', dept: '', title: 'sm', perm: 'cashbook.write' }, false)) === 'perm_locked', 'perm_locked：非 admin 碰 cashbook.write（2026-10-25 審查 B-01）');
+ok(vr({ ladder: 'store', dept: '', title: 'sm', perm: 'cashbook.write' }, false) === null, '非 admin 可碰 cashbook.write（2026-10-27 Eason 改回不鎖碼）');
 ok(vr({ ladder: 'store', dept: '', title: 'sm', perm: 'cashbook.write' }, true) === null, 'admin 可碰 cashbook.write');
 ok(code(vr({ ladder: 'hq', dept: 'hr', title: '*', perm: 'audit.write' }, true)) === null, 'admin 可碰 audit.write');
 ok(vr({ ladder: 'hq', dept: 'hr', title: 'hm', perm: 'platform.permmap' }, true) === null, 'admin 碰鎖碼合法');

@@ -160,10 +160,10 @@ t('enabled:false 不顯示這塊', () => {
 });
 
 // ---- manifest ----
-t('perms manifest 合法、dept=hr、四個分頁', () => {
+t('perms manifest 合法、dept=it（2026-10-27 Eason：權限設定移到資訊部門）、四個分頁', () => {
   const r = validateManifest(permsManifest);
   assert.ok(r.ok, JSON.stringify(r.errors));
-  assert.equal(permsManifest.dept, 'hr');
+  assert.equal(permsManifest.dept, 'it');
   assert.deepEqual(permsManifest.requires, ['platform.permmap']);
   assert.deepEqual(permsManifest.views.map((v) => v.id), ['map', 'ex', 'stores', 'audit']);
   assert.deepEqual(permsManifest.views.slice(1).map((v) => v.requires[0]), ['platform.permmap', 'platform.permex', 'platform.permex']);

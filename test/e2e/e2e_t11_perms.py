@@ -20,7 +20,7 @@ from playwright.sync_api import sync_playwright
 
 PORT = 8802
 
-LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write', 'pnl.admin']   # 2026-10-19 加薪酬管理、2026-10-25 加收支管理（＝後端 PERM_LOCKED）
+LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin']   # 2026-10-19 加薪酬管理；2026-10-27 收支管理改回不鎖（＝後端 PERM_LOCKED）
 # 預設規則（Perms.gs PERM_DEFAULT_RULES，20 條）
 DEFAULT_RULES = (
     [('store', '', 'sm', 'audit.read.own')]
@@ -312,8 +312,8 @@ def main():
             on = lambda pg, perm: sw(pg, perm).get_attribute('aria-checked') == 'true'
             check(on(ad, 'audit.read.own') and not on(ad, 'dorm.read') and not on(ad, 'audit.read'), '店長：看自己店稽核＝開，其餘關')
             check('看自己那家店的盤點與稽核結果' in ad.inner_text('[data-perm="audit.read.own"]'), '每個功能有一句白話說明')
-            check(ad.locator('[data-role="feature-row"][data-locked="1"]').count() == 7 and ad.locator('[data-role="feature-row"][data-locked="1"] [data-act="toggle"]:not([disabled])').count() == 7,
-                  '鎖碼七列標記（含薪酬管理、收支管理）；admin 的開關不灰掉')
+            check(ad.locator('[data-role="feature-row"][data-locked="1"]').count() == 6 and ad.locator('[data-role="feature-row"][data-locked="1"] [data-act="toggle"]:not([disabled])').count() == 6,
+                  '鎖碼六列標記（含薪酬管理、損益定稿；收支管理 2026-10-27 改回不鎖）；admin 的開關不灰掉')
             check(ad.inner_text('[data-role="bar-msg"]').strip() == '沒有未儲存的變更' and ad.locator('[data-act="save"][disabled]').count() == 1, '沒有變更：儲存鈕 disabled')
             # 「也從…拿到」：人資主管同時命中「人資部・全部職稱」
             role('人資部・總監').click()
@@ -518,10 +518,18 @@ def main():
             check(tabs(hr) == ['對照表', '個別例外'], '★人資主管有「對照表」「個別例外」兩個分頁（沒有店別對照、權限異動），實際：%s' % tabs(hr))
             hr.locator('.pm-role', has=hr.locator('span', has_text='店長')).first.click()
             lk = hr.locator('[data-role="feature-row"][data-locked="1"]')
-            check(lk.count() == 7, '鎖住的七列仍顯示（含薪酬管理、收支管理）')
-            check(lk.locator('[data-act="toggle"][disabled]').count() == 7, '★鎖碼七列對非 admin：開關 disabled（含薪酬管理、收支管理）')
-            check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 7, '鎖列標示「只有系統管理員能改」')
-            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 16, '其餘 16 列可開關（含收支作廢、額外考勤核定、公告管理、貨單核對、調撥管理、績效評核四碼，後端沒鎖；收支管理 2026-10-25 起鎖碼、看損益、填損益）')
+            check(lk.count() == 6, '鎖住的六列仍顯示（含薪酬管理、損益定稿）')
+            check(lk.locator('[data-act="toggle"][disabled]').count() == 6, '★鎖碼六列對非 admin：開關 disabled（含薪酬管理、損益定稿）')
+            check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 6, '鎖列標示「只有系統管理員能改」')
+            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 17, '其餘 17 列可開關（含收支作廢、額外考勤核定、公告管理、貨單核對、調撥管理、收支管理（2026-10-27 改回不鎖）、績效評核四碼、看損益、填損益）')
+            # 2026-10-27 Eason：權限設定移到資訊部門；收支管理人資也能開
+            check(hr.locator('[data-dept="it"] [data-nav="perms"]').count() == 1 and hr.locator('[data-dept="hr"] [data-nav="perms"]').count() == 0, '★權限設定在左側「資訊部門」底下（不在人資部門）')
+            cbt = hr.locator('[data-perm="cashbook.write"]:not([data-locked]) [data-act="toggle"]:not([disabled])')
+            check(cbt.count() == 1, '★人資主管的「收支管理」開關可以按（不是鎖碼）')
+            cbt.click()
+            hr.wait_for_selector('[data-act="save"]:not([disabled])')
+            check('沒有未儲存' not in hr.inner_text('[data-role="bar-msg"]'), '按下收支管理開關 → 出現未儲存變更')
+            cbt.click()
             hr.locator('[data-perm="platform.users"] [data-act="toggle"]').click(force=True)
             check('沒有未儲存' in hr.inner_text('[data-role="bar-msg"]'), '點 disabled 的鎖碼開關沒有任何變更')
             hr.fill('[data-role="who-input"]', '店長')

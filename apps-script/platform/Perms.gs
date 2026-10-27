@@ -12,7 +12,7 @@
 var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap',
   'store.void', 'att.extra',   // 2026-10-18 營運系統：收支作廢、額外考勤核定（人資主管也能設這兩碼的個別例外，PermActions.gs）
   'payroll.write',              // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
-  'cashbook.write',             // 2026-10-24 收支管理（會計跨店查帳、作廢、月結鎖定、改科目）；2026-10-25 改為鎖碼（審查 B-01：人資可整條職稱線開給全集團現金帳）
+  'cashbook.write',             // 2026-10-24 收支管理（會計跨店查帳、作廢、月結鎖定、改科目）；2026-10-25 曾改鎖碼（審查 B-01），2026-10-27 Eason 改回不鎖碼：「將四項改成人資都能開」
   'platform.bulletin',         // 2026-10-26 公告管理（電子佈告欄的公告管理／新增公告；原本同仁名單逐人勾 BULLETIN_ADMINS，Eason：搬進權限設定、不鎖碼、人資可設）
   'platform.purchase',           // 2026-10-24 貨單核對（財務部門；不鎖碼，Eason：財務部門自動有、他可再用個別例外加人；docs/purchase-fin）
   'pnl.read', 'pnl.write', 'pnl.admin',   // 2026-10-24 損益系統：看／填（財務部門預設）／管（定稿與設定，鎖碼）
@@ -20,7 +20,7 @@ var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin'];   // 2026-10-26 績效評核（docs/eval/spec.md §2.2；預設規則在 Eval.gs EV_PERM_DEFAULT_RULES，evSetup 補進 perm_map）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
-var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'cashbook.write', 'pnl.admin'];   // 2026-10-19 加薪酬系統；2026-10-25 加收支管理
+var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin'];   // 2026-10-19 加薪酬系統；2026-10-25 加收支管理、2026-10-27 Eason 改回不鎖（人資可開，與貨單／調撥／損益同一套）
 // 2026-10-26 指定門市只看考勤（docs/att-support/spec.md §2，Eason 7A）：帶單位的功能碼 att.view@<單位代碼>，例 att.view@mala-gf。
 //   不在 PERM_GRANTABLE：對照表規則一律不收（permValidateRule_／permCompute_ 規則迴圈都只認 PERM_GRANTABLE），只能用個別例外給、只能「多給」；
 //   只有 admin 能設（不在 StoreOps.gs STORE_HR_GRANTABLE）；單位要存在、啟用、store 階梯（含央廚 ck）。效果在 StoreOps.gs（ident att.view_people、platform.att）。
@@ -628,7 +628,7 @@ function permSessionCompute_(base, staffValues) {
 
 var PERM_MSG_ADMIN_ONLY = '人資主管要請系統管理員設定';
 // 非 admin 的調動改變了對方的鎖碼：依實際變動的碼組出中文訊息（含 platform.permmap 沿用原句）
-var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理', 'payroll.write': '薪酬系統', 'cashbook.write': '收支管理', 'pnl.admin': '損益系統定稿與設定' };
+var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理', 'payroll.write': '薪酬系統', 'pnl.admin': '損益系統定稿與設定' };
 function permLockedMsg_(changedCodes) {
   if (changedCodes.indexOf('platform.permmap') !== -1) return PERM_MSG_ADMIN_ONLY;
   var ph = [];

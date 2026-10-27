@@ -256,21 +256,19 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   const { sb, sheets, P, counters } = app;
   const A = sb.__admin;
   const g = post(sb, 'permMapGet', {}, A);
-  ok(g.ok && g.data.inited && g.data.rules.length === 36 && g.data.grantable.length === 23 && g.data.grantable[18] === 'transfer.write' && g.data.grantable[13] === 'platform.bulletin' && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write,cashbook.write,pnl.admin', '3: permMapGet 回 33 條規則、14 個可給功能（含公告管理）、6 個鎖碼（2026-10-25 加收支管理）', g.data && Object.keys(g.data));
+  ok(g.ok && g.data.inited && g.data.rules.length === 36 && g.data.grantable.length === 23 && g.data.grantable[18] === 'transfer.write' && g.data.grantable[13] === 'platform.bulletin' && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write,pnl.admin', '3: permMapGet 回 36 條規則、23 個可給功能、6 個鎖碼（2026-10-27 收支管理改回不鎖）', g.data && Object.keys(g.data));
   ok(g.data.titles.some((t) => t.code === 'osv' && t.rank === 2 && t.ladder === 'office') && g.data.depts.some((d) => d.code === 'hr') && g.data.names['audit.read'], '3: permMapGet 的 titles／depts／names 有內容（osv 職級 2）');
   const sav = (tok, add, remove) => post(sb, 'permMapSave', { add: add || [], remove: remove || [] }, tok);
   const R = (ladder, dept, title, perm) => ({ ladder, dept, title, perm });
   const before = sheets.perm_map._rows().length;
 
   // 鎖碼
-  for (const perm of ['platform.permmap', 'platform.users', 'audit.write', 'platform.staff', 'cashbook.write']) {
+  for (const perm of ['platform.permmap', 'platform.users', 'audit.write', 'platform.staff']) {
     const r = sav(P.hrHm.token, [R('hq', 'hr', '*', perm)]);
     ok(r.ok === false && r.code === 'perm_locked', '3: 非 admin 新增含 ' + perm + ' 的規則 → perm_locked', r);
   }
-  // 2026-10-25 審查 B-01：人資不能把收支管理整條職稱線開給店長
-  const cbStore = sav(P.hrHm.token, [R('store', '', 'sm', 'cashbook.write')]);
-  ok(cbStore.ok === false && cbStore.code === 'perm_locked', '3: 非 admin 把 cashbook.write 開給 store／sm 整線 → perm_locked', cbStore);
-  for (const lp of ['platform.permmap', 'audit.write', 'platform.staff', 'cashbook.write']) {
+  // 2026-10-27 Eason「將四項改成人資都能開」：cashbook.write 不再是鎖碼（審查 B-01 的鎖碼撤回），這裡不再測 perm_locked
+  for (const lp of ['platform.permmap', 'audit.write', 'platform.staff']) {
     const lockedRule = g.data.rules.find((r) => r.perm === lp);
     const rmLocked = sav(P.hrHm.token, [], [lockedRule.rule_id]);
     ok(rmLocked.ok === false && rmLocked.code === 'perm_locked', '3: 非 admin 刪 ' + lp + ' 規則 → perm_locked', rmLocked);
