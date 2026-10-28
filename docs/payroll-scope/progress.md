@@ -39,6 +39,21 @@
 
 證據（逐項輸出與截圖清單）：`.superpowers/sdd/plan/task-6-report.md`（該目錄不進版控）。
 
+## 全分支 final review 修正（2026-10-29）
+
+| 編號 | 問題 | 修法 | 位置 |
+|---|---|---|---|
+| C1 | 差異清單 `payrollStaffRoster` 的 `ids` 是全集團打卡對照，帶出別店同仁姓名、員編 | 非 admin 時 `payScopeIds_` 只留本打卡店（here）或薪資歸負責門市的完整資料，其餘清空 name／emp_no（保留 state／unit_name／pay_store／pay_none／store_code／here，差異清單判斷「該停用／待確認」只用這些；main 與 staff-sync-pending 的 staffDiff 都核對過） | dzy `StaffClock.gs`（114e4fc）；minikit gas 同步（6669002） |
+| minor | spec §5「permExList 只對 admin 回」 | 人資主管本來就只拿得到 STORE_HR_GRANTABLE 三碼、其他人 no_perm；補迴歸測試鎖住看不到 `payroll.store@`（程式未改） | dzy `test/storeops.mock.test.mjs` 10p |
+| I2 | 有範圍的人可用別店員工的 emp_id 寫工時／假別事件日／主檔（特休、假別統計以 emp_id 跨店讀工時） | `payScopeGuard_`：input_set／leave_event_set 每個 emp_id 要在負責門市主檔；master_set 新編號若出現在範圍外門市的主檔或工時就擋；回 `scope_forbidden`＋`detail:'emp_out_of_scope'`＋`emp_ids`。薪資頁有範圍時「儲存工時」只送本店主檔的人（工時表含只打卡未建主檔的編號，否則會被擋） | mala-clock-in `Payroll.gs`、`payroll.html`（615025b） |
+| I3 | 守門比正規化後的店碼，handler 用原字串（`' cf '` 會寫成另一家） | 有範圍時 `body.store` 與 master 每列 store 先 trim＋大寫；`'*'`／沒欄位不動（starIdentical 仍過） | 同上 |
+| minor | proxy-hook 接受 `['']`、`['  ']` | 元素須為非空、已 trim 字串，否則 throw | minikit `proxy-hook.js`（6669002） |
+| minor | manifest 註解多一個逗號 | 刪掉 | dzy `modules/payroll/manifest.js`（e49e6f2） |
+| I1 | release.md 回退 1 沒寫「步驟 2／5 之後不安全」；檔頭說沒主機名但有網址 | 補警語；網址改 `$DZY_URL`／`$PAY_URL`（值見 dispatch-resources.md）；SHA 全部換新 | `release.md` |
+
+dzy 分支為了讓第一段（平台後端）包含 C1，重排過：`269cb42 → 114e4fc（C1）→ 9957b1d（前端）→ 5fd1872（文件）→ e49e6f2 → 本檔 commit`；舊 `134a510`／`f712981` 不再在分支上（內容相同、未推過）。
+逐項證據：`.superpowers/sdd/plan/final-fix-report.md`。
+
 ## 還沒做
 
 1. 三個 repo 推分支、開 PR、依序合併（`release.md` 步驟 0-B～4；推 main 與 clasp 要 Eason 自己按）。
@@ -52,5 +67,6 @@
 
 - 「沒有 scope 欄位＝不限制」在步驟 6 換金鑰前仍是一個洞（spec §10）；步驟 6 不要拖。
 - CF／HQ 後端各有自己的金鑰與 Payroll 部署，本案只處理光復那一把；換金鑰前要與 Claude 確認它們是否被別的路徑使用（`release.md` 步驟 6 開頭）。
-- 人資主管的 `permExList` 可能回出其他人的 `payroll.store@` 例外列（Task 5 備註；後端不在本案修）。
+- ~~人資主管的 `permExList` 可能回出其他人的 `payroll.store@` 例外列~~：查證後本來就不會（只回 STORE_HR_GRANTABLE），已補測試（final review）。
+- dzy `payroll-scope` 分支落後 main 的 `StoreOps.gs`（7f466ce），分支上與 minikit 差這一檔；合併進 main 後 18 檔相同（已用 merge-tree 驗）。
 - `payroll_master_set` 換店的既有行為（舊店列可能殘留）不在本案修（spec §10）。
