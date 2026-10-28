@@ -28,6 +28,11 @@ var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platfor
 //   admin 專屬：人資調動同仁時若會改變某人有無這種碼，也比照鎖碼擋下（permStaffChangeCheck_／permNewRowBlock_）。
 var PERM_ATT_VIEW_PREFIX = 'att.view@';
 var PERM_ATT_VIEW_RE = /^att\.view@([A-Za-z0-9_-]{1,40})$/;
+// 2026-10-29 薪酬負責門市（docs/payroll-scope/spec.md §1）：payroll.store@<薪資店代碼>，例 payroll.store@CF。同 att.view@ 的做法：
+//   不在 PERM_GRANTABLE、規則一律不收、只走個別例外、只認 add；只有 admin 能設（permAcExAuth_：人資主管只能動 STORE_HR_GRANTABLE，不含它）。
+//   平台不驗證代碼是否存在於薪資門市表（平台讀不到）；代轉時 proxyWithOperator_ 把這些代碼整理成 scope 交給薪資後端裁切。
+var PERM_PAYROLL_STORE_PREFIX = 'payroll.store@';
+var PERM_PAYROLL_STORE_RE = /^payroll\.store@([A-Z0-9]{2,12})$/;
 
 var PERM_SHEET_MAP = 'perm_map';
 var PERM_SHEET_EX = 'perm_ex';
@@ -132,6 +137,22 @@ function permAttViewUnit_(perm) {
 function permAttViewUnitOk_(unit, org) {
   var u = unit && org && org.units ? org.units[unit] : null;
   return !!(u && u.active !== false && permStr_(u.ladder) === 'store');
+}
+/** payroll.store@<薪資店代碼> → 代碼；不是這種碼（或格式不對）→ '' */
+function permPayrollStoreCode_(perm) {
+  var m = PERM_PAYROLL_STORE_RE.exec(permStr_(perm));
+  return m ? m[1] : '';
+}
+/** perms（session／me 的權限陣列）中所有 payroll.store@X 的 X：排序去重，格式不對的略過；非陣列 → [] */
+function permPayrollStoresOf_(perms) {
+  var out = [];
+  if (!Array.isArray(perms)) return out;
+  perms.forEach(function (p) {
+    var c = permPayrollStoreCode_(p);
+    if (c && out.indexOf(c) === -1) out.push(c);
+  });
+  out.sort();
+  return out;
 }
 function permIsActive_(v) {
   if (v === true) return true;
@@ -299,6 +320,8 @@ function permCompute_(input) {
     var avu = permAttViewUnit_(perm);   // 2026-10-26 只看考勤 att.view@<單位>：只走例外、單位要合法（fail closed）、只認 add
     if (avu) {
       if (!permAttViewUnitOk_(avu, org) || permStr_(x.mode).toLowerCase() !== 'add') return;
+    } else if (permPayrollStoreCode_(perm)) {   // 2026-10-29 薪酬負責門市：只走例外、只認 add
+      if (permStr_(x.mode).toLowerCase() !== 'add') return;
     } else if (!permIsGrantable_(perm)) return;
     var mode = permStr_(x.mode).toLowerCase();
     var rawUntil = permStr_(x.until);
@@ -410,9 +433,11 @@ function permValidateRule_(rule, org, isAdmin) {
 function permValidateEx_(ex, today, org) {
   ex = ex || {};
   var avu = permAttViewUnit_(ex.perm);
-  if (!avu && !permIsGrantable_(ex.perm)) return permErr_('bad_perm', '這個功能不能設成例外');
+  var psc = permPayrollStoreCode_(ex.perm);
+  if (!avu && !psc && !permIsGrantable_(ex.perm)) return permErr_('bad_perm', '這個功能不能設成例外');
   var mode = permStr_(ex.mode);
   if (mode !== 'add' && mode !== 'remove') return permErr_('bad_mode', '請選擇多給或拿掉');
+  if (psc && mode !== 'add') return permErr_('bad_mode', '薪酬負責門市只能「多給」；要收回請撤銷那筆例外');
   if (avu) {
     if (mode !== 'add') return permErr_('bad_mode', '指定門市只看考勤只能「多給」；要收回請撤銷那筆例外');
     if (!permAttViewUnitOk_(avu, org)) return permErr_('bad_target', '這個門市不存在、已停用，或不是門市／央廚');
@@ -530,6 +555,8 @@ function permName_(code) {
     try { org = typeof stfReadOrg_ === 'function' ? stfReadOrg_() : null; } catch (e) { org = null; }
     return '只看考勤（' + permAttViewLabel_(avu, org) + '）';
   }
+  var psc = permPayrollStoreCode_(code);
+  if (psc) return '薪酬負責門市（' + psc + '）';
   return code;
 }
 

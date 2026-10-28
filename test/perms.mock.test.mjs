@@ -415,5 +415,34 @@ ok(code(ve(Object.assign({}, okEx, { note: '字'.repeat(51) }))) === 'bad_note',
 ok(ve(Object.assign({}, okEx, { note: '字'.repeat(50) })) === null, '例外 note 剛好 50 字合法');
 ok(code(ve(Object.assign({}, okEx, { mode: 'grant' }))) === 'bad_mode', '例外 bad_mode（額外錯誤碼）');
 
+// ===== 薪酬負責門市 payroll.store@<薪資店代碼>（docs/payroll-scope/spec.md §1；比照 att.view@，只走例外、只認 add）=====
+{
+  const vp = (perm, mode, until) => P.permValidateEx_({ perm, mode: mode || 'add', until: until || '', note: '負責門市' }, TODAY);
+  ok(vp('payroll.store@CF') === null && vp('payroll.store@MZTJS') === null && vp('payroll.store@AB') === null && vp('payroll.store@' + 'A'.repeat(12)) === null, '薪酬負責門市：合法代碼 → null');
+  ok(['payroll.store@cf', 'payroll.store@', 'payroll.store@A B', 'payroll.store@A', 'payroll.store@' + 'A'.repeat(13), 'payroll.store@C-F', 'payroll.store', 'payroll.store@CF@X'].every((c) => (vp(c) || {}).error === 'bad_perm'), '薪酬負責門市：小寫／空／含空白／太短太長／符號 → bad_perm');
+  ok((vp('payroll.store@CF', 'remove') || {}).error === 'bad_mode', '薪酬負責門市：remove → bad_mode');
+  ok(P.permIsGrantable_('payroll.store@CF') === false && P.PERM_GRANTABLE.every((c) => c.indexOf('payroll.store') === -1), '薪酬負責門市：不在 PERM_GRANTABLE');
+  ok(P.PERM_PAYROLL_STORE_RE.test('payroll.store@CF') && !P.PERM_PAYROLL_STORE_RE.test('payroll.store@cf'), 'PERM_PAYROLL_STORE_RE 存在且認大寫');
+  ok((P.permValidateRule_({ ladder: 'hq', dept: 'fin', title: '*', perm: 'payroll.store@CF' }, VORG, true) || {}).error === 'bad_perm', '薪酬負責門市：對照表規則不收（admin 也一樣）');
+  const E = 'DZY101';
+  const hq = { unit: 'dzy-hq', dept: 'fin', title: 'hs', emp_no: E };
+  const pc = (exs, extra) => run(hq, Object.assign({ exs: exs.map((x) => Object.assign({ emp_no: E }, x)), rules: [{ rule_id: 'R1', ladder: 'hq', dept: '', title: '*', perm: 'payroll.store@CF' }] }, extra || {}));
+  ok(pc([]).perms.indexOf('payroll.store@CF') === -1, 'permCompute_：規則裡的 payroll.store@ 一律不採用');
+  const c1 = pc([{ perm: 'payroll.store@CF', mode: 'add', until: '' }, { perm: 'payroll.store@MZTJS', mode: 'add', until: '' }]);
+  ok(has(c1, 'payroll.store@CF') && has(c1, 'payroll.store@MZTJS'), 'permCompute_：例外 add → perms 含兩家');
+  ok(c1.sources.some((x) => x.perm === 'payroll.store@CF' && x.source === 'exception'), 'permCompute_：來源＝個別例外');
+  ok(!has(pc([{ perm: 'payroll.store@CF', mode: 'remove', until: '' }]), 'payroll.store@CF'), 'permCompute_：remove 不給');
+  ok(!has(pc([{ perm: 'payroll.store@cf', mode: 'add', until: '' }]), 'payroll.store@cf'), 'permCompute_：小寫代碼不給');
+  ok(!has(pc([{ perm: 'payroll.store@CF', mode: 'add', until: '2026-10-16' }]), 'payroll.store@CF'), 'permCompute_：過期不給');
+  ok(has(pc([{ perm: 'payroll.store@CF', mode: 'add', until: TODAY }]), 'payroll.store@CF'), 'permCompute_：到期日當天仍給');
+  ok(!has(pc([{ perm: 'payroll.store@CF', mode: 'add', until: '', emp_no: 'DZY999' }]), 'payroll.store@CF'), 'permCompute_：別人的例外不給');
+  // 撤銷＝列從 exs 拿掉（active=FALSE 不進 exs）
+  ok(!has(pc([]), 'payroll.store@CF'), 'permCompute_：例外撤銷（不在 exs）後不含');
+  // permPayrollStoresOf_
+  ok(eq(P.permPayrollStoresOf_(['payroll.write', 'payroll.store@MZTJS', 'payroll.store@CF', 'payroll.store@CF', 'payroll.store@cf', 'payroll.store@', 'att.view@CF']), ['CF', 'MZTJS']), 'permPayrollStoresOf_：取代碼、去重、排序、濾掉格式不對的');
+  ok(eq(P.permPayrollStoresOf_([]), []) && eq(P.permPayrollStoresOf_(null), []) && eq(P.permPayrollStoresOf_(undefined), []), 'permPayrollStoresOf_：空／null → []');
+  ok(P.permName_('payroll.store@CF').indexOf('CF') !== -1 && P.permName_('payroll.store@CF').indexOf('薪酬') !== -1, 'permName_：薪酬負責門市（CF）');
+}
+
 console.log(`\n通過 ${passed} / 失敗 ${failed}（共 ${passed + failed}）`);
 if (failed) process.exit(1);

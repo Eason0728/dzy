@@ -22,7 +22,7 @@ function ok(c, label, extra) {
 
 const sb = { console };
 vm.createContext(sb);
-['Auth.gs', 'Users.gs', 'Staff.gs', 'StaffClock.gs', 'Code.gs'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(DIR, f), 'utf8'), sb, { filename: f }));
+['Auth.gs', 'Users.gs', 'Staff.gs', 'Perms.gs', 'StaffClock.gs', 'Code.gs'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(DIR, f), 'utf8'), sb, { filename: f }));
 
 // ── 假資料 ─────────────────────────────────────────────
 const stores = [
@@ -103,12 +103,27 @@ let perms = ['platform.self'];
 sb.handleMe_ = (t) => (t === 'good' ? { ok: true, data: { perms, user: { id: 'u1', role: 'staff' } } } : { ok: false, error: '登入已失效' });
 ok(!sb.handlePayrollStaffRoster_('bad', { store: 'MZTJS' }).ok, '3a: 沒登入擋');
 ok(sb.handlePayrollStaffRoster_('good', { store: 'MZTJS' }).code === 'FORBIDDEN', '3b: 沒有 payroll.write 擋');
-perms = ['payroll.write'];
+perms = ['payroll.write', 'payroll.store@MZTJS'];   // 2026-10-29 非 admin 要有負責門市才讀得到（見 3h）
 const r = sb.handlePayrollStaffRoster_('good', { store: 'mztjs' });
 ok(r.ok && r.data.store === 'MZTJS' && r.data.clock_store === 'mztjs' && r.data.staff.length === 5, '3c: 有權限回名單（店代碼不分大小寫）');
 ok(sb.handlePayrollStaffRoster_('good', { store: '<x>' }).code === 'bad_input', '3d: 店代碼格式錯擋');
 perms = ['*'];
 ok(sb.handlePayrollStaffRoster_('good', { store: 'CF' }).ok, '3e: admin（*）可讀');
+
+// 3h. 負責門市 scope（payroll-scope spec §2；測試編號 13m）：非 admin 只能讀 payroll.store@ 清單內的門市
+perms = ['payroll.write', 'payroll.store@CF'];
+const sf = sb.handlePayrollStaffRoster_('good', { store: 'SSLGF' });
+ok(sf.ok === false && sf.code === 'FORBIDDEN' && sf.error === 'scope_forbidden', '13m-1: 只負責 CF 的人讀 SSLGF → FORBIDDEN／scope_forbidden', sf);
+ok(sb.handlePayrollStaffRoster_('good', { store: 'CF' }).ok, '13m-2: 讀 CF 放行');
+ok(sb.handlePayrollStaffRoster_('good', { store: 'cf' }).ok, '13m-3: 小寫 cf 正規化後放行');
+perms = ['payroll.write'];
+ok(sb.handlePayrollStaffRoster_('good', { store: 'CF' }).error === 'scope_forbidden', '13m-4: 沒任何負責門市 → 全擋');
+perms = ['payroll.write', 'payroll.store@MZTJS', 'payroll.store@CF'];
+ok(sb.handlePayrollStaffRoster_('good', { store: 'MZTJS' }).ok && sb.handlePayrollStaffRoster_('good', { store: 'SSLGF' }).error === 'scope_forbidden', '13m-5: 兩家都負責 → 兩家放行、第三家擋');
+perms = ['payroll.store@CF'];
+ok(sb.handlePayrollStaffRoster_('good', { store: 'CF' }).code === 'FORBIDDEN' && sb.handlePayrollStaffRoster_('good', { store: 'CF' }).error !== 'scope_forbidden', '13m-6: 只有 payroll.store@ 沒有 payroll.write → 仍 FORBIDDEN（權限先擋）');
+perms = ['*'];
+ok(['SSLGF', 'MZTJS', 'CF', 'HQ'].every((st) => sb.handlePayrollStaffRoster_('good', { store: st }).ok), '13m-7: admin（*）任何門市放行');
 const code = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
 ok((code.match(/'payrollStaffRoster'/g) || []).length === 2, '3f: Code.gs 白名單＋分派各一次');
 ok(READ_ACTIONS.platform.includes('payrollStaffRoster') && !(WRITE_ACTIONS.platform || []).includes('payrollStaffRoster'), '3g: dryrun 列為讀取');
