@@ -282,6 +282,30 @@ t('人資主管在個別例外只能選的三碼（2026-10-26 加公告管理）
   assert.deepEqual(L.HR_EX_FEATURES, ['store.void', 'att.extra', 'platform.bulletin']);
   L.HR_EX_FEATURES.forEach((p) => assert.ok(L.FEATURE_ORDER.includes(p), p));
 });
+t('薪酬負責門市（payroll.store@，docs/payroll-scope/spec.md §5）：代碼、名稱', () => {
+  assert.equal(L.payrollStoreCode('CF'), 'payroll.store@CF');
+  assert.equal(L.payrollStoreCode(' mztjs '), 'payroll.store@MZTJS');
+  ['A B', '', 'A', 'ABCDEFGHIJKLM', 'a@b', null].forEach((c) => assert.equal(L.payrollStoreCode(c), '', String(c)));
+  assert.equal(L.payrollStoreOf('payroll.store@CF'), 'CF');
+  ['att.view@ck', 'payroll.store@', 'payroll.store@cf', 'payroll.write', '', null].forEach((c) => assert.equal(L.payrollStoreOf(c), '', String(c)));
+  const stores = [{ code: 'MZTJS', name: '墨竹亭金山', active: true }];
+  assert.equal(L.featureName('payroll.store@MZTJS', null, stores), '薪酬負責門市：墨竹亭金山（MZTJS）');
+  assert.equal(L.featureName('payroll.store@CF', null, stores), '薪酬負責門市：CF');
+  assert.equal(L.featureName('payroll.store@CF'), '薪酬負責門市：CF');
+  assert.ok(!L.FEATURE_ORDER.includes('payroll.store@CF'));
+});
+t('薪資門市清單解析（殼對代轉 ns 可能多包一層 data.data）', () => {
+  const rows = [{ code: 'CF', name: '央廚', active: true }, { code: 'OLD', name: '舊店', active: false }, { code: '', name: 'x' }, null];
+  const want = [{ code: 'CF', name: '央廚', active: true }, { code: 'OLD', name: '舊店', active: false }];
+  assert.deepEqual(L.parsePayrollStores({ ok: true, data: { stores: rows } }), want);
+  assert.deepEqual(L.parsePayrollStores({ ok: true, data: { ok: true, data: { stores: rows } } }), want);
+  assert.deepEqual(L.parsePayrollStores({ ok: true, data: { data: { stores: rows } } }), want);
+  assert.equal(L.parsePayrollStores({ ok: false, error: 'x' }), null);
+  assert.equal(L.parsePayrollStores({ ok: true, data: {} }), null);
+  assert.equal(L.parsePayrollStores(null), null);
+  assert.equal(L.payrollStoreLabel({ code: 'OLD', name: '舊店', active: false }), '舊店（OLD）停用');
+  assert.equal(L.payrollStoreLabel({ code: 'CF', name: '央廚', active: true }), '央廚（CF）');
+});
 t('每個功能都有白話說明', () => L.FEATURE_ORDER.forEach((p) => assert.ok(L.FEATURE_DESC[p], p)));
 t('指定門市只看考勤（2026-10-26 docs/att-support/spec.md §2）：代碼、名稱、不在可給清單', () => {
   assert.equal(L.attViewUnitOf('att.view@mala-gf'), 'mala-gf');
