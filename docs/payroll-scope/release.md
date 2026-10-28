@@ -29,9 +29,9 @@
 
 | repo | 分支 | 內容 commit（完整 sha） |
 |---|---|---|
-| mala-clock-in | `payroll-scope` | `3a7afa3ebda9df9cde51ed50bff60565aa03608c`（Payroll.gs 守門）、`a4b1e498a67c300b0222e50819533b008713a836`（payroll.html）、`615025b761531e910cd8d7521f22d0e702dc210f`（final review：擋跨店員工編號、store 正規化）、`d1fb156cf18ffff26c200e1e4e178acb7fe3b886`（fix2：帶 scope 先驗金鑰、擋 bootstrap、獎金員工檢查、錯誤不帶試算表 ID）、`5c5e8f873de06993b5997b658dd28cb2ffd6f026`（fix2：payroll.html 差異清單帶 emp_ids、藏從打卡名冊建立；**HEAD**） |
-| dzy | `payroll-scope` | `269cb42eb10d9ca1ff6c9dbdd3e9ec0313a12520`＋`114e4fcdec0e8abd3b603df231f598577232a69f`＋`3049ad4bf3c50e29a7132f39b2109344318333f7`（平台後端＋差異清單別店只回 state／pay_store／pay_none、emp_ids 篩選，**第一段＝推到 3049ad4 為止**）、其後是前端（權限設定、perms active 字串、bridge 帶 emp_ids，第二段）與文件（2026-10-29 fix2 又重排一次：後端 fix 插在 114e4fc 之後，前端／文件 commit 重放在它之上，sha 全變；第二段 sha 一律現場取） |
-| dzy-minikit | `payroll-scope` | `8cb53b1f23d0856f8d4a0626a6224a5b04ded9fd`（代轉帶 scope＋gas 同步）、`6669002af3e4b65c75183ff3eee447e1af1e0c01`（scope 元素須非空已 trim＋StaffClock.gs 同步）、`1d08748310a9aa6be12e73677a9ec12c0d01cca7`（fix2 StaffClock.gs 同步；**HEAD**） |
+| mala-clock-in | `payroll-scope` | `1b89c09dccfb7f5e696a7fa7b5971c43d692e429`（Payroll.gs 守門）、`56df4d3fee425503619cd983dcde53838f3fe705`（payroll.html）、`5e1939e3d14853f62399327a5bc9151f0d986879`（final review：擋跨店員工編號、store 正規化）、`4dac1a1113374e62a7efd2946211fc1d47b6d503`（fix2：帶 scope 先驗金鑰、擋 bootstrap、獎金員工檢查、錯誤不帶試算表 ID）、`0df91af0cec216f6117cb504167bf30206e9c212`（fix2：payroll.html 差異清單帶 emp_ids、藏從打卡名冊建立；**HEAD**）。分支疊在 PR #12（`staff-sync-pending`，`fbafdfe`）之上，**PR #12 必須先合併**（見 0-B、步驟 4） |
+| dzy | `payroll-scope` | `269cb42eb10d9ca1ff6c9dbdd3e9ec0313a12520`＋`114e4fcdec0e8abd3b603df231f598577232a69f`＋`3049ad4bf3c50e29a7132f39b2109344318333f7`＋`6d3d526ca13faac4fc7da33da3a14f7f2b3bee1b`（平台後端＋差異清單別店只回 state／pay_store／pay_none、emp_ids 篩選；fix3：非 admin 沒帶 emp_ids 時別店編號整筆不回，**第一段＝推到 6d3d526 為止**）、其後是前端（權限設定、perms active 字串、bridge 帶 emp_ids，第二段）與文件（2026-10-29 fix2、fix3 各重排一次：後端 fix 插在第一段末端，前端／文件 commit 重放在它之上；第二段 sha 一律用 gh 顯示的 PR head，見 0-B 末的說明） |
+| dzy-minikit | `payroll-scope` | `8cb53b1f23d0856f8d4a0626a6224a5b04ded9fd`（代轉帶 scope＋gas 同步）、`6669002af3e4b65c75183ff3eee447e1af1e0c01`（scope 元素須非空已 trim＋StaffClock.gs 同步）、`1d08748310a9aa6be12e73677a9ec12c0d01cca7`（fix2 StaffClock.gs 同步）、`74383fa56c835f481f8d8a66e521fde9adfc420f`（fix3 StaffClock.gs 同步；**HEAD**） |
 
 ---
 
@@ -75,28 +75,28 @@ SQL
 dzy 要拆兩段（第一段只有平台後端，第二段其餘）：
 
 ```
-# --- mala-clock-in ---
+# --- mala-clock-in ---（分支疊在 PR #12 staff-sync-pending 之上；#12 未合併前，這個 PR 的 diff 會連 #12 的 commit 一起顯示，屬正常）
 cd ~/mala-clock-in-wt-scope
-test "$(git rev-parse HEAD)" = 5c5e8f873de06993b5997b658dd28cb2ffd6f026 && git push -u origin payroll-scope
+test "$(git rev-parse HEAD)" = 0df91af0cec216f6117cb504167bf30206e9c212 && git push -u origin payroll-scope
 gh pr create -R Eason0728/mala-clock-in --base main --head payroll-scope --title "薪酬依負責門市分權限：薪資後端守門＋薪資頁" --body "見 dzy docs/payroll-scope/spec.md §4、§6"
 
 # --- dzy-minikit ---
 cd ~/dzy-minikit-wt-scope
-test "$(git rev-parse HEAD)" = 1d08748310a9aa6be12e73677a9ec12c0d01cca7 && git push -u origin payroll-scope
+test "$(git rev-parse HEAD)" = 74383fa56c835f481f8d8a66e521fde9adfc420f && git push -u origin payroll-scope
 gh pr create -R Eason0728/dzy-minikit --base main --head payroll-scope --title "薪酬代轉強制帶 scope（負責門市）" --body "見 dzy docs/payroll-scope/spec.md §3"
 
 # --- dzy（兩段）---
 cd ~/dzy-wt-payscope
-git merge-base --is-ancestor 3049ad4bf3c50e29a7132f39b2109344318333f7 payroll-scope || echo "第一段 sha 不在分支上，停"
-git push origin 3049ad4bf3c50e29a7132f39b2109344318333f7:refs/heads/payroll-scope-backend
+git merge-base --is-ancestor 6d3d526ca13faac4fc7da33da3a14f7f2b3bee1b payroll-scope || echo "第一段 sha 不在分支上，停"
+git push origin 6d3d526ca13faac4fc7da33da3a14f7f2b3bee1b:refs/heads/payroll-scope-backend
 git push -u origin payroll-scope
 gh pr create -R Eason0728/dzy --base main --head payroll-scope-backend --title "薪酬負責門市：平台後端（第一段）" --body "只有 apps-script/platform 與測試；見 docs/payroll-scope/spec.md §1、§2"
 gh pr create -R Eason0728/dzy --base main --head payroll-scope --title "薪酬負責門市：權限設定與集團總覽分頁（第二段）" --body "前端；要等第一段合併、mini 更新之後才合併"
 gh pr list -R Eason0728/dzy --head payroll-scope-backend   # 記下 PR 號 → 下面叫 <DZY1>；第二段叫 <DZY2>
 ```
 
-> 合併一律用 `gh pr merge <號> -R Eason0728/<repo> --merge --match-head-commit <完整 40 碼 sha>`；sha 比對失敗代表分支被動過，停下來問 Claude。dzy 第二段的 sha 取 `git -C ~/dzy-wt-payscope rev-parse payroll-scope`（本檔 commit 之後的最新一筆，**每次合併前現場取**）。
-> 三個分支目前都能與 main 乾淨合併（2026-10-29 fix2 後用 `git merge-tree` 重驗）；dzy 第一段（到 3049ad4）合併進 main 後，dzy 的 18 個平台 .gs 與 minikit `apps/dzy-platform/gas/` 逐檔相同（已驗）。注意：dzy `payroll-scope` 分支本身落後 main 一筆 `StoreOps.gs`（7f466ce 考勤名單列入未開通同仁），所以「分支」上的 StoreOps.gs 與 minikit 不同，合併進 main 後才相同——2-B 的比對要對 `~/dzy` main，不要對分支。
+> 合併一律用 `gh pr merge <號> -R Eason0728/<repo> --merge --match-head-commit <完整 40 碼 sha>`；sha 比對失敗代表分支被動過，停下來問 Claude。dzy 第二段的 sha **用 gh 顯示的 PR head**：`gh pr view <DZY2> -R Eason0728/dzy --json headRefOid -q .headRefOid`，並確認等於 `git -C ~/dzy-wt-payscope rev-parse payroll-scope`（**每次合併前現場取**）。本檔就在第二段最後一筆 commit 裡，寫進自己的 sha 會改變那筆 commit 的 sha（循環），所以第二段 HEAD 不寫死；第一段（6d3d526）與 minikit、mala-clock-in 的 sha 都不含本檔，可以寫死。
+> 三個分支目前都能與 main 乾淨合併（2026-10-29 fix3 後用 `git merge-tree` 重驗）；dzy 第一段（到 6d3d526）合併進 main 後，dzy 的 18 個平台 .gs 與 minikit `apps/dzy-platform/gas/` 逐檔相同（已驗）。注意：dzy `payroll-scope` 分支本身落後 main 一筆 `StoreOps.gs`（main 上「考勤名單：還沒開通但單位職稱已填好的同仁也列入」那筆），所以「分支」上的 StoreOps.gs 與 minikit 不同，合併進 main 後才相同——2-B 的比對要對 `~/dzy` main，不要對分支。
 
 ---
 
@@ -121,8 +121,8 @@ cd ~/mala-gas/mala-clock-in
 clasp pull
 # 雲端現況應等於 main 的 Payroll.gs（pull 之後、cp 之前）；有差異就停，先問 Claude（可能有未進 git 的雲端補丁，pull 會蓋掉本機補丁）
 git -C ~/mala-clock-in-wt-scope show origin/main:apps-script/Payroll.gs | diff -q - 薪資.js && echo "雲端＝main，可以套用"
-# 套用 scope 版（來源分支必須是 5c5e8f8 的 Payroll.gs，含 final review 與 fix2 的守門）
-test "$(git -C ~/mala-clock-in-wt-scope rev-parse HEAD)" = 5c5e8f873de06993b5997b658dd28cb2ffd6f026 || echo "分支不是預期的 commit，停"
+# 套用 scope 版（來源分支必須是 0df91af 的 Payroll.gs，含 final review 與 fix2 的守門）
+test "$(git -C ~/mala-clock-in-wt-scope rev-parse HEAD)" = 0df91af0cec216f6117cb504167bf30206e9c212 || echo "分支不是預期的 commit，停"
 cp ~/mala-clock-in-wt-scope/apps-script/Payroll.gs 薪資.js
 node --check 薪資.js && echo "語法 OK"
 diff <(git -C ~/mala-clock-in-wt-scope show origin/main:apps-script/Payroll.gs) 薪資.js | grep '^<'
@@ -167,7 +167,7 @@ probe bad  payroll_month      '{"store":"SSLGF","ym":"2026-10","scope":["ZZ"]}'
 2. `error: 'scope_forbidden'`（**新版生效的證明**：舊版沒有這個錯誤，會回 ok 或別的錯誤）。
 3. `ok: True` 且 `scope: '*'`（沒帶 scope＝舊路，照常；新版多回 `scope` 欄位）。
 4. `ok: True` 且 `scope: []`（空名單回空殼）。
-5. `error: 'unauthorized'`（**fix2 生效的證明**：帶 scope 的請求先驗金鑰；615025b 那版會先守門、回 `scope_forbidden`）。
+5. `error: 'unauthorized'`（**fix2 生效的證明**：帶 scope 的請求先驗金鑰；5e1939e 那版會先守門、回 `scope_forbidden`）。
 
 任何一項不符：先重跑一次（可能是 redeploy 延遲），仍不符就走回退。
 
@@ -213,7 +213,7 @@ bash kit/bin/stop.sh apps/dzy-platform && bash kit/bin/start.sh apps/dzy-platfor
 ### 2-A　【MacBook】合併 dzy 第一段（只有平台後端）
 
 ```
-gh pr merge <DZY1> -R Eason0728/dzy --merge --match-head-commit 3049ad4bf3c50e29a7132f39b2109344318333f7
+gh pr merge <DZY1> -R Eason0728/dzy --merge --match-head-commit 6d3d526ca13faac4fc7da33da3a14f7f2b3bee1b
 cd ~/dzy && git pull --ff-only
 ```
 
@@ -226,7 +226,7 @@ cd ~/dzy-minikit-wt-scope
 git fetch origin
 for f in apps/dzy-platform/gas/*.gs; do cmp -s "$f" ~/dzy/apps-script/platform/$(basename $f) || echo "不一致：$f"; done   # 應該沒有任何輸出
 bash kit/bin/render-docs.sh dzy-platform >/dev/null 2>&1; git status --short   # 應該乾淨
-gh pr merge <MK> -R Eason0728/dzy-minikit --merge --match-head-commit 1d08748310a9aa6be12e73677a9ec12c0d01cca7
+gh pr merge <MK> -R Eason0728/dzy-minikit --merge --match-head-commit 74383fa56c835f481f8d8a66e521fde9adfc420f
 ```
 
 （`<MK>` ＝ 0-B 開的 minikit PR 號。不一致或不乾淨就停，問 Claude。）
@@ -301,7 +301,8 @@ curl -s http://127.0.0.1:8799/platform/health     # level 應為 green，version
 
 ```
 cd ~/dzy-wt-payscope && git fetch origin
-SHA=$(git rev-parse payroll-scope); echo $SHA        # 完整 40 碼
+SHA=$(gh pr view <DZY2> -R Eason0728/dzy --json headRefOid -q .headRefOid); echo $SHA   # PR head（完整 40 碼）
+test "$SHA" = "$(git rev-parse payroll-scope)" || echo "PR head 與本機分支不同，停"
 gh pr merge <DZY2> -R Eason0728/dzy --merge --match-head-commit "$SHA"
 # 等 GitHub Pages 發布（約 1～2 分鐘），輪詢到新版檔案出現：
 DZY_URL='<管理系統網址，見 dispatch-resources.md，結尾不加 />'
@@ -315,8 +316,11 @@ until curl -s "$DZY_URL/modules/perms/lib.js?t=$RANDOM$RANDOM" | grep -q payroll
 
 ## 步驟 4　薪資頁 payroll.html（mala-clock-in）
 
+前提：mala-clock-in **PR #12（`staff-sync-pending`）已先合併**——`payroll-scope` 分支疊在它上面，先合本 PR 會把 #12 的內容一起帶進 main、繞過 #12 自己的審查。
+
 ```
-gh pr merge <PAY> -R Eason0728/mala-clock-in --merge --match-head-commit 5c5e8f873de06993b5997b658dd28cb2ffd6f026
+test "$(gh pr view 12 -R Eason0728/mala-clock-in --json state -q .state)" = MERGED || echo "PR #12 還沒合併，停"
+gh pr merge <PAY> -R Eason0728/mala-clock-in --merge --match-head-commit 0df91af0cec216f6117cb504167bf30206e9c212
 PAY_URL='<薪資頁 payroll.html 網址，見 dispatch-resources.md>'
 until curl -s "$PAY_URL?t=$RANDOM$RANDOM" | grep -q 'emp_ids:empIds'; do sleep 10; done; echo "薪資頁已上線"
 ```
