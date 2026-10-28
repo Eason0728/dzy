@@ -18,7 +18,7 @@ export default {
   // 分頁＝薪酬頁原本的側欄（2026-10-20 Eason：跟「薪酬管理」同一列）；要與 bridge.js PAYROLL_PAGES 一致（test/payroll-module.test.mjs 比對）
   views: [
     { id: 'dash', name: '儀表板', requires: ['payroll.write'] },
-    { id: 'group', name: '集團總覽', requires: ['payroll.admin'] },   // 只有系統管理者（*）通過；財務同仁看不到（docs/payroll-scope/spec.md §7）,
+    { id: 'group', name: '集團總覽', requires: ['payroll.admin'] },   // 只有系統管理者（*）通過；財務同仁看不到（docs/payroll-scope/spec.md §7）
     { id: 'run', name: '薪資計算', requires: ['payroll.write'] },
     { id: 'att', name: '出勤資料', requires: ['payroll.write'] },
     { id: 'bonus', name: '獎金計算', requires: ['payroll.write'] },
