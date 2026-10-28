@@ -97,8 +97,10 @@ function payrollStoreName(code, stores) {
   return hit && hit.name ? `${hit.name}（${code}）` : code;
 }
 /** 下拉顯示：名稱（代碼），停用的加「停用」 */
+/** 薪資後端門市表的 active 存字串 'true'／'false'（也可能是布林）：只有 false／'false'（不分大小寫、前後空白）算停用 */
+function payrollStoreOff(v) { return String(v).trim().toLowerCase() === 'false'; }
 export function payrollStoreLabel(st) {
-  return `${st.name || st.code}（${st.code}）${st.active === false ? '停用' : ''}`;
+  return `${st.name || st.code}（${st.code}）${payrollStoreOff(st.active) ? '停用' : ''}`;
 }
 /**
  * payroll_store_get 的回應 → [{code,name,active}]；失敗或讀不到陣列回 null。
@@ -110,7 +112,7 @@ export function parsePayrollStores(r) {
   let arr = d && d.stores;
   if (!Array.isArray(arr) && d && d.data) { d = d.data; arr = d && d.stores; }
   if (!Array.isArray(arr)) return null;
-  return arr.filter((x) => x && typeof x === 'object' && x.code).map((x) => ({ code: String(x.code), name: x.name ? String(x.name) : '', active: x.active !== false }));
+  return arr.filter((x) => x && typeof x === 'object' && x.code).map((x) => ({ code: String(x.code), name: x.name ? String(x.name) : '', active: !payrollStoreOff(x.active) }));
 }
 
 const LADDER_FALLBACK = { store: '門市', office: '品牌辦公室', hq: '總部' };

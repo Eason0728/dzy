@@ -306,6 +306,15 @@ t('薪資門市清單解析（殼對代轉 ns 可能多包一層 data.data）', 
   assert.equal(L.payrollStoreLabel({ code: 'OLD', name: '舊店', active: false }), '舊店（OLD）停用');
   assert.equal(L.payrollStoreLabel({ code: 'CF', name: '央廚', active: true }), '央廚（CF）');
 });
+t('薪資門市 active：薪資後端門市表存字串 \'true\'／\'false\'，布林與字串都要認（fix2-7）', () => {
+  const rows = [{ code: 'A1', active: 'false' }, { code: 'A2', active: 'FALSE' }, { code: 'A3', active: ' false ' }, { code: 'A4', active: false },
+    { code: 'B1', active: 'true' }, { code: 'B2', active: true }, { code: 'B3' }, { code: 'B4', active: '' }];
+  const got = L.parsePayrollStores({ ok: true, data: { stores: rows } }).map((x) => x.code + ':' + x.active).join();
+  assert.equal(got, 'A1:false,A2:false,A3:false,A4:false,B1:true,B2:true,B3:true,B4:true');
+  assert.equal(L.payrollStoreLabel({ code: 'OLD', name: '舊店', active: 'false' }), '舊店（OLD）停用');
+  assert.equal(L.payrollStoreLabel({ code: 'OLD', name: '舊店', active: 'FALSE' }), '舊店（OLD）停用');
+  assert.equal(L.payrollStoreLabel({ code: 'CF', name: '央廚', active: 'true' }), '央廚（CF）');
+});
 t('每個功能都有白話說明', () => L.FEATURE_ORDER.forEach((p) => assert.ok(L.FEATURE_DESC[p], p)));
 t('指定門市只看考勤（2026-10-26 docs/att-support/spec.md §2）：代碼、名稱、不在可給清單', () => {
   assert.equal(L.attViewUnitOf('att.view@mala-gf'), 'mala-gf');
