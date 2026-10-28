@@ -47,6 +47,9 @@ var USR_MSG_USERNAME_TOO_LONG = '帳號最多 64 個字';
 var USR_MSG_USERNAME_BAD_START = '帳號不能用 = + - @ 開頭';
 // minikit 假試算表會把純數字字串轉成數字，存一次就登不進去（GPT 複審第 5 條，2026-10-12）
 var USR_MSG_USERNAME_NEED_LETTER = '帳號至少要有一個英文字母';
+// 系統帳不能長得像同仁編號（DZY＋數字）：會跟同仁帳號撞名、被當成同仁身分（審查 2026-10-28 #4）
+var USR_MSG_USERNAME_LOOKS_EMP = '系統帳號不能用同仁編號格式（DZY 加數字），請換一個帳號名稱';
+var USR_EMP_LIKE_RE = /^DZY\d{3,}$/i;
 var USR_MSG_NAME_TOO_LONG = '姓名最多 50 個字';
 var USR_MSG_SELF_PW_LOCKED = '嘗試次數過多，請 15 分鐘後再試';
 
@@ -358,6 +361,8 @@ function handleSaveUser_(token, payload) {
       return { ok: false, error: USR_MSG_USERNAME_TAKEN };
     }
   }
+  // 系統帳不得用同仁編號格式（放在同仁帳號檢查之後：改同仁帳號照舊回「請到同仁名單操作」）
+  if (USR_EMP_LIKE_RE.test(username)) return { ok: false, error: USR_MSG_USERNAME_LOOKS_EMP };
 
   // ── 寫入 ─────────────────────────────────────────────────
   if (isInsert) {

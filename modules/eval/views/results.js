@@ -114,7 +114,7 @@ export function mountResults(el, ctx) {
     const lock = p.finalized ? '<p class="field-hint">這一季已定稿，要修改請人資先解除定稿。</p>' : (p.canManage ? '' : '<p class="field-hint">你可以查看，但不能替這位同仁打分。</p>');
     // 只有一位同事評時後端不回逐題（避免反推是誰給的分，審查 #4）
     const itemRows = (labels, vals) => (vals ? (labels || []).map((lb, i) => `<tr><td>${esc(lb)}</td><td class="num">${r1(vals[i])}</td></tr>`).join('')
-      : (res && res.peerCount !== undefined && res.peerCount < 2 && labels && labels.length ? '<tr><td colspan="2" class="ev-note">只有一位同事評分，為了保護匿名不顯示逐題分數</td></tr>' : ''));
+      : (res && (res.itemsHidden || (res.peerCount !== undefined && res.peerCount < 2)) && labels && labels.length ? '<tr><td colspan="2" class="ev-note">評分人數不足（同事少於兩位），為了保護匿名不顯示逐題分數</td></tr>' : ''));
     let html = `<div class="card" data-role="ev-detail"><div class="card-title">${esc(p.name)}　${esc(qLabel(p.quarter))}　明細</div>${lock}`;
     if (res) {
       html += `<div class="table-wrap"><table class="table ev-table"><tbody>

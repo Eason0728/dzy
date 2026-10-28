@@ -93,7 +93,10 @@ export function mountMine(el, ctx) {
       const cur = qs[i];
       const prev = i > 0 ? qs[i - 1] : null;
       const rows = [];
-      const items = (labels, vals, max, prevVals) => (labels || []).map((lb, j) => `<tr><td>${esc(lb)}</td><td class="num">${vals ? r1(vals[j]) : '—'}</td><td class="num">${max}</td><td class="num">${vals && prevVals ? diff(vals[j], prevVals[j]) : ''}</td></tr>`).join('');
+      // 評分同事少於兩位時後端不回逐題（attItems／perfItems＝null，itemsHidden），只留小計（避免反推是誰給的分）
+      const hidden = '<tr><td colspan="4" class="ev-note">評分人數不足（同事少於兩位），為了保護匿名不顯示逐題分數</td></tr>';
+      const items = (labels, vals, max, prevVals) => (!vals && cur.itemsHidden && labels && labels.length) ? hidden
+        : (labels || []).map((lb, j) => `<tr><td>${esc(lb)}</td><td class="num">${vals ? r1(vals[j]) : '—'}</td><td class="num">${max}</td><td class="num">${vals && prevVals ? diff(vals[j], prevVals[j]) : ''}</td></tr>`).join('');
       const attMax = cur.kind === 'ft' ? 6 : 5;
       const sameLab = (a, b) => a && b && JSON.stringify(a) === JSON.stringify(b);
       rows.push(`<tr class="sub"><td colspan="4">職能態度（滿分 30 分）</td></tr>`);

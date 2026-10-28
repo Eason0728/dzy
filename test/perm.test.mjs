@@ -284,6 +284,48 @@ await (async function sectionG() {
 })();
 
 // ============================================================
+// G'. restore()：只有後端明確判定 token 失效才清 token；連線失敗／逾時／格式錯誤保留（2026-10-28 審查 #9）
+// ============================================================
+await (async function sectionGTransient() {
+  const realFetch = globalThis.fetch;
+  const keepCases = [
+    ['連線失敗（fetch 丟錯）', async () => { throw new TypeError('Failed to fetch'); }],
+    ['逾時（AbortError）', async () => { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }],
+    ['格式錯誤（回 HTML）', async () => ({ text: async () => '<!DOCTYPE html><p>Google 錯誤頁</p>' })]
+  ];
+  for (const [label, fakeFetch] of keepCases) {
+    localStorage.clear();
+    localStorage.setItem(TOKEN_KEY, 'tok-keep-on-network-error');
+    __setTransport(null);              // 走真的 defaultTransport（fetch 換成假的，不打網路）
+    globalThis.fetch = fakeFetch;
+    let r;
+    try { r = await restore(); } finally { globalThis.fetch = realFetch; }
+    assertEqual(r, false, "G'1 " + label + ' → restore() 回 false（改顯示登入頁）');
+    assertEqual(localStorage.getItem(TOKEN_KEY), 'tok-keep-on-network-error', "G'1 ★" + label + ' → token 仍在（不是後端判定失效，不清）');
+  }
+  // 注入的 transport 標了 transient → 也保留
+  localStorage.setItem(TOKEN_KEY, 'tok-keep-transient');
+  __setTransport(makeMockTransport({ me: async () => ({ ok: false, error: '連線失敗，請檢查網路', transient: true }) }));
+  assertEqual(await restore(), false, "G'2 transient:true → restore() 回 false");
+  assertEqual(localStorage.getItem(TOKEN_KEY), 'tok-keep-transient', "G'2 ★transient:true → token 仍在");
+  // 伺服器回應自己夾帶 transient:true（偽造）→ 不算，照樣清（transient 只能由 transport 自己標；2026-10-28 複驗）
+  localStorage.setItem(TOKEN_KEY, 'tok-forged-transient');
+  __setTransport(null);
+  globalThis.fetch = async () => ({ text: async () => JSON.stringify({ ok: false, error: '登入已失效，請重新登入', transient: true }) });
+  try { assertEqual(await restore(), false, "G'3 偽造 transient → restore() 回 false"); } finally { globalThis.fetch = realFetch; }
+  assertEqual(localStorage.getItem(TOKEN_KEY), null, "G'3 ★伺服器回應自帶 transient:true → token 照樣被清");
+  // 後端回的任何錯誤（失效、停用、待審核、被退回、忙碌）→ 清（往安全的方向失敗，不靠逐字比對訊息）
+  for (const err of ['unauthorized', '登入已失效，請重新登入', '帳號已停用', '帳號還在等主管審核', '帳號資料被退回，請找人資重新開通', '系統忙碌中，請稍後再試']) {
+    localStorage.setItem(TOKEN_KEY, 'tok-rejected');
+    __setTransport(makeMockTransport({ me: async () => ({ ok: false, error: err }) }));
+    assertEqual(await restore(), false, "G'4 後端回 " + err + ' → restore() 回 false');
+    assertEqual(localStorage.getItem(TOKEN_KEY), null, "G'4 ★後端回 " + err + ' → token 被清');
+  }
+  __setTransport(null);
+  localStorage.clear();
+})();
+
+// ============================================================
 // H. 舊後端若仍夾帶 secrets（換版過渡期）：前端忽略，翻遍 localStorage 也找不到
 // ============================================================
 await (async function sectionH() {
