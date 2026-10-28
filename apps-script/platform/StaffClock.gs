@@ -2608,7 +2608,16 @@ function handlePayrollStaffRoster_(token, payload) {
   if (!clkSheetsReady_()) return clkErr_('not_ready', '同仁名單還沒和打卡系統對照');
   var data = payStaffRosterBuild_(pay, clkStaffAll_(), clkMaps_(), clkStores_(), stfReadOrg_(), clkTodayOf_(new Date()));
   data.ids = payPickIds_(data.ids, payload && payload.emp_ids, data.staff);
-  if (me.data.perms.indexOf('*') === -1) data.ids = payScopeIds_(data.ids, permPayrollStoresOf_(me.data.perms));
+  if (me.data.perms.indexOf('*') === -1) {
+    var scopeL = permPayrollStoresOf_(me.data.perms);
+    data.ids = payScopeIds_(data.ids, scopeL);
+    // 沒帶 emp_ids（不是陣列）→ 別店編號整筆不回，連 state／pay_store／pay_none 都不給，免得列舉全集團打卡編號與薪資門市（fix3）
+    if (!Array.isArray(payload && payload.emp_ids)) {
+      Object.keys(data.ids).forEach(function (k) {
+        if (!data.ids[k].pay_store || scopeL.indexOf(data.ids[k].pay_store) === -1) delete data.ids[k];
+      });
+    }
+  }
   data.unit_none = PAY_UNIT_NONE.slice();
   return { ok: true, data: data };
 }
