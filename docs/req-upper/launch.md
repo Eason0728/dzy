@@ -40,7 +40,7 @@ gh pr merge 30 -R Eason0728/mala-store-ops --merge
    應包含 PR #36（req-upper）。在 apps/dzy-platform 底下跑：shasum -a 256 -c gas/SOURCE.sha256 | grep -vc ": OK"（應為 0）
    照 ~/dzy-minikit/START.txt 重啟 dzy-platform（約 2 秒停機），確認 health green。
 3. 驗新版：不帶 token 打 curl -s -XPOST http://127.0.0.1:8799/platform/api -H 'Content-Type: text/plain' -d '{"action":"attUpperGaps"}'
-   應回 unauthorized（舊版回「不支援的操作」）。
+   應回「登入已失效，請重新登入」（平台沒帶 token 的標準回應，不會出現 unauthorized 這個字；舊版回「不支援的操作」）。
 4. 門市營運系統：cd ~/dzy-store && git pull --ff-only && git log --oneline -1（應包含 mala-store-ops PR #30），照 ~/dzy-store-data/START.txt 重啟，確認 health green。
 5. .env 不要加 REQ_UPPER_ON（先不開）。今晚 00:10 每日同步會第一次把「誰是值班主管」從六店帶回來。
 出事退回：dzy-platform 回到 pull 前的 commit（git reset --hard <步驟 2 前的 hash>）再照 START.txt 重啟；備份檔還原照 ROLLBACK.md。
