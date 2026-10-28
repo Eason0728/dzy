@@ -8,6 +8,8 @@
 
 **Tech Stack:** Google Apps Script（Payroll.gs、平台 .gs 在 Mac mini 執行器上跑）、Node.js（minikit runner、node 測試）、原生 JS ES module 前端、Playwright e2e（不在本案範圍內新增）。
 
+**基底分支：** 三個 repo 都從 `payroll-staff-sync`（差異清單，Eason0728/dzy#52、mala-clock-in#11、dzy-minikit#38）開分支；那三個 PR 合併後改 rebase 到 main。
+
 **Spec:** `docs/payroll-scope/spec.md`（需求 `docs/payroll-scope/requirements.md`）
 
 ## Global Constraints
@@ -34,7 +36,7 @@
 
 ### Task 1: 薪資後端 scope 守門與回應裁切（mala-clock-in）
 
-工作目錄：`git -C ~/mala-clock-in worktree add ../mala-clock-in-wt-scope -b payroll-scope origin/main`（本機主資料夾在別的分支，不要在那裡改）。
+工作目錄：`git -C ~/mala-clock-in worktree add ../mala-clock-in-wt-scope -b payroll-scope origin/payroll-staff-sync`（本機主資料夾在別的分支，不要在那裡改）。
 
 **Files:**
 - Modify: `apps-script/Payroll.gs`（`/* ═════ Handlers` 標記之後、`const PAYROLL_HANDLERS = {` 之前加 guard 函式；在 `PAYROLL_HANDLERS` 定義之後一行包裝）
@@ -134,7 +136,7 @@ git commit -m "feat(payroll.html): 嵌入時依負責門市只顯示該店、藏
 
 - [ ] **Step 1: 寫失敗測試**：
   - perms.mock：admin 新增例外 `{emp_no:'DZY101', perm:'payroll.store@CF', mode:'add'}` → 成功；`payroll.store@cf`、`payroll.store@`、`payroll.store@A B` → 驗證錯誤；mode remove → 驗證錯誤；人資主管新增 `payroll.store@CF` → 被拒；該同仁 permCompute_ 結果含 `payroll.store@CF`；例外撤銷後不含；`until` 已過期不含。
-  - proxy-authorize 13h：admin 打 payroll → `scope==='*'`；13i：財務同仁有 payroll.write＋兩筆例外 CF、MZTJS → `scope` 深等於 `['CF','MZTJS']`；13j：沒例外 → `[]`；13k：audit／cashbook 回傳沒有 scope 欄；13l：無 payroll.write 仍 FORBIDDEN（不因有 payroll.store@ 就放行）。
+  - proxy-authorize 13h：admin 打 payroll → `scope==='*'`；13i：財務同仁有 payroll.write＋兩筆例外 CF、MZTJS → `scope` 深等於 `['CF','MZTJS']`；13j：沒例外 → `[]`；13k：audit／cashbook 回傳沒有 scope 欄；13l：無 payroll.write 仍 FORBIDDEN（不因有 payroll.store@ 就放行）；13m：`payrollStaffRoster {store:'SSLGF'}` 對只負責 CF 的財務同仁回 scope_forbidden、`{store:'CF'}` 放行、admin 任何門市都放行（本測試寫在 `test/payroll-staff-roster.test.mjs`）。
 
 - [ ] **Step 2: 跑測試確認失敗** `node test/proxy-authorize.test.mjs; node test/perms.mock.test.mjs`。
 
@@ -154,7 +156,7 @@ git commit -m "feat(platform): 薪酬負責門市個別例外 payroll.store@，�
 
 ### Task 4: Mac mini 代轉傳遞 scope（dzy-minikit）
 
-工作目錄：`git -C ~/dzy-minikit worktree add ../dzy-minikit-wt-scope -b payroll-scope origin/main`。
+工作目錄：`git -C ~/dzy-minikit worktree add ../dzy-minikit-wt-scope -b payroll-scope origin/payroll-staff-sync`。
 
 **Files:**
 - Modify: `kit/runner/proxy.js`（取授權結果的 scope，傳給 buildBody；頂部文件註解補一行）

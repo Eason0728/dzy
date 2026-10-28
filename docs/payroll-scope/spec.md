@@ -28,6 +28,7 @@
 - `proxyWithOperator_` 對 ns `payroll` 多回 **`scope`**：
   - role admin（或 perms 含 `*`）→ `'*'`
   - 其他 → perms 中所有 `payroll.store@X` 的 X 組成的陣列（排序去重，可為空陣列）
+- **平台讀取 `payrollStaffRoster {store}`**（差異清單，PR Eason0728/dzy#52 新增，直接打平台、不經代轉）：同樣要套負責門市——非 admin 時 `store` 必須在自己的 `payroll.store@` 清單內，否則回 `{ok:false, error:'scope_forbidden'}`。
 - 讀寫白名單不變（PROXY_READ_ACTIONS／PROXY_WRITE_ACTIONS.payroll＝dryrun.js，維持 proxy-authorize 測試比對）。
 - `test/proxy-authorize.test.mjs` 新增：admin→'*'；財務同仁兩筆例外→兩碼；沒例外→[]；撤銷的例外不算；其他 ns 不帶 scope。
 
