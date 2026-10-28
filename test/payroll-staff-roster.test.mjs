@@ -124,6 +124,24 @@ perms = ['payroll.store@CF'];
 ok(sb.handlePayrollStaffRoster_('good', { store: 'CF' }).code === 'FORBIDDEN' && sb.handlePayrollStaffRoster_('good', { store: 'CF' }).error !== 'scope_forbidden', '13m-6: 只有 payroll.store@ 沒有 payroll.write → 仍 FORBIDDEN（權限先擋）');
 perms = ['*'];
 ok(['SSLGF', 'MZTJS', 'CF', 'HQ'].every((st) => sb.handlePayrollStaffRoster_('good', { store: st }).ok), '13m-7: admin（*）任何門市放行');
+// 3i. 負責門市不得看到別店同仁姓名／員編（final review C1）：ids 是全集團對照，非 admin 只留本店打卡店或薪資歸負責門市的人
+perms = ['payroll.write', 'payroll.store@CF'];
+const cfr = sb.handlePayrollStaffRoster_('good', { store: 'CF' });
+const cfJson = JSON.stringify(cfr);
+const otherNames = ['甲一', '乙二', '丙三', '丁四', '戊五', '己六', '庚七', '辛八', '壬九', '子十一'];
+const otherEmps = ['DZY001', 'DZY002', 'DZY003', 'DZY004', 'DZY005', 'DZY006', 'DZY007', 'DZY008', 'DZY009', 'DZY011'];
+ok(cfr.ok && otherNames.every((n) => !cfJson.includes(n)), '13n-1: 只負責 CF → 回傳 JSON 不含任何非 CF 同仁姓名', otherNames.filter((n) => cfJson.includes(n)));
+ok(otherEmps.every((e) => !cfJson.includes(e)), '13n-2: 只負責 CF → 回傳 JSON 不含任何非 CF 同仁員編', otherEmps.filter((e) => cfJson.includes(e)));
+ok(cfr.data.ids.GF03 && cfr.data.ids.GF03.pay_store === 'SSLGF' && cfr.data.ids.GF03.state === 'active' && cfr.data.ids.GF03.here === false
+  && cfr.data.ids.GF03.name === '' && cfr.data.ids.GF03.emp_no === '', '13n-3: 別店編號仍留 state／pay_store／here（差異清單判斷用），只清姓名員編', cfr.data.ids.GF03);
+ok(cfr.data.ids['HQ-10'] && cfr.data.ids['HQ-10'].here === true && cfr.data.ids['HQ-10'].emp_no === 'DZY010', '13n-4: 本打卡店（here）的編號保留完整', cfr.data.ids['HQ-10']);
+perms = ['payroll.write', 'payroll.store@MZTJS', 'payroll.store@SSLGF'];
+const jsr = sb.handlePayrollStaffRoster_('good', { store: 'MZTJS' });
+ok(jsr.data.ids.GF03.name === '戊五' && jsr.data.ids.GF03.emp_no === 'DZY005', '13n-5: 薪資歸負責門市（SSLGF）的別店編號保留完整', jsr.data.ids.GF03);
+ok(jsr.data.ids.MZTGF01.name === '' && jsr.data.ids['HQ-07'].name === '', '13n-6: 非負責門市的別店編號清空姓名');
+perms = ['*'];
+const adm = sb.handlePayrollStaffRoster_('good', { store: 'CF' });
+ok(JSON.stringify(adm.data.ids) === JSON.stringify(build('CF').ids), '13n-7: admin（*）ids 不變（含別店姓名）');
 const code = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
 ok((code.match(/'payrollStaffRoster'/g) || []).length === 2, '3f: Code.gs 白名單＋分派各一次');
 ok(READ_ACTIONS.platform.includes('payrollStaffRoster') && !(WRITE_ACTIONS.platform || []).includes('payrollStaffRoster'), '3g: dryrun 列為讀取');
