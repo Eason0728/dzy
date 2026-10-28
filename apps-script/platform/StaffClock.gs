@@ -2469,7 +2469,8 @@ function clkAfterDisable_(empNo, byLabel) {
 // 判斷「這個人屬於哪家薪酬門市」一律看同仁名單的所屬單位（不看打卡名冊）：去別店支援、共用打卡機的人才不會被列成新人。
 
 /** 共用總部打卡（hq）的單位，薪資分屬不同薪酬門市：單位 → 薪酬店代碼，優先於 clock_stores.payroll_store。
- *  yiwu-hq（一悟品牌辦公室）目前沒有薪酬門市（等 Eason 定）：列在 PAY_UNIT_NONE＝不出現在任何一家的名單。 */
+ *  yiwu-hq（一悟品牌辦公室）薪資先不建立（Eason 2026-10-28）：列在 PAY_UNIT_NONE＝不出現在任何一家的名單，
+ *  ids 標 pay_none，薪酬頁顯示「一悟品牌辦公室尚未設薪資門市」。不要建薪酬門市、不要建主檔。 */
 var PAY_UNIT_STORE = { 'dzy-hq': 'HQ', 'mala-hq': 'SSLHQ', 'mzt-hq': 'MZTHQ' };
 var PAY_UNIT_NONE = ['yiwu-hq'];
 
@@ -2520,7 +2521,7 @@ function payStaffState_(status, last, today) {
  * 回 { store, clock_store, clock_store_name, staff:[…歸這家薪酬門市的人], ids:{打卡編號: …} }
  *   staff[i]：{ emp_no, name, state, last_day, hire_date, unit, unit_name, title, title_name, emp_id }（emp_id＝該打卡店 confirmed 對照；沒有＝''）
  *   ids：該打卡店（不含 rejected）＋其他店的對照，薪資主檔的編號拿來查「這個人現在在哪、還在不在職」；同編號以該打卡店優先
- *   ids[eid]：{ emp_no, name, state, unit_name, pay_store, store_code, here }（here＝在這家打卡店）
+ *   ids[eid]：{ emp_no, name, state, unit_name, pay_store, pay_none, store_code, here }（here＝在這家打卡店；pay_none＝單位在 PAY_UNIT_NONE）
  */
 function payStaffRosterBuild_(pay, staffAll, maps, stores, org, today) {
   var p = stfStr_(pay).toUpperCase();
@@ -2553,7 +2554,7 @@ function payStaffRosterBuild_(pay, staffAll, maps, stores, org, today) {
     var s = byEmp[m.emp_no];
     var v = s ? view(s) : null;
     ids[m.emp_id] = { emp_no: m.emp_no, name: v ? v.name : '', state: v ? v.state : 'missing', unit_name: v ? v.unit_name : '',
-      pay_store: v ? v.pay_store : '', store_code: m.store_code, here: here };
+      pay_store: v ? v.pay_store : '', pay_none: !!(v && PAY_UNIT_NONE.indexOf(v.unit) !== -1), store_code: m.store_code, here: here };
   }
   maps.forEach(function (m) { if (m.store_code === csCode) put(m, true); });
   maps.forEach(function (m) { if (m.store_code !== csCode) put(m, false); });

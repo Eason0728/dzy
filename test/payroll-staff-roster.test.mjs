@@ -89,6 +89,7 @@ ok(!js.ids.GF99, '2e: rejected 對照不列');
 ok(js.ids.GF03 && js.ids.GF03.here === false, '2f: 別家打卡店的編號也查得到（here=false）');
 ok(build('SSLHQ').staff.map((s) => s.emp_no).join() === 'DZY007' && build('MZTHQ').staff.map((s) => s.emp_no).join() === 'DZY008'
   && build('HQ').staff.map((s) => s.emp_no).join() === 'DZY010', '2g: 總部三家各自只有自己的人，一悟那位哪裡都不出現');
+ok(build('HQ').ids['HQ-09'].pay_none === true && build('HQ').ids['HQ-09'].pay_store === '' && build('HQ').ids['HQ-10'].pay_none === false, '2g2: 一悟那位的編號標 pay_none（薪酬頁顯示尚未設薪資門市）');
 ok(build('SSLHQ').staff[0].emp_id === 'HQ-07', '2h: SSLHQ 的人用 hq 打卡店的編號');
 ok(build('MZTGF').staff.map((s) => s.emp_no + ':' + s.emp_id).join() === 'DZY006:MZTGF01', '2i: 墨竹亭光復用 MZTGF 編號（不是金山那個）');
 ok(build('HQ').ids['HQ-10'].here === true, '2j: 同一編號在兩店都有時以這家打卡店優先');
