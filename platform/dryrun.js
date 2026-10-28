@@ -36,7 +36,9 @@ export const READ_ACTIONS = {
     // 營運巡檢（2026-10-27，docs/inspection/spec.md）：純讀取；inspSetup／inspSubmit／inspVoid／inspBankSave 不列（寫入，試跑會攔）
     'inspMe', 'inspList', 'inspGet', 'inspBankGet',
     // 值班主管本人的申請改由上層審（2026-10-28，docs/req-upper）：找不到上層的提醒，純讀取
-    'attUpperGaps'],
+    'attUpperGaps',
+    // 薪酬管理差異清單（2026-10-28）：依薪酬門市列同仁名單，純讀取；帶入／停用走 payroll_master_set（已在 WRITE_ACTIONS.payroll）
+    'payrollStaffRoster'],
   audit: ['getAll'],
   dorm: ['rooms', 'list', 'contract', 'handover'],
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）
