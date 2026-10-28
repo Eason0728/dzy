@@ -380,7 +380,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(!has(sm, 'DZY004') && !has(sm, 'DZY005') && !has(sm, 'DZY006') && !has(sm, 'DZY007'), '3 別店（含央廚）的人不出現');
   ok(has(sm, 'DZY008'), '3 核定工時：店長核同店所有打卡的人（含同店另一位店長；2026-10-21）');
   ok(!has(app.ident('DZY001').att.req_people.map((x) => x.sub), 'DZY008') && !has(app.ident('DZY001').att.req_people.map((x) => x.sub), 'DZY001'), '3 申請：店長不能核同店另一位店長、也不能核自己');
-  ok(!has(sm, 'DZY030') && !has(sm, 'DZY031'), '3 已離職、待審的人不出現');
+  ok(!has(sm, 'DZY030') && has(sm, 'DZY031'), '3 已離職不出現；待審（還沒開通）照樣要核（2026-10-29 Eason 選 A，原為不出現）');
   ok(!has(sm, 'DZY010') && !has(sm, 'DZY020'), '3 店長看不到品牌辦公室／總部的人');
   ok(app.people('DZY001').every((x) => x.clock === 'mztgf'), '3 店長名單只有本店打卡店別');
   ok(has(subs('DZY006'), 'DZY006') && has(subs('DZY006'), 'DZY007') && !has(subs('DZY006'), 'DZY001'), '3 央廚店長比照：含自己與央廚人員');
@@ -405,7 +405,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const NOATT = ['DZY010', 'DZY014', 'DZY020', 'DZY022', 'DZY025', 'DZY026', 'DZY027'];
   ok(NOATT.every((e) => !has(hr, e)), '3 ★責任制職稱（odir hm ceo gm chair）不出現在人資主管名單');
   const admin = app.subs('U:a001');
-  ok(NOATT.every((e) => !has(admin, e)) && has(admin, 'DZY001') && has(admin, 'DZY024') && !has(admin, 'DZY030') && !has(admin, 'DZY031'), '3 admin 名單：全部要考勤的人、責任制不出現、離職待審不出現');
+  ok(NOATT.every((e) => !has(admin, e)) && has(admin, 'DZY001') && has(admin, 'DZY024') && !has(admin, 'DZY030') && has(admin, 'DZY031'), '3 admin 名單：全部要考勤的人、責任制與離職不出現、待審出現（2026-10-29）');
   ok(eq(admin.slice().sort(), hr.slice().sort()), '3 admin 與人資主管名單是同一批人（都是全部要考勤的人）');
   // 純函式：人資主管旗標＋本人是要考勤的人 → 仍不含自己
   const org = app.sb.stfReadOrg_();
@@ -1025,6 +1025,44 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const pp = [me, { emp: 'DZY103', status: 'unclaimed', unit: '', dept: '', title: '' }];
   ok(eq(app.sb.storeAttTargets_(me, { admin: true }, pp, org, home).map((x) => x.emp), ['DZY103']), '7c 不能核自己的規則照舊（推算的人也不含自己）');
   ok(app.sb.storeAttTargets_({ emp: 'DZY101', status: 'active', unit: 'mala-gf', dept: '', title: 'sm' }, {}, pp, org, null).length === 0, '7c 沒給 home 對照就不推算');
+})();
+
+// ============================================================
+// 7c2. 還沒開通但單位職稱已填好（2026-10-29 Eason 選 A）：央廚考勤只剩已開通的 3 人 → 未認領／待審／退回都要列，停用不列
+// ============================================================
+(() => {
+  const E = (emp, name, status, unit, title) => [emp, name, unit, '', title, status, '2026-03-01'];
+  const cast = [
+    E('DZY201', '央廚廠長', 'active', 'ck', 'fm'),
+    E('DZY202', '央廚已開通', 'active', 'ck', 'pt'),
+    E('DZY203', '央廚未認領', 'unclaimed', 'ck', 'pt'),
+    E('DZY204', '央廚待審', 'pending', 'ck', 'ft'),
+    E('DZY205', '央廚被退回', 'rejected', 'ck', 'pt'),
+    E('DZY206', '央廚離職', 'disabled', 'ck', 'pt'),
+    E('DZY207', '光復未認領', 'unclaimed', 'mala-gf', 'pt'),
+    E('DZY208', '光復店長', 'active', 'mala-gf', 'sm'),
+    E('DZY209', '央廚未認領責任制', 'unclaimed', 'ck', 'hm'),
+    E('DZY220', '人資主管', 'active', 'dzy-hq', 'hm')
+  ];
+  cast[9][3] = 'hr';
+  const app = world(cast, { pilot: PERMS_ALL_PILOT });
+  const sc = app.sheets.staff_clock._data;
+  sc.length = 1;
+  const homeOf = { DZY201: 'cf', DZY202: 'cf', DZY203: 'cf', DZY204: 'cf', DZY205: 'cf', DZY206: 'cf', DZY207: 'gf', DZY208: 'gf', DZY209: 'cf' };
+  Object.keys(homeOf).forEach((e) => sc.push([e, homeOf[e], homeOf[e].toUpperCase() + e.slice(3), 'home', 'confirmed', 'created', 'TRUE', '', '', '', '']));
+  const fm = app.subs('DZY201');
+  ok(['DZY201', 'DZY202', 'DZY203', 'DZY204', 'DZY205'].every((e) => has(fm, e)), '7c2 廠長核定工時名單含未認領、待審、被退回的央廚同仁', fm);
+  ok(!has(fm, 'DZY206') && !has(fm, 'DZY209') && !has(fm, 'DZY207'), '7c2 離職、責任制、別單位不列', fm);
+  ok(has(app.subs('DZY208'), 'DZY207') && !has(app.subs('DZY208'), 'DZY203'), '7c2 門市同一規則：光復店長看得到光復未認領、看不到央廚的');
+  const hr = app.subs('DZY220'), adm = app.subs('U:a001');
+  ok(['DZY203', 'DZY204', 'DZY205', 'DZY207'].every((e) => has(hr, e) && has(adm, e)) && !has(hr, 'DZY206') && !has(adm, 'DZY206'), '7c2 人資主管與管理員也看得到，離職照舊不列', { hr, adm });
+  const reqFm = app.ident('DZY201').att.req_people.map((x) => x.sub);
+  ok(['DZY203', 'DZY204', 'DZY205'].every((e) => reqFm.indexOf(e) !== -1), '7c2 申請審核名單也一樣列入', reqFm);
+  const org = app.sb.stfReadOrg_();
+  const p203 = app.sb.storePeople_().find((x) => x.emp === 'DZY203');
+  const t203 = app.sb.storeEffectiveTarget_(p203, org, app.sb.storeHomeFn_());
+  ok(t203 && t203.status === 'active' && t203.notClaimed === 'unclaimed' && t203.inferred !== true && t203.unit === 'ck', '7c2 以正式資料列入（不是推算），原狀態記在 notClaimed', t203);
+  ok(p203.status === 'unclaimed', '7c2 不改到原本的同仁物件');
 })();
 
 // ============================================================
