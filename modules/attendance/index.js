@@ -5,7 +5,7 @@
 'use strict';
 
 import { createEmbed } from './embed.js';
-import { unwrap, toAlerts, toBadge } from './alerts.js';
+import { unwrap, toAlerts, toBadge, toGapAlert } from './alerts.js';
 
 const embed = createEmbed({
   title: '考勤管理',
@@ -20,8 +20,18 @@ async function fetchAlerts(ctx) {
   try { return unwrap(await ctx.api.call('attendance', 'attAlerts')); } catch (e) { return null; }
 }
 
+// 值班主管本人的申請找不到上層（2026-10-28，docs/req-upper）：平台後端 attUpperGaps，只有人資主管／管理員回得出內容；失敗當沒有
+async function fetchGaps(ctx) {
+  try { return toGapAlert(await ctx.api.call('platform', 'attUpperGaps')); } catch (e) { return null; }
+}
+
 export default {
   ...embed,
-  async alerts(ctx) { return toAlerts(await fetchAlerts(ctx)); },
+  async alerts(ctx) {
+    const [data, gap] = await Promise.all([fetchAlerts(ctx), fetchGaps(ctx)]);
+    const out = toAlerts(data);
+    if (out && gap && !(data && data.pending === true)) out.push(gap);
+    return out;
+  },
   async badge(ctx) { return toBadge(await fetchAlerts(ctx)); }
 };

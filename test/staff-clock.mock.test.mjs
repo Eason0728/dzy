@@ -168,6 +168,7 @@ function rowsOf(app, name) {
   return rows.slice(1).map((r) => Object.fromEntries(head.map((h, i) => [h, r[i] === undefined ? '' : r[i]])));
 }
 const maps = (app) => rowsOf(app, 'staff_clock');
+const eq6 = (a, b) => (b === undefined ? JSON.stringify(a) === JSON.stringify(['cf', 'gf', 'hq', 'mztgf', 'mztjs', 'mztlzl']) : JSON.stringify(a) === JSON.stringify(b));
 const jobs = (app) => rowsOf(app, 'clock_outbox');
 const staffOf = (app, emp) => rowsOf(app, 'staff').find((r) => r.emp_no === emp);
 const mapOf = (app, emp, store) => maps(app).filter((m) => m.emp_no === emp && (!store || m.store_code === store));
@@ -207,7 +208,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const { sb, sheets } = app;
   sb.setupStaff(); sb.setupStaff();
   ok(sheets.clock_stores._rows()[0].join() === 'store_code,store_name,unit_code,enabled,payroll_store', 'B1 clock_stores 表頭逐字（含 payroll_store）');
-  ok(sheets.staff_clock._rows()[0].join() === 'emp_no,store_code,emp_id,role,state,source,roster_active,last_punch,confirmed_by,confirmed_at,updated_at,line_h,line_kid,line_bound_at,line_ok_at', 'B1 staff_clock 表頭逐字（spec §2.3＋LINE 認身分四欄）');
+  ok(sheets.staff_clock._rows()[0].join() === 'emp_no,store_code,emp_id,role,state,source,roster_active,last_punch,confirmed_by,confirmed_at,updated_at,line_h,line_kid,line_bound_at,line_ok_at,duty_mgr', 'B1 staff_clock 表頭逐字（spec §2.3＋LINE 認身分四欄＋duty_mgr）');
   ok(sheets.clock_outbox._rows()[0].join() === 'job_id,kind,emp_no,store_code,emp_id,name,op_id,expect_json,state,tries,next_at,lease_until,last_error,created_at,updated_at,done_at', 'B1 clock_outbox 表頭逐字（spec §2.4 v2）');
   const stores = sheets.clock_stores._rows().slice(1);
   ok(stores.length === 6 && stores.map((r) => r[0]).join() === 'gf,mztjs,mztgf,mztlzl,hq,cf', 'B1 預設六列、store_code 照契約', stores);
@@ -491,6 +492,90 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   sb.clockOutboxClaim_(nowT(1));
   sb.clockOutboxDone_(c3.data.job_id, { ok: true, emp_id: '含空 白' }, nowT(2));
   ok(jobs(app).find((j) => j.job_id === c3.data.job_id).state === 'failed' && mapOf(app, c3.data.emp_no).length === 0, 'B4 打卡端回的編號格式不對 → failed，不寫對照');
+})();
+
+// ============================================================
+// 值班主管本人的申請改由上層審（2026-10-28，docs/req-upper）：duty_mgr 欄與 clockUpperEmps_
+// ============================================================
+(() => {
+  const app = fresh();
+  const { sb, sheets } = app;
+  const p = (n) => claimApprove(app, n, 'pw-' + n + '-0001', MZT_GF('pt')).emp;
+  const eA = p('值班甲'), eB = p('一般乙'), eC = p('離職丙');
+  giveMap(app, eA, 'mztgf', 'G1', 'home');
+  giveMap(app, eA, 'mztjs', 'J1', 'support', { source: 'name_match' });
+  giveMap(app, eA, 'hq', 'H1', 'support', { source: 'name_match' });
+  giveMap(app, eB, 'mztgf', 'G2', 'home');
+  giveMap(app, eC, 'mztgf', 'G3', 'home');
+  const dutyOf = (store, eid) => maps(app).find((x) => x.store_code === store && x.emp_id === eid).duty_mgr;
+  // 沒套用過名冊：舊列沒有 duty_mgr → 空 → 名單空
+  const u0 = sb.clockUpperEmps_();
+  ok(u0.ok === true && eq6(Object.keys(u0.stores).sort()) && Object.keys(u0.stores).every((k) => Array.isArray(u0.stores[k]) && u0.stores[k].length === 0), 'DM 還沒同步 duty_mgr：六店代碼都有 key、全是空陣列', u0);
+  sb.clockRosterApply_('mztgf', [rosterRow('G1', '值班甲', { duty_mgr: true }), rosterRow('G2', '一般乙'), rosterRow('G3', '離職丙', { duty_mgr: 'TRUE' })], undefined, nowT(0));
+  ok(dutyOf('mztgf', 'G1') === 'TRUE' && dutyOf('mztgf', 'G2') !== 'TRUE' && dutyOf('mztgf', 'G3') === 'TRUE', 'DM clockRosterApply_ 依 svc_roster 列的 duty_mgr 寫入（true／"TRUE"→TRUE；欄位不存在→非 TRUE）', maps(app).map((x) => x.emp_id + ':' + x.duty_mgr));
+  const u1 = sb.clockUpperEmps_();
+  ok(eq6(u1.stores.mztgf, ['G1', 'G3']) && eq6(u1.stores.mztjs, ['J1']) && eq6(u1.stores.hq, ['H1']) && u1.stores.gf.length === 0 && u1.stores.cf.length === 0 && u1.stores.mztlzl.length === 0,
+    'DM ★clockUpperEmps_：值班主管在每一店所有 confirmed 對照的 emp_id（含不是值班那幾店）；一般人不在', u1.stores);
+  // 名冊上停用 → roster_active FALSE：不再算（G3 這筆停用，他在別店也沒有對照 → 消失）
+  sb.clockRosterApply_('mztgf', [rosterRow('G1', '值班甲', { duty_mgr: true }), rosterRow('G2', '一般乙'), rosterRow('G3', '離職丙', { active: false, duty_mgr: true })], undefined, nowT(1));
+  ok(eq6(sb.clockUpperEmps_().stores.mztgf, ['G1']), 'DM roster_active=FALSE 的值班對照不算', sb.clockUpperEmps_().stores.mztgf);
+  // 取消值班 → 名單剔除（連同他在別店的對照）
+  sb.clockRosterApply_('mztgf', [rosterRow('G1', '值班甲'), rosterRow('G2', '一般乙')], undefined, nowT(2));
+  ok(dutyOf('mztgf', 'G1') === 'FALSE', 'DM 下次同步 duty_mgr=FALSE → 改回 FALSE');
+  const u2 = sb.clockUpperEmps_();
+  ok(Object.keys(u2.stores).every((k) => u2.stores[k].length === 0), 'DM 取消值班後名單清空', u2.stores);
+  // 另一店也標值班：該人所有 confirmed 對照都進名單；pending 的不進
+  giveMap(app, eB, 'mztjs', 'J2', 'support', { state: 'suggested' });
+  sb.clockRosterApply_('mztjs', [rosterRow('J1', '值班甲'), rosterRow('J2', '一般乙', { duty_mgr: true })], undefined, nowT(3));
+  const u3 = sb.clockUpperEmps_();
+  ok(u3.stores.mztjs.indexOf('J2') === -1, 'DM suggested 對照不進名單（沒生效）', u3.stores);
+  // 值班主管沒有 confirmed 對照：duty_mgr=TRUE 的非 confirmed 列、以及同步記下的「打卡上有沒對照」且 duty 的帳號 → clockUpperEmps_.unmapped 計數
+  {
+    const a5 = fresh();
+    const eX = claimApprove(a5, '未對照甲', 'pw-un-0001', MZT_GF('pt')).emp;
+    giveMap(a5, eX, 'mztgf', 'U1', 'home', { state: 'suggested' });
+    giveMap(a5, eX, 'mztjs', 'U2', 'home', { state: 'suggested', roster_active: 'FALSE' });
+    const r5 = a5.sb.clockRosterApply_('mztgf', [rosterRow('U1', '未對照甲', { duty_mgr: true }), rosterRow('U9', '沒對照乙', { duty_mgr: true }), rosterRow('U8', '沒對照丙')], undefined, nowT(0));
+    ok(r5.ok, 'DM unmapped 套用成功', r5);
+    const up = a5.sb.clockUpperEmps_();
+    ok(up.unmapped === 2 && eq6(up.stores.mztgf, []), 'DM ★clockUpperEmps_.unmapped＝suggested 的值班列(1)＋同步記下沒對照的值班帳號(1)；roster_active=FALSE 與非值班不算', up);
+    const un = a5.sb.clkDutyUnmapped_(a5.sb.clkMaps_()).map((x) => x.store_code + ':' + x.emp_id + ':' + x.reason).sort();
+    ok(eq6(un, ['mztgf:U1:unmapped', 'mztgf:U9:unmapped']), 'DM clkDutyUnmapped_ 項目形狀（無姓名）', un);
+    const al = post(a5.sb, 'clockAlerts', {}, a5.tok);
+    ok(al.data.unmapped.some((u) => u.emp_id === 'U9') && al.data.unmapped.some((u) => u.emp_id === 'U8'), 'DM 原有 alerts.unmapped 不受影響（duty 欄不外洩影響）');
+    ok(a5.sb.clockUpperEmps_().unmapped === 2 && u0.unmapped === 0, 'DM 沒有時 unmapped=0');
+  }
+  // 不進分派表
+  ok(post(sb, 'clockUpperEmps_', {}, app.tok).ok === false && post(sb, 'clockUpperEmps', {}, app.tok).ok === false, 'DM clockUpperEmps_ 不進 Code.gs 分派表');
+  // 舊 15 欄表直接跑 clockRosterApply_（沒先跑 setupStaff）→ 自動補成 16 欄、duty_mgr 正確、其他欄不動
+  {
+    const a3 = fresh();
+    a3.sb.setupStaff();
+    const sd = a3.sheets.staff_clock._data;
+    sd[0] = sd[0].slice(0, 15);
+    const e3 = claimApprove(a3, '舊表甲', 'pw-old-0001', MZT_GF('pt')).emp;
+    sd.push([e3, 'mztgf', 'G1', 'home', 'confirmed', 'created', 'TRUE', '', 'tester', 'c0', 'u0', 'h', 'k', 'b', 'o']);
+    const r3 = a3.sb.clockRosterApply_('mztgf', [rosterRow('G1', '舊表甲', { duty_mgr: true, last_punch: '' })], undefined, nowT(0));
+    const row = sd[sd.length - 1];
+    ok(r3.ok && sd[0].length === 16 && sd[0][15] === 'duty_mgr' && row[15] === 'TRUE', 'DM ★舊 15 欄表直接 clockRosterApply_：補成 16 欄、duty_mgr=TRUE', [r3, sd[0], row]);
+    ok(row.slice(0, 15).join('|') === [e3, 'mztgf', 'G1', 'home', 'confirmed', 'created', 'TRUE', '', 'tester', 'c0', 'u0', 'h', 'k', 'b', 'o'].join('|') || row[10] !== 'u0', 'DM 其他欄不動（updated_at 可更新）');
+    ok(row[0] === e3 && row[1] === 'mztgf' && row[2] === 'G1' && row[3] === 'home' && row[8] === 'tester' && row[9] === 'c0', 'DM 識別欄與確認欄不動');
+    // 表頭亂掉 → 不寫
+    const a4 = fresh();
+    a4.sb.setupStaff();
+    a4.sheets.staff_clock._data[0][3] = 'zzz';
+    const r4 = a4.sb.clockRosterApply_('mztgf', [rosterRow('G1', 'x')], undefined, nowT(0));
+    ok(r4.ok === false, 'DM 表頭不一致 → 拒絕寫入', r4);
+  }
+  // 舊表（沒有 duty_mgr 表頭）→ clkSetup_ 補表頭、不動既有資料
+  const app2 = fresh();
+  app2.sb.setupStaff();
+  const head = app2.sheets.staff_clock._data[0];
+  const old = head.slice(0, 15);
+  app2.sheets.staff_clock._data[0] = old.slice();
+  app2.sheets.staff_clock._data.push(['DZY001', 'gf', 'E1', 'home', 'confirmed', 'created', 'TRUE', '', '', '', '', '', '', '', '']);
+  app2.sb.clkSetup_(app2.sheets.staff_clock ? { getSheetByName: (n) => app2.sheets[n] || null } : null);
+  ok(app2.sheets.staff_clock._data[0].join() === head.join() && app2.sheets.staff_clock._data[1][0] === 'DZY001', 'DM 舊表（缺 duty_mgr）自動補表頭、資料列不動', app2.sheets.staff_clock._data[0]);
 })();
 
 // ============================================================
@@ -1050,7 +1135,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
 (() => {
   const app = fresh();
   const { sb, tok } = app;
-  const internals = ['clockOutboxClaim_', 'clockOutboxDone_', 'clockRosterApply_', 'clockDailyApply_', 'clockMapBuildApply_', 'clockAutoSupportCheck_', 'clockAutoSupportRecord_', 'clkAfterConfirm_', 'clkSetup_'];
+  const internals = ['clockOutboxClaim_', 'clockOutboxDone_', 'clockRosterApply_', 'clockDailyApply_', 'clockMapBuildApply_', 'clockAutoSupportCheck_', 'clockAutoSupportRecord_', 'clkAfterConfirm_', 'clkSetup_', 'clockUpperEmps_'];
   const UNKNOWN = '不支援的操作';
   internals.forEach((fn) => {
     const r1 = post(sb, fn, {}, tok);

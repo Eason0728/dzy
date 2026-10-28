@@ -26,7 +26,9 @@ var CLK_MAP_BASE = ['emp_no', 'store_code', 'emp_id', 'role', 'state', 'source',
   'last_punch', 'confirmed_by', 'confirmed_at', 'updated_at'];
 // LINE 認身分（docs/line-auth/spec.md §3）：每晚由 svc_roster 同步進來；舊分頁表頭缺這四欄時由 clkEnsureMapExtra_ 自動補
 var CLK_MAP_LINE = ['line_h', 'line_kid', 'line_bound_at', 'line_ok_at'];
-var CLK_MAP_HEADERS = CLK_MAP_BASE.concat(CLK_MAP_LINE);
+// 值班主管本人的申請改由上層審（docs/req-upper）：打卡端 svc_roster 每列的 duty_mgr（'TRUE'／'FALSE'），排在 LINE 四欄之後；舊表缺這欄時由 clkEnsureMapExtra_ 補表頭
+var CLK_MAP_DUTY = ['duty_mgr'];
+var CLK_MAP_HEADERS = CLK_MAP_BASE.concat(CLK_MAP_LINE, CLK_MAP_DUTY);
 var CLK_OUTBOX_HEADERS = ['job_id', 'kind', 'emp_no', 'store_code', 'emp_id', 'name', 'op_id', 'expect_json',
   'state', 'tries', 'next_at', 'lease_until', 'last_error', 'created_at', 'updated_at', 'done_at'];
 var CLK_STAFF_EXTRA = ['hire_date', 'last_day', 'extra_depts', 'line_revoked_at'];   // extra_depts＝兼任部門（組織改版 T2，Staff.gs 讀寫）；line_revoked_at＝人資停用 LINE 開通／重設的時間（毫秒，LineAuth.gs 讀寫）；舊表缺尾端欄時自動補
@@ -229,7 +231,7 @@ function clkEnsureStaffExtra_(ss) {
   clkFillTailHeaders_(sh, start, CLK_STAFF_EXTRA, 2, STF_SHEET);
 }
 
-/** staff_clock 尾端補 line_h、line_kid、line_bound_at、line_ok_at（前 11 欄必須是舊表頭才動；空表交給 stfEnsureSheet_） */
+/** staff_clock 尾端補 line_h、line_kid、line_bound_at、line_ok_at、duty_mgr（前 11 欄必須是舊表頭才動；空表交給 stfEnsureSheet_） */
 function clkEnsureMapExtra_(ss) {
   var sh = ss.getSheetByName(CLK_SHEET_MAP);
   if (!sh) return;
@@ -239,7 +241,7 @@ function clkEnsureMapExtra_(ss) {
   if (typeof sh.getMaxColumns === 'function' && sh.getMaxColumns() < n && typeof sh.insertColumnsAfter === 'function') {
     sh.insertColumnsAfter(sh.getMaxColumns(), n - sh.getMaxColumns());
   }
-  clkFillTailHeaders_(sh, CLK_MAP_BASE.length + 1, CLK_MAP_LINE, 0, CLK_SHEET_MAP);
+  clkFillTailHeaders_(sh, CLK_MAP_BASE.length + 1, CLK_MAP_LINE.concat(CLK_MAP_DUTY), 0, CLK_SHEET_MAP);
 }
 
 /** 由 setupStaff 呼叫（只補不覆蓋；表頭不一致丟錯停下） */
@@ -1524,6 +1526,10 @@ function clkApplyLineCols_(m, r) {
     }
     if (!same) { m[k] = v; changed = true; }
   });
+  // duty_mgr：名冊列沒這個鍵（舊版打卡端）＝FALSE；儲存格空白也視同 FALSE；試算表可能把 TRUE／FALSE 轉成布林，比對前先正規化
+  var duty = (r && String(r.duty_mgr === undefined || r.duty_mgr === null ? '' : r.duty_mgr).trim().toUpperCase() === 'TRUE') ? 'TRUE' : 'FALSE';
+  var curDuty = String(m.duty_mgr === undefined || m.duty_mgr === null ? '' : m.duty_mgr).trim().toUpperCase() === 'TRUE' ? 'TRUE' : 'FALSE';
+  if (curDuty !== duty) { m.duty_mgr = duty; changed = true; }   // 空白視同 FALSE，不為了補 FALSE 而重寫整列
   return changed;
 }
 
@@ -1544,6 +1550,17 @@ function clockRosterApply_(store_code, rows, payrollNames, now) {
     var st = clkStoreByCode_(store);
     if (!st) return clkErr_('bad_input', '不認得的店代碼');
     if (!Array.isArray(rows)) return clkErr_('bad_input', CLK_MSG.BAD_INPUT);
+    // 先自己確保 staff_clock 表頭（舊 15 欄表補 duty_mgr；冪等），不依賴人先跑 setupStaff；補完表頭仍不一致就不寫，免得寫到錯欄
+    try {
+      var mapSh = stfSheet_(CLK_SHEET_MAP);
+      if (mapSh) {
+        clkEnsureMapExtra_(SpreadsheetApp.getActive());
+        var hd = mapSh.getRange(1, 1, 1, CLK_MAP_HEADERS.length).getValues()[0].map(function (v) { return String(v).trim(); });
+        if (hd.join('|') !== CLK_MAP_HEADERS.join('|')) return clkErr_('bad_input', '分頁「' + CLK_SHEET_MAP + '」表頭與程式不一致，停止寫入以免資料錯位');
+      }
+    } catch (e) {
+      return clkErr_('bad_input', '分頁「' + CLK_SHEET_MAP + '」表頭無法補齊，停止寫入');
+    }
     var d = clkDate_(now), nowText = clkNowText_(d);
     var maps = clkMaps_();
     // 空名冊而這家店已有生效對照 → 視為抓取失敗（分頁改名、網址指錯），不套用，否則整店對照會被標成停用
@@ -1589,7 +1606,7 @@ function clockRosterApply_(store_code, rows, payrollNames, now) {
         var chk = clockAutoSupportCheck_({ store_code: store, src_store: srcStore, src_emp_id: srcEid });
         if (!chk.data.allowed) {
           summary.conflicts++;
-          unmapped.push({ emp_id: eid, name: stfStr_(r.name) });
+          unmapped.push(clkUnmappedItem_(eid, r));
           if (!jobsCache) { jobsCache = clkJobs_(); usedIds = clkUsedIds_(jobsCache); }
           if (clkCompensateCore_(store, eid, 'roster_' + chk.data.reason, src.emp_no, d, jobsCache, usedIds)) summary.compensated++;
           return;
@@ -1600,7 +1617,7 @@ function clockRosterApply_(store_code, rows, payrollNames, now) {
         summary.created++;
         return;
       }
-      unmapped.push({ emp_id: eid, name: stfStr_(r.name) });
+      unmapped.push(clkUnmappedItem_(eid, r));
     });
     // 名冊完全沒有這個編號的對照列 → 視為不在職
     maps.forEach(function (m) {
@@ -1623,6 +1640,59 @@ function clockRosterApply_(store_code, rows, payrollNames, now) {
     summary.unmapped = unmapped.length; summary.name_diff = nameDiff.length; summary.payroll_diff = payrollDiff.length;
     return { ok: true, data: summary };
   });
+}
+
+/** 「打卡上有、沒對照」的一筆；打卡端說他是值班主管就多 duty:true（值班主管沒對照＝打卡端開關開了也沒人能核，docs/req-upper） */
+function clkUnmappedItem_(eid, r) {
+  var o = { emp_id: eid, name: stfStr_(r.name) };
+  var dm = r && r.duty_mgr !== undefined && r.duty_mgr !== null ? r.duty_mgr : '';
+  if (String(dm).trim().toUpperCase() === 'TRUE') o.duty = true;
+  return o;
+}
+
+/**
+ * 值班主管但管理系統沒有 confirmed 對照的帳號：回 [{store_code, emp_id, reason:'unmapped'}]（不含姓名）。
+ * 來源：① staff_clock 裡 duty_mgr=TRUE、roster_active 不是 FALSE、state 不是 confirmed 的列；
+ * ② 每日同步記下的「打卡上有、沒對照」且 duty:true 的帳號（還沒有對照列，已排除同店同編號已 confirmed 的）。
+ */
+function clkDutyUnmapped_(maps) {
+  var out = [], seen = {};
+  var add = function (store, eid) { var k = store + '|' + eid; if (!seen[k]) { seen[k] = true; out.push({ store_code: store, emp_id: eid, reason: 'unmapped' }); } };
+  var confirmed = {};
+  maps.forEach(function (m) { if (m.state === 'confirmed') confirmed[m.store_code + '|' + m.emp_id] = true; });
+  maps.forEach(function (m) {
+    if (m.state !== 'confirmed' && m.roster_active !== 'FALSE' && m.emp_id && String(m.duty_mgr === undefined || m.duty_mgr === null ? '' : m.duty_mgr).trim().toUpperCase() === 'TRUE') add(m.store_code, m.emp_id);
+  });
+  clkStores_().forEach(function (st) {
+    var ss = clkSyncState_(st.store_code);
+    (ss.unmapped || []).forEach(function (u) {
+      if (u && u.duty === true && u.emp_id && !confirmed[st.store_code + '|' + u.emp_id]) add(st.store_code, clkEid_(u.emp_id));
+    });
+  });
+  return out;
+}
+
+/**
+ * 值班主管名單（給 Mac mini 同步員用，**不進 Code.gs 分派表**）：
+ * 任一 state=confirmed、roster_active!=='FALSE'、duty_mgr=TRUE 的對照 → 這個 DZY 同仁算值班主管；
+ * 回他在每一店所有 confirmed 對照的 emp_id（含不是值班主管的那幾店：跨店支援時申請也要送上層）。
+ * 六店代碼都有 key（沒有＝空陣列）。回 { ok:true, stores:{ <store_code>:[emp_id…] }, unmapped:<值班主管沒有 confirmed 對照的帳號數> }。
+ */
+function clockUpperEmps_() {
+  var stores = {};
+  CLK_DEFAULT_STORES.forEach(function (d) { stores[d[0]] = []; });
+  clkStores_().forEach(function (st) { stores[st.store_code] = []; });
+  var maps = clkMaps_();
+  var duty = {};
+  maps.forEach(function (m) {
+    if (m.state === 'confirmed' && m.roster_active !== 'FALSE' && String(m.duty_mgr === undefined || m.duty_mgr === null ? '' : m.duty_mgr).trim().toUpperCase() === 'TRUE') duty[m.emp_no] = true;
+  });
+  maps.forEach(function (m) {
+    if (m.state !== 'confirmed' || !duty[m.emp_no] || !m.emp_id) return;
+    if (!stores[m.store_code]) stores[m.store_code] = [];
+    if (stores[m.store_code].indexOf(m.emp_id) === -1) stores[m.store_code].push(m.emp_id);
+  });
+  return { ok: true, stores: stores, unmapped: clkDutyUnmapped_(maps).length };
 }
 
 // ---- 每日 ----

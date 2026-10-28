@@ -1405,6 +1405,203 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
 })();
 
 // ============================================================
+// 13. 值班主管本人的申請改由上層審（2026-10-28，docs/req-upper；只動 req 模式，hours 不變）
+// ============================================================
+(() => {
+  const g = (label, got, want) => ok(eq(got, want), label, { got, want });
+  const D = (emp, name, unit, title, duty, extra) => Object.assign({ emp, name, unit, dept: '', title, status: 'active', duty_units: duty || [] }, extra || {});
+  const BASE = [
+    D('DZY401', '值班店長', 'mzt-gf', 'sm', ['mzt-gf']),
+    D('DZY402', '值班區經理', 'mzt-gf', 'am', ['mzt-gf']),
+    D('DZY403', '測試督導', 'mzt-hq', 'osv'),
+    D('DZY404', '測試總監', 'mzt-hq', 'odir'),
+    D('DZY405', '兼值班正職', 'mzt-gf', 'ft', ['mzt-gf']),
+    D('DZY406', '一般正職', 'mzt-gf', 'ft'),
+    D('DZY407', '支援計時', 'mala-gf', 'pt', ['mala-gf']),
+    D('DZY408', '辛光值班店長', 'mala-gf', 'sm', ['mala-gf']),
+    D('DZY409', '辛光總監', 'mala-hq', 'odir'),
+    D('DZY410', '兼值班計時', 'mzt-gf', 'pt', ['mzt-gf'])
+  ];
+  const P = Object.fromEntries(BASE.map((x) => [x.emp, x]));
+  const app = world([['DZY399', '佔位', 'mala-gf', '', 'pt', 'active', '2026-01-01']]);
+  const sb = app.sb;
+  const org = sb.stfReadOrg_();
+  const req = (a, t, rctx) => sb.attApproverOf_(P[a], P[t], org, 'req', rctx);
+  const hrs = (a, t) => sb.attApproverOf_(P[a], P[t], org, 'hours');
+
+  // 13a. storeDutyUnitsMap_（staff_clock.duty_mgr＋clock_stores → 單位）
+  {
+    const M = (emp, store, extra) => Object.assign({ emp_no: emp, store_code: store, state: 'confirmed', roster_active: 'TRUE', duty_mgr: 'TRUE' }, extra || {});
+    const SU = { mztgf: ['mzt-gf'], hq: ['dzy-hq', 'mzt-hq'], gf: ['mala-gf'] };
+    g('13a duty_mgr=TRUE 的對照 → 該打卡店的單位清單（多單位店全列、跨店聯集排序）',
+      sb.storeDutyUnitsMap_([M('DZY1', 'mztgf'), M('DZY1', 'gf'), M('DZY2', 'hq')], SU), { DZY1: ['mala-gf', 'mzt-gf'], DZY2: ['dzy-hq', 'mzt-hq'] });
+    g('13a duty_mgr 空／FALSE／pending／roster_active=FALSE 都不算',
+      sb.storeDutyUnitsMap_([M('DZY1', 'mztgf', { duty_mgr: 'FALSE' }), M('DZY2', 'mztgf', { duty_mgr: '' }), M('DZY3', 'mztgf', { state: 'suggested' }), M('DZY4', 'mztgf', { roster_active: 'FALSE' }), { emp_no: 'DZY5', store_code: 'mztgf', state: 'confirmed', roster_active: 'TRUE' }], SU), {});
+  }
+
+  // 13b. attNeedOf_：只有 req 模式、只有值班主管的計時／正職變成 head
+  g('13b 值班正職 req → head（同店長的鏈）', sb.attNeedOf_(P.DZY405, org, 'req'), { kind: 'head', unit: 'mzt-gf', brand: 'mzt' });
+  g('13b 值班計時 req → head', sb.attNeedOf_(P.DZY410, org, 'req').kind, 'head');
+  g('13b 一般正職 req 仍 unit', sb.attNeedOf_(P.DZY406, org, 'req'), { kind: 'unit', unit: 'mzt-gf' });
+  g('13b ★值班正職 hours 完全不變（unit）', sb.attNeedOf_(P.DZY405, org, 'hours'), { kind: 'unit', unit: 'mzt-gf' });
+  g('13b 值班店長 req 仍 head（原本就是）', sb.attNeedOf_(P.DZY401, org, 'req'), { kind: 'head', unit: 'mzt-gf', brand: 'mzt' });
+
+  // 13c. 店長是值班主管：同店區經理也是值班主管 → 區經理被排除，往上到督導／總監
+  ok(req('DZY402', 'DZY401') === false, '13c ★店長（值班）的申請：同店區經理也是值班主管 → 不核');
+  ok(req('DZY403', 'DZY401') === true, '13c 店長（值班）的申請：督導核（區域關＝品牌內）');
+  ok(req('DZY404', 'DZY401') === false, '13c 區域沒開時總監不核店長（照舊）');
+  {
+    app.props.REGIONS_ON = '1'; sb.regionCtxReset_();
+    const rctx = sb.regionCtx_();
+    ok(rctx && rctx.on === true, '13c 區域開關開');
+    ok(req('DZY404', 'DZY401', rctx) === true && req('DZY403', 'DZY401', rctx) === false, '13c ★區域開、該店沒有有效督導：往上到總監（督導沒劃區不核）');
+    ok(req('DZY402', 'DZY401', rctx) === false, '13c 區域開時值班區經理仍排除');
+    app.props.REGIONS_ON = '0'; sb.regionCtxReset_();
+  }
+  {
+    // 區經理不是值班主管 → 照舊能核店長（值班與否只看 approver 自己的 duty_units）
+    const am2 = D('DZY402', '值班區經理', 'mzt-gf', 'am', []);
+    ok(sb.attApproverOf_(am2, P.DZY401, org, 'req') === true, '13c 同店區經理不是值班主管 → 照舊核店長');
+    const am3 = D('DZY402', '值班區經理', 'mzt-gf', 'am', ['mzt-js']);
+    ok(sb.attApproverOf_(am3, P.DZY401, org, 'req') === true, '13c 區經理只是別店的值班主管（duty_units 不含 need.unit）→ 照舊');
+  }
+
+  // 13d. 正職兼值班：不給同店店長，往上給區經理（不是值班）／督導
+  ok(req('DZY401', 'DZY405') === false, '13d ★兼值班正職：同店店長不核（店長自己也是值班主管）');
+  ok(sb.attApproverOf_(D('DZY411', '非值班店長', 'mzt-gf', 'sm', []), P.DZY405, org, 'req') === false, '13d ★兼值班正職：就算店長不是值班主管也不核（改走店長的鏈）');
+  ok(sb.attApproverOf_(D('DZY412', '非值班區經理', 'mzt-gf', 'am', []), P.DZY405, org, 'req') === true, '13d 兼值班正職：同店非值班區經理核');
+  ok(req('DZY402', 'DZY405') === false && req('DZY403', 'DZY405') === true, '13d 兼值班正職：值班區經理被排除、督導核');
+  ok(req('DZY401', 'DZY410') === false && req('DZY403', 'DZY410') === true, '13d 兼值班計時：同上');
+
+  // 13e. 一般正職仍給店長（即使店長自己是值班主管）；hours 不變
+  ok(req('DZY401', 'DZY406') === true, '13e ★一般正職：店長（值班）照舊核');
+  ok(req('DZY402', 'DZY406') === false, '13e 一般正職：區經理不核（照舊）');
+  ok(hrs('DZY401', 'DZY405') === true && hrs('DZY401', 'DZY410') === true, '13e ★hours：店長照舊核兼值班者的工時');
+  ok(hrs('DZY401', 'DZY401') === true && hrs('DZY402', 'DZY401') === false, '13e hours：店長核自己工時、區經理不核（完全不變）');
+  // 一般店長、沒有任何 duty_units 的 people（舊資料）：與改前一致
+  {
+    const legacy = (e, u, t) => ({ emp: e, name: e, unit: u, dept: '', title: t, status: 'active' });
+    ok(sb.attApproverOf_(legacy('A1', 'mzt-gf', 'am'), legacy('B1', 'mzt-gf', 'sm'), org, 'req') === true && sb.attApproverOf_(legacy('A2', 'mzt-gf', 'sm'), legacy('B2', 'mzt-gf', 'ft'), org, 'req') === true,
+      '13e 沒有 duty_units 欄位（舊資料）：行為與改前相同');
+  }
+
+  // 13f. 人資主管／admin 仍可核
+  {
+    const tg = (flags, me) => sb.storeAttTargets_(me || { emp: 'DZY999', status: 'active', unit: 'dzy-hq', dept: 'hr', title: 'hm' }, flags, BASE, org, null, 'req', null).map((x) => x.emp).sort();
+    const all = ['DZY401', 'DZY402', 'DZY405', 'DZY406', 'DZY407', 'DZY408', 'DZY410'];
+    g('13f ★人資主管：值班主管的申請照舊全可核', tg({ hrHead: true }).filter((e) => ['DZY401', 'DZY405', 'DZY408', 'DZY410'].indexOf(e) !== -1), ['DZY401', 'DZY405', 'DZY408', 'DZY410']);
+    g('13f admin：同上', tg({ admin: true }, { emp: '', status: 'active', unit: '', dept: '', title: '' }).filter((e) => ['DZY401', 'DZY405'].indexOf(e) !== -1), ['DZY401', 'DZY405']);
+    g('13f 值班店長自己核不到值班區經理之外的人：店長核一般正職，不核兼值班者', tg({}, P.DZY401).sort(), ['DZY406']);
+    g('13f 督導核值班店長與值班區經理與兼值班者', tg({}, P.DZY403).filter((e) => ['DZY401', 'DZY402', 'DZY405', 'DZY410'].indexOf(e) !== -1), ['DZY401', 'DZY402', 'DZY405', 'DZY410']);
+    void all;
+  }
+
+  // 13g. 支援帳號：打卡店單位的值班主管不算核定人，往上
+  {
+    const M = (emp, store, id) => ({ emp_no: emp, store_code: store, emp_id: id, role: 'staff', state: 'confirmed', roster_active: 'TRUE' });
+    const MAPS = [M('DZY407', 'gf', 'GF07'), M('DZY407', 'mztgf', 'MG07'), M('DZY406', 'mztgf', 'MG06'), M('DZY401', 'mztgf', 'MG01'), M('DZY404', 'hq', 'H04')];
+    const SU = sb.storeClockUnits_();
+    const ALL = ['ck', 'dzy-hq', 'mala-gf', 'mala-hq', 'mzt-gf', 'mzt-hq', 'mzt-js', 'mzt-lzl'];
+    const keys = (a) => a.map((x) => x.clock + ':' + x.emp_id);
+    const run = (me, o) => { o = o || {}; const r = sb.storeAttLists_(P[me], o.flags || {}, o.people || BASE, org, null, MAPS, SU, null, ALL, {}); return { h: keys(r.people), r: keys(r.req_people) }; };
+    const s401 = run('DZY401');
+    ok(s401.h.indexOf('mztgf:MG07') !== -1 && s401.r.indexOf('mztgf:MG07') === -1, '13g ★值班支援帳號：墨光值班店長核工時、但申請不核（hours 不變）', s401);
+    const s404 = run('DZY404');
+    ok(s404.r.indexOf('mztgf:MG07') !== -1, '13g ★值班支援帳號的申請：同店第一、二層都是值班主管 → 往上到墨竹亭總監', s404);
+    // 同一個支援計時若「不是」值班主管 → 店長照舊核（對照組）
+    const noDuty = BASE.map((x) => (x.emp === 'DZY407' ? Object.assign({}, x, { duty_units: [] }) : x));
+    const s401b = run('DZY401', { people: noDuty });
+    ok(s401b.r.indexOf('mztgf:MG07') !== -1, '13g 對照：非值班主管的支援帳號，店長照舊核申請', s401b);
+    // 人資主管看得到
+    const hr = sb.storeAttLists_({ emp: 'DZY999', status: 'active', unit: 'dzy-hq', dept: 'hr', title: 'hm' }, { hrHead: true }, BASE, org, null, MAPS, SU, null, ALL, {});
+    ok(keys(hr.req_people).indexOf('mztgf:MG07') !== -1, '13g 人資主管仍可核值班支援帳號的申請');
+  }
+
+  // 13g2. att.extra 例外也套「同店值班主管不核值班主管的申請」（只 req）；支援帳號店長層整層跳過
+  {
+    const extraMe = D('DZY420', '額外核定值班', 'mzt-gf', 'ft', ['mzt-gf']);
+    const extraOk = D('DZY421', '額外核定非值班', 'mzt-gf', 'ft', []);
+    const people = BASE.concat([extraMe, extraOk]);
+    const tg = (me, mode) => sb.storeAttTargets_(me, { attExtra: true }, people, org, null, mode, null).map((x) => x.emp);
+    ok(tg(extraMe, 'req').indexOf('DZY401') === -1 && tg(extraMe, 'req').indexOf('DZY405') === -1, '13g2 ★att.extra（本人是同店值班主管）：不核同店值班主管的申請');
+    ok(tg(extraMe, 'hours').indexOf('DZY401') !== -1, '13g2 hours 不變');
+    ok(tg(extraOk, 'req').indexOf('DZY401') !== -1 && tg(extraOk, 'req').indexOf('DZY405') !== -1, '13g2 att.extra（非值班）：仍可核');
+    const M = (emp, store, id) => ({ emp_no: emp, store_code: store, emp_id: id, role: 'staff', state: 'confirmed', roster_active: 'TRUE' });
+    const MAPS2 = [M('DZY407', 'gf', 'GF07'), M('DZY407', 'mztgf', 'MG07')];
+    const ALL = ['ck', 'dzy-hq', 'mala-gf', 'mala-hq', 'mzt-gf', 'mzt-hq', 'mzt-js', 'mzt-lzl'];
+    const lst = (me, flags) => sb.storeAttLists_(me, flags, people, org, null, MAPS2, sb.storeClockUnits_(), null, ALL, {}).req_people.map((x) => x.clock + ':' + x.emp_id);
+    ok(lst(extraMe, { attExtra: true }).indexOf('mztgf:MG07') === -1, '13g2 ★支援帳號：att.extra 的值班主管不核');
+    ok(lst(extraOk, { attExtra: true }).indexOf('mztgf:MG07') !== -1, '13g2 支援帳號：att.extra 非值班仍可核');
+    // 打卡店店長（非值班）也不核值班主管的支援帳號（店長層整層跳過）
+    const smNon = D('DZY422', '非值班店長', 'mzt-gf', 'sm', []);
+    const ppl2 = BASE.filter((x) => x.emp !== 'DZY401' && x.emp !== 'DZY402').concat([smNon]);
+    const l2 = sb.storeAttLists_(smNon, {}, ppl2, org, null, MAPS2, sb.storeClockUnits_(), null, ALL, {}).req_people.map((x) => x.clock + ':' + x.emp_id);
+    ok(l2.indexOf('mztgf:MG07') === -1, '13g2 ★值班主管的支援帳號：打卡店店長（非值班）不核（L1 跳過）', l2);
+    const l3 = sb.storeAttLists_(P.DZY404, {}, ppl2, org, null, MAPS2, sb.storeClockUnits_(), null, ALL, {}).req_people.map((x) => x.clock + ':' + x.emp_id);
+    ok(l3.indexOf('mztgf:MG07') !== -1, '13g2 往上由總監核', l3);
+  }
+
+  // 13h. storeUpperGaps_：找不到上層
+  {
+    const gaps = (people, rctx) => sb.storeUpperGaps_(people, org, rctx || null, [], {}).map((x) => x.emp);
+    g('13h 辛光值班者（店長、計時）：品牌沒督導、區域沒開 → 總監不核 → 列出', gaps(BASE).sort(), ['DZY407', 'DZY408']);
+    g('13h 墨光值班店長有督導 → 不列；一般人不列', gaps(BASE).indexOf('DZY401'), -1);
+    const noOsv = BASE.filter((x) => x.emp !== 'DZY403');
+    g('13h 沒督導（區域關）→ 墨光值班者也沒人核', gaps(noOsv).sort(), ['DZY401', 'DZY405', 'DZY407', 'DZY408', 'DZY410']);
+    app.props.REGIONS_ON = '1'; sb.regionCtxReset_();
+    g('13h ★區域開、沒有有效督導 → 總監補位，不再列（兩個品牌都有總監）', gaps(noOsv, sb.regionCtx_()).sort(), []);
+    app.props.REGIONS_ON = '0'; sb.regionCtxReset_();
+    g('13h 離職的值班主管不列（只剩辛光計時）', sb.storeUpperGaps_(BASE.map((x) => (x.emp === 'DZY408' ? Object.assign({}, x, { status: 'disabled' }) : x)), org, null, [], {}).map((x) => x.emp), ['DZY407']);
+  }
+})();
+
+// 13i. 整條走 ident／handleAttUpperGaps_（staff_clock.duty_mgr 欄真的讀進來）
+(() => {
+  const app = world(BIG);
+  const setDuty = (emp, store, v) => {
+    const row = app.sheets.staff_clock._data.find((r) => r[0] === emp && r[1] === store);
+    while (row.length < 16) row.push('');
+    row[15] = v;
+  };
+  const hdr = app.sheets.staff_clock._data[0];
+  ok(hdr[15] === 'duty_mgr' && hdr.length === 16, '13i staff_clock 表頭尾端新欄 duty_mgr', hdr);
+  const reqSubs = (sub) => app.ident(sub).att.req_people.map((x) => x.sub);
+  const hoursSubs = (sub) => app.ident(sub).att.people.map((x) => x.sub);
+  ok(reqSubs('DZY001').indexOf('DZY002') !== -1 && reqSubs('DZY012').indexOf('DZY002') === -1, '13i 對照組：一般正職 DZY002 由店長核、督導不核');
+  setDuty('DZY002', 'mztgf', 'TRUE');
+  ok(reqSubs('DZY001').indexOf('DZY002') === -1, '13i ★正職兼值班（duty_mgr=TRUE）：同店店長的申請名單不再有他');
+  ok(reqSubs('DZY012').indexOf('DZY002') !== -1, '13i 往上給督導');
+  ok(reqSubs('DZY001').indexOf('DZY003') !== -1 && hoursSubs('DZY001').indexOf('DZY002') !== -1, '13i 一般計時仍給店長；hours 不變（店長仍核他的工時）');
+  ok(reqSubs('DZY020').indexOf('DZY002') !== -1 && reqSubs('U:a001').indexOf('DZY002') !== -1, '13i 人資主管、admin 仍可核');
+  setDuty('DZY002', 'mztgf', 'FALSE');
+  ok(reqSubs('DZY001').indexOf('DZY002') !== -1, '13i duty_mgr=FALSE → 回到店長核');
+
+  // attUpperGaps：DZY042（小辛辣店長，品牌無督導、區域關、總監不核店長）設成值班主管
+  setDuty('DZY042', 'gf', 'TRUE');
+  const gapsOf = (tok) => post(app.sb, 'attUpperGaps', {}, tok);
+  const adm = gapsOf(app.adminTok);
+  ok(adm.ok && adm.data.items.length === 1 && adm.data.items[0].emp === 'DZY042' && adm.data.items[0].name === '小辛辣店長' && typeof adm.data.items[0].unit_name === 'string' && adm.data.items[0].unit_name !== '', '13i ★attUpperGaps：admin 看得到沒有上層的值班主管', adm);
+  const hr = gapsOf(app.login('DZY020'));
+  ok(hr.ok && hr.data.items.length === 1 && hr.data.items[0].emp === 'DZY042', '13i attUpperGaps：人資主管看得到', hr);
+  const sm = gapsOf(app.login('DZY001'));
+  ok(sm.ok && eq(sm.data.items, []), '13i attUpperGaps：一般主管（有 platform.att 但不是人資主管）回空', sm);
+  ok(post(app.sb, 'attUpperGaps', {}, '').ok === false, '13i attUpperGaps：沒登入 → 失敗');
+  ok(has(app.sb.CODE_ALLOWED_ACTIONS, 'attUpperGaps'), '13i attUpperGaps 在 CODE_ALLOWED_ACTIONS');
+  ok(Array.isArray(adm.data.unmapped) && adm.data.unmapped.length === 0, '13i attUpperGaps.unmapped 預設空陣列', adm);
+  { const row = app.sheets.staff_clock._data.find((r) => r[0] === 'DZY041' && r[1] === 'gf'); while (row.length < 16) row.push(''); row[4] = 'suggested'; row[15] = 'TRUE'; }
+  const adm2 = gapsOf(app.adminTok);
+  ok(eq(adm2.data.unmapped, [{ store_code: 'gf', emp_id: 'GF041', reason: 'unmapped' }]), '13i ★attUpperGaps.unmapped：值班主管但對照不是 confirmed → 列出（無姓名）', adm2);
+  ok(eq(gapsOf(app.login('DZY001')).data, { items: [] }) || gapsOf(app.login('DZY001')).data.items.length === 0, '13i 一般主管仍回空');
+  { const row = app.sheets.staff_clock._data.find((r) => r[0] === 'DZY041' && r[1] === 'gf'); row[4] = 'confirmed'; row[15] = 'FALSE'; }
+  // 有人核了就不列：小辛辣加一位督導
+  app.props.REGIONS_ON = '0';
+  const staffN = app.sheets.staff._data;
+  staffN.push(staffRow(['DZY050', '小辛辣督導', 'mala-hq', '', 'osv', 'active', '2026-01-01'], 50));
+  const g2 = gapsOf(app.adminTok);
+  ok(g2.ok && eq(g2.data.items, []), '13i 品牌有督導 → 不再列出', g2);
+})();
+
+// ============================================================
 // 8. 分派與 dryrun
 // ============================================================
 (async () => {
