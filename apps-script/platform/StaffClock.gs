@@ -2565,18 +2565,33 @@ function payStaffRosterBuild_(pay, staffAll, maps, stores, org, today) {
  * 讀取 action payrollStaffRoster {store}（薪酬店代碼，如 SSLGF）：要 payroll.write（薪酬管理同一個權限）。
  * 只回姓名、在職狀態、單位、職稱、到職／最後上班日、打卡編號（不回手機、生日、地址）。
  */
-/** 負責門市裁 ids（純函式；payroll-scope final review C1）：ids 是全集團打卡對照，非 admin 不可看到別店同仁的姓名／員編。
- *  保留完整：here（本打卡店）或 pay_store 在負責門市 L 內；其餘清空 name、emp_no，留 state／unit_name／pay_store／pay_none／store_code／here
- *  （payroll.html staffDiff 對非本店編號只用這些判斷「該停用／待確認」；姓名比對只發生在 pay_store＝本店，本店必在 L 內）。 */
+/** 負責門市裁 ids（純函式；payroll-scope final review C1、fix2-2）：ids 是全集團打卡對照，非 admin 不可看到別店同仁的姓名／員編。
+ *  只有 pay_store 在負責門市 L 內才保留完整；其餘（包含在本打卡店打卡、支援或共用打卡表的別店同仁）只回 {state, pay_store, pay_none}
+ *  （payroll.html staffDiff 對這些編號只用這三欄判斷「該停用／待確認」，unit_name／name 可缺；可能看到別店代碼，不會看到人）。 */
 function payScopeIds_(ids, L) {
   var out = {};
   Object.keys(ids || {}).forEach(function (k) {
-    var x = ids[k], keep = x.here === true || (x.pay_store && L.indexOf(x.pay_store) !== -1);
-    var y = {};
-    Object.keys(x).forEach(function (f) { y[f] = x[f]; });
-    if (!keep) { y.name = ''; y.emp_no = ''; }
-    out[k] = y;
+    var x = ids[k];
+    if (x.pay_store && L.indexOf(x.pay_store) !== -1) {
+      var y = {};
+      Object.keys(x).forEach(function (f) { y[f] = x[f]; });
+      out[k] = y;
+    } else {
+      out[k] = { state: x.state, pay_store: x.pay_store, pay_none: x.pay_none };
+    }
   });
+  return out;
+}
+
+/** payload.emp_ids 是陣列 → ids 只留這些編號＋本店名單（staff）的打卡編號（帶入新人後重算不會變「對不到」）；
+ *  不是陣列＝沒帶，照舊全回。admin 也套用（只是少傳，不是權限）。fix2-2 */
+function payPickIds_(ids, empIds, staff) {
+  if (!Array.isArray(empIds)) return ids;
+  var want = {};
+  empIds.forEach(function (v) { var k = stfStr_(v); if (k) want[k] = true; });
+  (staff || []).forEach(function (p) { if (p.emp_id) want[p.emp_id] = true; });
+  var out = {};
+  Object.keys(ids || {}).forEach(function (k) { if (want[k]) out[k] = ids[k]; });
   return out;
 }
 
@@ -2592,6 +2607,7 @@ function handlePayrollStaffRoster_(token, payload) {
   }
   if (!clkSheetsReady_()) return clkErr_('not_ready', '同仁名單還沒和打卡系統對照');
   var data = payStaffRosterBuild_(pay, clkStaffAll_(), clkMaps_(), clkStores_(), stfReadOrg_(), clkTodayOf_(new Date()));
+  data.ids = payPickIds_(data.ids, payload && payload.emp_ids, data.staff);
   if (me.data.perms.indexOf('*') === -1) data.ids = payScopeIds_(data.ids, permPayrollStoresOf_(me.data.perms));
   data.unit_none = PAY_UNIT_NONE.slice();
   return { ok: true, data: data };

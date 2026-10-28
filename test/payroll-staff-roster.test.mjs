@@ -128,17 +128,39 @@ ok(['SSLGF', 'MZTJS', 'CF', 'HQ'].every((st) => sb.handlePayrollStaffRoster_('go
 perms = ['payroll.write', 'payroll.store@CF'];
 const cfr = sb.handlePayrollStaffRoster_('good', { store: 'CF' });
 const cfJson = JSON.stringify(cfr);
-const otherNames = ['甲一', '乙二', '丙三', '丁四', '戊五', '己六', '庚七', '辛八', '壬九', '子十一'];
-const otherEmps = ['DZY001', 'DZY002', 'DZY003', 'DZY004', 'DZY005', 'DZY006', 'DZY007', 'DZY008', 'DZY009', 'DZY011'];
+// 癸十（DZY010）薪資歸 HQ，只是在 CF 打卡店支援（here）→ 也不能看到（fix2-2 拿掉 here 例外）
+const otherNames = ['甲一', '乙二', '丙三', '丁四', '戊五', '己六', '庚七', '辛八', '壬九', '癸十', '子十一'];
+const otherEmps = ['DZY001', 'DZY002', 'DZY003', 'DZY004', 'DZY005', 'DZY006', 'DZY007', 'DZY008', 'DZY009', 'DZY010', 'DZY011'];
 ok(cfr.ok && otherNames.every((n) => !cfJson.includes(n)), '13n-1: 只負責 CF → 回傳 JSON 不含任何非 CF 同仁姓名', otherNames.filter((n) => cfJson.includes(n)));
 ok(otherEmps.every((e) => !cfJson.includes(e)), '13n-2: 只負責 CF → 回傳 JSON 不含任何非 CF 同仁員編', otherEmps.filter((e) => cfJson.includes(e)));
-ok(cfr.data.ids.GF03 && cfr.data.ids.GF03.pay_store === 'SSLGF' && cfr.data.ids.GF03.state === 'active' && cfr.data.ids.GF03.here === false
-  && cfr.data.ids.GF03.name === '' && cfr.data.ids.GF03.emp_no === '', '13n-3: 別店編號仍留 state／pay_store／here（差異清單判斷用），只清姓名員編', cfr.data.ids.GF03);
-ok(cfr.data.ids['HQ-10'] && cfr.data.ids['HQ-10'].here === true && cfr.data.ids['HQ-10'].emp_no === 'DZY010', '13n-4: 本打卡店（here）的編號保留完整', cfr.data.ids['HQ-10']);
+const THIN = 'pay_none,pay_store,state';
+ok(cfr.data.ids.GF03 && Object.keys(cfr.data.ids.GF03).sort().join() === THIN && cfr.data.ids.GF03.pay_store === 'SSLGF' && cfr.data.ids.GF03.state === 'active',
+  '13n-3: 別店編號只留 state／pay_store／pay_none（差異清單判斷用），沒有 name／emp_no／unit_name／store_code／here', cfr.data.ids.GF03);
+ok(cfr.data.ids['HQ-10'] && Object.keys(cfr.data.ids['HQ-10']).sort().join() === THIN && cfr.data.ids['HQ-10'].pay_store === 'HQ',
+  '13n-4: 在本打卡店支援、薪資歸別店（HQ）的人也只留三欄（共用打卡店／支援不再帶出別店姓名）', cfr.data.ids['HQ-10']);
+ok(!cfJson.includes('鼎兆元總部') && !cfJson.includes('"here"'), '13n-4b: 只負責 CF → 回應沒有別店單位名稱、沒有 here 欄', cfJson.match(/.{0,30}(鼎兆元總部|"here").{0,30}/g));
 perms = ['payroll.write', 'payroll.store@MZTJS', 'payroll.store@SSLGF'];
 const jsr = sb.handlePayrollStaffRoster_('good', { store: 'MZTJS' });
 ok(jsr.data.ids.GF03.name === '戊五' && jsr.data.ids.GF03.emp_no === 'DZY005', '13n-5: 薪資歸負責門市（SSLGF）的別店編號保留完整', jsr.data.ids.GF03);
-ok(jsr.data.ids.MZTGF01.name === '' && jsr.data.ids['HQ-07'].name === '', '13n-6: 非負責門市的別店編號清空姓名');
+ok(jsr.data.ids.MZTGF01.name === undefined && jsr.data.ids['HQ-07'].name === undefined && jsr.data.ids.MZTJS01.name === undefined
+  && jsr.data.ids.MZTJS05.name === '甲一', '13n-6: 非負責門市的別店編號沒有姓名（MZTJS01 雖在本打卡店，薪資歸 MZTGF 也一樣）');
+// 13n-8：只負責 SSLHQ 的財務讀 SSLHQ（hq 打卡店共用：HQ／MZTHQ／一悟的人都在同一張打卡表）
+perms = ['payroll.write', 'payroll.store@SSLHQ'];
+const hqr = sb.handlePayrollStaffRoster_('good', { store: 'SSLHQ' });
+const hqJson = JSON.stringify(hqr);
+ok(hqr.ok && ['辛八', '壬九', '癸十', 'DZY008', 'DZY009', 'DZY010'].every((n) => !hqJson.includes(n)) && hqr.data.ids['HQ-07'].name === '庚七',
+  '13n-8: 只負責 SSLHQ → 看不到同打卡店 HQ／MZTHQ／一悟同仁的姓名員編；自己的人完整', ['辛八', '壬九', '癸十', 'DZY008', 'DZY009', 'DZY010'].filter((n) => hqJson.includes(n)));
+ok(hqr.data.ids['HQ-08'].pay_store === 'MZTHQ' && hqr.data.ids['HQ-09'].pay_none === true && hqr.data.ids['HQ-10'].pay_store === 'HQ', '13n-9: 別店只回 pay_store／pay_none（可能看到別店代碼，不會看到人）');
+// 13n-10：payload.emp_ids 是陣列 → ids 只回這些編號（＋本店名單的打卡編號，帶入後重算不會變「對不到」）；沒帶 → 照舊
+perms = ['payroll.write', 'payroll.store@MZTJS'];
+const eir = sb.handlePayrollStaffRoster_('good', { store: 'MZTJS', emp_ids: ['MZTJS12', ' MZTJS05 ', 'NOPE', 5] });
+const eiKeys = Object.keys(eir.data.ids).sort().join();
+ok(eir.ok && eiKeys === 'MZTJS05,MZTJS08,MZTJS09,MZTJS10,MZTJS12', '13n-10: 帶 emp_ids → 只回這些＋本店名單的打卡編號（不回 GF03／HQ-xx 等）', eiKeys);
+ok(eir.data.ids.MZTJS12.name === undefined && eir.data.ids.MZTJS12.pay_store === 'SSLGF', '13n-11: emp_ids 篩選後仍套負責門市裁切');
+perms = ['*'];
+const eia = sb.handlePayrollStaffRoster_('good', { store: 'CF', emp_ids: ['GF03'] });
+ok(Object.keys(eia.data.ids).sort().join() === 'GF03' && eia.data.ids.GF03.name === '戊五', '13n-12: admin 帶 emp_ids 也只回那些（＋本店名單），內容完整', Object.keys(eia.data.ids));
+ok(JSON.stringify(sb.handlePayrollStaffRoster_('good', { store: 'CF', emp_ids: 'GF03' }).data.ids) === JSON.stringify(build('CF').ids), '13n-13: emp_ids 不是陣列 → 當沒帶（admin 全回）');
 perms = ['*'];
 const adm = sb.handlePayrollStaffRoster_('good', { store: 'CF' });
 ok(JSON.stringify(adm.data.ids) === JSON.stringify(build('CF').ids), '13n-7: admin（*）ids 不變（含別店姓名）');
