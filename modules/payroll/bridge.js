@@ -39,6 +39,8 @@ export function parseCall(data) {
 /** ctx.api.call 的結果（{ok,data}／{ok:false,error,data?,status?}）→ 薪酬頁原本的扁平回應 */
 export function toPageResult(r) {
   if (!r || typeof r !== 'object') return { ok: false, error: 'bad_response', message: '伺服器回應格式錯誤' };
+  // 試跑模式：平台攔下寫入、回 ok:true＋dryrun，不能讓薪酬頁以為存好了（比照 modules/pnl/bridge.js）
+  if (r.dryrun) return { ok: false, error: 'dryrun', message: '試跑模式，未寫入' };
   const data = r.data && typeof r.data === 'object' && !Array.isArray(r.data) ? r.data : {};
   if (r.ok === true) return Object.assign({}, data, { ok: true });
   const out = Object.assign({}, data, { ok: false, error: String(r.error || '請求失敗') });

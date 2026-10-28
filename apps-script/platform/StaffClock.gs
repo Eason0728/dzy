@@ -2402,9 +2402,17 @@ function handleSvcSsoRedeem_(payload) {
   var ticket = payload && typeof payload.ticket === 'string' ? payload.ticket : '';
   var aud = payload && typeof payload.aud === 'string' ? payload.aud : '';
   if (!/^[0-9a-f]{64}$/.test(ticket)) return clkErr_('ticket_invalid', '入場券無效');
-  var cache = CacheService.getScriptCache(), key = SSO_CACHE_PREFIX + ticket;
-  var raw = cache.get(key);
-  cache.remove(key);
+  // LockService 包住 get＋remove：兩個請求同時兌換同一張券，只有一個拿得到（比照 PurchaseSso.gs，審查 2026-10-28 #5）
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return clkErr_('busy', CLK_MSG.BUSY);
+  var raw;
+  try {
+    var cache = CacheService.getScriptCache(), key = SSO_CACHE_PREFIX + ticket;
+    raw = cache.get(key);
+    cache.remove(key);
+  } finally {
+    lock.releaseLock();
+  }
   var rec = null;
   try { rec = raw ? JSON.parse(raw) : null; } catch (e) { rec = null; }
   if (!rec || rec.aud !== aud) return clkErr_('ticket_invalid', '入場券無效或已過期');

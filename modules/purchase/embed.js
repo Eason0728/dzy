@@ -24,6 +24,26 @@ const LOGOUT_FLUSH_MS = 150;
 const TICKET_RE = /^[0-9a-f]{64}$/;
 const NAV_ID_RE = /^[a-z][a-z0-9-]{0,30}$/;
 
+/** 試跑模式（網址 ?dryrun=1）只擋管理系統自己的 API；嵌入的子系統照常寫入，所以 iframe 上方要明顯提示（2026-10-28 審查 #8）。
+ *  行為（照常發入場券）不變。模組不 import platform/，直接看網址。 */
+export const DRYRUN_EMBED_WARN = '試跑模式只保護管理系統本身；這個嵌入的子系統按送出會真的寫入，請勿送出';
+function isDryRunPage() {
+  try {
+    return typeof location !== 'undefined' && !!location && new URLSearchParams(location.search || '').get('dryrun') === '1';
+  } catch (e) {
+    return false;
+  }
+}
+function dryRunWarn() {
+  const n = document.createElement('div');
+  n.className = 'card';
+  n.setAttribute('data-role', 'dryrun-embed-warn');
+  n.setAttribute('role', 'alert');
+  n.setAttribute('style', 'border-left:4px solid var(--warn);background:var(--warn-light);font-weight:700');
+  n.textContent = DRYRUN_EMBED_WARN;
+  return n;
+}
+
 /** 管理系統自己跑在本機時才用本機貨單網頁 */
 export function isDevHost(host) {
   return host === 'localhost' || host === '127.0.0.1';
@@ -155,6 +175,7 @@ export function createEmbed(cfg) {
 
       state = { el, ctx, frame: null, down: null, timer: null, noTicket: null, cur: '', synced: false, origin: purchaseOrigin(host), base: purchaseBase(host) };
       window.addEventListener('message', onMessage);
+      if (isDryRunPage()) el.appendChild(dryRunWarn());
       el.appendChild(bar);
       renderFrame();
       return async function unmount() {

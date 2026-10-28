@@ -188,11 +188,13 @@ function evScope_(c) {
     Object.keys(c.org.unit).forEach(function (u) { if (c.org.unit[u].parent === c.me.brand) s.units[u] = true; });
   }
   var rscope = (s.manage && c.me) ? stfReviewScope_(c.me.values, c.org) : null;
+  // 區域（REGIONS_ON='1'）：區督導只管自己區的店，跟認領審核同一套（審查 2026-10-28 #3）；請求內快取
+  var rctx = rscope && typeof regionCtx_ === 'function' ? regionCtx_() : null;
   s.canManage = function (p) {
     if (!p || (c.me && p.emp === c.me.emp)) return false;
     if (c.isAdmin) return true;
     // 用目前身分判斷（stfCanReview_ 看的是認領送出的 p_* 欄，認領通過後會清空）；規則同同仁認領審核「往上一層」
-    return !!rscope && stfScopeMeets_(rscope, stfReviewNeed_(c.org, p.unit, p.dept, p.title));
+    return !!rscope && stfScopeMeets_(rscope, stfReviewNeed_(c.org, p.unit, p.dept, p.title), rctx);
   };
   s.canView = function (p) {
     if (!p) return false;
@@ -394,14 +396,33 @@ function evPersonQuarter_(c, p, q, cache) {
     peerCount: peers.length
   };
 }
-/** 定稿用：live 結果壓成可存的 result */
+/** 定稿用：live 結果壓成可存的 result（存 peerCount，定稿後也能做匿名守門；定稿／匯入值原樣沿用） */
 function evFreeze_(r) {
   if (!r) return null;
   if (r.source !== 'live') return r.frozen;
   var a = r.agg;
   return { attitude: a.attitude, performance: a.performance, adjAtt: a.adjAtt, adjPerf: a.adjPerf, subtotal: a.subtotal, total: a.total,
     grade: a.grade, bonusBase: a.bonusBase, wageIdx: a.wageIdx, attItems: a.attItems, perfItems: a.perfItems,
-    attLabels: r.attLabels, perfLabels: r.perfLabels, kpiTitle: r.kpiTitle, kpi: r.kpi, attCount: a.attCount, perfCount: a.perfCount };
+    attLabels: r.attLabels, perfLabels: r.perfLabels, kpiTitle: r.kpiTitle, kpi: r.kpi, attCount: a.attCount, perfCount: a.perfCount, peerCount: r.peerCount };
+}
+/**
+ * 同事評分少於兩人 → 逐題平均＝自評＋那一位（或就是那一位），可反推（審查 #4、2026-10-28 #1 #2）。不分 live／final／hist。
+ * live 看 r.peerCount；定稿／匯入有存 peerCount 就用；舊定稿沒有 → 用 attCount（含自評）保守判斷（≤2 可能是 1 同事＋自評）；人數都不明 → 遮。
+ */
+function evFewPeers_(r, f) {
+  var num = function (v) { return (v === '' || v === null || v === undefined || isNaN(Number(v))) ? null : Number(v); };
+  if (r && r.source === 'live') return !(r.peerCount >= 2);
+  var pc = num(f && f.peerCount);
+  if (pc !== null) return pc < 2;
+  var ac = num(f && f.attCount);
+  if (ac !== null) return ac < 3;
+  return true;
+}
+/** 守門：人數不足就拿掉逐題（attItems／perfItems／同事逐題平均），只留總分；itemsHidden 給前端顯示說明 */
+function evHideFewItems_(r, f) {
+  if (!f || !evFewPeers_(r, f)) return false;
+  f.attItems = null; f.perfItems = null; f.peerAttItems = null; f.peerPerfItems = null; f.itemsHidden = true;
+  return true;
 }
 function evCache_() {
   return { peer: evRows_('peer'), self: evRows_('self'), sup: evRows_('sup'), fin: evRows_('fin'), hist: evRows_('hist'), msg: evRows_('msg'), newbie: evRows_('newbie') };
@@ -428,6 +449,7 @@ function handleEvMyScores_(token) {
       var f = evFreeze_(r);
       f.quarter = q; f.kind = r.kind; f.source = r.source;
       if (r.source === 'live') { f.selfAtt = r.selfAtt; f.selfPerf = r.selfPerf; f.peerAttItems = r.peerAttItems; f.peerPerfItems = r.peerPerfItems; }
+      evHideFewItems_(r, f);   // 本人也不能拿逐題＋自評反推唯一那位同事的分數（2026-10-28 #1）
       var sup = cache.sup.filter(function (x) { return x.quarter === q && stfNormEmp_(x.ratee) === me.emp; })[0];
       f.feedback = sup ? evStr_(sup.feedback) : '';
       return f;
@@ -546,10 +568,13 @@ function handleEvPersonDetail_(token, payload) {
   var tpl = evKind_(p) === 'ft' ? evTplFor_(p, sup) : { title: '', items: [] };
   var nb = cache.newbie.filter(function (x) { return stfNormEmp_(x.emp_no) === p.emp; })[0];
   var f = r ? evFreeze_(r) : null;
-  if (f && r.source === 'live') {
-    var few = r.peerCount < 2;   // 同事少於兩人：逐題平均＝自評＋那一位，回自評或逐題就能反推（審查 #4）
-    f.selfAtt = few ? null : r.selfAtt; f.selfPerf = few ? null : r.selfPerf; f.peerAttItems = r.peerAttItems; f.peerPerfItems = r.peerPerfItems; f.peerCount = r.peerCount;
-    if (few) { f.attItems = null; f.perfItems = null; }
+  if (f) {
+    // 同事少於兩人：逐題平均＝自評＋那一位，回自評或逐題就能反推（審查 #4）；定稿、匯入也一樣（2026-10-28 #2）
+    var few = evFewPeers_(r, f);
+    if (r.source === 'live') {
+      f.selfAtt = few ? null : r.selfAtt; f.selfPerf = few ? null : r.selfPerf; f.peerAttItems = r.peerAttItems; f.peerPerfItems = r.peerPerfItems; f.peerCount = r.peerCount;
+    }
+    evHideFewItems_(r, f);
   }
   return { ok: true, data: {
     emp: p.emp, name: p.name, kind: evKind_(p), unit: p.unit, brand: p.brand, quarter: q,

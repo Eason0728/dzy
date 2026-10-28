@@ -217,6 +217,8 @@ http.createServer((req, res) => {
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
     if (req.url.startsWith('/__today')) { today = new URL(req.url, 'http://x').searchParams.get('d') || today; res.writeHead(200, cors); return res.end(today); }
+    // 代轉（稽核、宿舍等）e2e 不提供：回錯誤，讓殼的其他模組安靜失敗，不碰正式主機（2026-10-28 審查 #10）
+    if (req.url.startsWith('/platform/proxy')) { res.writeHead(200, Object.assign({ 'Content-Type': 'application/json' }, cors)); return res.end(JSON.stringify({ ok: false, error: 'e2e 測試後端沒有代轉' })); }
     let out;
     try { out = sb.doPost({ postData: { contents: body } }).getContent(); } catch (e) { out = JSON.stringify({ ok: false, error: String(e) }); }
     res.writeHead(200, Object.assign({ 'Content-Type': 'application/json' }, cors));

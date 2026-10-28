@@ -96,4 +96,25 @@ t('公告管理 → 歷史區：重新載入一般頁（等 ready 才送切換�
   assert.equal(posted.length, 0);
 });
 un2();
+
+// 試跑模式（?dryrun=1）只擋管理系統自己的 API；嵌入的佈告欄照常寫入（簽名、上架）→ iframe 上方要有明顯提示（2026-10-28 #8）
+for (const dry of [true, false]) {
+  globalThis.location = { hostname: 'dzy.mozhuting.com', search: dry ? '?dryrun=1' : '' };
+  const r3 = new El('div');
+  const un3 = bulletin.mount(r3, { viewId: 'board', api: { call: async () => ({ ok: false }) } });
+  const warn = r3.all((n) => n.attrs['data-role'] === 'dryrun-embed-warn');
+  const fr3 = r3.all((n) => n.tagName === 'iframe')[0];
+  t(dry ? '★?dryrun=1 → iframe 上方顯示「嵌入的子系統會真的寫入」提示' : '沒有 ?dryrun=1 → 不顯示試跑提示', () => {
+    if (dry) {
+      assert.equal(warn.length, 1);
+      assert.equal(warn[0].textContent, '試跑模式只保護管理系統本身；這個嵌入的子系統按送出會真的寫入，請勿送出');
+      assert.ok(r3.children.indexOf(warn[0]) < r3.children.indexOf(fr3), '提示在 iframe 上方');
+      assert.ok(fr3.src.startsWith(BACKENDS.bulletin + '/?embed=dzy'), '照常載入佈告欄');
+    } else {
+      assert.equal(warn.length, 0);
+    }
+  });
+  un3();
+  delete globalThis.location;
+}
 process.exit(failed ? 1 : 0);

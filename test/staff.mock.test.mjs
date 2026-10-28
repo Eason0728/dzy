@@ -453,8 +453,10 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   post(sb, 'setActive', { id: 'u002', active: true }, tok);
   ok(post(sb, 'me', {}, accTok2).ok === false, 'A9-5 停用再啟用後舊 token 不復活');
   // 第 6 條：人員管理手動建過 DZY 帳號 → 匯入不撞號
-  // 2026-10-12：saveUser 不再能建 role staff（同仁帳號只走同仁名單），改用系統角色建一個 DZY 名稱的帳號
-  post(sb, 'saveUser', { username: 'DZY001', name: '手動建的', role: 'accountant', node: '', password: 'manual-pw-123' }, tok);
+  // 2026-10-12：saveUser 不再能建 role staff（同仁帳號只走同仁名單）；2026-10-28 起系統帳也不能用 DZY 編號（審查 #4）
+  // → 舊資料裡可能還有這種帳號：直接寫進 users 分頁模擬，匯入照樣不能撞號
+  ok(post(sb, 'saveUser', { username: 'DZY001', name: '手動建的', role: 'accountant', node: '', password: 'manual-pw-123' }, tok).ok === false, 'A9-6 前置：saveUser 不能再建 DZY 編號的系統帳');
+  sheets.users.appendRow(['u099', 'DZY001', '手動建的', 'accountant', '', 'salt-x', 'hash-x', 'TRUE', '', '']);
   const im = post(sb, 'staffImport', { names: ['測試甲'] }, tok);
   ok(im.ok && im.data.created[0].emp_no === 'DZY002', 'A9-6 已有 DZY001 帳號 → 匯入從 DZY002 起', im);
   ok(sheets.users._rows().filter((u) => u[1] === 'DZY002').length === 1, 'A9-6 users 沒有重複帳號');

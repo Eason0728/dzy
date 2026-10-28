@@ -65,7 +65,7 @@ let currentToken = null; // 記憶體快取的 token（來源仍是 localStorage
 async function defaultTransport(requestBody) {
   const url = BACKENDS.platform;
   if (!url) {
-    return { ok: false, error: '尚未設定平台後端網址（platform/config.js）' };
+    return { ok: false, error: '尚未設定平台後端網址（platform/config.js）', transient: true };
   }
 
   // 逾時 45 秒（2026-08-17 由 15 秒放寬，Eason 在手機上實際踩到「連線逾時」）。
@@ -85,7 +85,8 @@ async function defaultTransport(requestBody) {
       signal: controller.signal
     });
   } catch (err) {
-    return { ok: false, error: (err && err.name === 'AbortError') ? '連線逾時，請稍後再試' : '連線失敗，請檢查網路' };
+    // transient：不是後端的判定（連線失敗／逾時），restore() 看到就保留 token（2026-10-28 審查 #9）
+    return { ok: false, error: (err && err.name === 'AbortError') ? '連線逾時，請稍後再試' : '連線失敗，請檢查網路', transient: true };
   } finally {
     clearTimeout(timer);
   }
@@ -94,9 +95,12 @@ async function defaultTransport(requestBody) {
   // 那種訊息（Unexpected token '<'）對現場的人完全沒有意義。
   const text = await res.text();
   try {
-    return JSON.parse(text);
+    const o = JSON.parse(text);
+    // transient 只能由本 transport 自己標；伺服器回應帶的一律拿掉（2026-10-28 複驗：否則回應自帶 transient:true 就能讓失效的 token 留著）
+    if (o && typeof o === 'object') delete o.transient;
+    return o;
   } catch {
-    return { ok: false, error: '伺服器回應格式錯誤，請稍後再試' };
+    return { ok: false, error: '伺服器回應格式錯誤，請稍後再試', transient: true };
   }
 }
 
@@ -250,6 +254,7 @@ export async function login(username, password) {
 /**
  * 開機還原：讀 localStorage 的 token，打 me 換最新身分（spec §6.1 step 2）。
  * 沒有 token、或 token 已失效 → 清乾淨並回 false，呼叫方（shell.js）改顯示登入頁。
+ * 連線失敗／逾時／格式錯誤（transient）→ 保留 token、回 false。
  * @returns {Promise<boolean>}
  */
 export async function restore() {
@@ -266,13 +271,23 @@ export async function restore() {
   }
 
   if (!res || res.ok !== true || !res.data || !res.data.user) {
-    clearTokenFromStorage();
+    // 只有連線失敗、逾時、格式錯誤（transient）保留 token；後端回的任何錯誤都清（下次開頁再試，不用重新登入；2026-10-28 審查 #9）
+    if (isTokenRejected(res)) clearTokenFromStorage();
     clearSession();
     return false;
   }
 
   applySession({ token, ...res.data });
   return true;
+}
+
+/**
+ * 要不要清掉 token：只有「連線層」失敗（transport 自己標的 transient）才保留，
+ * 後端回的任何 ok:false（失效、停用、待審核、被退回、忙碌…）一律清——往安全的方向失敗，
+ * 不靠逐字比對後端中文訊息（2026-10-28 複驗）。
+ */
+function isTokenRejected(res) {
+  return !(res && typeof res === 'object' && res.transient === true);
 }
 
 /** 登出後端的等待上限（毫秒）：逾時就不等了，照樣清本機 */

@@ -19,6 +19,26 @@ import { isBoardTab, navMessage } from './nav.js';
 
 const BULLETIN_ORIGIN = BACKENDS.bulletin;
 const LOAD_TIMEOUT_MS = 15000;
+
+/** 試跑模式（網址 ?dryrun=1）只擋管理系統自己的 API；嵌入的子系統照常寫入，所以 iframe 上方要明顯提示（2026-10-28 審查 #8）。
+ *  行為（照常發入場券）不變。模組不 import platform/，直接看網址。 */
+export const DRYRUN_EMBED_WARN = '試跑模式只保護管理系統本身；這個嵌入的子系統按送出會真的寫入，請勿送出';
+function isDryRunPage() {
+  try {
+    return typeof location !== 'undefined' && !!location && new URLSearchParams(location.search || '').get('dryrun') === '1';
+  } catch (e) {
+    return false;
+  }
+}
+function dryRunWarn() {
+  const n = document.createElement('div');
+  n.className = 'card';
+  n.setAttribute('data-role', 'dryrun-embed-warn');
+  n.setAttribute('role', 'alert');
+  n.setAttribute('style', 'border-left:4px solid var(--warn);background:var(--warn-light);font-weight:700');
+  n.textContent = DRYRUN_EMBED_WARN;
+  return n;
+}
 const VIEWS = {
   board: { src: '/?embed=dzy', aud: 'bulletin', tip: '同仁帳號會自動登入佈告欄；系統帳號或還沒對上同仁編號的，請選名字登入' },
   hist: { src: '/?embed=dzy', aud: 'bulletin', tip: '已下架的舊公告，只供查閱、不用再簽名' },
@@ -104,6 +124,7 @@ export default {
 
     state = { el, ctx, frame, tip, view: 'board', src: null, ready: false, busy: false, down: null, timer: null };
     window.addEventListener('message', onMessage);
+    if (isDryRunPage()) el.appendChild(dryRunWarn());
     el.appendChild(bar);
     el.appendChild(frame);
     render(ctx.viewId);
