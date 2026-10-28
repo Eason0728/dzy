@@ -11,12 +11,12 @@
 | # | 做什麼 | 在哪 | 做完的人看得到什麼 | 回退 |
 |---|---|---|---|---|
 | 0 | 盤點誰有薪酬個別例外＋推分支開 PR | mini（唯讀）＋MacBook | 一份「代號＋單位」清單 | 不需要 |
-| 1 | 薪資後端 Payroll.gs（clasp） | MacBook | 探針四項過；沒人帶 scope，行為不變 | 重新 redeploy 上一版號 |
-| 2 | dzy 後端 → minikit → mini 重啟 | MacBook＋mini | health 版本＝minikit HEAD；admin 照常 | mini `git reset --hard`＋重啟 |
+| 1 | 薪資後端 Payroll.gs（clasp） | MacBook | 探針五項過；沒人帶 scope，行為不變 | 重新 redeploy 上一版號（步驟 2 之後要先把非 admin 薪酬權限歸零） |
+| 2 | dzy 後端 → minikit → mini 重啟 | MacBook＋mini | health 版本＝minikit HEAD；admin 照常 | 先歸零非 admin 薪酬權限或關代轉，再 mini `git reset --hard`＋重啟 |
 | 3 | dzy 前端 | MacBook | 權限設定出現「薪酬：負責門市」 | revert merge |
 | 4 | 薪資頁 payroll.html | MacBook | 輪詢到 `scopeLimited` | revert merge |
 | 5 | Eason 在權限設定做三件事 | 瀏覽器 | 財務同仁只看到自己的門市 | 撤銷剛加的例外／規則 |
-| 6 | 換管理金鑰 | MacBook＋mini | 舊 `?k=` 連結失效 | 還原舊金鑰（見該步） |
+| 6 | 換管理金鑰 | MacBook＋mini | 舊 `?k=` 連結失效 | **不還原舊金鑰**：再產一把新的重做（見該步） |
 
 順序不能換，理由（spec §8、§10）：
 
@@ -29,9 +29,9 @@
 
 | repo | 分支 | 內容 commit（完整 sha） |
 |---|---|---|
-| mala-clock-in | `payroll-scope` | `3a7afa3ebda9df9cde51ed50bff60565aa03608c`（Payroll.gs 守門）、`a4b1e498a67c300b0222e50819533b008713a836`（payroll.html）、`615025b761531e910cd8d7521f22d0e702dc210f`（final review：擋跨店員工編號、store 正規化；**HEAD**） |
-| dzy | `payroll-scope` | `269cb42eb10d9ca1ff6c9dbdd3e9ec0313a12520`＋`114e4fcdec0e8abd3b603df231f598577232a69f`（平台後端＋差異清單清別店姓名，**第一段＝推到 114e4fc 為止**）、`9957b1d`（前端，第二段）、`e49e6f2`（manifest 註解）、其後只有文件（2026-10-29 final review 時重排過，舊的 `134a510`／`f712981` 已不在分支上） |
-| dzy-minikit | `payroll-scope` | `8cb53b1f23d0856f8d4a0626a6224a5b04ded9fd`（代轉帶 scope＋gas 同步）、`6669002af3e4b65c75183ff3eee447e1af1e0c01`（scope 元素須非空已 trim＋StaffClock.gs 同步；**HEAD**） |
+| mala-clock-in | `payroll-scope` | `3a7afa3ebda9df9cde51ed50bff60565aa03608c`（Payroll.gs 守門）、`a4b1e498a67c300b0222e50819533b008713a836`（payroll.html）、`615025b761531e910cd8d7521f22d0e702dc210f`（final review：擋跨店員工編號、store 正規化）、`d1fb156cf18ffff26c200e1e4e178acb7fe3b886`（fix2：帶 scope 先驗金鑰、擋 bootstrap、獎金員工檢查、錯誤不帶試算表 ID）、`5c5e8f873de06993b5997b658dd28cb2ffd6f026`（fix2：payroll.html 差異清單帶 emp_ids、藏從打卡名冊建立；**HEAD**） |
+| dzy | `payroll-scope` | `269cb42eb10d9ca1ff6c9dbdd3e9ec0313a12520`＋`114e4fcdec0e8abd3b603df231f598577232a69f`＋`3049ad4bf3c50e29a7132f39b2109344318333f7`（平台後端＋差異清單別店只回 state／pay_store／pay_none、emp_ids 篩選，**第一段＝推到 3049ad4 為止**）、其後是前端（權限設定、perms active 字串、bridge 帶 emp_ids，第二段）與文件（2026-10-29 fix2 又重排一次：後端 fix 插在 114e4fc 之後，前端／文件 commit 重放在它之上，sha 全變；第二段 sha 一律現場取） |
+| dzy-minikit | `payroll-scope` | `8cb53b1f23d0856f8d4a0626a6224a5b04ded9fd`（代轉帶 scope＋gas 同步）、`6669002af3e4b65c75183ff3eee447e1af1e0c01`（scope 元素須非空已 trim＋StaffClock.gs 同步）、`1d08748310a9aa6be12e73677a9ec12c0d01cca7`（fix2 StaffClock.gs 同步；**HEAD**） |
 
 ---
 
@@ -77,18 +77,18 @@ dzy 要拆兩段（第一段只有平台後端，第二段其餘）：
 ```
 # --- mala-clock-in ---
 cd ~/mala-clock-in-wt-scope
-test "$(git rev-parse HEAD)" = 615025b761531e910cd8d7521f22d0e702dc210f && git push -u origin payroll-scope
+test "$(git rev-parse HEAD)" = 5c5e8f873de06993b5997b658dd28cb2ffd6f026 && git push -u origin payroll-scope
 gh pr create -R Eason0728/mala-clock-in --base main --head payroll-scope --title "薪酬依負責門市分權限：薪資後端守門＋薪資頁" --body "見 dzy docs/payroll-scope/spec.md §4、§6"
 
 # --- dzy-minikit ---
 cd ~/dzy-minikit-wt-scope
-test "$(git rev-parse HEAD)" = 6669002af3e4b65c75183ff3eee447e1af1e0c01 && git push -u origin payroll-scope
+test "$(git rev-parse HEAD)" = 1d08748310a9aa6be12e73677a9ec12c0d01cca7 && git push -u origin payroll-scope
 gh pr create -R Eason0728/dzy-minikit --base main --head payroll-scope --title "薪酬代轉強制帶 scope（負責門市）" --body "見 dzy docs/payroll-scope/spec.md §3"
 
 # --- dzy（兩段）---
 cd ~/dzy-wt-payscope
-git merge-base --is-ancestor 114e4fcdec0e8abd3b603df231f598577232a69f payroll-scope || echo "第一段 sha 不在分支上，停"
-git push origin 114e4fcdec0e8abd3b603df231f598577232a69f:refs/heads/payroll-scope-backend
+git merge-base --is-ancestor 3049ad4bf3c50e29a7132f39b2109344318333f7 payroll-scope || echo "第一段 sha 不在分支上，停"
+git push origin 3049ad4bf3c50e29a7132f39b2109344318333f7:refs/heads/payroll-scope-backend
 git push -u origin payroll-scope
 gh pr create -R Eason0728/dzy --base main --head payroll-scope-backend --title "薪酬負責門市：平台後端（第一段）" --body "只有 apps-script/platform 與測試；見 docs/payroll-scope/spec.md §1、§2"
 gh pr create -R Eason0728/dzy --base main --head payroll-scope --title "薪酬負責門市：權限設定與集團總覽分頁（第二段）" --body "前端；要等第一段合併、mini 更新之後才合併"
@@ -96,7 +96,7 @@ gh pr list -R Eason0728/dzy --head payroll-scope-backend   # 記下 PR 號 → �
 ```
 
 > 合併一律用 `gh pr merge <號> -R Eason0728/<repo> --merge --match-head-commit <完整 40 碼 sha>`；sha 比對失敗代表分支被動過，停下來問 Claude。dzy 第二段的 sha 取 `git -C ~/dzy-wt-payscope rev-parse payroll-scope`（本檔 commit 之後的最新一筆，**每次合併前現場取**）。
-> 三個分支目前都能與 main 乾淨合併（2026-10-29 final review 後用 `git merge-tree` 重驗）；dzy 第一段（到 114e4fc）合併進 main 後，dzy 的 18 個平台 .gs 與 minikit `apps/dzy-platform/gas/` 逐檔相同（已驗）。注意：dzy `payroll-scope` 分支本身落後 main 一筆 `StoreOps.gs`（7f466ce 考勤名單列入未開通同仁），所以「分支」上的 StoreOps.gs 與 minikit 不同，合併進 main 後才相同——2-B 的比對要對 `~/dzy` main，不要對分支。
+> 三個分支目前都能與 main 乾淨合併（2026-10-29 fix2 後用 `git merge-tree` 重驗）；dzy 第一段（到 3049ad4）合併進 main 後，dzy 的 18 個平台 .gs 與 minikit `apps/dzy-platform/gas/` 逐檔相同（已驗）。注意：dzy `payroll-scope` 分支本身落後 main 一筆 `StoreOps.gs`（7f466ce 考勤名單列入未開通同仁），所以「分支」上的 StoreOps.gs 與 minikit 不同，合併進 main 後才相同——2-B 的比對要對 `~/dzy` main，不要對分支。
 
 ---
 
@@ -121,11 +121,12 @@ cd ~/mala-gas/mala-clock-in
 clasp pull
 # 雲端現況應等於 main 的 Payroll.gs（pull 之後、cp 之前）；有差異就停，先問 Claude（可能有未進 git 的雲端補丁，pull 會蓋掉本機補丁）
 git -C ~/mala-clock-in-wt-scope show origin/main:apps-script/Payroll.gs | diff -q - 薪資.js && echo "雲端＝main，可以套用"
-# 套用 scope 版（來源分支必須是 615025b 的 Payroll.gs，含 final review 的跨店員工編號守門）
-test "$(git -C ~/mala-clock-in-wt-scope rev-parse HEAD)" = 615025b761531e910cd8d7521f22d0e702dc210f || echo "分支不是預期的 commit，停"
+# 套用 scope 版（來源分支必須是 5c5e8f8 的 Payroll.gs，含 final review 與 fix2 的守門）
+test "$(git -C ~/mala-clock-in-wt-scope rev-parse HEAD)" = 5c5e8f873de06993b5997b658dd28cb2ffd6f026 || echo "分支不是預期的 commit，停"
 cp ~/mala-clock-in-wt-scope/apps-script/Payroll.gs 薪資.js
 node --check 薪資.js && echo "語法 OK"
-diff <(git -C ~/mala-clock-in-wt-scope show origin/main:apps-script/Payroll.gs) 薪資.js | grep -c '^<'   # 應為 0：只有新增行、沒有刪除任何舊行
+diff <(git -C ~/mala-clock-in-wt-scope show origin/main:apps-script/Payroll.gs) 薪資.js | grep '^<'
+# 應該恰好一行：payClockSS 舊的「打卡試算表開不起來（clock_ss_id=…）」錯誤訊息（fix2 改成不帶 ID）。其餘全是新增行；多出別的刪除行就停
 ```
 
 ### 1-C　【MacBook】推送、建版本、重新部署（auto mode 會擋，Eason 自己按 Run）
@@ -157,6 +158,7 @@ probe bad  payroll_master_get '{}'
 probe good payroll_month      '{"store":"SSLGF","ym":"2026-10","scope":["ZZ"]}'
 probe good payroll_master_get '{"store":"SSLGF"}'
 probe good payroll_master_get '{"store":"SSLGF","scope":[]}'
+probe bad  payroll_month      '{"store":"SSLGF","ym":"2026-10","scope":["ZZ"]}'
 ```
 
 過關條件（四行輸出依序）：
@@ -165,11 +167,44 @@ probe good payroll_master_get '{"store":"SSLGF","scope":[]}'
 2. `error: 'scope_forbidden'`（**新版生效的證明**：舊版沒有這個錯誤，會回 ok 或別的錯誤）。
 3. `ok: True` 且 `scope: '*'`（沒帶 scope＝舊路，照常；新版多回 `scope` 欄位）。
 4. `ok: True` 且 `scope: []`（空名單回空殼）。
+5. `error: 'unauthorized'`（**fix2 生效的證明**：帶 scope 的請求先驗金鑰；615025b 那版會先守門、回 `scope_forbidden`）。
 
 任何一項不符：先重跑一次（可能是 redeploy 延遲），仍不符就走回退。
 
 **回退 1**：`clasp redeploy <同一個部署 ID> -V <PREV>`（1-A 記下的舊版號）；再 `sleep 20` 重跑探針 2（應不再是 scope_forbidden）。
-⚠ **只有在步驟 2 之前回退才安全**（那時沒人帶 scope，不影響任何使用者）。**步驟 2／5 做過之後**，舊版 Payroll.gs 會把 `body.scope` 當成沒用的欄位忽略＝財務同仁看得到、改得到全集團薪資。這時要**先**到權限設定關掉「總部・財務部・全部職稱 → 薪酬管理」規則、撤銷所有 `payroll.store@` 個別例外（或先走回退 2 把 mini 退回舊版），**之後**才 redeploy 舊版號。
+⚠ **只有在步驟 2 之前回退才安全**（那時沒人帶 scope，不影響任何使用者）。**步驟 2／5 做過之後**，舊版 Payroll.gs 會把 `body.scope` 當成沒用的欄位忽略＝財務同仁看得到、改得到全集團薪資。這時**先做「回退前置：非 admin 薪酬權限歸零」（下一段，A 或 B 擇一，做完驗證）**，之後才 redeploy 舊版號。
+
+**回退前置：非 admin 薪酬權限歸零**（回退 1、回退 2 都要先做；步驟 2 之前不需要）
+
+A. 權限歸零（建議；薪酬管理只剩 admin 能進，admin 照常可用）：
+1. 【Eason 瀏覽器】權限設定 → 對照表：關掉「總部・財務部・全部職稱 → 薪酬管理」（以及任何其他給 `payroll.write` 的規則）。
+2. 【Eason 瀏覽器】個別例外：撤銷**所有**「薪酬管理」（`payroll.write`）個別例外——不分部門、不分是否到期。`payroll.store@` 例外可以留著（沒有 `payroll.write` 就進不去）。
+3. 【mini】唯讀驗證，兩支查詢都必須是 **0**（整段貼給 mini 的 Claude）：
+```
+sqlite3 -readonly -cmd ".timeout 5000" "$HOME/dzy-platform-data/app.db" <<'SQL'
+SELECT 'perm_ex payroll.write 有效例外' AS what, count(*) AS n FROM rows e
+WHERE e.sheet='perm_ex' AND e.r>1
+  AND json_extract(e.cells_json,'$[2]')='payroll.write'
+  AND lower(json_extract(e.cells_json,'$[3]'))='add'
+  AND upper(CAST(json_extract(e.cells_json,'$[6]') AS TEXT)) IN ('TRUE','1');
+SELECT 'perm_map payroll.write 有效規則' AS what, count(*) AS n FROM rows m
+WHERE m.sheet='perm_map' AND m.r>1
+  AND json_extract(m.cells_json,'$[4]')='payroll.write'
+  AND upper(CAST(json_extract(m.cells_json,'$[5]') AS TEXT)) IN ('TRUE','1');
+SQL
+```
+   兩行的 `n` 都是 0 才往下做回退；不是 0 就回到 1／2 再撤一次（0-A 那支查詢去掉 `check_revoke` 判斷就是同一份清單）。
+
+B. 暫時關掉 mini 的薪酬代轉（所有人含 admin 都暫時不能用管理系統的薪酬管理；不改權限資料）：
+```
+export PATH="$HOME/.local/node/bin:$PATH"; cd "$HOME/dzy-minikit"
+mkdir -p "$HOME/dzy-minikit-work"; umask 077; cp apps/dzy-platform/.env "$HOME/dzy-minikit-work/dzy-platform.env.before-payroll-off"   # 不印內容
+sed -i '' 's/^PROXY_URL_PAYROLL=.*/PROXY_URL_PAYROLL=/' apps/dzy-platform/.env                     # 網址清空（不印）
+bash kit/bin/stop.sh apps/dzy-platform && bash kit/bin/start.sh apps/dzy-platform && sleep 3 && bash kit/bin/status.sh apps/dzy-platform
+```
+   效果：`.env` 只在啟動時讀，重啟後 ns `payroll` 沒有網址 → 代轉回 **HTTP 404 `{"ok":false,"error":"UNKNOWN_NS"}`**（`kit/runner/proxy.js`，在打上游之前就回），薪酬頁每個呼叫都失敗、不會碰到薪資後端。`.env` 不在 git 裡，回退 2 的 `git reset --hard` 不會把它改回來。
+   恢復：`cp "$HOME/dzy-minikit-work/dzy-platform.env.before-payroll-off" apps/dzy-platform/.env` 後同樣 stop／start。
+   ⚠ B 只擋薪資資料；平台自己的「差異清單」`payrollStaffRoster`（姓名、單位、在職狀態，沒有薪資）不經代轉。回退 2 退回的舊版平台沒有負責門市裁切，有 `payroll.write` 的人仍讀得到全集團名單——**回退 2 優先用 A**；只用 B 時要接受這一點。
 
 ---
 
@@ -178,7 +213,7 @@ probe good payroll_master_get '{"store":"SSLGF","scope":[]}'
 ### 2-A　【MacBook】合併 dzy 第一段（只有平台後端）
 
 ```
-gh pr merge <DZY1> -R Eason0728/dzy --merge --match-head-commit 114e4fcdec0e8abd3b603df231f598577232a69f
+gh pr merge <DZY1> -R Eason0728/dzy --merge --match-head-commit 3049ad4bf3c50e29a7132f39b2109344318333f7
 cd ~/dzy && git pull --ff-only
 ```
 
@@ -191,7 +226,7 @@ cd ~/dzy-minikit-wt-scope
 git fetch origin
 for f in apps/dzy-platform/gas/*.gs; do cmp -s "$f" ~/dzy/apps-script/platform/$(basename $f) || echo "不一致：$f"; done   # 應該沒有任何輸出
 bash kit/bin/render-docs.sh dzy-platform >/dev/null 2>&1; git status --short   # 應該乾淨
-gh pr merge <MK> -R Eason0728/dzy-minikit --merge --match-head-commit 6669002af3e4b65c75183ff3eee447e1af1e0c01
+gh pr merge <MK> -R Eason0728/dzy-minikit --merge --match-head-commit 1d08748310a9aa6be12e73677a9ec12c0d01cca7
 ```
 
 （`<MK>` ＝ 0-B 開的 minikit PR 號。不一致或不乾淨就停，問 Claude。）
@@ -221,6 +256,7 @@ gh pr merge <MK> -R Eason0728/dzy-minikit --merge --match-head-commit 6669002af3
    cd apps/dzy-platform && shasum -a 256 -c gas/SOURCE.sha256 | grep -vc ": OK"      # 應為 0
    grep -c "payroll.store@" gas/Perms.gs                                              # 應 ≥ 1
    grep -c "scope" proxy-hook.js                                                       # 應 ≥ 1
+   grep -c "payPickIds_" gas/StaffClock.gs                                             # 應 ≥ 1（fix2：差異清單別店只回三欄）
    cd "$HOME/dzy-minikit"
 
 3. 重啟（約 2 秒停機；dzy-platform 是 start.sh 開的手動重啟迴圈，用 stop.sh／start.sh，不要用 kill）
@@ -246,7 +282,7 @@ gh pr merge <MK> -R Eason0728/dzy-minikit --merge --match-head-commit 6669002af3
 
 登入管理系統（Eason 是 admin）→ 薪酬管理：門市下拉有全部門市、頁頂有「集團總覽」、能看到本月資料。這代表 mini 帶的是 `'*'`、薪資後端（步驟 1）認得。**打不開、或每個畫面都跳錯誤＝立刻走回退 2**。
 
-**回退 2**（mini，貼給 mini 的 Claude）：
+**回退 2**（mini，貼給 mini 的 Claude；步驟 5 之後要先做「回退前置」）：
 
 ```
 export PATH="$HOME/.local/node/bin:$PATH"; cd "$HOME/dzy-minikit"
@@ -255,7 +291,7 @@ bash kit/bin/stop.sh apps/dzy-platform && bash kit/bin/start.sh apps/dzy-platfor
 curl -s http://127.0.0.1:8799/platform/health     # level 應為 green，version＝BEFORE 的短 hash
 ```
 資料沒有被這次更新改動（新版只讀個別例外、不寫新欄位），一般不需要還原備份檔；若資料有疑慮，照 `~/dzy-minikit/apps/dzy-platform/ROLLBACK.md` 還原步驟 2-C 做的備份。
-⚠ **若已做過步驟 5-①（把薪酬開給整個財務部）**，回退 mini 之前要**先**到權限設定把那條規則關掉——舊版 mini 不帶 scope，財務同仁會變成可看全集團。
+⚠ **若已做過步驟 5（開財務部規則或任何人的薪酬例外）**，回退 mini 之前要**先**做上面的「回退前置：非 admin 薪酬權限歸零」（A 優先）並驗證為 0——舊版 mini 不帶 scope，有 `payroll.write` 的人會變成可看全集團。
 
 ---
 
@@ -280,9 +316,9 @@ until curl -s "$DZY_URL/modules/perms/lib.js?t=$RANDOM$RANDOM" | grep -q payroll
 ## 步驟 4　薪資頁 payroll.html（mala-clock-in）
 
 ```
-gh pr merge <PAY> -R Eason0728/mala-clock-in --merge --match-head-commit 615025b761531e910cd8d7521f22d0e702dc210f
+gh pr merge <PAY> -R Eason0728/mala-clock-in --merge --match-head-commit 5c5e8f873de06993b5997b658dd28cb2ffd6f026
 PAY_URL='<薪資頁 payroll.html 網址，見 dispatch-resources.md>'
-until curl -s "$PAY_URL?t=$RANDOM$RANDOM" | grep -q sendAtt; do sleep 10; done; echo "薪資頁已上線"
+until curl -s "$PAY_URL?t=$RANDOM$RANDOM" | grep -q 'emp_ids:empIds'; do sleep 10; done; echo "薪資頁已上線"
 ```
 
 （`<PAY>` ＝ 0-B 開的 mala-clock-in PR 號。）
@@ -304,7 +340,8 @@ until curl -s "$PAY_URL?t=$RANDOM$RANDOM" | grep -q sendAtt; do sleep 10; done; 
 - [ ] 只負責央廚的人：門市選單只有央廚；頁頂沒有「集團總覽」；參數卡「只套用到目前門市」勾起且鎖住；門市設定與紅字同步看不到。
 - [ ] 同一人在瀏覽器主控台送 `store:'SSLGF'` 的 payroll_month／payroll_master_set／payroll_calc → 全部 `scope_forbidden`；送 `payroll_group`、`payroll_get`、`payroll_store_set`、`payroll_holiday_sync`、集團預設參數 → 全部擋。
 - [ ] 回應裡找不到 `clock_ss_id`、找不到負責門市以外的店碼。
-- [ ] 同一人打開「同仁名單比對」（差異清單）：開發者工具 Network 看 `payrollStaffRoster` 回應，找不到別店同仁的姓名或員編（別店編號的 name／emp_no 是空字串）；畫面「該停用」列不顯示別店姓名。
+- [ ] 同一人打開「同仁名單比對」（差異清單）：開發者工具 Network 看 `payrollStaffRoster` 回應——**可以出現別店的店碼**（`pay_store`，例如 `HQ`），但**絕不能出現別店同仁的姓名或員編**；薪資不歸負責門市的編號只有 `state`／`pay_store`／`pay_none` 三欄（在本打卡店支援、共用打卡表的別店同仁也一樣）。畫面「該停用」列只寫「薪資應歸 X」，不顯示別店姓名，也沒有 undefined。
+- [ ] 同一人在主控台送本店 `payroll_bonus_set`，夾一個別店員工的編號 → `scope_forbidden`（detail `emp_out_of_scope`）；送 `payroll_bootstrap` → `scope_forbidden`（detail `admin_only`）；員工設定頁看不到「從打卡名冊建立」。
 - [ ] 同一人在主控台送本店 `payroll_input_set`／`payroll_leave_event_set`，夾一個別店員工的打卡編號 → `scope_forbidden`（detail `emp_out_of_scope`）；正常按「儲存工時」照常成功。
 - [ ] 沒被指派任何門市的財務同仁 → 只看到「尚未指派負責門市」。
 - [ ] 非財務部、沒有個別例外的同仁 → 左側沒有薪酬管理。
@@ -321,7 +358,7 @@ until curl -s "$PAY_URL?t=$RANDOM$RANDOM" | grep -q sendAtt; do sleep 10; done; 
 範圍：薪資 web app 是光復打卡部署，**必須換的是光復那一把**（`deploy-local/ADMIN_KEY.txt`＝光復 `程式碼.js` 的 `CONFIG.ADMIN_KEY`）。央廚、總部後端各有自己的金鑰與部署，本案不必動它們（已知取捨：它們不經 mini 代轉、本來就只含該店資料）。**換之前請先與 Claude 確認 CF／HQ 是否也載有 Payroll.gs 並被別的路徑使用；不確定就先不動它們。**
 ⚠ 連動：mala-fortune 的 GitHub secret `CLOCK_ADMIN_KEY_GF`（指揮台「今天新增了誰」）——最容易漏，漏了會靜靜失效、不報錯。
 ⚠ auto mode 會把「換金鑰部署」判成 Production Deploy，clasp 那幾行由 Eason 自己按 Run。
-⚠ 從 6-D 部署完成到 6-E mini 換好之間，管理系統的薪酬管理會回「通行碼錯誤」（代轉帶舊金鑰）；挑非營業尖峰，兩段連著做（約 5 分鐘）。
+⚠ **已接受的停機窗**：從 6-D 部署完成到 6-E mini 換好之間（約 5 分鐘），管理系統的薪酬管理對**所有人（含 admin）**都會回「通行碼錯誤」（代轉帶舊金鑰）。這是刻意接受的代價（不做雙金鑰過渡）；**一定在下班後／非營業時段做**，6-D、6-E 連著做，中間不插別的事。
 
 ### 6-A　【MacBook】產新金鑰（不印出來），備份舊的
 
@@ -398,7 +435,11 @@ probe good payroll_master_get '{"store":"SSLGF"}'     # 預期 ok: True（新金
 再看：管理系統薪酬管理能開（代轉帶新金鑰）；舊 `?k=<舊金鑰>` 連結顯示「已搬進管理系統」或驗證失敗；指揮台隔天早上的「今天新增了誰」照常（或手動觸發 mala-fortune 指揮台 workflow 看）。
 最後確認沒有殘留：`grep -rlF -- "$OLD" ~/mala-gas ~/mala-clock-in/deploy-local 2>/dev/null | grep -v '\.old-'` 應該沒有輸出；舊金鑰備份檔 `ADMIN_KEY.txt.old-*` 在確認一週沒事後刪除。
 
-**回退 6**：`cd ~/mala-clock-in/deploy-local && cp ADMIN_KEY.txt.old-<日期> ADMIN_KEY.txt`；光復 `程式碼.js` 的 ADMIN_KEY 換回舊值（同 6-C，方向相反）→ clasp push／version／redeploy；mini 再跑一次 `set-payroll-secret.js` 貼回舊值；`gh secret set CLOCK_ADMIN_KEY_GF` 也換回。不要只回退其中一邊。
+**回退 6**：**絕不還原舊金鑰**——舊金鑰在 `?k=` 連結、聊天紀錄、別的機器上流傳過，就是這一步要淘汰的東西（`ADMIN_KEY.txt.old-*` 只用來在 6-B／6-F 找殘留，不是回退來源）。新金鑰出問題（例如 mini 指紋對不上、指揮台失效）時，**再產一把全新的、重做 6-A～6-F**：
+1. 6-A 用 `openssl rand -hex 24` 產新的 `ADMIN_KEY.txt.new`（覆蓋上一把失敗的）；
+2. 6-C 的 python 把「目前 `程式碼.js` 裡那把」換成新的（`old` 改讀目前生效的 `ADMIN_KEY.txt`，若 6-F 還沒 mv，就讀上一把 `.new` 的備份）；
+3. 6-D／6-E／6-F 照做，三處（光復部署、mini、`CLOCK_ADMIN_KEY_GF`）都換成同一把新金鑰，指紋要一致。
+重做期間同樣有約 5 分鐘薪酬管理停機，照樣挑下班後做。
 
 ---
 

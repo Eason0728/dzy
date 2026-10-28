@@ -28,7 +28,9 @@
 - `proxyWithOperator_` 對 ns `payroll` 多回 **`scope`**：
   - role admin（或 perms 含 `*`）→ `'*'`
   - 其他 → perms 中所有 `payroll.store@X` 的 X 組成的陣列（排序去重，可為空陣列）
-- **平台讀取 `payrollStaffRoster {store}`**（差異清單，PR Eason0728/dzy#52 新增，直接打平台、不經代轉）：同樣要套負責門市——非 admin 時 `store` 必須在自己的 `payroll.store@` 清單內，否則回 `{ok:false, error:'scope_forbidden'}`。
+- **平台讀取 `payrollStaffRoster {store, emp_ids?}`**（差異清單，PR Eason0728/dzy#52 新增，直接打平台、不經代轉）：同樣要套負責門市——非 admin 時 `store` 必須在自己的 `payroll.store@` 清單內，否則回 `{ok:false, error:'scope_forbidden'}`。
+  - 回應的 `ids`（全集團打卡編號對照）：非 admin 時，只有 `pay_store ∈ L` 的編號保留完整；其餘（包含在本打卡店打卡、共用打卡表或來支援的別店同仁）**只回 `{state, pay_store, pay_none}`**——可能看到別店代碼，不會看到別店同仁的姓名、員編、單位（2026-10-29 fix2）。
+  - `emp_ids` 是陣列時 `ids` 只回這些編號＋本店名單（`staff`）的打卡編號（所有人都套用，包含 admin；沒帶＝照舊全回）。薪資頁送本店主檔的編號。
 - 讀寫白名單不變（PROXY_READ_ACTIONS／PROXY_WRITE_ACTIONS.payroll＝dryrun.js，維持 proxy-authorize 測試比對）。
 - `test/proxy-authorize.test.mjs` 新增：admin→'*'；財務同仁兩筆例外→兩碼；沒例外→[]；撤銷的例外不算；其他 ns 不帶 scope。
 
@@ -64,10 +66,14 @@
 | `payroll_get` | 一律擋（全集團結果；前端已無呼叫者） |
 | `payroll_config_set` | `body.store` 原值必須非空（空白＝集團預設），且 `st ∈ L` |
 | `payroll_leave_type_set` | `body.store` 原值必須非空（空白＝集團共用），且 `st ∈ L` |
-| `payroll_master_set` | `st ∈ L`，且每一列的 `payStore(m.store || st) ∈ L`（Q3 A：換店要兩家都負責） |
+| `payroll_master_set` | `st ∈ L`，且每一列的 `payStore(m.store || st) ∈ L`（Q3 A：換店要兩家都負責）；新加進本店的編號若已出現在範圍外門市的主檔或工時 → `emp_out_of_scope` |
+| `payroll_input_set`、`payroll_leave_event_set`、`payroll_bonus_set` | `st ∈ L`，且 payload 每個非空 `emp_id` 都在 L 內門市的主檔 → 否則 `detail:'emp_out_of_scope'`＋`emp_ids` |
+| `payroll_bootstrap` | 一律擋（`detail:'admin_only'`；會把整個打卡名冊寫進主檔，不經員工檢查。薪資頁有範圍時藏這顆按鈕） |
 | `payroll_store_get` | 放行，回應裁切（4.3） |
 | 其餘白名單 action（讀 9 支、寫 7 支） | `st ∈ L` |
 | 不在上表也不在代轉白名單的 action | 照現行（代轉白名單已先擋掉） |
+
+**順序**：只要 `body.scope` 有值（任何形狀），先驗管理金鑰（`checkAdmin`），不對就回 `{ok:false, error:'unauthorized'}`，**之後**才守門——守門會讀主檔／工時並回 `emp_ids`，不先驗金鑰等於讓沒金鑰的人探員工編號（fix2）。
 
 L 為空陣列時，所有動作都會因 `st ∉ L` 被擋（除 `payroll_store_get` 回空清單、`payroll_master_get` 見 4.3）。
 
@@ -147,3 +153,9 @@ L 為空陣列時，所有動作都會因 `st ∉ L` 被擋（除 `payroll_store
 - 「沒有 scope 欄位＝不限制」在第 6 步換金鑰前是一個洞（持舊金鑰者仍可看全部）——就是 Q1 要換金鑰的原因，第 6 步不能拖。
 - `payroll_master_set` 換店的既有行為（舊店列可能殘留）不在本案修。
 - 假別表「不勾＝集團共用」本來就沒作用（後端不讀 scope_own），本案只把勾選框鎖住，不修那個既有問題。
+- **共用打卡表**：兩家薪資門市若在門市設定指向同一個 `clock_ss_id`，負責其中一家的人透過打卡紀錄／出勤匯出／工時歸集會看到另一家的打卡與出勤（後端以打卡表為單位讀）。目前正式環境是一家一張（1:1）；`payroll_store_set`（改 `clock_ss_id`）只有系統管理者能做，要維持 1:1 靠 admin 設定紀律，程式不擋。
+- **紅字天數**：`payroll_calc` 遇到當月沒有紅字天數時可能自動同步集團紅字天數（同一份政府行事曆，不是任何門市的私有資料），有範圍的人按「重新計算」可能因此寫入集團紅字表；內容與 admin 同步的相同，接受。
+- **「只有財務部」「系統帳號只給 admin」靠授權紀律**：`payroll.write` 是鎖碼、只有 admin 能開，但給誰（是否真的是財務部、系統／共用帳號是否只留 admin）程式不驗，靠 admin 授權時把關（上線步驟 5、0-A 清單）。
+- **空名單開頁**：還沒被指派任何門市的人開薪資頁時，boot 仍會平行送出 `payroll_month`／`payroll_trend`，後端以 `scope_forbidden` 擋掉（沒有資料外洩），之後頁面停在「尚未指派」。只是多兩支被擋的請求，不修。
+- **D5「看」的範圍（Eason 2026-10-29 裁示）**：D5 的「只有 Eason 能看」指的是**集團層級的控制**（集團總覽、集團預設參數的設定畫面、紅字天數同步、門市設定、集團共用假別表的編輯）。負責門市的參數頁照常顯示**合併後實際生效的參數值**（集團預設＋本店覆寫的結果），這是計薪必須看到的，不算違反 D5。
+- **差異清單看得到別店代碼**：`payrollStaffRoster` 對範圍外編號回 `pay_store`（例如「薪資應歸 HQ」），只有店碼、沒有人名／員編。

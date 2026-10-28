@@ -1,6 +1,6 @@
 # 薪酬依負責門市分權限 — 進度
 
-> 規格 `spec.md`、實作計畫 `plan.md`、上線步驟 `release.md`。更新：2026-10-29。
+> 規格 `spec.md`、實作計畫 `plan.md`、上線步驟 `release.md`。更新：2026-10-29（fix2）。
 > **目前狀態：程式與本機整合實測完成，三個 repo 的分支都還沒 push、沒上線。** 上線由 Eason 依 `release.md` 執行。
 
 ## Task 狀態
@@ -54,6 +54,24 @@
 dzy 分支為了讓第一段（平台後端）包含 C1，重排過：`269cb42 → 114e4fc（C1）→ 9957b1d（前端）→ 5fd1872（文件）→ e49e6f2 → 本檔 commit`；舊 `134a510`／`f712981` 不再在分支上（內容相同、未推過）。
 逐項證據：`.superpowers/sdd/plan/final-fix-report.md`。
 
+## 第二輪審查修正 fix2（2026-10-29）
+
+兩份獨立審查確認的問題，全部 TDD（先紅後綠）：
+
+| # | 問題 | 修法 | 位置 |
+|---|---|---|---|
+| 1 | 守門在 checkAdmin 之前跑：沒金鑰的人帶 scope 可拿 `scope_forbidden`／`emp_ids` 探員工編號 | `payScopeWrap_`：`body.scope` 有值且金鑰不對 → 先回 `unauthorized`（不讀任何薪資表） | mala-clock-in `Payroll.gs`（d1fb156） |
+| 2 | 差異清單 `here` 例外：共用打卡店、別店支援者的姓名員編看得到 | 只有 `pay_store ∈ L` 完整，其餘只回 `{state, pay_store, pay_none}`；`emp_ids` 陣列時只回這些＋本店名單編號；薪資頁送本店主檔 emp_ids、文字不再依賴 unit_name | dzy `StaffClock.gs`（第一段）、`bridge.js`（第二段）；mala-clock-in `payroll.html`（5c5e8f8）；minikit gas 同步（1d08748） |
+| 3 | 有範圍仍能「從打卡名冊建立」（整份名冊寫進主檔，不經員工檢查）；前端讀 `r.added.length`，永遠顯示沒有新增 | 有範圍 → `scope_forbidden`／`admin_only`，薪資頁藏按鈕；訊息改讀 `r.names`、`r.added` 是人數 | 同上 |
+| 4 | `payroll_bonus_set` 可夾別店員工 | 納入 `emp_out_of_scope` 規則 | `Payroll.gs` |
+| 5 | 打卡試算表開不起來的錯誤字串含 `clock_ss_id`，會被 Code.gs 當 detail 回傳 | 訊息只留門市＋「請找系統管理者檢查門市設定」，ID 寫 Logger | `Payroll.gs` |
+| 6 | `tests/payroll-scope.test.js` 例外被當放行、放行只驗「不是 scope_forbidden」 | 例外＝失敗；放行要 `ok:true` 或指定業務錯誤（calc `no_holiday`、finalize `reason_required`） | 測試 |
+| 7 | 權限設定 `active: x.active !== false` 把字串 `'false'` 當啟用 | 字串比對（不分大小寫、前後空白） | dzy `modules/perms/lib.js`（第二段） |
+| 8–11 | release／spec 文件 | 回退 1／2 先歸零非 admin 薪酬權限（含唯讀驗證查詢）或關 mini 代轉；回退 6 不還原舊金鑰、停機窗寫明；驗收改「可見別店代碼、不可見別店人」；spec §10 補五項取捨、requirements D5 對齊；SHA 全部重算 | `release.md`、`spec.md`、`requirements.md` |
+
+dzy 分支又重排一次：後端 fix 插在 `114e4fc` 之後成為新的第一段終點 `3049ad4`，前端與文件 commit 重放在它之上（sha 全變，未推過）。
+逐項證據：`.superpowers/sdd/plan/fix2-report.md`。
+
 ## 還沒做
 
 1. 三個 repo 推分支、開 PR、依序合併（`release.md` 步驟 0-B～4；推 main 與 clasp 要 Eason 自己按）。
@@ -70,3 +88,4 @@ dzy 分支為了讓第一段（平台後端）包含 C1，重排過：`269cb42 �
 - ~~人資主管的 `permExList` 可能回出其他人的 `payroll.store@` 例外列~~：查證後本來就不會（只回 STORE_HR_GRANTABLE），已補測試（final review）。
 - dzy `payroll-scope` 分支落後 main 的 `StoreOps.gs`（7f466ce），分支上與 minikit 差這一檔；合併進 main 後 18 檔相同（已用 merge-tree 驗）。
 - `payroll_master_set` 換店的既有行為（舊店列可能殘留）不在本案修（spec §10）。
+- 共用打卡表、紅字天數自動同步、授權紀律、空名單開頁、D5「看」的範圍：見 spec §10（fix2 補記）。
