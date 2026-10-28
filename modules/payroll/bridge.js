@@ -36,6 +36,19 @@ export function parseCall(data) {
   return { id: data.id, action: data.action, payload };
 }
 
+/** 薪酬頁要的「管理系統自己的資料」（2026-10-28 差異清單＋一鍵帶入）：這幾個 action 不送薪資後端，改打平台後端。
+ *  只帶白名單欄位（門市代碼），其他一律丟掉。 */
+export const PLATFORM_ROUTES = { payroll_dzy_staff: { action: 'payrollStaffRoster', keys: ['store'] } };
+
+/** 一則呼叫該送哪裡：{ns, action, payload} */
+export function routeOf(call) {
+  const p = PLATFORM_ROUTES[call.action];
+  if (!p) return { ns: 'payroll', action: call.action, payload: call.payload };
+  const payload = {};
+  p.keys.forEach((k) => { if (typeof call.payload[k] === 'string') payload[k] = call.payload[k]; });
+  return { ns: 'platform', action: p.action, payload };
+}
+
 /** ctx.api.call 的結果（{ok,data}／{ok:false,error,data?,status?}）→ 薪酬頁原本的扁平回應 */
 export function toPageResult(r) {
   if (!r || typeof r !== 'object') return { ok: false, error: 'bad_response', message: '伺服器回應格式錯誤' };

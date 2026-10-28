@@ -47,6 +47,8 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'svcStoreRedeem', 'svcStoreWho', 'svcStoreRoster',
   // 2026-10-28：值班主管本人的申請改由上層審（docs/req-upper）。attUpperGaps 是純讀取（人資主管／admin 才有內容），首頁提醒用
   'attUpperGaps',
+  // 2026-10-28：薪酬管理「差異清單＋一鍵帶入」（StaffClock.gs 末節）。純讀取，要 payroll.write；寫入仍由薪酬頁走 payroll_master_set
+  'payrollStaffRoster',
   // 2026-10-25：區域（督導負責區，Regions.gs；docs/regions/spec.md 第 9 節）。regionList／regionCheck 是讀取；regionSave／regionSwitch 寫入（上鎖）
   'regionList', 'regionSave', 'regionCheck', 'regionSwitch',
   // 2026-10-25：LINE 認身分的人資操作（LineAuth.gs；docs/line-auth/spec.md §3.2）。lineRevoke 寫入（上鎖）、lineAuthLog 讀取。
@@ -252,6 +254,7 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'svcStoreWho': return handleSvcStoreWho_(payload);
     case 'svcStoreRoster': return handleSvcStoreRoster_(payload);
     case 'attUpperGaps': return handleAttUpperGaps_(token);
+    case 'payrollStaffRoster': return handlePayrollStaffRoster_(token, payload);
     case 'regionList': return handleRegionList_(token);
     case 'regionSave': return handleRegionSave_(token, payload);
     case 'regionCheck': return handleRegionCheck_(token);

@@ -39,7 +39,7 @@ var CLK_STAFF_EXTRA = ['hire_date', 'last_day', 'extra_depts', 'line_revoked_at'
 var CLK_DEFAULT_STORES = [
   ['gf', '小辛辣 新竹光復', [['mala', '新竹光復']], 'SSLGF'],
   ['mztjs', '墨竹亭 新竹金山', [['mzt', '新竹金山']], 'MZTJS'],
-  ['mztgf', '墨竹亭 新竹光復', [['mzt', '新竹光復']], ''],
+  ['mztgf', '墨竹亭 新竹光復', [['mzt', '新竹光復']], 'MZTGF'],
   ['mztlzl', '墨竹亭 台北六張犁', [['mzt', '台北六張犁']], 'MZTLZL'],
   // 總部：管理系統有四個總部／品牌辦公室單位（Eason 2026-10-14），打卡共用同一套總部打卡 → unit_code 逗號分隔四個
   ['hq', '鼎兆元 總部', [['dzy', '鼎兆元總部'], ['mzt', '墨竹亭品牌辦公室'], ['mala', '小辛辣品牌辦公室'], ['yiwu', '一悟燒肉品牌辦公室']], 'HQ'],
@@ -2459,4 +2459,120 @@ function clkAfterDisable_(empNo, byLabel) {
     try { stfLog_(stfNormEmp_(empNo), 'disable_jobs_failed', 'system', '停用單開單失敗'); } catch (e2) { /* 每日對帳會補 */ }
     return null;
   }
+}
+
+// ============================================================
+// 薪酬管理「差異清單＋一鍵帶入」（2026-10-28，Eason 選 B 方案：不自動建檔）
+// ============================================================
+// 薪酬頁（mala-clock-in/payroll.html，嵌在薪酬管理模組）選一家薪酬門市時，用這支拿「該店的同仁名單」跟薪資主檔比：
+// 新人、該停用、姓名不一致。按「帶入／停用」才由薪酬頁自己用 payroll_master_set 寫入，這支只讀、不碰薪資。
+// 判斷「這個人屬於哪家薪酬門市」一律看同仁名單的所屬單位（不看打卡名冊）：去別店支援、共用打卡機的人才不會被列成新人。
+
+/** 共用總部打卡（hq）的單位，薪資分屬不同薪酬門市：單位 → 薪酬店代碼，優先於 clock_stores.payroll_store。
+ *  yiwu-hq（一悟品牌辦公室）薪資先不建立（Eason 2026-10-28）：列在 PAY_UNIT_NONE＝不出現在任何一家的名單，
+ *  ids 標 pay_none，薪酬頁顯示「一悟品牌辦公室尚未設薪資門市」。不要建薪酬門市、不要建主檔。 */
+var PAY_UNIT_STORE = { 'dzy-hq': 'HQ', 'mala-hq': 'SSLHQ', 'mzt-hq': 'MZTHQ' };
+var PAY_UNIT_NONE = ['yiwu-hq'];
+
+/** 打卡店的薪酬店代碼：clock_stores.payroll_store；空白時退回 CLK_DEFAULT_STORES 的預設（正式表 mztgf 曾是空白） */
+function clkPayStoreOf_(st) {
+  var v = stfStr_(st && st.payroll_store).toUpperCase();
+  if (v) return v;
+  var code = clkCode_(st && st.store_code);
+  for (var i = 0; i < CLK_DEFAULT_STORES.length; i++) if (CLK_DEFAULT_STORES[i][0] === code) return stfStr_(CLK_DEFAULT_STORES[i][3]).toUpperCase();
+  return '';
+}
+
+/** 單位 → 薪酬店代碼（純函式）：stores＝clkStores_()；對不到回 '' */
+function payStoreOfUnit_(unit, stores) {
+  var u = stfStr_(unit);
+  if (!u || PAY_UNIT_NONE.indexOf(u) !== -1) return '';
+  if (PAY_UNIT_STORE[u]) return PAY_UNIT_STORE[u];
+  for (var i = 0; i < stores.length; i++) {
+    if (stores[i].enabled && clkUnitsOf_(stores[i]).indexOf(u) !== -1) return clkPayStoreOf_(stores[i]);
+  }
+  return '';
+}
+
+/** 薪酬店代碼 → 去哪家打卡店找打卡編號（純函式）：payroll_store 相同的店優先，否則找含有「對照到這家薪酬店的單位」的店 */
+function payClockStoreOf_(pay, stores) {
+  var p = stfStr_(pay).toUpperCase();
+  if (!p) return null;
+  for (var i = 0; i < stores.length; i++) if (stores[i].enabled && clkPayStoreOf_(stores[i]) === p) return stores[i];
+  var units = Object.keys(PAY_UNIT_STORE).filter(function (u) { return PAY_UNIT_STORE[u] === p; });
+  for (var j = 0; j < stores.length; j++) {
+    if (!stores[j].enabled) continue;
+    var us = clkUnitsOf_(stores[j]);
+    if (units.some(function (u) { return us.indexOf(u) !== -1; })) return stores[j];
+  }
+  return null;
+}
+
+/** 同仁在職狀態：disabled＝已停用；最後上班日已過＝已離職；其他（含未認領、待審）都算在職 */
+function payStaffState_(status, last, today) {
+  if (status === 'disabled') return 'disabled';
+  if (last && last < today) return 'left';
+  return 'active';
+}
+
+/**
+ * 組名單（純函式，測試直接呼叫）：
+ *   staffAll＝clkStaffAll_() 形狀、maps＝clkMaps_()、stores＝clkStores_()、org＝stfReadOrg_()、today＝'yyyy-MM-dd'
+ * 回 { store, clock_store, clock_store_name, staff:[…歸這家薪酬門市的人], ids:{打卡編號: …} }
+ *   staff[i]：{ emp_no, name, state, last_day, hire_date, unit, unit_name, title, title_name, emp_id }（emp_id＝該打卡店 confirmed 對照；沒有＝''）
+ *   ids：該打卡店（不含 rejected）＋其他店的對照，薪資主檔的編號拿來查「這個人現在在哪、還在不在職」；同編號以該打卡店優先
+ *   ids[eid]：{ emp_no, name, state, unit_name, pay_store, pay_none, store_code, here }（here＝在這家打卡店；pay_none＝單位在 PAY_UNIT_NONE）
+ */
+function payStaffRosterBuild_(pay, staffAll, maps, stores, org, today) {
+  var p = stfStr_(pay).toUpperCase();
+  var cs = payClockStoreOf_(p, stores);
+  var csCode = cs ? cs.store_code : '';
+  var byEmp = {};
+  staffAll.forEach(function (s) { if (s.emp) byEmp[s.emp] = s; });
+  function view(s) {
+    var unit = clkStaffUnit_(s), u = org.unit[unit], tc = stfStr_(s.values[STF_COL.title]), t = org.title[tc];
+    return { emp_no: s.emp, name: clkStaffName_(s), state: payStaffState_(clkStaffStatus_(s), s.last, today),
+      last_day: s.last || '', hire_date: s.hire || '', unit: unit, unit_name: u ? u.name : unit, title: tc, title_name: t ? t.name : tc,
+      pay_store: payStoreOfUnit_(unit, stores) };
+  }
+  var staff = [];
+  staffAll.forEach(function (s) {
+    if (!s.emp) return;
+    var v = view(s);
+    if (v.pay_store !== p) return;
+    var mine = maps.filter(function (m) { return m.emp_no === s.emp && m.store_code === csCode && m.state === 'confirmed'; });
+    mine.sort(function (a, b) { return (a.role === 'home' ? 0 : 1) - (b.role === 'home' ? 0 : 1); });
+    v.emp_id = mine.length ? mine[0].emp_id : '';
+    delete v.pay_store;
+    staff.push(v);
+  });
+  staff.sort(function (a, b) { return a.emp_no < b.emp_no ? -1 : (a.emp_no > b.emp_no ? 1 : 0); });
+  var ids = {};
+  function put(m, here) {
+    if (!m.emp_id || m.state === 'rejected') return;
+    if (ids[m.emp_id] && (ids[m.emp_id].here || !here)) return;
+    var s = byEmp[m.emp_no];
+    var v = s ? view(s) : null;
+    ids[m.emp_id] = { emp_no: m.emp_no, name: v ? v.name : '', state: v ? v.state : 'missing', unit_name: v ? v.unit_name : '',
+      pay_store: v ? v.pay_store : '', pay_none: !!(v && PAY_UNIT_NONE.indexOf(v.unit) !== -1), store_code: m.store_code, here: here };
+  }
+  maps.forEach(function (m) { if (m.store_code === csCode) put(m, true); });
+  maps.forEach(function (m) { if (m.store_code !== csCode) put(m, false); });
+  return { store: p, clock_store: csCode, clock_store_name: cs ? stfStr_(cs.store_name) : '', staff: staff, ids: ids };
+}
+
+/**
+ * 讀取 action payrollStaffRoster {store}（薪酬店代碼，如 SSLGF）：要 payroll.write（薪酬管理同一個權限）。
+ * 只回姓名、在職狀態、單位、職稱、到職／最後上班日、打卡編號（不回手機、生日、地址）。
+ */
+function handlePayrollStaffRoster_(token, payload) {
+  var me = handleMe_(token);
+  if (!me.ok) return me;
+  if (!hasPerm_(me.data.perms, 'payroll.write')) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+  var pay = stfStr_(payload && payload.store).toUpperCase();
+  if (!/^[A-Z0-9]{2,12}$/.test(pay)) return clkErr_('bad_input', '門市代碼不正確');
+  if (!clkSheetsReady_()) return clkErr_('not_ready', '同仁名單還沒和打卡系統對照');
+  var data = payStaffRosterBuild_(pay, clkStaffAll_(), clkMaps_(), clkStores_(), stfReadOrg_(), clkTodayOf_(new Date()));
+  data.unit_none = PAY_UNIT_NONE.slice();
+  return { ok: true, data: data };
 }

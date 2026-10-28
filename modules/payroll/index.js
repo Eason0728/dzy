@@ -4,7 +4,7 @@
  */
 'use strict';
 
-import { payrollTarget, parseCall, toPageResult, navMessage } from './bridge.js';
+import { payrollTarget, parseCall, toPageResult, navMessage, routeOf } from './bridge.js';
 
 const LOAD_TIMEOUT_MS = 20000;
 let state = null;   // { el, ctx, frame, target, down, timer }
@@ -40,7 +40,8 @@ async function onMessage(e) {
   if (!call) return;
   const frame = state.frame, origin = state.target.origin, ctx = state.ctx;
   let r;
-  try { r = await ctx.api.call('payroll', call.action, call.payload); } catch (err) { r = { ok: false, error: '網路連線失敗，請稍後再試', status: 0 }; }
+  const to = routeOf(call);
+  try { r = await ctx.api.call(to.ns, to.action, to.payload); } catch (err) { r = { ok: false, error: '網路連線失敗，請稍後再試', status: 0 }; }
   if (!state || state.frame !== frame || !frame.contentWindow) return;   // 已切走
   frame.contentWindow.postMessage({ type: 'dzy-payroll-result', v: 1, id: call.id, result: toPageResult(r) }, origin);
 }

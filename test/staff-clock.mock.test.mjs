@@ -1209,7 +1209,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const { sb, sheets, tok } = app;
   const gfRows = sheets.clock_stores._rows();
   { const m = {}; gfRows.slice(1).forEach((r) => { m[r[0]] = r[4]; });
-    ok(gfRows[0][4] === 'payroll_store' && JSON.stringify(m) === JSON.stringify({ gf: 'SSLGF', mztjs: 'MZTJS', mztgf: '', mztlzl: 'MZTLZL', hq: 'HQ', cf: 'CF' }), 'FIX1 clock_stores.payroll_store 預設列：gf=SSLGF／mztjs=MZTJS／mztlzl=MZTLZL／hq=HQ／cf=CF，mztgf 無證據留空', m); }
+    ok(gfRows[0][4] === 'payroll_store' && JSON.stringify(m) === JSON.stringify({ gf: 'SSLGF', mztjs: 'MZTJS', mztgf: 'MZTGF', mztlzl: 'MZTLZL', hq: 'HQ', cf: 'CF' }), 'FIX1 clock_stores.payroll_store 預設列：gf=SSLGF／mztjs=MZTJS／mztlzl=MZTLZL／hq=HQ／cf=CF，mztgf=MZTGF（2026-10-28 薪酬門市表已建）', m); }
   const p = claimApprove(app, '薪光復甲', 'pw-fix1-pw-01', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
   giveMap(app, p.emp, 'gf', 'E5', 'home');
   const real = sb.clockRosterApply_('gf', [rosterRow('E5', '薪光復甲')], [{ store: 'SSLGF', emp_id: 'E5', name: '薪光復甲打錯' }], nowT(0));
