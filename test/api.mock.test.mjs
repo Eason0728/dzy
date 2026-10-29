@@ -590,6 +590,16 @@ await (async function test14() {
   assertEqual(sent.payload, { year: '2026', token: 'someone-elses-token' }, '14b: payload 夾帶的 action／code／pass 刪掉；payload.token 原樣留著（宿舍的簽約／點交單 token 要用）');
   assertEqual(sent.token, 'tok-acct-9', '14c: 外層 token 一律是目前登入身分的，payload.token 蓋不掉它');
 
+  // 2026-10-29 第二道防線：代轉 ns 的 payload 頂層不准夾帶 operator／adminKey／admin_key／pin_master／key／level／scope／account
+  //（這些都是 mini 代轉層依登入身分自己補的影子欄位或各後端金鑰；瀏覽器端沒有任何模組合法需要送）。巢狀的同名欄位不動。
+  globalThis.fetch = makeFetchMock({ adminStores: () => ({ ok: true, stores: [] }) });
+  const mock3 = globalThis.fetch;
+  await call('cashbook', 'adminStores', {
+    store: 'gf', operator: '假會計', adminKey: 'k1', admin_key: 'k2', pin_master: '0000', key: 'k3', level: 'write', scope: 'all', account: 'boss',
+    items: [{ key: 'q1', level: 3 }]
+  });
+  assertEqual(mock3.calls[0].body.payload, { store: 'gf', items: [{ key: 'q1', level: 3 }] }, '14f: 代轉 ns 的 payload 頂層 operator／adminKey／admin_key／pin_master／key／level／scope／account 一律剝除；巢狀的不動');
+
   // 宿舍點交單：payload.token 是點交單 token，必須原樣送到（e2e t6 抓到過）
   globalThis.fetch = makeFetchMock({ handover: () => ({ ok: true, state: 'pending' }) });
   const mock2 = globalThis.fetch;
