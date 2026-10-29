@@ -2665,3 +2665,62 @@ function stf2610mRun_(token, payload, dir) {
 
 function handleOrgEnableMztMc202610_(token, payload) { return stf2610mRun_(token, payload, 'apply'); }
 function handleOrgEnableMztMcRollback202610_(token, payload) { return stf2610mRun_(token, payload, 'rollback'); }
+
+// ---- 15. 墨竹亭台中美村加進打卡對照 clock_stores（2026-10-29，第七家打卡店 MZTMC；一次性按鈕，只有 role admin）----
+// clock_stores 只有空表時才寫預設列（stfEnsureSheet_），正式表要靠這支補一列；退回＝把 enabled 改 FALSE（不刪列）。
+var STF_2610C = { code: 'mztmc', name: '墨竹亭 台中美村', unit: 'mzt-mc', payroll: 'MZTMC' };
+function stf2610cPlan_(dir) {
+  var rows = clkRows_(CLK_SHEET_STORES, CLK_STORES_HEADERS);
+  var hit = null;
+  rows.forEach(function (r) { if (!hit && clkCode_(r.store_code) === STF_2610C.code) hit = r; });
+  var plan = { action: 'skip', row: 0, bad: [], maps: 0, conflict: '' };
+  if (!hit) {
+    if (dir === 'apply') {
+      plan.action = 'add';
+      rows.forEach(function (r) {   // 別的店的 unit_code 已含 mzt-mc → 加了就變成同單位兩店
+        if (clkUnitsOf_({ unit_code: r.unit_code }).indexOf(STF_2610C.unit) !== -1) plan.conflict = clkCode_(r.store_code);
+      });
+    }
+    return plan;
+  }
+  plan.row = hit._row;
+  if (stfStr_(hit.store_name) !== STF_2610C.name || stfStr_(hit.unit_code) !== STF_2610C.unit) {
+    plan.bad.push({ kind: 'clock_store', code: STF_2610C.code, expected: STF_2610C.name + '／' + STF_2610C.unit, actual: stfStr_(hit.store_name) + '／' + stfStr_(hit.unit_code) });
+    return plan;
+  }
+  var on = clkTruthy_(hit.enabled);
+  if (dir === 'apply') { plan.action = on ? 'skip' : 'reactivate'; return plan; }
+  if (!on) return plan;
+  plan.maps = clkMaps_().filter(function (m) { return clkCode_(m.store_code) === STF_2610C.code && m.state === 'confirmed'; }).length;
+  plan.action = 'deactivate';
+  return plan;
+}
+function stf2610cRun_(token, payload, dir) {
+  var auth = stfRequireAdmin_(token);
+  if (!auth.ok) return auth;
+  if (!clkSheetsReady_() || clkHeaderProblem_()) return { ok: false, error: '打卡對照分頁還沒初始化或表頭不一致，請先打開同仁名單讓系統初始化' };
+  var dry = !!(payload && payload.dryrun === true);
+  var plan = stf2610cPlan_(dir);
+  var label = dir === 'apply' ? '墨竹亭台中美村加進打卡對照' : '退回墨竹亭台中美村打卡對照';
+  if (plan.bad.length) return { ok: false, error: label + '：clock_stores 已有 mztmc 但名稱或單位不是預期的值（可能被改過），什麼都沒有改', data: { bad: plan.bad } };
+  if (plan.conflict) return { ok: false, error: label + '：店 ' + plan.conflict + ' 的 unit_code 已含 mzt-mc，什麼都沒有改', data: { bad: [{ kind: 'unit_conflict', code: plan.conflict, expected: '不含 mzt-mc', actual: 'mzt-mc' }] } };
+  if (plan.maps) return { ok: false, error: label + '：已有 ' + plan.maps + ' 筆同仁打卡對照在這家店，請先處理再退回', data: { maps: plan.maps } };
+  var data = { dryrun: dry, action: plan.action, store: { code: STF_2610C.code, name: STF_2610C.name, unit: STF_2610C.unit, payroll: STF_2610C.payroll } };
+  if (dry || plan.action === 'skip') return { ok: true, data: data };
+  var by = String(auth.user.id);
+  var sh = stfSheet_(CLK_SHEET_STORES);
+  if (plan.action === 'add') {
+    sh.getRange(sh.getLastRow() + 1, 1, 1, CLK_STORES_HEADERS.length)
+      .setValues([[STF_2610C.code, STF_2610C.name, STF_2610C.unit, 'TRUE', STF_2610C.payroll]]);
+    stfLog_('', 'clock_add_mztmc_2610', by, 'clock_store:mztmc:add');
+  } else {
+    var turnOn = plan.action === 'reactivate';
+    sh.getRange(plan.row, CLK_STORES_HEADERS.indexOf('enabled') + 1, 1, 1).setValue(turnOn ? 'TRUE' : 'FALSE');   // 只寫 enabled 那一格
+    stfLog_('', turnOn ? 'clock_add_mztmc_2610' : 'clock_add_mztmc_2610_rollback', by, 'clock_store:mztmc:' + (turnOn ? 'reactivate' : 'deactivate'));
+  }
+  var after = stf2610cPlan_(dir);
+  if (after.action !== 'skip' || after.bad.length) return { ok: false, error: label + '後驗證失敗（資料與目標不一致），請檢查 clock_stores 分頁後重跑' };
+  return { ok: true, data: data };
+}
+function handleClockAddMztMc202610_(token, payload) { return stf2610cRun_(token, payload, 'apply'); }
+function handleClockAddMztMcRollback202610_(token, payload) { return stf2610cRun_(token, payload, 'rollback'); }

@@ -34,13 +34,14 @@ var CLK_OUTBOX_HEADERS = ['job_id', 'kind', 'emp_no', 'store_code', 'emp_id', 'n
 var CLK_STAFF_EXTRA = ['hire_date', 'last_day', 'extra_depts', 'line_revoked_at'];   // extra_depts＝兼任部門（組織改版 T2，Staff.gs 讀寫）；line_revoked_at＝人資停用 LINE 開通／重設的時間（毫秒，LineAuth.gs 讀寫）；舊表缺尾端欄時自動補
 
 // 預設六列：[store_code, store_name, [[品牌代碼, 單位名稱]…], payroll_store]；unit_code 由 STF_DEFAULT_ORG 依品牌＋單位名稱查（多個單位以逗號串起來），查不到的留空。
-// payroll_store＝薪資模組自己的門市代碼（SSLGF＝打卡 Payroll.gs PAY_DEFAULT_STORE；CF／HQ／MZTJS／MZTLZL 見 mala-clock-in、mala-payroll skill 的薪酬門市表紀錄）；
+// payroll_store＝薪資模組自己的門市代碼（SSLGF＝打卡 Payroll.gs PAY_DEFAULT_STORE；CF／HQ／MZTJS／MZTLZL／MZTMC 見 mala-clock-in、mala-payroll skill 的薪酬門市表紀錄）；
 // 墨竹亭光復 mztgf：文件記載「不在薪酬門市表」、無代碼證據，留空（空白時退回用 store_code 比對）
 var CLK_DEFAULT_STORES = [
   ['gf', '小辛辣 新竹光復', [['mala', '新竹光復']], 'SSLGF'],
   ['mztjs', '墨竹亭 新竹金山', [['mzt', '新竹金山']], 'MZTJS'],
   ['mztgf', '墨竹亭 新竹光復', [['mzt', '新竹光復']], 'MZTGF'],
   ['mztlzl', '墨竹亭 台北六張犁', [['mzt', '台北六張犁']], 'MZTLZL'],
+  ['mztmc', '墨竹亭 台中美村', [['mzt', '台中美村']], 'MZTMC'],   // 2026-10-29 第七家打卡店；正式表由 clockAddMztMc202610 補列
   // 總部：管理系統有四個總部／品牌辦公室單位（Eason 2026-10-14），打卡共用同一套總部打卡 → unit_code 逗號分隔四個
   ['hq', '鼎兆元 總部', [['dzy', '鼎兆元總部'], ['mzt', '墨竹亭品牌辦公室'], ['mala', '小辛辣品牌辦公室'], ['yiwu', '一悟燒肉品牌辦公室']], 'HQ'],
   ['cf', '中央廚房', [['ck', '中央工廠（央廚）']], 'CF']
