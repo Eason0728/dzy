@@ -112,7 +112,8 @@ class Mock(MockBackend):
                 return {'ok': False, 'error': '登入已失效'}
             if '*' in u['perms'] or u.get('hr_head'):
                 return {'ok': True, 'data': {'items': [{'emp': 'DZY9%02d' % i, 'name': '假值班%d' % i, 'unit_name': '門市X'} for i in range(self.gaps['items'])],
-                                              'unmapped': [{'store_code': 'cs1', 'emp_id': 'CS1%03d' % i, 'reason': 'unmapped'} for i in range(self.gaps['unmapped'])]}}
+                                              'unmapped': [{'store_code': 'cs1', 'emp_id': 'CS1%03d' % i, 'reason': 'unmapped'} for i in range(self.gaps['unmapped'])],
+                                              'hours_items': [{'emp': 'DZY8%02d' % i, 'name': '假同仁%d' % i, 'unit_name': '門市Y'} for i in range(self.gaps.get('hours', 0))]}}
             return {'ok': True, 'data': {'items': []}}
         if action == 'payrollStaffRoster':
             self.platform_calls.append(('payrollStaffRoster', body.get('payload')))
@@ -172,7 +173,7 @@ def scenario():
         'pay_stores': pay_stores, 'fin_scope': fin_scope,
         'att_alerts': {'ok': True, 'data': {'items': att_items, 'partial': R.random() < 0.3, 'asOf': '2026-10-29T00:00:00Z', 'pending': False}},
         'sched_alerts': {'ok': True, 'data': {'items': sched_items, 'asOf': '2026-10-29T00:00:00Z', 'self': self_part, 'fixed': fixed}},
-        'gaps': {'items': R.randint(0, 3), 'unmapped': R.randint(0, 2)},
+        'gaps': {'items': R.randint(0, 3), 'unmapped': R.randint(0, 2), 'hours': R.randint(0, 2)},   # hours＝工時沒人核（2026-10-30）
         'duty_tabs': tabs_json(STORE_TAB_POOL['duty'][:2] + R.sample(STORE_TAB_POOL['duty'][2:], R.randint(0, 3))),
         'sched_tabs': tabs_json(STORE_TAB_POOL['schedule']),
     }
@@ -335,6 +336,9 @@ def main():
         gap_total = scen['gaps']['items'] + scen['gaps']['unmapped']
         if gap_total:
             want_rows.append('%d 位值班主管的申請找不到上層，由人資主管審' % gap_total)
+        hours_gap = scen['gaps'].get('hours', 0)
+        if hours_gap:
+            want_rows.append('%d 位同仁的工時沒人核，由人資主管核' % hours_gap)
         pg.wait_for_function("() => !document.querySelector('[data-role=\"alert-list\"][data-module=\"attendance\"]')?.textContent.includes('讀取中')", timeout=8000)
         rows = alert_rows(pg, 'attendance')
         check(rows == want_rows, '考勤首頁提醒列（隨機件數＋partial＋找不到上層）：期望 %s 實際 %s' % (want_rows, rows))
@@ -344,7 +348,7 @@ def main():
         side = pg.locator('[data-role="nav-desktop"] [data-nav="attendance"] .badge')
         check((side.count() == 1 and side.inner_text().strip() == want_badge) or (side.count() == 0 and want_badge == ''), '考勤側邊欄數字同卡片')
         # 點每一列 → 導到對應分頁（approve／request／device）；partial 列沒有 view → 不是連結、點了不導頁（2026-10-29 platform/tabs.js alertViewId，殼不再退回模組預設分頁）
-        views = [k for k in ('approve', 'request', 'device') if cnt[k] > 0] + ([None] if d['partial'] else []) + (['request'] if gap_total else [])
+        views = [k for k in ('approve', 'request', 'device') if cnt[k] > 0] + ([None] if d['partial'] else []) + (['request'] if gap_total else []) + (['approve'] if hours_gap else [])
         for i, v in enumerate(views):
             row = pg.locator('[data-role="alert-list"][data-module="attendance"] [data-role="alert-row"]').nth(i)
             key = cm.key(pg, '[data-role="alert-list"][data-module="attendance"] [data-role="alert-row"]:nth-child(%d)' % (i + 1)) or ('row-att-%d' % i)

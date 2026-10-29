@@ -626,6 +626,29 @@ function oracle(W) {
     });
     return out.sort();
   };
+  // 工時找不到核定人（2026-10-30 Eason 照推薦，attUpperGaps.hours_items）：在職、身分有效、要核工時（非 hr_only）、有生效打卡帳號；
+  // 非支援帳號看表上有沒有人能核（attApproverOf_ hours，店長核自己算有），支援帳號看打卡店四層有沒有人；推算／orphan 不算（另有「沒有對照」提醒）
+  O.hoursGaps = () => {
+    const out = [];
+    activePeople.forEach((p) => {
+      if (!identityOk(W, p)) return;
+      const t = Object.assign({}, p, { duty_units: dutyOf(p), acting: actingOf(p) });
+      const nd = need(t, 'hours');
+      if (!nd || nd.kind === 'hr_only') return;
+      const accts = liveAcct.filter((a) => a.emp === p.emp);
+      if (!accts.length) return;
+      const te = eff(p);
+      let gap = false;
+      accts.forEach((a) => {
+        const units = storeUnits[a.store] || [];
+        if (te && isSupport(te, a.store, units)) {
+          if (!Object.keys(supportApprovers(units, false, inter(units, te.acting) ? p.emp : '')).length) gap = true;
+        } else if (!W.people.some((ap) => approver(Object.assign({}, ap), t, 'hours'))) gap = true;
+      });
+      if (gap) out.push(p.emp);
+    });
+    return out.sort();
+  };
   O.permsOf = permsOf; O.hrHeadOf = hrHeadOf; O.actingOf = actingOf; O.dutyOf = dutyOf; O.need = need; O.eff = eff; O.approver = approver;
   return O;
 }
@@ -744,6 +767,10 @@ function run() {
   const gotGaps = gapsAdmin.data.items.map((x) => x.emp).sort();
   const expGaps = O.upperGaps();
   ok(eq(gotGaps, expGaps), 'attUpperGaps：找不到上層的值班主管名單', { got: gotGaps, exp: expGaps });
+  const gotH = (gapsAdmin.data.hours_items || []).map((x) => x.emp).sort();
+  const expH = O.hoursGaps();
+  ok(Array.isArray(gapsAdmin.data.hours_items) && eq(gotH, expH), '★attUpperGaps.hours_items：工時找不到核定人的名單（2026-10-30）', { got: gotH, exp: expH });
+  (gapsAdmin.data.hours_items || []).forEach((x) => ok(typeof x.unit_name === 'string' && typeof x.name === 'string', 'hours_items 列形狀', x));
   gapsAdmin.data.items.forEach((x) => ok(typeof x.unit_name === 'string' && typeof x.name === 'string', 'attUpperGaps 列形狀', x));
   const hrHead = viewers.find((p) => O.hrHeadOf(p));
   if (hrHead) {

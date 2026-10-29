@@ -656,8 +656,38 @@ function storeUpperGaps_(people, org, rctx, maps, storeUnits) {
 }
 
 /**
+ * 工時找不到核定人的同仁（2026-10-30 Eason 照推薦；attUpperGaps.hours_items）：在職、身分有效（storeOrgOf_）、要核工時（attNeedOf_ hours 非 null、非 hr_only）、
+ * 有生效打卡帳號；非支援帳號看表上有沒有人能核（attApproverOf_ hours，店長核自己算有），支援帳號看打卡店四層（storeSupportApprovers_）有沒有人。
+ * 除人資主管／admin 外沒人能核就列（例：共用打卡店的另一單位沒店長、沒總監的辦公室）。推算／orphan 的人不算（另有「沒有對照」提醒）。
+ * 回 [{emp, name, unit}]，依 emp 排序。
+ */
+function storeHoursGaps_(people, org, rctx, maps, storeUnits) {
+  var out = [];
+  var acct = {};
+  storeAttAccounts_(people, org, null, maps || [], storeUnits || {}).forEach(function (a) { (acct[a.t.emp] = acct[a.t.emp] || []).push(a); });
+  people.forEach(function (t) {
+    if (stfStr_(t.status) !== 'active' || !stfStr_(t.emp)) return;
+    if (!storeOrgOf_(t, org)) return;
+    var need = attNeedOf_(t, org, 'hours');
+    if (!need || need.kind === 'hr_only') return;
+    var list = acct[t.emp] || [];
+    if (!list.length) return;
+    var gap = false;
+    list.forEach(function (a) {
+      if (a.support) {
+        var selfEx = a.units.some(function (u) { return storeActingHas_(t, u); }) ? stfStr_(t.emp) : '';
+        if (!Object.keys(storeSupportApprovers_(a.units, people, org, rctx, false, selfEx)).length) gap = true;
+      } else if (!people.some(function (ap) { return attApproverOf_(ap, t, org, 'hours', rctx); })) gap = true;
+    });
+    if (gap) out.push({ emp: t.emp, name: stfStr_(t.name), unit: stfStr_(t.unit) });
+  });
+  return out.sort(function (a, b) { return a.emp < b.emp ? -1 : (a.emp > b.emp ? 1 : 0); });
+}
+
+/**
  * 讀取 action attUpperGaps（docs/req-upper）：只有「有 platform.att 且是人資主管或 admin」的人看得到，其他一律回空。
- * 回 { ok:true, data:{ items:[{emp, name, unit_name}], unmapped:[{store_code, emp_id, reason:'unmapped'}] } }；unit_name＝單位顯示名稱。
+ * 回 { ok:true, data:{ items:[{emp, name, unit_name}], unmapped:[{store_code, emp_id, reason:'unmapped'}], hours_items:[{emp, name, unit_name}] } }；unit_name＝單位顯示名稱。
+ * hours_items＝工時找不到核定人的同仁（storeHoursGaps_，2026-10-30）；同一支讀取 action，dryrun READ_ACTIONS／minikit readActions 不用改。
  */
 function handleAttUpperGaps_(token) {
   var me = handleMe_(token);
@@ -675,11 +705,12 @@ function handleAttUpperGaps_(token) {
   var org = stfReadOrg_();
   var rctx = typeof regionCtx_ === 'function' ? regionCtx_() : null;
   var maps = clkMaps_();
-  var items = storeUpperGaps_(storePeople_(), org, rctx, maps, storeClockUnits_()).map(function (g) {
-    return { emp: g.emp, name: g.name, unit_name: storeUnitLabel_(g.unit, org) };
-  });
+  var people = storePeople_(), su = storeClockUnits_();
+  var label = function (g) { return { emp: g.emp, name: g.name, unit_name: storeUnitLabel_(g.unit, org) }; };
+  var items = storeUpperGaps_(people, org, rctx, maps, su).map(label);
+  var hoursItems = storeHoursGaps_(people, org, rctx, maps, su).map(label);   // 2026-10-30 工時沒人核
   // 值班主管但管理系統沒有 confirmed 對照的打卡帳號：打卡開關開了也沒人能核（不含姓名）
-  return { ok: true, data: { items: items, unmapped: clkDutyUnmapped_(maps) } };
+  return { ok: true, data: { items: items, unmapped: clkDutyUnmapped_(maps), hours_items: hoursItems } };
 }
 
 /** 兼任單位 ∩ 試點（排序去重） */
