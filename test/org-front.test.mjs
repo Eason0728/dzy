@@ -573,6 +573,23 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   rows.fire('click', { target: btn });
   if (typeof unmount === 'function') unmount();
   ok(typeof unmount !== 'function' || (docLs.keydown || []).length === 0, '20 卸載時移除 document 監聽');
+  // 對抗驗證 D：同一個 el 再掛一次 → 舊監聽換掉、不累積；對話框開著時 Esc 不收合「更多」
+  const el2 = el; el2.__unmount = mountList(el2, h); await flush();
+  const rows2 = el2.querySelector('[data-role="rows"]');
+  open = false;
+  rows2.fire('click', { target: btn });
+  ok(open && (docLs.keydown || []).length === 1, '20 ★重掛同一個 el 後展開 → document 仍只有 1 個監聽');
+  globalThis.document.querySelector = (sel) => (sel === '.dialog-overlay' ? {} : null);
+  docLs.keydown[0]({ key: 'Escape' });
+  ok(open && (docLs.keydown || []).length === 1, '20 ★對話框開著按 Esc → 不收合「更多」、監聽還在');
+  delete globalThis.document.querySelector;
+  docLs.keydown[0]({ key: 'Escape' });
+  ok(!open && (docLs.keydown || []).length === 0, '20 對話框關了再按 Esc → 收合');
+  rows2.fire('click', { target: btn });
+  const el3Unmount = mountList(el2, h); await flush();   // 第三次掛：前一次展開中的監聯要被換掉而不是留到卸載
+  ok((docLs.keydown || []).length <= 1, '20 ★展開中再重掛 → 舊 document 監聯被移除（不等卸載）');
+  el3Unmount(); if (typeof el2.__unmount === 'function') el2.__unmount();
+  ok((docLs.keydown || []).length === 0, '20 全部卸載後沒有殘留監聽');
   delete globalThis.document.addEventListener; delete globalThis.document.removeEventListener;
 }
 

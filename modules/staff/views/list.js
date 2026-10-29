@@ -37,16 +37,19 @@ export function mountList(el, ctx) {
   let alive = true;
   // 手機「更多」展開時的 Esc：原本只綁在清單 el 上，焦點不在清單內（例如剛點完按鈕焦點掉到 body）按 Esc 沒反應（2026-10-29 資料帶入測試）。
   // 改掛 document：有任何一列展開就掛一個，全部收合（或卸載）就移除，不累積。
-  let docEsc = null;
+  // 監聽掛在 el 上（el.__stfDocEsc）而不是閉包：同一個 el 重掛時先拆舊的，不會等到舊 mount 卸載才移除（對抗驗證 D）。
+  const dropDocEsc = () => { if (el.__stfDocEsc) { document.removeEventListener('keydown', el.__stfDocEsc); el.__stfDocEsc = null; } };
+  if (typeof document !== 'undefined' && document.removeEventListener) dropDocEsc();
   const syncDocEsc = () => {
     const anyOpen = el.querySelectorAll('tr.stf-open').length > 0;
-    if (anyOpen && !docEsc && typeof document !== 'undefined' && document.addEventListener) {
-      docEsc = (e) => { if (e.key === 'Escape' && el.__stfCloseMore) el.__stfCloseMore(null); };
-      document.addEventListener('keydown', docEsc);
-    } else if (!anyOpen && docEsc) {
-      document.removeEventListener('keydown', docEsc);
-      docEsc = null;
-    }
+    if (anyOpen && !el.__stfDocEsc && typeof document !== 'undefined' && document.addEventListener) {
+      el.__stfDocEsc = (e) => {
+        if (e.key !== 'Escape' || !el.__stfCloseMore) return;
+        if (document.querySelector && document.querySelector('.dialog-overlay')) return;   // 模組對話框開著：Esc 歸對話框，不連帶收合「更多」
+        el.__stfCloseMore(null);
+      };
+      document.addEventListener('keydown', el.__stfDocEsc);
+    } else if (!anyOpen && el.__stfDocEsc) dropDocEsc();
   };
   let staff = [];
   let org = { brands: [], units: [], depts: [], titles: [] };
@@ -169,9 +172,7 @@ export function mountList(el, ctx) {
       onAction(e);
     });
     // 「更多」展開後按 Esc、或點同仁名單其他地方都會收起（2026-10-26 Fable 複查建議）；el 跨重畫共用，只綁一次
-    if (!el.__stfMoreBound) {
-      el.__stfMoreBound = true;
-      const closeMore = (keep) => {
+    const closeMore = (keep) => {
         el.querySelectorAll('tr.stf-open').forEach((tr) => {
           if (tr === keep) return;
           tr.classList.remove('stf-open');
@@ -180,10 +181,12 @@ export function mountList(el, ctx) {
         });
         syncDocEsc();
       };
-      el.__stfCloseMore = closeMore;
-      el.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMore(null); });
-      el.addEventListener('click', (e) => { closeMore(e.target.closest ? e.target.closest('tr.stf-open') : null); }, true);
+    if (!el.__stfMoreBound) {
+      el.__stfMoreBound = true;
+      el.addEventListener('keydown', (e) => { if (e.key === 'Escape' && el.__stfCloseMore) el.__stfCloseMore(null); });
+      el.addEventListener('click', (e) => { if (el.__stfCloseMore) el.__stfCloseMore(e.target.closest ? e.target.closest('tr.stf-open') : null); }, true);
     }
+    el.__stfCloseMore = closeMore;   // 每次掛載都換成這次的（el 上的事件只綁一次，透過這個指標找到最新的 closeMore／syncDocEsc）
     el.querySelector('[data-role="add-staff"]').addEventListener('click', () => openAddFlow(clockEnv()));
     if (orgTools) {
       el.querySelector('[data-role="org-upgrade"]').addEventListener('click', upgradeFlow);
@@ -665,5 +668,5 @@ export function mountList(el, ctx) {
   }
 
   load();
-  return () => { alive = false; if (docEsc) { document.removeEventListener('keydown', docEsc); docEsc = null; } };
+  return () => { alive = false; if (typeof document !== 'undefined' && document.removeEventListener) dropDocEsc(); };
 }
