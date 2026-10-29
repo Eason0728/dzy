@@ -36,3 +36,19 @@ export function pickDynamicView(viewId, tabs, fallbackId) {
   if (Array.isArray(tabs) && tabs.length) return tabs[0].id;
   return fallbackId;
 }
+
+/**
+ * 首頁「待辦與異常」一列的目的分頁 id（2026-10-29 從 shell.js alertTarget 搬成純函式）。
+ * item.view 不是字串（模組只是提醒，例如「部分門市暫時讀不到」）→ null＝只顯示、不給連結樣式、不導頁。
+ * dynamicTabs 模組且 view 合格、進得了模組（views[0] 有權限）→ 直接該分頁。
+ * 其他：view 對到有權限的分頁就用它；對不到或沒權限 → 退回模組第一個有權限的分頁（沒有就 null）。
+ * permitted(view) 由殼提供（看 requires）。
+ */
+export function alertViewId(manifest, item, permitted) {
+  if (!item || typeof item.view !== 'string') return null;
+  const views = Array.isArray(manifest && manifest.views) ? manifest.views : [];
+  if (manifest.dynamicTabs && TAB_ID_RE.test(item.view) && views[0] && permitted(views[0])) return item.view;
+  const view = views.find((v) => v.id === item.view && permitted(v)) || views.find(permitted);
+  return view ? view.id : null;
+}
+

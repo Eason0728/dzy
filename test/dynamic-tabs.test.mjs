@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { sanitizeTabs, pickDynamicView, TABS_MAX } from '../platform/tabs.js';
+import { sanitizeTabs, pickDynamicView, TABS_MAX, alertViewId } from '../platform/tabs.js';
 import { navTabs } from '../modules/storeops/embed.js';
 import * as A from '../modules/attendance/embed.js';
 import * as S from '../modules/schedule/embed.js';
@@ -38,6 +38,20 @@ t('pickDynamicView：網址合格優先 → 第一個分頁 → 預設', () => {
   assert.equal(pickDynamicView('duty', [{ id: 'home' }], 'main'), 'duty');
   assert.equal(pickDynamicView('Bad!', [{ id: 'home' }], 'main'), 'home');
   assert.equal(pickDynamicView(null, [], 'main'), 'main');
+});
+t('alertViewId：提醒列沒有 view → null（不給連結）；有 view 對到就用、對不到退回第一個有權限的；動態分頁直達（2026-10-29）', () => {
+  const m = { id: 'cashbook', views: [{ id: 'main', requires: ['x'] }, { id: 'lock', requires: ['y'] }] };
+  const can = (v) => v.requires.some((p) => p === 'y');
+  assert.equal(alertViewId(m, { text: '部分門市暫時讀不到' }, can), null);
+  assert.equal(alertViewId(m, { view: null }, can), null);
+  assert.equal(alertViewId(m, { view: 'lock' }, can), 'lock');
+  assert.equal(alertViewId(m, { view: 'nope' }, can), 'lock');
+  assert.equal(alertViewId(m, { view: 'main' }, can), 'lock');
+  assert.equal(alertViewId(m, { view: 'lock' }, () => false), null);
+  const dyn = { id: 'attendance', dynamicTabs: true, views: [{ id: 'main', requires: ['a'] }] };
+  assert.equal(alertViewId(dyn, { view: 'duty-x' }, () => true), 'duty-x');
+  assert.equal(alertViewId(dyn, { view: 'Bad!' }, () => true), 'main');
+  assert.equal(alertViewId(dyn, {}, () => true), null);
 });
 t('navTabs：只認 dzy-store-nav v1；cur 要在清單裡', () => {
   const d = { type: 'dzy-store-nav', v: 1, items: [{ id: 'home', label: '首頁' }, { id: 'inventory', label: '庫存盤點', badge: 33 }, { id: 'X', label: 'bad' }], cur: 'inventory' };
