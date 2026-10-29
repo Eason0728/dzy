@@ -423,7 +423,7 @@ function expectReview(R, T) {
     ok(post(sb, 'staffSetActive', { emp_no: e, active: true }, A).ok, 'F 啟用');
     ok(post(sb, 'staffList', {}, A).data.staff.find((x) => x.emp_no === e).status === 'active', 'F 啟用後回 active');
     // 離職：人資登記 last_day（今天）→ 名單帶 last_day；撤銷；再登記過去日期 → 每日同步停用 → 復職
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);   // 台北日期（後端 can_cancel 用台北「今天」比；UTC 晚上會差一天）
     const lv = post(sb, 'staffLeave', { emp_no: e, last_day: today }, A);
     ok(lv.ok && lv.data.can_cancel === true, 'F 登記離職（今天）可撤銷', lv);
     ok(post(sb, 'staffList', {}, A).data.staff.find((x) => x.emp_no === e).last_day === today, 'F 名單 last_day');

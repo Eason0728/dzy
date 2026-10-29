@@ -974,7 +974,13 @@ def acct_ops_fill(page, mock):
     page.click(sel + ' .ops-vbtn[data-verdict="合格"]')
     check(page.locator('#ops-s-pending').inner_text() == str(c['pending'] + 1), '再點一次合格→取消回未檢查')
     page.click(sel + ' .ops-vbtn[data-verdict="合格"]')
-    tracked = next(e for e in entries if e['track'])
+    tracked = next((e for e in entries if e['track']), None)
+    if tracked is None:
+        # 隨機資料沒抽到任何追蹤項：補點一項「追蹤」再測取消（不然 next() 會 StopIteration 把整支測試炸掉）
+        tracked = next(e for e in entries if e['verdict'] == '合格')
+        page.click('.ops-item[data-item="%s"] .ops-tbtn' % tracked['item_id'])
+        tracked['track'] = True
+        print('  （隨機沒抽到追蹤項，補點 %s 為追蹤）' % tracked['item_id'])
     cm.click(page, '.ops-item[data-item="%s"] .ops-tbtn.sel' % tracked['item_id'], '取消追蹤')
     check(page.locator('.ops-item[data-item="%s"] .ops-tbtn.sel' % tracked['item_id']).count() == 0, '追蹤中再點＝取消')
     page.click('.ops-item[data-item="%s"] .ops-tbtn' % tracked['item_id'])

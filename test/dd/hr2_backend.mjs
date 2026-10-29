@@ -616,6 +616,16 @@ function oracle(W) {
       }
       if (gap) out.push(p.emp);
     });
+    // 總部同仁（非值班主管）有打卡帳號、申請照原身分（部門總監核），但表上已沒有在職核定人 → 也列（StoreOps.gs 0c44636，2026-10-29 審查低 2）
+    activePeople.forEach((p) => {
+      if (out.includes(p.emp) || isDuty(p) || unit(p.unit).ladder !== 'hq') return;
+      const te = eff(p);   // 後端 acct 只收「支援」帳號（storeAttAccounts_ a.support），總部自己的 hq 打卡不算
+      if (!te || !liveAcct.some((a) => a.emp === p.emp && isSupport(te, a.store, storeUnits[a.store] || []))) return;
+      const t = Object.assign({}, p, { duty_units: dutyOf(p), acting: actingOf(p) });
+      const nd = need(t, 'req');
+      if (!nd || nd.kind === 'hr_only') return;
+      if (!W.people.some((ap) => approver(Object.assign({}, ap), t, 'req'))) out.push(p.emp);
+    });
     return out.sort();
   };
   O.permsOf = permsOf; O.hrHeadOf = hrHeadOf; O.actingOf = actingOf; O.dutyOf = dutyOf; O.need = need; O.eff = eff; O.approver = approver;
