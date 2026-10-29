@@ -302,6 +302,11 @@ def main():
                 pg.locator('[data-role="alert-list"][data-module="purchase"] [data-role="alert-row"]').first.click()
                 pg.wait_for_selector('[data-keep="purchase"] iframe', timeout=10000)
                 tab_want = 'review' if ds['counts']['review'] > 0 else 'failed'
+                # 提醒先導到 #/purchase/main?tab=<x>，嵌入頁送回選單後殼才改寫成 #/purchase/<x>（dd 測試 2026-10-29：單次讀 hash 會撞到這段時間差）
+                try:
+                    pg.wait_for_function("(h) => location.hash === h", arg='#/purchase/%s' % tab_want, timeout=8000)
+                except Exception:
+                    pass
                 check(pg.evaluate('location.hash') == '#/purchase/%s' % tab_want, '點貨單提醒 → #/purchase/%s：%s' % (tab_want, pg.evaluate('location.hash')))
                 pre_tab = tab_want if tab_want in [t for t, _ in ds['purchase_tabs']] else ds['purchase_tabs'][0][0]
                 pg.goto(SITE + '/index.html#/home')

@@ -343,11 +343,18 @@ def main():
         check(badge == want_badge, '考勤卡片數字＝核定＋申請＝%r，實際 %r' % (want_badge, badge))
         side = pg.locator('[data-role="nav-desktop"] [data-nav="attendance"] .badge')
         check((side.count() == 1 and side.inner_text().strip() == want_badge) or (side.count() == 0 and want_badge == ''), '考勤側邊欄數字同卡片')
-        # 點每一列 → 導到對應分頁（approve／request／device；partial 列沒有 view → 進模組預設）
-        views = [k for k in ('approve', 'request', 'device') if cnt[k] > 0] + (['main'] if d['partial'] else []) + (['request'] if gap_total else [])
+        # 點每一列 → 導到對應分頁（approve／request／device）；partial 列沒有 view → 不是連結、點了不導頁（2026-10-29 platform/tabs.js alertViewId，殼不再退回模組預設分頁）
+        views = [k for k in ('approve', 'request', 'device') if cnt[k] > 0] + ([None] if d['partial'] else []) + (['request'] if gap_total else [])
         for i, v in enumerate(views):
             row = pg.locator('[data-role="alert-list"][data-module="attendance"] [data-role="alert-row"]').nth(i)
             key = cm.key(pg, '[data-role="alert-list"][data-module="attendance"] [data-role="alert-row"]:nth-child(%d)' % (i + 1)) or ('row-att-%d' % i)
+            if v is None:
+                check(row.get_attribute('role') != 'link' and not row.get_attribute('data-target'), '考勤提醒第 %d 列（partial，沒有 view）→ 不是連結、沒有 data-target' % (i + 1))
+                h0 = pg.evaluate('location.hash')
+                row.click()
+                pg.wait_for_timeout(300)
+                check(pg.evaluate('location.hash') == h0, '點 partial 列不導頁（仍在 %s）' % h0)
+                continue
             row.click()
             pg.wait_for_selector('[data-keep="attendance"] iframe[data-role="store-frame"]')
             fr0 = wait_frame(pg, STORE + '/dzy-store/?embed=dzy&only=duty', "() => window.__got.some(m => m.data && m.data.type === 'dzy-store-tabs')")

@@ -64,17 +64,9 @@ def sanitize_tabs(items):
         if not name:
             continue
         b = t.get('badge')
-        if isinstance(b, bool):
-            n = 1 if b else 0   # JS Number(true)＝1
-        elif b is None:
-            n = 0
-        else:
-            try:
-                n = float(b)
-            except (TypeError, ValueError):
-                n = 0
-        # embed.js：Number(badge)||0；tabs.js：整數且 >0 才算，上限 999
-        badge = min(int(n), 999) if n == int(n) and n > 0 else 0
+        # embed.js badgeNum（2026-10-29）：只收 number（布林 true 不再變 1、字串 '33' 不算）、有限且 >0，小數無條件捨去；tabs.js：整數 >0 才算，上限 999
+        n = int(b) if isinstance(b, (int, float)) and not isinstance(b, bool) and b == b and b not in (float('inf'), float('-inf')) and b > 0 else 0
+        badge = min(n, 999)
         seen.add(tid)
         out.append({'id': tid, 'name': name, 'badge': badge, 'err': t.get('err') is True})
     return out
