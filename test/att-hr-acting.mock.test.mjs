@@ -471,10 +471,10 @@ function setup() {
   const d3 = sb.apvDirectory_();
   ok(!sb.apvRoleMembers_('head', d3.byEmp.DZY202, d3, null).some((p) => p.emp === 'DZY201') && eq(sb.permActingUnitsOf_('DZY201'), []), '7-9 ★兼任者主要單位停用 → 請購第一關也收回');
   orgRow[7] = 'TRUE'; sb.permActingReset_();
-  // 7-2 財務同仁到門市打卡：不算支援、店長不核，人資主管核
+  // 7-2 財務同仁到門市打卡＝支援（2026-10-29 Eason 改）：工時店長核，申請照原身分給人資主管
   sheets.staff_clock._data.push(['DZY222', 'mztgf', 'MZTGF222', 'staff', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
-  ok(!has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222') && !has(app.V('DZY231'), 'mztgf:DZY222'), '7-2 ★財務同仁在門市打卡：店長不核也不看');
-  ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2 人資主管核財務同仁的門市帳號');
+  ok(has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222'), '7-2 ★財務同仁在門市打卡：店長核工時、不簽申請');
+  ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2 人資主管核財務同仁的門市帳號（工時與申請）');
   ok(eq(app.H('DZY221'), []), '7-2 財務總監仍空');
 })();
 
