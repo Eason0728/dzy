@@ -20,6 +20,7 @@ globalThis.fetch = async (url) => {
 };
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { esc, datetime, date, roc, money } from '../platform/fmt.js';
 import { safePdfUrl, b64ToBytes, safePdfName, isPdfBytes, preferShare, isLineInApp, giveCopyErrorText } from '../modules/dorm/views/handover.js';
 
@@ -323,6 +324,11 @@ const { mountHandover, calcCompensationPreview, validateHandoverSubmit } =
 
 const priceOf = (item) => (EQUIP.find((x) => x.item === item) || {}).price || 0;
 
+t('★畫面說明：設備清單旁要寫明「未歸還就會照賠償單價計價」（2026-10-30 Eason 照推薦：維持計價規則、只補說明）', () => {
+  const src = fs.readFileSync(new URL('../modules/dorm/views/handover.js', import.meta.url), 'utf8');
+  assert.ok(src.includes('dorm-handover-items-hint'), '要有 id=dorm-handover-items-hint 的說明');
+  assert.ok(/未歸還[^'"\n]*計價/.test(src), '說明文字要講「未歸還…計價」');
+});
 t('calcCompensationPreview：異常＋未歸還 → 計價（書桌 2000）', () => {
   const total = calcCompensationPreview([{ item: '書桌', normal: false, returned: false }], false, priceOf, CLEANING_FEE);
   assert.equal(total, 2000);
