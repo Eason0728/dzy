@@ -768,7 +768,18 @@ function clkLeaveBlocks_(empNo) {
   if (!clkSheetsReady_()) return null;
   var s = clkStaffByEmp_(empNo);
   if (!s || !s.last) return null;
-  return s.last <= clkTodayOf_(new Date()) ? CLK_MSG.LEFT : null;
+  var today = clkTodayOf_(new Date());
+  if (s.last > today) return null;
+  // 預先登記、日子到了（沒人呼叫過 setTokenAfter_）：第一次擋下時補寫 token_after，營運系統沿用 token_after 的 session 才會被刪（對抗驗證 2026-10-30）。
+  // 只在 token_after 早於台北今天 00:00 時寫一次，之後的請求不再寫；撤銷離職不回退 token_after（本來就要重登）。
+  try {
+    var ur = typeof findUsrRowById_ === 'function' ? findUsrRowById_(stfStr_(s.values[STF_COL.user_id])) : null;
+    if (ur && typeof setTokenAfter_ === 'function') {
+      var ta = Number(ur.values[AUTH_USERS_COL.token_after]) || 0;
+      if (ta < Date.parse(today + 'T00:00:00+08:00')) setTokenAfter_(ur.row);
+    }
+  } catch (e) { /* 踢人失敗不影響擋下 */ }
+  return CLK_MSG.LEFT;
 }
 
 function handleStaffLeaveCancel_(token, payload) {

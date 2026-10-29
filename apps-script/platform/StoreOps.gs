@@ -897,6 +897,7 @@ function storeIdent_(sub) {
   } else {
     return inactive;
   }
+    if (typeof clkLeaveBlocks_ === 'function' && clkLeaveBlocks_(p.emp)) return inactive;   // 2026-10-30 離職日已到：營運系統與平台同一天停（svcStoreWho／svcStoreRoster 回 inactive，營運系統重查身分時會刪 session）
 
   var admin = String(user.role) === 'admin';
   var perms = p ? storePermsOf_(p) : [];
