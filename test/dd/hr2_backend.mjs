@@ -581,17 +581,15 @@ function oracle(W) {
     if (!W.pilot.length || p.status !== 'active') return out;
     const perms = permsOf(p), acting = actingOf(p), hrHead = hrHeadOf(p);
     const hrOnlyHead = p.title === 'hm' && HR_ONLY_DEPTS.indexOf(p.dept) !== -1;
+    out.att = (GATE_ATT.indexOf(p.title) !== -1 && !hrOnlyHead) || hrHead || acting.length > 0 || perms.indexOf('att.extra') !== -1 || exViewUnitsOf(p).length > 0;
     const u = unit(p.unit);
-    // 職稱那條（2026-10-29 比照 storeOpsGate_）：身分要有效（單位／職稱啟用、職稱屬該單位階梯）；門市階梯的人本人單位還要在試點
-    const titleOk = identityOk(W, p) && (u.ladder !== 'store' || W.pilot.indexOf(p.unit) !== -1);
-    out.att = (GATE_ATT.indexOf(p.title) !== -1 && !hrOnlyHead && titleOk) || hrHead || acting.length > 0 || perms.indexOf('att.extra') !== -1 || exViewUnitsOf(p).length > 0;
     const hasHq = liveAcct.some((a) => a.emp === p.emp && a.store === 'hq');
     let schedView = false;
     if (W.regionsOn && (p.title === 'osv' || p.title === 'odir')) {
       const vu = viewUnitsOf(p);
       if (vu.length) schedView = O.lists(p, {}, vu, []).V.size > 0;
     }
-    out.sched = (GATE_SCHED.indexOf(p.title) !== -1 && titleOk) || hrHead || acting.length > 0 || schedView || (!!u && u.active && (u.ladder === 'hq' || u.ladder === 'office') && hasHq);
+    out.sched = GATE_SCHED.indexOf(p.title) !== -1 || hrHead || acting.length > 0 || schedView || (!!u && u.active && (u.ladder === 'hq' || u.ladder === 'office') && hasHq);
     out.storeops = NO_ATT.indexOf(p.title) !== -1 || (W.pilot.indexOf(p.unit) !== -1 && identityOk(W, p) && !!u && u.ladder === 'store') || acting.length > 0 || perms.indexOf('att.extra') !== -1;
     return out;
   };
@@ -872,7 +870,7 @@ function run() {
   });
 
   // 3g. 資訊（不算失敗）：有考勤／排班選單、但 ident 三份名單與 units_managed／self 都空的人（選單點進去沒東西）
-  //     2026-10-29 起職稱那條要「身分有效＋門市階梯在試點」（比照 storeOpsGate_）；剩下的多半是總部／辦公室職稱
+  //     目前規格就是「職稱在名單上就給選單」（storeAttGate_／storeSchedGate_ 只看 STORE_SSO_UNITS 非空，不看本人單位在不在試點；storeOpsGate_ 有看）
   const emptyMenu = [];
   viewers.forEach((p) => {
     const d = app.login(p.emp); const g = idents[p.emp];

@@ -997,33 +997,20 @@ function handleSvcStoreRoster_(payload) {
 // ============================================================
 
 /**
- * 考勤／排班閘門「職稱那條」的共同前提（2026-10-29 資料帶入測試，比照 storeOpsGate_）：
- * 身分有效（storeOrgOf_：單位／職稱啟用、職稱屬於該單位階梯，例如門市沒有廠長），且門市階梯（store）的人本人單位要在試點 pilot。
- * 總部／品牌辦公室職稱（hm／ceo／odir…）單位不在試點清單裡，只看身分有效。其他來源（人資主管、兼任、att.extra、att.view@、hq 自填）不經這裡。
- */
-function storeTitleGateOk_(values, pilot, org) {
-  var p = { unit: stfStr_(values[STF_COL.unit]), title: stfStr_(values[STF_COL.title]) };
-  var o = storeOrgOf_(p, org || stfReadOrg_());
-  if (!o) return false;
-  return o.ladder !== 'store' || pilot.indexOf(p.unit) !== -1;
-}
-
-/**
  * 總開關（STORE_SSO_UNITS）空 → 一律 false（考勤管理選單不顯示）。
- * 否則：在職且（職稱 STORE_ATT_GATE_TITLES：sm／fm／am／rdd／osv／odir／hm／ceo／gm／chair 且身分有效、門市階梯者本人單位在試點（storeTitleGateOk_）、或人資主管、或有 att.extra、
+ * 否則：在職且（職稱 STORE_ATT_GATE_TITLES：sm／fm／am／rdd／osv／odir／hm／ceo／gm／chair、或人資主管、或有 att.extra、
  *   或有合法的 att.view@<單位>（2026-10-26 指定門市只看考勤））→ true。
  * admin 本來就是 '*'，不在這裡判斷。values＝staff 分頁一列。
  */
 function storeAttGate_(values) {
-  var pilot = storePilotUnits_();
-  if (!pilot.length) return false;
+  if (!storePilotUnits_().length) return false;
   if (!values || stfStr_(values[STF_COL.status]) !== 'active') return false;
   var p = { status: 'active', dept: stfStr_(values[STF_COL.dept]), title: stfStr_(values[STF_COL.title]) };
   // 人資核的部門（STORE_ATT_HR_ONLY_DEPTS）的總監：不因職稱拿到（Q4 B），其他來源照舊
   var hrOnlyHead = p.title === 'hm' && STORE_ATT_HR_ONLY_DEPTS.indexOf(p.dept) !== -1;
-  if (STORE_ATT_GATE_TITLES.indexOf(p.title) !== -1 && !hrOnlyHead && storeTitleGateOk_(values, pilot)) return true;   // 身分有效＋門市階梯在試點（2026-10-29）
+  if (STORE_ATT_GATE_TITLES.indexOf(p.title) !== -1 && !hrOnlyHead) return true;
   if (stfIsHrHead_(p)) return true;
-  if (storeRowActingPilot_(values, pilot).length) return true;   // 兼任店長
+  if (storeRowActingPilot_(values, storePilotUnits_()).length) return true;   // 兼任店長
   var perms = storeRowPerms_(values);
   if (perms.indexOf(STORE_PERM_ATT_EXTRA) !== -1) return true;
   // 沒有 att.view@ 碼就不讀 org（Fable 審查 2：一般同仁每次登入都會走到這裡）
@@ -1033,17 +1020,16 @@ function storeAttGate_(values) {
 
 /**
  * 衍生權限 platform.sched（「排班管理」選單；不寫進 roles）。
- * 總開關（STORE_SSO_UNITS）空 → false。否則在職且（職稱 STORE_SCHED_GATE_TITLES：sm／fm／am 且身分有效、本人單位在試點（storeTitleGateOk_）、或人資主管、
+ * 總開關（STORE_SSO_UNITS）空 → false。否則在職且（職稱 STORE_SCHED_GATE_TITLES：sm／fm／am、或人資主管、
  * 或所在單位階梯為 hq／office 的總部、品牌辦公室同仁，且本人有 confirmed、roster_active 不是 FALSE 的 hq 打卡對照）→ true。不含 att.extra。admin 是 '*'，不在這裡判斷。values＝staff 分頁一列。
  */
 function storeSchedGate_(values) {
-  var pilot = storePilotUnits_();
-  if (!pilot.length) return false;
+  if (!storePilotUnits_().length) return false;
   if (!values || stfStr_(values[STF_COL.status]) !== 'active') return false;
   var p = { status: 'active', dept: stfStr_(values[STF_COL.dept]), title: stfStr_(values[STF_COL.title]) };
-  if (STORE_SCHED_GATE_TITLES.indexOf(p.title) !== -1 && storeTitleGateOk_(values, pilot)) return true;   // 身分有效＋門市階梯在試點（2026-10-29）
+  if (STORE_SCHED_GATE_TITLES.indexOf(p.title) !== -1) return true;
   if (stfIsHrHead_(p)) return true;
-  if (storeRowActingPilot_(values, pilot).length) return true;   // 兼任店長（Q1 A：可排兼任店的班）
+  if (storeRowActingPilot_(values, storePilotUnits_()).length) return true;   // 兼任店長（Q1 A：可排兼任店的班）
   if (storeSchedViewGate_(values)) return true;   // 督導／總監「只看」名單非空＝唯讀看班表（2026-10-25 Eason）
   var u = stfReadOrg_().unit[stfStr_(values[STF_COL.unit])];   // 總部／品牌辦公室同仁（單位階梯 hq／office）
   if (!(u && u.active && STORE_SCHED_GATE_LADDERS.indexOf(u.ladder || 'store') !== -1)) return false;
