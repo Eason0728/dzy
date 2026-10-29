@@ -68,6 +68,12 @@ t('同一列的 chip 依階梯→部門排', () => {
   const r = L.featureRows(DATA).find((x) => x.perm === 'audit.read');
   assert.deepEqual(r.rules.map((x) => x.text), ['總部・全部部門・執行長', '總部・營運部・全部職稱']);
 });
+t('★對照表列以後端 grantable 為準（FEATURE_ORDER 只管排序與中文名；後端沒給的碼不畫，多給的接在後面；沒回才退回全部，2026-10-29）', () => {
+  const sub = L.featureRows(Object.assign({}, DATA, { grantable: ['pnl.read', 'audit.read', 'x.new'] }));
+  assert.deepEqual(sub.map((r) => r.perm), ['audit.read', 'pnl.read', 'x.new']);
+  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: [] })).length, 28, '空陣列當沒回');
+  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: undefined })).length, 28);
+});
 t('沒有規則的功能 rules 為空', () => assert.deepEqual(L.featureRows(DATA).find((x) => x.perm === 'dorm.write').rules, []));
 
 t('錯誤碼 → 中文（2026-10-29：後端有 error 字串就優先顯示，沒有或只是代碼才套固定句）', () => {

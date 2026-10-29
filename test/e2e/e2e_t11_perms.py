@@ -130,7 +130,7 @@ class Mock11(MockBackend):
                 return {'ok': True, 'data': {'inited': False}}
             return {'ok': True, 'data': {
                 'inited': True, 'rules': list(self.rules),
-                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin'],
+                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank'],
                 'locked': LOCKED, 'names': {},
                 'counts': self.counts(),
                 'ladders': [{'code': 'store', 'name': '門市'}, {'code': 'office', 'name': '品牌辦公室'}, {'code': 'hq', 'name': '總部'}],
@@ -306,8 +306,8 @@ def main():
             check('3 人' in role('店長').inner_text(), '身分顯示人數（店長 3 人）：%s' % role('店長').inner_text().replace('\n', ' '))
             role('店長').click()
             perms_order = [r.get_attribute('data-perm') for r in ad.locator('[data-role="feature-row"]').all()]
-            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin'],
-                  '★右側 23 個功能列、順序正確：%s' % perms_order)
+            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank'],
+                  '★右側 28 個功能列（＝後端 grantable，2026-10-29 mock 補營運巡檢五碼與 Perms.gs 一致）、順序正確：%s' % perms_order)
             sw = lambda pg, perm: pg.locator('[data-role="feature-row"][data-perm="%s"] [data-act="toggle"]' % perm)
             on = lambda pg, perm: sw(pg, perm).get_attribute('aria-checked') == 'true'
             check(on(ad, 'audit.read.own') and not on(ad, 'dorm.read') and not on(ad, 'audit.read'), '店長：看自己店稽核＝開，其餘關')
@@ -523,7 +523,7 @@ def main():
             check(lk.count() == 6, '鎖住的六列仍顯示（含薪酬管理、損益定稿）')
             check(lk.locator('[data-act="toggle"][disabled]').count() == 6, '★鎖碼六列對非 admin：開關 disabled（含薪酬管理、損益定稿）')
             check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 6, '鎖列標示「只有系統管理員能改」')
-            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 17, '其餘 17 列可開關（含收支作廢、額外考勤核定、公告管理、貨單核對、調撥管理、收支管理（2026-10-27 改回不鎖）、績效評核四碼、看損益、填損益）')
+            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 22, '其餘 22 列可開關（含收支作廢、額外考勤核定、公告管理、貨單核對、調撥管理、收支管理（2026-10-27 改回不鎖）、績效評核四碼、營運巡檢五碼、看損益、填損益）')
             # 2026-10-27 Eason：權限設定移到資訊部門；收支管理人資也能開
             check(hr.locator('[data-dept="it"] [data-nav="perms"]').count() == 1 and hr.locator('[data-dept="hr"] [data-nav="perms"]').count() == 0, '★權限設定在左側「資訊部門」底下（不在人資部門）')
             cbt = hr.locator('[data-perm="cashbook.write"]:not([data-locked]) [data-act="toggle"]:not([disabled])')
@@ -547,7 +547,7 @@ def main():
             hr.locator('.pm-role', has=hr.locator('span', has_text='人資部・總監')).first.click()
             hr.locator('[data-perm="audit.read"] [data-act="toggle"]').click()
             hr.click('[data-act="save"]')
-            check(has_toast(hr, '這個改動會改到你自己的權限，請系統管理員處理'), '★改到自己 → perm_self 中文提示')
+            check(has_toast(hr, '你自己的權限'), '★改到自己 → perm_self 中文提示（2026-10-29 起優先顯示後端人話「這次修改會改變你自己的權限…」）')
             check(not any(r['perm'] == 'audit.read' and r['dept'] == 'hr' for r in mock.rules), 'perm_self 被擋下，規則沒寫進去')
             # 送出鎖碼 → perm_locked 中文（繞過畫面直接打 API，驗畫面用的錯誤轉換）
             res = hr.evaluate("""async () => {
@@ -556,7 +556,7 @@ def main():
               const r = await api.call('platform', 'permMapSave', { add: [{ ladder: 'hq', dept: '', title: '*', perm: 'platform.users' }] });
               return { ok: r.ok, code: lib.codeOf(r), text: lib.errorText(r) };
             }""")
-            check(res['ok'] is False and res['code'] == 'perm_locked' and res['text'] == '只有系統管理員能改這個功能的對象', '★送出鎖碼 → perm_locked，中文：%s' % res)
+            check(res['ok'] is False and res['code'] == 'perm_locked' and '系統管理' in res['text'], '★送出鎖碼 → perm_locked，中文（後端原句「只有系統管理者能改…」優先）：%s' % res)
             # 直接打網址進 admin 分頁 → 彈回首頁
             # 人資主管的個別例外：功能下拉只有三碼（2026-10-26 加公告管理）；清單只有後端回的那三碼的例外（這裡沒有）
             hr.evaluate("() => { window.location.hash = '#/perms/ex'; }")

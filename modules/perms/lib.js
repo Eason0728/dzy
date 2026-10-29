@@ -189,15 +189,18 @@ function titleRank(rule, org) {
 }
 
 /**
- * 對照表的列：一個功能一列，順序固定＝FEATURE_ORDER（後端 grantable 有多的接在後面）。
+ * 對照表的列：一個功能一列＝後端 grantable（順序照 FEATURE_ORDER，後端多的接在後面；沒回才畫 FEATURE_ORDER 全部）。
  * 每列 { perm, name, locked, rules:[{rule_id, text}] }；規則依 階梯→部門→職級→編號 排。
  */
 export function featureRows(data) {
   data = data || {};
   const names = data.names || {};
   const lockedSet = new Set(data.locked || []);
-  const perms = FEATURE_ORDER.slice();
-  (data.grantable || []).forEach((p) => { if (perms.indexOf(p) === -1) perms.push(p); });
+  // 2026-10-29：列以後端 grantable 為準（後端沒給的碼不畫），FEATURE_ORDER 只負責順序與中文名；後端多給的接在後面；舊後端沒回才畫全部
+  const given = Array.isArray(data.grantable) ? data.grantable.filter((p) => typeof p === 'string' && p !== '') : [];
+  const perms = given.length
+    ? FEATURE_ORDER.filter((p) => given.indexOf(p) !== -1).concat(given.filter((p) => FEATURE_ORDER.indexOf(p) === -1))
+    : FEATURE_ORDER.slice();
   return perms.map((perm) => {
     const rules = (data.rules || []).filter((r) => r.perm === perm).slice().sort((a, b) =>
       (LADDER_ORDER.indexOf(a.ladder) - LADDER_ORDER.indexOf(b.ladder))
