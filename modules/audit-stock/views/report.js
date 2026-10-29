@@ -46,7 +46,7 @@
 
 import * as sharedApi from '../../audit-shared/api.js';
 import { Format } from '../../audit-shared/umd-bridge.js';
-import { loadLastStore } from './fill-submit.js';
+import { loadLastStore, currentMonth } from './fill-submit.js';
 
 // ============================================================
 // 小工具：DOM 建構（做法同 overview.js／fill.js，模組自己一份）
@@ -155,10 +155,8 @@ export function mountReport(root, ctx, moduleState) {
   // 預設月份：看的年份是今年 → 當月；是別的年份 → 該年一月（同舊版）
   function defaultMonth() {
     const year = getYear();
-    const now = new Date();
-    if (String(now.getFullYear()) === String(year)) {
-      return year + '-' + pad2(now.getMonth() + 1);
-    }
+    const m = currentMonth();   // 台北時間（2026-10-29）
+    if (m.slice(0, 4) === String(year)) return m;
     return year + '-01';
   }
 

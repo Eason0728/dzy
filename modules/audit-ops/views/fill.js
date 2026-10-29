@@ -542,11 +542,10 @@ export function mountFill(root, ctx, moduleState) {
 
       // 月份優先序同 audit-stock/views/fill.js：params ＞ moduleState（任務①）＞ 當月／預設。
       const carriedMonth = params.month ? null : readModuleState(moduleState).month;
-      const now = new Date();
-      const realMonthStr = String(now.getFullYear()) + '-' + pad2(now.getMonth() + 1);
+      const realMonthStr = FillSubmit.currentMonth();   // 台北時間（2026-10-29，同 audit-stock）
       month = params.month
         || (carriedMonth && months.indexOf(carriedMonth) !== -1 ? carriedMonth : null)
-        || (String(now.getFullYear()) === YEAR ? realMonthStr : months[0]);
+        || (realMonthStr.slice(0, 4) === YEAR ? realMonthStr : months[0]);
       if (months.indexOf(month) === -1) month = months[0];
       monthSelect.value = month;
       writeModuleState(moduleState, { store, month });
