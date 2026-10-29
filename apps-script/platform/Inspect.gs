@@ -305,7 +305,7 @@ function handleInspSubmit_(token, payload) {
   });
 }
 
-/** 作廢（打錯店、測試資料）。只有看全部的人（營運部、admin）。payload {id} */
+/** 作廢（打錯店、測試資料）。要有 platform.insp-void 且那家店在自己看得到的範圍內（admin 全部）。payload {id} */
 function handleInspVoid_(token, payload) {
   var c = inspEnter_(token);
   if (!c.ok) return c;
@@ -318,6 +318,7 @@ function handleInspVoid_(token, payload) {
     if (!hit) return inspFail_('not_found', '找不到這筆巡檢');
     if (inspStr_(hit.state) === 'void') return { ok: true, data: { id: id } };
     hit.state = 'void';
+    if (!c.isAdmin && !c.scope.view[inspStr_(hit.unit)]) return inspFail_('not_found', '找不到這筆巡檢，或你沒有權限看');   // 2026-10-30 對抗驗證：作廢也受「看得到的店」限制（admin 照舊）
     hit.void_by = c.me ? c.me.emp : 'U:' + String(c.user.id);
     hit.void_at = inspNow_();
     var sh = stfSheet_(INSP_SHEET);

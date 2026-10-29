@@ -91,3 +91,8 @@ Eason 2026-10-27 在確認頁回答（https://claude.ai/artifact/FrnJiNgcDTvDa5q
 - 前端 `modules/perms/lib.js FEATURE_ORDER／FEATURE_NAMES／FEATURE_DESC` 同步加碼；清單頁「作廢這筆」鈕照舊看 `inspMe.can_void`。
 - **上線後 admin 要再按一次「營運巡檢 → 初始化營運巡檢」（inspSetup）**：正式環境 perm_map 已初始化，新預設規則不會自動生效；inspSetup 只補 perm_map 裡還沒有的同一條（ladder／dept／title／perm 都相同就跳過）、不覆蓋、可重按（test/inspection.mock.test.mjs 3d「再按一次不重複補」）。
 - minikit：readActions 不用改（inspVoid 是寫入、本來就不在 readActions；沒有新 action）。只需同步 `Perms.gs`、`Inspect.gs` 到 gas/。
+
+### 8.1 對抗驗證補強（2026-10-30）
+- 作廢也受「看得到的店」限制：`handleInspVoid_` 找到那筆後 `!c.isAdmin && !c.scope.view[unit]` → `not_found`（美村店長就算拿到 insp-void 也不能作廢光復的；admin 全部）。
+- 加分文字：`summaryOf` 的 `forms[]` 多存 `bonus`（封頂後實際算進分數的加分；後端 `inspCleanSummary_` 原樣收 0～999 整數）。報告頁同一列的「加分 ＋N」用存檔 bonus；封頂前送出的舊報告沒存 bonus → 用現算 raw（當時沒封頂，分數就是含 raw），避免與分數欄矛盾。
+
