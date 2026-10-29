@@ -7,7 +7,7 @@
  */
 'use strict';
 
-import { FEATURE_ORDER, HR_EX_FEATURES, ATT_VIEW_CHOICE, ATT_VIEW_CHOICE_NAME, attViewCode, ACTING_CHOICE, ACTING_CHOICE_NAME, actingCode, PAYROLL_STORE_CHOICE, PAYROLL_STORE_CHOICE_NAME, payrollStoreCode, parsePayrollStores, payrollStoreLabel, featureName, errorText, exStatus, untilText, sortExItems, resolvePerson, removeAuditReadHint } from '../lib.js';
+import { exFeatureList, ATT_VIEW_CHOICE, ATT_VIEW_CHOICE_NAME, attViewCode, ACTING_CHOICE, ACTING_CHOICE_NAME, actingCode, PAYROLL_STORE_CHOICE, PAYROLL_STORE_CHOICE_NAME, payrollStoreCode, parsePayrollStores, payrollStoreLabel, featureName, errorText, exStatus, untilText, sortExItems, resolvePerson, removeAuditReadHint } from '../lib.js';
 
 export function mountEx(el, ctx) {
   const esc = ctx.fmt.esc;
@@ -16,6 +16,7 @@ export function mountEx(el, ctx) {
   let staff = [];
   let units = [];   // 2026-10-26 指定門市只看考勤：後端只回給 admin（permExList.att_view_units）
   let actingUnits = [];   // 2026-10-29 兼任店長：admin 與人資主管都有（permExList.acting_units）
+  let exData = null;   // permExList 整包（grantable 給功能下拉用，2026-10-29）
   let payStores = null;   // 薪資門市清單（只在 admin 開表單時讀；null＝沒讀到，改手動輸入）
   let payStoresTried = false;
   let notInited = false;
@@ -30,6 +31,7 @@ export function mountEx(el, ctx) {
     items = r.data.items || [];
     units = Array.isArray(r.data.att_view_units) ? r.data.att_view_units : [];
     actingUnits = Array.isArray(r.data.acting_units) ? r.data.acting_units : [];
+    exData = r.data;
     if (ctx.can('platform.permex') && !payStoresTried) {   // 只有 admin 會用到；失敗不擋畫面
       payStoresTried = true;
       try { payStores = parsePayrollStores(await ctx.api.call('payroll', 'payroll_store_get', {})); } catch (e) { payStores = null; }
@@ -61,9 +63,9 @@ export function mountEx(el, ctx) {
       el.innerHTML = '<div class="card"><div class="card-title">權限設定還沒初始化</div><p class="text-muted">請先到「對照表」分頁按「初始化」。</p></div>';
       return;
     }
-    // 人資主管（沒有 platform.permex）只能選三碼；admin 全部。後端 permExList 也只回他看得到的那三碼的例外
+    // 人資主管（沒有 platform.permex）只能選三碼；admin 全部。清單以後端 permExList 回的 grantable 為準（2026-10-29，與對照表一致；舊後端沒回才用前端清單）
     const isAdmin = ctx.can('platform.permex');
-    const featList = isAdmin ? FEATURE_ORDER : HR_EX_FEATURES;
+    const featList = exFeatureList(exData, isAdmin);
     // 2026-10-26「指定門市只看考勤」只給 admin（後端也只有 admin 能存）；選了才出現門市下拉
     const attViewOn = isAdmin && units.length > 0;
     const actingOn = actingUnits.length > 0;

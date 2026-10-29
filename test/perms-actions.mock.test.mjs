@@ -376,6 +376,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   const L = post(sb, 'permExList', {}, A);
   ok(L.ok && L.data.items.length === 3 && L.data.items[0].ex_id === 'X001' && L.data.items[0].name === '計時同仁' && L.data.items[0].status === 'active', '4: permExList 全部、含姓名與 status', L.data.items.map((i) => [i.ex_id, i.status]));
   ok(post(sb, 'permExList', { emp_no: P.fin.emp.toLowerCase() }, A).data.items.length === 1, '4: permExList 依 emp_no 篩（不分大小寫）');
+  ok(JSON.stringify(L.data.grantable) === JSON.stringify(sb.PERM_GRANTABLE), '4: ★permExList 回 grantable＝PERM_GRANTABLE（admin；個別例外下拉以此為準，2026-10-29）', L.data.grantable);
   sheets.perm_ex.appendRow(['X004', P.pt.emp, 'dorm.write', 'add', dayShift(sb, -1), '過期', 'TRUE', '', 'u001', '', '']);
   ok(post(sb, 'permExList', {}, A).data.items.find((i) => i.ex_id === 'X004').status === 'expired', '4: 到期的例外 status=expired');
 

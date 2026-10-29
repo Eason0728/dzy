@@ -4,9 +4,21 @@
  */
 'use strict';
 
-/** 可給的 19 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE） */
+/** 可給的 28 個功能（順序＝畫面順序＝後端 PERM_GRANTABLE；test/perms-front.test.mjs 釘住兩邊一致。2026-10-29 補績效評核四碼、營運巡檢五碼） */
 export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase',
-  'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write'];
+  'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write',
+  'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
+  'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank'];
+
+/**
+ * 個別例外的功能下拉清單（2026-10-29）：以後端 permExList 回的 grantable 為準（admin＝全部、人資主管＝STORE_HR_GRANTABLE，與對照表頁一致）；
+ * 後端沒回（舊後端）才退回前端的 FEATURE_ORDER／HR_EX_FEATURES。
+ */
+export function exFeatureList(data, isAdmin) {
+  const g = data && Array.isArray(data.grantable) ? data.grantable.filter((p) => typeof p === 'string' && p !== '') : [];
+  if (g.length) return g;
+  return isAdmin ? FEATURE_ORDER : HR_EX_FEATURES;
+}
 
 /** 人資主管（platform.permmap 但不是 admin）在個別例外只能動的三碼（2026-10-26 加公告管理）；對照後端 STORE_HR_GRANTABLE，真正擋的是後端，前端只是不顯示選不了的 */
 export const HR_EX_FEATURES = ['store.void', 'att.extra', 'platform.bulletin'];
@@ -30,7 +42,16 @@ export const FEATURE_NAMES = {
   'pnl.read': '看損益',
   'pnl.write': '填損益',
   'pnl.admin': '損益定稿與設定',
-  'transfer.write': '調撥管理'
+  'transfer.write': '調撥管理',
+  'platform.eval-manage': '績效評核：替所屬同仁打分',
+  'platform.eval-brand': '績效評核：看自己品牌各店',
+  'platform.eval-all': '績效評核：看全集團',
+  'platform.eval-admin': '績效評核：題目設定與定稿',
+  'platform.insp-do': '營運巡檢：到店巡檢',
+  'platform.insp-own': '營運巡檢：看自己店',
+  'platform.insp-brand': '營運巡檢：看自己品牌各店',
+  'platform.insp-all': '營運巡檢：看全集團',
+  'platform.insp-bank': '營運巡檢：題目設定'
 };
 
 /** 其他會出現在 myPerms／異動裡的碼 */
@@ -343,7 +364,16 @@ export const FEATURE_DESC = {
   'pnl.read': '進損益系統，只能看儀表板',
   'pnl.write': '進損益系統：看、填資料、匯入、確認為 0（財務部門預設有）',
   'pnl.admin': '損益定稿、解除定稿、改設定（只有系統管理員能開）',
-  'transfer.write': '進調撥管理：看調撥月報、品項記憶、卡關總覽，產月報、改品項記憶（財務部門預設有）'
+  'transfer.write': '進調撥管理：看調撥月報、品項記憶、卡關總覽，產月報、改品項記憶（財務部門預設有）',
+  'platform.eval-manage': '進績效評核替所屬同仁打分（店長／廠長預設有）',
+  'platform.eval-brand': '看自己品牌各店的績效評核結果（區經理、品牌辦公室預設有）',
+  'platform.eval-all': '看全集團的績效評核結果（人資、總部主管預設有）',
+  'platform.eval-admin': '績效評核的題目設定、定稿與解除定稿（人資主管預設有）',
+  'platform.insp-do': '到店做營運巡檢、送出巡檢報告（督導、營運部預設有）',
+  'platform.insp-own': '看自己店的營運巡檢報告（店長預設有）',
+  'platform.insp-brand': '看自己品牌各店的營運巡檢報告（區經理、品牌辦公室預設有）',
+  'platform.insp-all': '看全集團的營運巡檢報告、作廢巡檢（營運部預設有）',
+  'platform.insp-bank': '設定營運巡檢題目（墨竹亭、一悟自訂題庫）'
 };
 
 /** 總部高層（不分部門）的職稱代碼 */
