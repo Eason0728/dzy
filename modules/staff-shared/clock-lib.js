@@ -14,6 +14,7 @@ export const STORE_PAGE = {
   mztjs: 'clock-mztjs.html',
   mztgf: 'clock-mztgf.html',
   mztlzl: 'clock-mztlzl.html',
+  mztmc: 'clock-mztmc.html',
   hq: 'clock-hq.html',
   cf: 'clock-cf.html'
 };

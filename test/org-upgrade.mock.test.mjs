@@ -396,6 +396,7 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   sub('offOfs', '待審丁', { brand: 'mala', unit: 'mala-hq', title: 'ofs' });
   sub('offOdir', '待審丁二', { brand: 'mala', unit: 'mala-hq', title: 'odir' });
   sub('mztOff', '待審丁三', { brand: 'mzt', unit: 'mzt-hq', title: 'osv' });
+  sub('offOsv', '待審丁四', { brand: 'mala', unit: 'mala-hq', title: 'osv' });
   sub('deptHs', '待審戊', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
   sub('deptHm', '待審戊二', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hm' });
   sub('opsHsP', '待審戊三', { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs' });
@@ -416,14 +417,21 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   // 中央工廠
   ok(whoCan(P.ckPt.emp) === exp('ckSm', 'ckSm2'), 'T3 中央工廠計時：正＝ck 店長；反＝品牌辦公室（不能審 ck）、營運部主管、執行長、門市店長', whoCan(P.ckPt.emp));
   ok(whoCan(P.ckSm.emp) === exp('ceo'), 'T3 中央工廠店長：正＝執行長以上；反＝另一位 ck 店長、品牌辦公室、營運部主管', whoCan(P.ckSm.emp));
-  // 品牌辦公室任何人 → 營運部主管
-  ok(whoCan(P.offOfs.emp) === exp('opsHm') && whoCan(P.offOdir.emp) === exp('opsHm') && whoCan(P.mztOff.emp) === exp('opsHm'), 'T3 品牌辦公室任何人：正＝營運部主管；反＝區經理／區督導／總監（同辦公室）、執行長、他部門主管', [whoCan(P.offOfs.emp), whoCan(P.offOdir.emp)]);
+  // 品牌辦公室（2026-10-29 第 20 節）：同仁 → 同辦公室總監；總監 → 執行長以上；營運部主管不再審
+  ok(whoCan(P.offOfs.emp) === exp('odirMala') && whoCan(P.offOsv.emp) === exp('odirMala'), 'T3 品牌辦公室行政同仁／區督導：正＝同辦公室總監；反＝營運部主管、同辦公室區經理／區督導、執行長、他部門主管', [whoCan(P.offOfs.emp), whoCan(P.offOsv.emp)]);
+  ok(whoCan(P.offOdir.emp) === exp('ceo'), 'T3 品牌辦公室總監：正＝執行長以上；反＝另一位總監、營運部主管', whoCan(P.offOdir.emp));
+  ok(whoCan(P.mztOff.emp) === exp(), 'T3 墨竹亭區督導：小辛辣總監、營運部主管都看不到（墨竹亭沒有總監時只剩人資）', whoCan(P.mztOff.emp));
+  {
+    const org = sb.stfReadOrg_();
+    const a = sb.stfReviewNeed_(org, 'mala-hq', '', 'osv'), b = sb.stfReviewNeed_(org, 'mala-hq', '', 'odir');
+    ok(a.kind === 'office_head' && a.unit === 'mala-hq' && b.kind === 'exec', 'T3 stfReviewNeed_：辦公室同仁 office_head（人事異動直屬主管、績效評核同一套）、總監 exec', [a.kind, b.kind]);
+  }
   // 總部部門
   ok(whoCan(P.deptHs.emp) === exp('itHm'), 'T3 部門同仁：正＝同主要部門的部門主管；反＝財務部主管、營運部主管、執行長', whoCan(P.deptHs.emp));
   ok(whoCan(P.opsHsP.emp) === exp('opsHm'), 'T3 營運部同仁：營運部主管（同部門）可審', whoCan(P.opsHsP.emp));
   ok(whoCan(P.deptHm.emp) === exp('ceo'), 'T3 部門主管：正＝執行長以上；反＝同部門另一位／他部門／營運部主管', whoCan(P.deptHm.emp));
   ok(whoCan(P.ceoP.emp) === exp(), 'T3 執行長以上：只有人資（和 BOSS）；另一位執行長也不行', whoCan(P.ceoP.emp));
-  ok(pend.HR.length === 13 && pend.BOSS.length === 13, 'T3 人資、BOSS 全可審（13 筆全看得到）', [pend.HR.length, pend.BOSS.length]);
+  ok(pend.HR.length === 14 && pend.BOSS.length === 14, 'T3 人資、BOSS 全可審（14 筆全看得到）', [pend.HR.length, pend.BOSS.length]);
 
   // 反例走實際 action：明確點名的幾個
   const appr = (k, p) => post(sb, 'unitApprove', { emp_no: p.emp }, R[k].token);
@@ -443,7 +451,10 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   ok(appr('oamMala', P.storeSm).ok && staffOf(app, P.storeSm.emp).status === 'active', 'T3 正：品牌辦公室區經理核准店長');
   ok(appr('ckSm', P.ckPt).ok, 'T3 正：ck 店長核准 ck 計時');
   ok(appr('ceo', P.ckSm).ok && appr('ceo', P.deptHm).ok, 'T3 正：執行長核准 ck 店長與部門主管');
-  ok(appr('opsHm', P.offOfs).ok && appr('opsHm', P.offOdir).ok, 'T3 正：營運部主管核准品牌辦公室同仁／總監');
+  ok(appr('opsHm', P.offOfs).ok === false && appr('opsHm', P.offOdir).ok === false, 'T3 反：營運部主管不再審品牌辦公室（2026-10-29）');
+  ok(appr('odirMala', P.offOfs).ok && appr('ceo', P.offOdir).ok, 'T3 正：同辦公室總監核准行政同仁、執行長核准總監');
+  ok(appr('osvMala', P.offOsv).ok === false && staffOf(app, P.offOsv.emp).status === 'pending', 'T3 反：同辦公室區督導不能審區督導');
+  ok(appr('odirMala', P.offOsv).ok && staffOf(app, P.offOsv.emp).status === 'active', 'T3 正：同辦公室總監核准區督導認領（2026-10-29）');
   ok(appr('itHm', P.deptHs).ok, 'T3 正：資訊部主管核准資訊部同仁');
   ok(post(sb, 'unitApprove', { emp_no: P.ceoP.emp }, hrTok).code === 'perm_admin_only', 'T3 人資核准人資部執行長 → 改變 platform.staff，鎖碼擴大後只有 admin（2026-10-17）');
   ok(post(sb, 'unitApprove', { emp_no: P.ceoP.emp }, tok).ok, 'T3 正：admin 核准人資部執行長');
@@ -1496,6 +1507,151 @@ function noBranddev(app) { const d = app.sheets.org._data; for (let i = d.length
   odd('門市掛執行長', 'title', 'ceo');
   odd('停用門市', 'unit', 'mzt-mc', { brand: 'mzt', unit: 'mzt-gf' });
   odd('不存在單位', 'unit', 'zz-none');
+})();
+
+// ── 第 19 節（2026-10-29）：重新啟用墨竹亭台中美村 orgEnableMztMc202610／orgEnableMztMcRollback202610 ──
+(() => {
+  const en = (app, payload, t) => post(app.sb, 'orgEnableMztMc202610', payload || {}, t === undefined ? app.tok : t);
+  const rb = (app, t) => post(app.sb, 'orgEnableMztMcRollback202610', {}, t === undefined ? app.tok : t);
+  const mcRows = (app) => app.sheets.org._data.filter((r) => r[0] === 'unit' && r[1] === 'mzt-mc');
+  const isOn = (app) => String(mcRows(app)[0][7]).toUpperCase() === 'TRUE';
+  const app = freshNew();
+  ok(mcRows(app).length === 1 && !isOn(app), '19 前提：mzt-mc 存在且停用');
+  ok(en(app, { dryrun: true }, app.hrTok).ok === false && rb(app, app.hrTok).ok === false && en(app, {}, app.hrTok).ok === false, '19 ★非 admin（人資）預覽／執行／退回都被擋');
+  ok(en(app, { dryrun: true }, '').ok === false, '19 無 token 被擋');
+  const before = sheetDump(app);
+  const dr = en(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true && dr.data.action === 'reactivate' && dr.data.unit.code === 'mzt-mc' && sheetDump(app) === before, '19 dryrun 預覽重新啟用、零寫入', dr);
+  const orgB = JSON.stringify(orgRows(app));
+  const run = en(app, {});
+  ok(run.ok && run.data.dryrun === false && run.data.action === 'reactivate' && mcRows(app).length === 1 && isOn(app), '19 執行：同一列改為啟用', run);
+  const strip = (rows) => JSON.stringify(rows.map((r) => r.map((v, i) => (i === 7 ? '' : v))));
+  ok(strip(JSON.parse(orgB)) === strip(orgRows(app)), '19 ★只改啟用那一格（其他格逐格相同）');
+  ok(app.sb.stfReadOrg_().unit['mzt-mc'].active === true, '19 讀組織：mzt-mc 啟用');
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_enable_mztmc_2610').length === 1, '19 staff_log 一筆');
+  const again = en(app, {});
+  ok(again.ok && again.data.action === 'skip' && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_enable_mztmc_2610').length === 1, '19 重跑冪等：略過、不重複紀錄', again);
+  // 啟用後同仁可選、店長可建
+  const sm = mk(app, '美村店長', { brand: 'mzt', unit: 'mzt-mc', title: 'sm' });
+  ok(staffOf(app, sm.emp).unit === 'mzt-mc', '19 同仁可掛墨竹亭台中美村（店長）');
+  // 退回：有人 → 拒絕只列 emp_no
+  const rbNo = rb(app);
+  ok(rbNo.ok === false && rbNo.data.members.join() === sm.emp && JSON.stringify(rbNo.data).indexOf('美村店長') === -1 && isOn(app), '19 ★退回：有人在店 → 拒絕、只列 emp_no、不動', rbNo);
+  setStaff(app, sm.emp, 'unit', 'mzt-gf');
+  const pend = submitOnly(app, '美村待審', { brand: 'mzt', unit: 'mzt-mc', title: 'pt' });
+  const rbP = rb(app);
+  ok(rbP.ok === false && rbP.data.members.join() === pend.emp, '19 ★退回：送出待審 p_unit＝mzt-mc 也拒絕', rbP);
+  setStaff(app, pend.emp, 'status', 'disabled');
+  const r2 = rb(app);
+  ok(r2.ok && r2.data.action === 'deactivate' && mcRows(app).length === 1 && !isOn(app), '19 停用的人不擋：退回成功、列還在', r2);
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_enable_mztmc_2610_rollback').length === 1, '19 退回有 staff_log');
+  ok(rb(app).data.action === 'skip', '19 退回重跑冪等');
+  ok(en(app, {}).data.action === 'reactivate' && isOn(app), '19 退回後再啟用');
+  // 沒有列 → 新增在墨竹亭最後
+  const app2 = freshNew();
+  const d2 = app2.sheets.org._data; for (let i = d2.length - 1; i >= 1; i--) if (d2[i][0] === 'unit' && d2[i][1] === 'mzt-mc') d2.splice(i, 1);
+  const mzMax = Math.max(...d2.filter((r) => r[0] === 'unit' && r[3] === 'mzt').map((r) => Number(r[6])));
+  const a2 = en(app2, {});
+  ok(a2.ok && a2.data.action === 'add' && mcRows(app2).length === 1 && mcRows(app2)[0].slice(0, 8).join('|') === `unit|mzt-mc|台中美村|mzt|store||${mzMax + 1}|TRUE`, '19 沒有列：新增一列（order＝墨竹亭最大＋1）', a2);
+  // 衝突：名稱或品牌不同 → 拒絕、不動
+  const app3 = freshNew();
+  mcRows(app3)[0][2] = '別的名字';
+  const snap3 = JSON.stringify(orgRows(app3));
+  const c1 = en(app3, {});
+  ok(c1.ok === false && c1.data.bad.length === 1 && JSON.stringify(orgRows(app3)) === snap3 && rb(app3).ok === false, '19 ★衝突（名稱不同）：啟用與退回都拒絕、org 不動', c1);
+  // Code.gs 登錄、dryrun
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/'orgEnableMztMc202610', 'orgEnableMztMcRollback202610'/.test(src) && /orgEnableMztMc202610: 1, orgEnableMztMcRollback202610: 1/.test(src) && /case 'orgEnableMztMc202610'/.test(src) && /case 'orgEnableMztMcRollback202610'/.test(src), '19 兩個 action 在白名單、寫入鎖、分派表');
+  ok(!/READ_ACTIONS[^\n]*orgEnableMztMc/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '19 不在任何讀取清單');
+})();
+
+// ── 第 20 節（2026-10-29）：停用營運部 orgDisableOps202610／orgDisableOpsRollback202610 ──
+(() => {
+  const en = (app, payload, t) => post(app.sb, 'orgDisableOps202610', payload || {}, t === undefined ? app.tok : t);
+  const rb = (app, t) => post(app.sb, 'orgDisableOpsRollback202610', {}, t === undefined ? app.tok : t);
+  const opsRows = (app) => app.sheets.org._data.filter((r) => r[0] === 'dept' && r[1] === 'ops');
+  const isOn = (app) => String(opsRows(app)[0][7]).toUpperCase() === 'TRUE';
+  const app = freshNew();
+  ok(opsRows(app).length === 1 && isOn(app), '20 前提：ops 存在且啟用');
+  ok(en(app, { dryrun: true }, app.hrTok).ok === false && rb(app, app.hrTok).ok === false && en(app, {}, app.hrTok).ok === false, '20 ★非 admin（人資）都被擋');
+  // 有人在營運部 → 拒絕、只列 emp_no
+  const m = mk(app, '營運甲', { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs' });
+  const p = submitOnly(app, '營運待審', { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs' });
+  const no = en(app, { dryrun: true });
+  ok(no.ok === false && no.data.members.slice().sort().join() === [m.emp, p.emp].sort().join() && JSON.stringify(no.data).indexOf('營運甲') === -1 && isOn(app), '20 ★有人（目前、送出待審）→ 預覽就拒絕、只列 emp_no', no);
+  setStaff(app, m.emp, 'status', 'disabled'); setStaff(app, p.emp, 'status', 'disabled');
+  const before = sheetDump(app);
+  const dr = en(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true && dr.data.action === 'deactivate' && sheetDump(app) === before, '20 dryrun 預覽停用、零寫入', dr);
+  const orgB = JSON.stringify(orgRows(app));
+  const run = en(app, {});
+  ok(run.ok && run.data.action === 'deactivate' && opsRows(app).length === 1 && !isOn(app), '20 執行：同一列改為停用', run);
+  const strip = (rows) => JSON.stringify(rows.map((r) => r.map((v, i) => (i === 7 ? '' : v))));
+  ok(strip(JSON.parse(orgB)) === strip(orgRows(app)), '20 ★只改啟用那一格');
+  ok(app.sb.stfReadOrg_().dept.ops.active === false, '20 讀組織：ops 停用');
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_disable_ops_2610').length === 1, '20 staff_log 一筆');
+  ok(en(app, {}).data.action === 'skip' && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_disable_ops_2610').length === 1, '20 重跑冪等');
+  const r2 = rb(app);
+  ok(r2.ok && r2.data.action === 'reactivate' && isOn(app) && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_disable_ops_2610_rollback').length === 1, '20 退回：重新啟用、有紀錄', r2);
+  ok(rb(app).data.action === 'skip', '20 退回重跑冪等');
+  // 衝突：名稱不同 → 拒絕不動
+  const app3 = freshNew();
+  opsRows(app3)[0][2] = '別的名字';
+  const snap3 = JSON.stringify(orgRows(app3));
+  const c1 = en(app3, {});
+  ok(c1.ok === false && c1.data.bad.length === 1 && JSON.stringify(orgRows(app3)) === snap3 && rb(app3).ok === false, '20 ★衝突：停用與退回都拒絕、org 不動', c1);
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/'orgDisableOps202610', 'orgDisableOpsRollback202610'/.test(src) && /orgDisableOps202610: 1, orgDisableOpsRollback202610: 1/.test(src) && /case 'orgDisableOps202610'/.test(src) && /case 'orgDisableOpsRollback202610'/.test(src), '20 兩個 action 在白名單、寫入鎖、分派表');
+  ok(!/READ_ACTIONS[^\n]*orgDisableOps/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '20 不在任何讀取清單');
+})();
+
+// ── 第 21 節（2026-10-29）：墨竹亭台中美村加進打卡對照 clockAddMztMc202610／clockAddMztMcRollback202610 ──
+(() => {
+  const en = (app, payload, t) => post(app.sb, 'clockAddMztMc202610', payload || {}, t === undefined ? app.tok : t);
+  const rb = (app, t) => post(app.sb, 'clockAddMztMcRollback202610', {}, t === undefined ? app.tok : t);
+  const cs = (app) => app.sheets.clock_stores._data;
+  const mc = (app) => cs(app).filter((r) => String(r[0]) === 'mztmc');
+  const asProd = (app) => { const d = cs(app); for (let i = d.length - 1; i >= 1; i--) if (String(d[i][0]) === 'mztmc') d.splice(i, 1); };   // 正式表＝只有原本六家
+  const app = freshNew();
+  ok(app.sheets.clock_stores && mc(app).length === 1, '21 前提：新建的表預設就有 mztmc（CLK_DEFAULT_STORES 第七列）');
+  asProd(app);
+  ok(mc(app).length === 0, '21 前提：模擬正式表沒有 mztmc');
+  ok(en(app, { dryrun: true }, app.hrTok).ok === false && en(app, {}, app.hrTok).ok === false && rb(app, app.hrTok).ok === false, '21 ★非 admin（人資）預覽／執行／退回都被擋');
+  ok(en(app, { dryrun: true }, '').ok === false, '21 無 token 被擋');
+  const before = sheetDump(app);
+  const dr = en(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true && dr.data.action === 'add' && dr.data.store.unit === 'mzt-mc' && sheetDump(app) === before, '21 dryrun 預覽新增、零寫入', dr);
+  const others = JSON.stringify(cs(app));
+  const run = en(app, {});
+  ok(run.ok && run.data.action === 'add' && mc(app).length === 1 && mc(app)[0].slice(0, 5).join('|') === 'mztmc|墨竹亭 台中美村|mzt-mc|TRUE|MZTMC', '21 執行：新增一列 mztmc／mzt-mc／MZTMC', run);
+  ok(JSON.stringify(cs(app).filter((r) => String(r[0]) !== 'mztmc')) === others, '21 ★其他店的列逐格不動');
+  ok(app.sb.clkStoreOfUnit_('mzt-mc') && app.sb.clkStoreOfUnit_('mzt-mc').store_code === 'mztmc' && app.sb.clkUnitConflict_() === '', '21 單位 mzt-mc 對到打卡店 mztmc、沒有單位衝突');
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'clock_add_mztmc_2610').length === 1, '21 staff_log 一筆');
+  const again = en(app, {});
+  ok(again.ok && again.data.action === 'skip' && mc(app).length === 1 && rowsOf(app, 'staff_log').filter((r) => r.event === 'clock_add_mztmc_2610').length === 1, '21 重跑冪等：略過、不重複', again);
+  const r1 = rb(app);
+  ok(r1.ok && r1.data.action === 'deactivate' && mc(app).length === 1 && String(mc(app)[0][3]).toUpperCase() === 'FALSE', '21 退回：enabled 改 FALSE、列還在', r1);
+  ok(rb(app).data.action === 'skip', '21 退回重跑冪等');
+  const re = en(app, {});
+  ok(re.ok && re.data.action === 'reactivate' && String(mc(app)[0][3]).toUpperCase() === 'TRUE', '21 退回後再加入＝重新啟用', re);
+  // 已有確認的打卡對照 → 退回拒絕
+  app.sheets.staff_clock._data.push(['DZY999', 'mztmc', 'MZTMC01', 'home', 'confirmed', 'build', 'TRUE', '', '', '', '', '', '', '', '', '']);
+  const rbNo = rb(app);
+  ok(rbNo.ok === false && rbNo.data.maps === 1 && String(mc(app)[0][3]).toUpperCase() === 'TRUE', '21 ★已有同仁打卡對照：退回拒絕、不動', rbNo);
+  // 衝突：mztmc 列名稱或單位被改過 → 拒絕
+  const app2 = freshNew();
+  mc(app2)[0][1] = '別的店名';
+  const snap2 = JSON.stringify(cs(app2));
+  const c1 = en(app2, {});
+  ok(c1.ok === false && c1.data.bad.length === 1 && JSON.stringify(cs(app2)) === snap2 && rb(app2).ok === false, '21 ★衝突（店名被改過）：加入與退回都拒絕、不動', c1);
+  // 別的店的 unit_code 已含 mzt-mc → 加入拒絕
+  const app3 = freshNew(); asProd(app3);
+  const gfRow = cs(app3).find((r) => String(r[0]) === 'mztgf'); gfRow[2] = 'mzt-gf,mzt-mc';
+  const c3 = en(app3, {});
+  ok(c3.ok === false && mc(app3).length === 0, '21 ★別店 unit_code 已含 mzt-mc：拒絕、不新增', c3);
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/'clockAddMztMc202610', 'clockAddMztMcRollback202610'/.test(src) && /clockAddMztMc202610: 1, clockAddMztMcRollback202610: 1/.test(src) && /case 'clockAddMztMc202610'/.test(src) && /case 'clockAddMztMcRollback202610'/.test(src), '21 兩個 action 在 Code.gs 白名單、寫入表、分派');
+  ok(!/READ_ACTIONS[^\n]*clockAddMztMc/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '21 不在任何讀取清單');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

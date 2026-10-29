@@ -30,6 +30,8 @@ var STORE_NO_ATT_TITLES = ['odir', 'hm', 'ceo', 'gm', 'chair'];
 // 門市／中央工廠的單位主管同等職稱（spec §12＋docs/org/spec.md 第 15 節）：店長 sm、廠長 fm、區經理 am、廚藝總監 rdd
 //   用途：營運系統「管理單位」units_managed（本店同仁權限、整店功能）。誰核誰改看下面兩張表（Eason 2026-10-21）。
 var STORE_ATT_HEAD_TITLES = ['sm', 'fm', 'am', 'rdd'];
+// 被核者要列入考勤名單的帳號狀態（2026-10-29 Eason 選 A）：在職同仁都要被核，跟有沒有開通管理系統帳號無關；只有停用（離職）不列
+var STORE_ATT_LIST_STATUSES = ['active', 'unclaimed', 'pending', 'rejected'];
 
 // ── 誰核誰（Eason 2026-10-21，docs/org/spec.md 第 15.1 節）：分「核定工時 hours」與「加班單／請假單／忘刷單 req」兩張表 ──
 // 核定工時：門市／中央工廠所有打卡的人（pt ft sm fm am rdd）都由本單位店長／廠長核；店長／廠長可核自己的工時
@@ -274,20 +276,22 @@ function storeInferFromHome_(t, org, home) {
 /**
  * 把一位同仁變成「算名單用的被核者」。回 null＝不列入；
  * 否則回 {…同仁, pilotUnits, inferred, orphan}：正式資料完整 → 原樣（pilotUnits＝[unit]）；
+ * 完整但還沒開通（unclaimed／pending／rejected）→ 同完整，status 視為 active、notClaimed＝原狀態；
  * 不完整且能推算 → unit／title 換成推算值、status 視為 active、inferred＝true；
  * 不完整又推算不出 → orphan＝true（只有人資主管與 admin 看得到，pilotUnits＝主店對到的全部單位）。
- * 只處理 active／unclaimed；責任制職稱（只在有填職稱時判斷）一律不列。
+ * 只處理 STORE_ATT_LIST_STATUSES（停用不列）；責任制職稱（只在有填職稱時判斷）一律不列。
  */
 function storeEffectiveTarget_(t0, org, home) {
   var st = stfStr_(t0.status);
   var e = {};
   Object.keys(t0).forEach(function (k) { e[k] = t0[k]; });
+  if (STORE_ATT_LIST_STATUSES.indexOf(st) === -1) return null;
   if (!storeOrgIncomplete_(t0, org)) {
-    if (st !== 'active') return null;
+    // 還沒開通（未認領、待審、被退回）但人資已填好單位職稱：照正式資料列入、status 視為 active（同推算分支），本單位店長／廠長才核得到
+    if (st !== 'active') { e.status = 'active'; e.notClaimed = st; }
     e.pilotUnits = [stfStr_(t0.unit)];
     return e;
   }
-  if (st !== 'active' && st !== 'unclaimed') return null;
   if (STORE_NO_ATT_TITLES.indexOf(stfStr_(t0.title)) !== -1) return null;
   var inf = storeInferFromHome_(t0, org, home);
   if (inf) {
