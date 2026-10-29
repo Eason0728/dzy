@@ -1177,7 +1177,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // 9b. 支援帳號由打卡店主管核（工時＋申請）、原單位主管只看
   const s301 = run('DZY301');
   g('9b 辛光店長 工時：自己、本店計時、到本店支援的資訊同仁（總部同仁到門市也一樣，5A）；不含本店計時在墨光的帳號', s301.h, ['gf:GF01', 'gf:GF02', 'gf:GF13']);
-  g('9b 辛光店長 申請：本店計時、資訊同仁在本店的帳號（不含自己）', s301.r, ['gf:GF02', 'gf:GF13']);
+  g('9b 辛光店長 申請：本店計時（不含自己）；資訊同仁在本店的帳號申請照原身分，不歸店長（2026-10-29 Eason）', s301.r, ['gf:GF02']);
   g('9b ★原單位主管只看（4B）：辛光店長看得到本店計時在墨光的帳號，只看不核', s301.v, ['mztgf:MG02']);
   const s303 = run('DZY303');
   g('9b 墨光店長 工時：自己、本店計時、到墨光支援的辛光計時與央廚計時；不含自己在金山的支援帳號', s303.h, ['mztgf:MG02', 'mztgf:MG03', 'mztgf:MG04', 'mztgf:MG12', 'mztgf:MG18']);
@@ -1187,7 +1187,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   g('9b ★店長去別店支援：金山店長核墨光店長在金山的工時', s305.h, ['mztjs:MJ03', 'mztjs:MJ05', 'mztjs:MJ06']);
   g('9b ★店長去別店支援：申請也由金山店長核（2A）；店長本人與區經理的申請照舊不歸他', s305.r, ['mztjs:MJ03']);
   g('9b 區經理：第一層有店長就不輪到區經理；自己店店長的申請照舊', [run('DZY306').h, run('DZY306').r, run('DZY306').v], [[], ['mztjs:MJ05'], []]);
-  g('9b ★總部同仁去門市：資訊總監只核總部帳號，門市那個帳號只看', [run('DZY314').h, run('DZY314').r, run('DZY314').v], [['hq:H13'], ['hq:H13'], ['gf:GF13']]);
+  g('9b ★總部同仁去門市：資訊總監核總部帳號；門市那個帳號工時只看、申請照原身分由他簽（2026-10-29 Eason）', [run('DZY314').h, run('DZY314').r, run('DZY314').v], [['hq:H13'], ['gf:GF13', 'hq:H13'], ['gf:GF13']]);
   g('9b 一般同仁沒有名單', [run('DZY302').h, run('DZY302').r, run('DZY302').v], [[], [], []]);
 
   // 9c. 打卡店沒有店長時往上找（3A）：六張犁沒有店長／區經理
@@ -1316,9 +1316,9 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const g = (label, got, want) => ok(eq(got, want), label, { got, want });
   g('9k ident 墨光店長 people：多了辛光計時在墨光的帳號', K('DZY333', 'people'), ['mztgf:MZTGF332', 'mztgf:MZTGF333', 'mztgf:MZTGF334']);
   g('9k ident 墨光店長 req_people', K('DZY333', 'req_people'), ['mztgf:MZTGF332', 'mztgf:MZTGF334']);
-  g('9k ident 辛光店長：本店兩人＋資訊同仁在本店；辛光計時在墨光的帳號只看', [K('DZY331', 'people'), K('DZY331', 'req_people'), K('DZY331', 'view_people')],
-    [['gf:GF331', 'gf:GF332', 'gf:GF338'], ['gf:GF332', 'gf:GF338'], ['mztgf:MZTGF332']]);
-  g('9k ident 資訊總監：總部帳號照核、門市帳號只看', [K('DZY339', 'people'), K('DZY339', 'view_people')], [['hq:HQ338'], ['gf:GF338']]);
+  g('9k ident 辛光店長：本店兩人＋資訊同仁在本店（申請不歸店長）；辛光計時在墨光的帳號只看', [K('DZY331', 'people'), K('DZY331', 'req_people'), K('DZY331', 'view_people')],
+    [['gf:GF331', 'gf:GF332', 'gf:GF338'], ['gf:GF332'], ['mztgf:MZTGF332']]);
+  g('9k ident 資訊總監：總部帳號照核、門市帳號工時只看、申請照原身分由他簽', [K('DZY339', 'people'), K('DZY339', 'req_people'), K('DZY339', 'view_people')], [['hq:HQ338'], ['gf:GF338', 'hq:HQ338'], ['gf:GF338']]);
   const vp = app.ident('DZY331').att;
   const SUPK = ['clock', 'emp_id', 'sub', 'name', 'support', 'home_unit', 'home_unit_name'];
   const isSup = (x) => (x.clock === 'mztgf' && x.emp_id === 'MZTGF332') || (x.clock === 'gf' && x.emp_id === 'GF338');

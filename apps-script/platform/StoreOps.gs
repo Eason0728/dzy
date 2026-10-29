@@ -408,13 +408,23 @@ function storeAnyIn_(arr, set) {
 function storeAttIsSupport_(t, storeCode, units, org) {
   if (!t || t.inferred || t.orphan) return false;
   if (storeCode === STORE_SELF_CLOCK) return false;
+  if ((STORE_NOT_SUPPORT_EX[stfStr_(t.emp)] || []).indexOf(stfStr_(storeCode)) !== -1) return false;   // 個人例外：在這家打卡不算支援
   // 2026-10-26 Eason：品牌辦公室同仁（區督導、行政、區經理 oam）到門市打卡不算支援，照原規則由辦公室總監核（不讓店長核督導）
   var tu = org && org.unit ? org.unit[stfStr_(t.unit)] : null;
   if (tu && tu.ladder === 'office') return false;
-  // 2026-10-29 人資核的部門（STORE_ATT_HR_ONLY_DEPTS，例財務部）到門市打卡也不算支援：只給人資主管、admin、本單位 att.extra（Codex 審查 2）
-  if (org && STORE_ATT_HR_ONLY_DEPTS.indexOf(stfStr_(t.dept)) !== -1) { var nd = attNeedOf_(t, org, 'hours'); if (nd && nd.kind === 'hr_only') return false; }
+  // 總部同仁（含財務部）到門市打卡＝支援：工時由該店主管核；申請照原身分（storeAttLists_ 的 reqByHome，2026-10-29 Eason）
   if (!units || !units.length) return false;
   return units.indexOf(stfStr_(t.unit)) === -1;
+}
+
+/** 個人例外：這些人在指定的打卡店上班不算支援（工時、申請都照原身分核；薪資歸原單位）。{emp: [store_code…]}
+ *  2026-10-29 Eason：財務部一位同仁固定在央廚上班，不算支援、薪水算總部 → 工時與申請都由人資主管核，央廚主管只看不核。 */
+var STORE_NOT_SUPPORT_EX = { DZY027: ['cf'] };
+
+/** 對象所屬單位是總部（hq 階梯）→ true（支援帳號的申請照原身分簽，storeAttLists_） */
+function storeIsHqTarget_(t, org) {
+  var u = t && org && org.unit ? org.unit[stfStr_(t.unit)] : null;
+  return !!(u && u.ladder === 'hq');
 }
 
 /** 單位顯示名稱（同 att.view@ 的「品牌 單位」，例「麻的小辛辣 新竹光復」；央廚與已含品牌名的不加；查不到＝代碼）。Perms.gs 沒載入時只給單位名稱 */
@@ -562,10 +572,13 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
       var extra = !!flags.attExtra && !!myUnit && a.units.indexOf(myUnit) !== -1;
       var extraBlockR = dutyT && a.units.some(function (u) { return storeDutyHas_(me, u); });   // 值班主管的申請：打卡店單位的值班主管（含 att.extra 例外）不核
       var apprH = base || extra || (!!myEmp && !!apprCache[key][myEmp]);
-      var apprR = base || (extra && !extraBlockR) || (!!myEmp && !!apprCache[keyR][myEmp]);
+      // 2026-10-29 Eason：總部同仁到門市支援，工時給該店主管核（店長才知道上下班時間），請假／加班／忘打卡等申請照原身分（部門主管、人資主管）簽
+      var reqByHome = storeIsHqTarget_(t, org);
+      var apprR = reqByHome ? !!reqT[t.emp] : (base || (extra && !extraBlockR) || (!!myEmp && !!apprCache[keyR][myEmp]));
       if (apprH || apprR) {
         if (apprH && needH) storeAttListAdd_(L.hours, a);
         if (apprR && !t.orphan && attNeedOf_(t, org, 'req')) storeAttListAdd_(L.req, a);
+        if (!apprH && viewable && origView && hrsT[t.emp]) storeAttListAdd_(L.view, a);   // 原單位主管：簽申請之外，工時只看
       } else if (viewable && ((origView && (hrsT[t.emp] || reqT[t.emp])) || storeAnyIn_(a.units, viewUnits))) {
         storeAttListAdd_(L.view, a);
       }
@@ -599,6 +612,7 @@ function storeUpperGaps_(people, org, rctx, maps, storeUnits) {
     var gap = !has;
     if (!gap) {
       (acct[t.emp] || []).forEach(function (a) {
+        if (storeIsHqTarget_(t, org)) return;   // 總部同仁的支援帳號：申請照原身分，上面 has 已算過
         var ap = storeSupportApprovers_(a.units, people, org, rctx, true, a.units.some(function (u) { return storeActingHas_(t, u); }) ? t.emp : '');
         if (!Object.keys(ap).length) gap = true;
       });
