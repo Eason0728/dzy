@@ -921,7 +921,7 @@ def main():
             cand = [p for p in GRANTABLE if p not in LOCKED and not any(r['ladder'] == 'hq' and r['dept'] in ('hr', '') and r['title'] in ('*', 'hm') and r['perm'] == p for r in mock.rules)]
             hr.click('[data-perm="%s"] [data-act="toggle"]' % cand[0])
             hr.click('[data-act="save"]')
-            check(toast(hr, '這個改動會改到你自己的權限'), '人資主管改到自己 → perm_self 中文 toast')
+            check(toast(hr, '你自己的權限'), '人資主管改到自己 → perm_self 中文 toast（2026-10-29 起優先顯示後端人話：「這次修改會改變你自己的權限…」）')
             hr.click('[data-act="revert"]')
             # 不碰自己：成功
             hr.click('.pm-role[data-key="store||pt"]')
@@ -938,7 +938,7 @@ def main():
               const r = await api.call('platform', 'permMapSave', { add: [{ ladder: 'store', dept: '', title: 'pt', perm: 'platform.staff' }] });
               return { ok: r.ok, code: lib.codeOf(r), text: lib.errorText(r) };
             }""")
-            check(res['ok'] is False and res['code'] == 'perm_locked' and '系統管理員' in res['text'], '繞過畫面送鎖碼 → perm_locked 中文：%s' % res)
+            check(res['ok'] is False and res['code'] == 'perm_locked' and '系統管理' in res['text'], '繞過畫面送鎖碼 → perm_locked 中文（後端原句「只有系統管理者能改…」）：%s' % res)
             go(hr, '#/perms/ex')
             hr.wait_for_selector('[data-role="ex-perm"]')
             opts = hr.locator('[data-role="ex-perm"] option').all()
