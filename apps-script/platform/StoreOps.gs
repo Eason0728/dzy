@@ -405,10 +405,11 @@ function storeAnyIn_(arr, set) {
 
 /**
  * 這個打卡帳號算不算支援（spec §1）。t＝storeEffectiveTarget_ 的結果；units＝打卡店的 clkUnitsOf_。
- * 推算（inferred）／orphan 的人、總部打卡 hq、打卡店沒有填單位（或不在 clock_stores）、品牌辦公室同仁（給了 org 時）→ 不算（照舊）。
+ * orphan 的人、總部打卡 hq、打卡店沒有填單位（或不在 clock_stores）、品牌辦公室同仁（給了 org 時）→ 不算（照舊）；推算者 2026-10-30 起套本規則。
  */
 function storeAttIsSupport_(t, storeCode, units, org) {
-  if (!t || t.inferred || t.orphan) return false;
+  // 2026-10-30 Eason 照推薦：推算者（inferred，單位＝主店推算出來的）到非主店打卡也套支援規則——由打卡店店長→區經理…核，主店主管只看；orphan 照舊不算
+  if (!t || t.orphan) return false;
   if (storeCode === STORE_SELF_CLOCK) return false;
   if ((STORE_NOT_SUPPORT_EX[stfStr_(t.emp)] || []).indexOf(stfStr_(storeCode)) !== -1) return false;   // 個人例外：在這家打卡不算支援
   // 2026-10-26 Eason：品牌辦公室同仁（區督導、行政、區經理 oam）到門市打卡不算支援，照原規則由辦公室總監核（不讓店長核督導）

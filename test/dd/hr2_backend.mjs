@@ -495,7 +495,7 @@ function oracle(W) {
     return out;
   };
   const isSupport = (t, store, units) => {
-    if (t.inferred || t.orphan) return false;
+    if (t.orphan) return false;   // 2026-10-30 Eason 照推薦：推算者（inferred，單位＝主店推算出來的）到非主店打卡也算支援、由打卡店主管核；orphan 照舊不算
     if (store === 'hq') return false;
     const tu = unit(t.unit);
     if (tu && tu.ladder === 'office') return false;

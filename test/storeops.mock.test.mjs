@@ -1170,7 +1170,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(sb.storeAttIsSupport_(T('mala-gf'), 'mztgf', ['mzt-gf']) === true, '9a 打卡店單位不含本人單位 → 支援（不看 role）');
   ok(sb.storeAttIsSupport_(T('mzt-gf'), 'mztgf', ['mzt-gf']) === false, '9a 在自己單位的店打卡 → 不是支援');
   ok(sb.storeAttIsSupport_(T('dzy-hq'), 'hq', ['mzt-hq']) === false && sb.storeAttIsSupport_(T('mala-gf'), 'hq', ['dzy-hq', 'mzt-hq', 'mala-hq']) === false, '9a ★總部打卡 hq 一律不算支援（就算單位不在 hq 的清單裡）');
-  ok(sb.storeAttIsSupport_(T('mala-gf', { inferred: true }), 'mztgf', ['mzt-gf']) === false && sb.storeAttIsSupport_(T('', { orphan: true }), 'mztgf', ['mzt-gf']) === false, '9a 推算／orphan 的人不套支援規則');
+  ok(sb.storeAttIsSupport_(T('mala-gf', { inferred: true }), 'mztgf', ['mzt-gf']) === true && sb.storeAttIsSupport_(T('mzt-gf', { inferred: true }), 'mztgf', ['mzt-gf']) === false && sb.storeAttIsSupport_(T('', { orphan: true }), 'mztgf', ['mzt-gf']) === false, '9a 推算者到非主店打卡＝支援（2026-10-30 Eason 照推薦）、在主店不是；orphan 照舊不套');
   ok(sb.storeAttIsSupport_(T('mzt-js'), 'mztlzl', ['mzt-lzl', 'mzt-js']) === false && sb.storeAttIsSupport_(T('mzt-gf'), 'mztlzl', ['mzt-lzl', 'mzt-js']) === true, '9a 多單位的店：本人單位在清單任一個 → 不是支援；都不在 → 支援');
   ok(sb.storeAttIsSupport_(T('mzt-gf'), 'zz', []) === false, '9a 打卡店沒填單位（或不在 clock_stores）→ 照舊不算支援');
   ok(sb.storeAttIsSupport_(T('mzt-hq'), 'mztgf', ['mzt-gf'], org) === false && sb.storeAttIsSupport_(T('mzt-hq'), 'mztgf', ['mzt-gf']) === true,
