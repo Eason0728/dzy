@@ -46,6 +46,8 @@ const OTHER_NAMES = {
 export function featureName(code, units) {
   const u = attViewUnitOf(code);
   if (u) return `只看考勤（${attViewUnitName(u, units)}）`;
+  const au = actingUnitOf(code);
+  if (au) return `兼任店長（${attViewUnitName(au, units)}）`;
   return FEATURE_NAMES[code] || OTHER_NAMES[code] || code;
 }
 
@@ -72,6 +74,23 @@ function attViewUnitName(unit, units) {
     return hit && hit.name ? hit.name : unit;
   }
   return units[unit] || unit;
+}
+
+// ---- 兼任店長（store.sm@<單位>，docs/att-hr-acting/spec.md；admin 與人資主管都能設、只能多給、只能用個別例外） ----
+export const ACTING_PREFIX = 'store.sm@';
+/** 功能下拉裡「兼任店長」那一項的值（送出時換成 store.sm@<門市>） */
+export const ACTING_CHOICE = '__acting__';
+export const ACTING_CHOICE_NAME = '兼任店長';
+const ACTING_RE = /^store\.sm@([A-Za-z0-9_-]{1,40})$/;
+/** store.sm@<單位> → 單位代碼；其他 → '' */
+export function actingUnitOf(code) {
+  const m = ACTING_RE.exec(String(code || ''));
+  return m ? m[1] : '';
+}
+/** 門市代碼 → 權限碼；代碼格式不對回 '' */
+export function actingCode(unit) {
+  const c = ACTING_PREFIX + String(unit || '').trim();
+  return actingUnitOf(c) ? c : '';
 }
 
 const LADDER_FALLBACK = { store: '門市', office: '品牌辦公室', hq: '總部' };
@@ -432,6 +451,7 @@ export function sourceText(src, profile) {
     case 'dept': return `因為部門：${profile.dept_name || '你的部門'}`;
     case 'exception': return src.until ? `個別例外，到 ${shortDate(src.until)}` : '個別例外';
     case 'implied': return '因為能填稽核單';
+    case 'acting': return '因為兼任店長';
     case 'role': return '系統角色';
     default: return String(src.source || '');
   }

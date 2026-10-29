@@ -96,6 +96,7 @@ function doGet(e) {
 function dispatch_(e) {
   // 區域快取（Regions.gs）只活在同一次請求：每次進來先清（mini 常駐行程的全域變數會跨請求留著）
   if (typeof regionCtxReset_ === 'function') regionCtxReset_();
+  if (typeof permActingReset_ === 'function') permActingReset_();   // 兼任店長對照（Perms.gs）同理
   var body = parseJsonBody_(e);
   if (body === null) {
     return { ok: false, error: CODE_MSG_BAD_REQUEST };
