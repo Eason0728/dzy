@@ -478,8 +478,10 @@ for (const p of people) {
     ok(sees && p.scope.canVoid ? g.ok && g.data.state === 'void' : g.error === 'not_found', `4f 作廢後 inspGet ${p.kind}@${p.unit} → ${sees && p.scope.canVoid ? '營運部仍可查（void）' : 'not_found'}`);
     const withVoid = lst(p, { include_void: true }).data.items.some((x) => x.id === rec.id);
     ok(withVoid === (sees && p.scope.canVoid), `4g include_void ${p.kind}@${p.unit} → ${sees && p.scope.canVoid}`);
-    for (const fid of rec.files) ok(!w.fileGet({ token: p.token, id: fid }).ok, `4h 作廢後照片沒人看得到 ${p.kind}@${p.unit}`);
+    const canPhoto = sees && p.scope.canVoid;
+    for (const fid of rec.files) ok(w.fileGet({ token: p.token, id: fid }).ok === canPhoto, `4h 作廢後照片 ${p.kind}@${p.unit} → ${canPhoto ? '能看作廢報告的人仍看得到' : '看不到'}`);
   }
+  for (const fid of rec.files) ok(w.fileGet({ token: A, id: fid }).ok, `4h2 作廢後 admin 仍看得到照片 ${fid}`);
   const vrow = post('inspGet', { id: rec.id }, A).data;
   ok(vrow.state === 'void' && (post('inspList', { include_void: true }, A).data.items.find((x) => x.id === rec.id) || {}).state === 'void', '4i admin 看到 state=void');
   rec.void = true;

@@ -137,9 +137,12 @@ function inspFileCanView_(c, inspId) {
   if (!inspReady_()) return false;
   var hit = null;
   inspRows_().forEach(function (o) { if (o.id === inspId) hit = o; });
-  if (!hit || inspStr_(hit.state) === 'void') return false;
+  if (!hit) return false;
   var s = inspScopeOf_(c);
-  return !!s.view[inspStr_(hit.unit)];
+  if (!s.view[inspStr_(hit.unit)]) return false;
+  // 作廢後：與 inspGet／inspList include_void 同一條件——能看作廢報告的人（canVoid）才看得到照片（2026-10-29）
+  if (inspStr_(hit.state) === 'void') return s.canVoid;
+  return true;
 }
 
 function inspSummaryOut_(o) {
