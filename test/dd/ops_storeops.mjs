@@ -248,8 +248,10 @@ function expectGates(p) {
   if (!pilot.length || p.status !== 'active') return { storeops: false, att: false, sched: false };
   const hr = isHrHead(p);
   const storeops = NO_ATT.includes(p.title) || (pilot.includes(p.unit) && validOrg(p) && UNITS[p.unit].ladder === 'store');
-  const att = (['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo', 'gm', 'chair'].includes(p.title) && !(p.title === 'hm' && p.dept === 'fin')) || hr;
-  const sched = ['sm', 'fm', 'am'].includes(p.title) || hr || (['hq', 'office'].includes(UNITS[p.unit].ladder) && !!(p.clock && p.clock.active && p.clock.store === 'hq'));
+  // 職稱那條（2026-10-29 比照 storeOpsGate_）：身分有效，且門市階梯的人本人單位要在試點；總部／辦公室職稱只看身分有效
+  const titleOk = validOrg(p) && (UNITS[p.unit].ladder !== 'store' || pilot.includes(p.unit));
+  const att = (['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo', 'gm', 'chair'].includes(p.title) && !(p.title === 'hm' && p.dept === 'fin') && titleOk) || hr;
+  const sched = (['sm', 'fm', 'am'].includes(p.title) && titleOk) || hr || (['hq', 'office'].includes(UNITS[p.unit].ladder) && !!(p.clock && p.clock.active && p.clock.store === 'hq'));
   return { storeops, att, sched };
 }
 
