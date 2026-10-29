@@ -264,13 +264,13 @@ ok(eq(M.MONEY_COLS, [5, 6, 7]) && eq(M.COL_WIDTHS, [10, 12, 8, 14, 22, 10, 8, 10
   let bad = [];
   for (let i = 0; i < 200; i++) {
     const n = ri(0, 22);
-    const items = Array.from({ length: n }, (_, k) => pick([{ id: 'tab' + k, label: '分頁' + k, badge: pick([0, 3, '7', -1, 'x']) }, { id: 'Bad Id', label: 'x' }, { id: 'ok' + k, label: 5 }, null, { id: 'e' + k, label: 'E', err: true }]));
+    const items = Array.from({ length: n }, (_, k) => pick([{ id: 'tab' + k, label: '分頁' + k, badge: pick([0, 3, '7', -1, 'x', true, 4.6]) }, { id: 'Bad Id', label: 'x' }, { id: 'ok' + k, label: 5 }, null, { id: 'e' + k, label: 'E', err: true }]));
     const cur = pick([items.find((x) => x && typeof x.id === 'string' && /^[a-z][a-z0-9-]{0,30}$/.test(x.id) && typeof x.label === 'string')?.id, 'nope', 5, undefined]);
     const d = { type: rand() < 0.9 ? 'dzy-purchase-nav' : 'dzy-purchase-go', v: rand() < 0.9 ? 1 : 0, items, cur };
     const got = PE.navTabs(d);
     const valid = d.type === 'dzy-purchase-nav' && d.v === 1 && items.length <= 20;
     if (!valid) { if (got !== null) bad.push({ d, got }); continue; }
-    const tabs = items.filter((x) => x && typeof x.id === 'string' && /^[a-z][a-z0-9-]{0,30}$/.test(x.id) && typeof x.label === 'string').map((x) => ({ id: x.id, name: x.label, badge: Number(x.badge) || 0, err: x.err === true }));
+    const tabs = items.filter((x) => x && typeof x.id === 'string' && /^[a-z][a-z0-9-]{0,30}$/.test(x.id) && typeof x.label === 'string').map((x) => ({ id: x.id, name: x.label, badge: typeof x.badge === 'number' && Number.isFinite(x.badge) && x.badge > 0 ? Math.floor(x.badge) : 0, err: x.err === true }));   // 2026-10-29 badge 只收數字
     const wantCur = typeof cur === 'string' && tabs.some((t) => t.id === cur) ? cur : '';
     if (!eq(got, { tabs, cur: wantCur })) bad.push({ d, got, want: { tabs, cur: wantCur } });
     const ctx = { viewId: pick([tabs[0]?.id, 'main', 'zzz', undefined]), params: { tab: pick([tabs[tabs.length - 1]?.id, 'nope', 3]) } };
@@ -278,8 +278,8 @@ ok(eq(M.MONEY_COLS, [5, 6, 7]) && eq(M.COL_WIDTHS, [10, 12, 8, 14, 22, 10, 8, 10
     const wantW = ids.includes(ctx.viewId) ? ctx.viewId : (typeof ctx.params.tab === 'string' && ids.includes(ctx.params.tab) ? ctx.params.tab : '');
     if (PE.wantedTab(ctx, tabs) !== wantW) bad.push({ ctx, got: PE.wantedTab(ctx, tabs), wantW });
   }
-  ok(bad.length === 0, '10a: navTabs（>20 個整包丟、壞 id 單筆丟、badge 轉數字、cur 要在清單內）＋wantedTab（網址優先、其次 ?tab=）200 組', bad.slice(0, 2));
-  ok(PE.navTabs({ type: 'dzy-purchase-nav', v: 1, items: [{ id: 'review', label: '待核對', badge: -5 }], cur: 'review' }).tabs[0].badge === -5, '10b: （觀察）navTabs 不擋負數 badge（殼的 sanitizeTabs 會歸 0，但 badge 顯示交給殼）');
+  ok(bad.length === 0, '10a: navTabs（>20 個整包丟、壞 id 單筆丟、badge 只收正數、cur 要在清單內）＋wantedTab（網址優先、其次 ?tab=）200 組', bad.slice(0, 2));
+  ok(PE.navTabs({ type: 'dzy-purchase-nav', v: 1, items: [{ id: 'review', label: '待核對', badge: -5 }, { id: 'b', label: 'B', badge: true }], cur: 'review' }).tabs.map((t) => t.badge).join() === '0,0', '10b: navTabs 負數與布林 badge 都歸 0（2026-10-29，布林 true 不再變 1）');
   let bad2 = [];
   for (let i = 0; i < 100; i++) {
     const review = pick([0, ri(1, 50), -1, 2.5, '3', null]), failed = pick([0, ri(1, 50), -2, NaN, undefined]);
