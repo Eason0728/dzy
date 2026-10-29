@@ -90,14 +90,14 @@ def expect(forms, ans):
             w = sum(x for x, _ in cats)
             bonus = min(bonus, 20)   # 2026-10-30 Eason 照推薦：每張表加分總額上限 +20
             score = sum(x * r for x, r in cats) / w * 100 + bonus
-        per[f['id']] = {'score': score, 'pen': pen, 'inop': f['inOperational']}
+        per[f['id']] = {'score': score, 'pen': pen, 'bonus': bonus if cats else 0, 'inop': f['inOperational']}
     ev = [v for v in per.values() if v['inop'] and v['score'] is not None]
     pen = sum(v['pen'] for v in per.values() if v['inop'])
     op = r1(sum(v['score'] for v in ev) / len(ev) - pen) if ev else None
     mg = per['management']['score'] if 'management' in per else None
     mg = r1(mg) if mg is not None else None
     return {'op': op, 'opg': grade(op) if op is not None else '未評', 'mg': mg, 'mgg': grade(mg) if mg is not None else '未評',
-            'pen': pen, 'forms': {fid: r1(v['score']) for fid, v in per.items()}}
+            'pen': pen, 'forms': {fid: r1(v['score']) for fid, v in per.items()}, 'bonus': {fid: v['bonus'] for fid, v in per.items()}}
 
 
 def defects(forms, ans):
@@ -465,7 +465,7 @@ def main():
             rid = 'INS-%s-%s' % (format(int(time.time() * 1000) + len(records), 'x').upper(), ''.join(rnd.choice('ABCDEFGHJKMNPQRSTUVWXYZ23456789') for _ in range(6)))
             date = '2026-%02d-%02d' % (rnd.randint(7, 10), rnd.randint(1, 28))
             summary = {'operationalScore': exp['op'], 'operationalGrade': exp['opg'], 'managementScore': exp['mg'], 'managementGrade': exp['mgg'],
-                       'penaltyTotal': exp['pen'], 'forms': [{'id': f['id'], 'name': f['name'], 'score': exp['forms'][f['id']]} for f in forms], 'defects': defects(forms, ans)}
+                       'penaltyTotal': exp['pen'], 'forms': [{'id': f['id'], 'name': f['name'], 'score': exp['forms'][f['id']], 'bonus': exp['bonus'][f['id']]} for f in forms], 'defects': defects(forms, ans)}
             r = api('inspSubmit', {'id': rid, 'unit': unit, 'date': date, 'bank_ver': bank_ver, 'forms': forms, 'answers': to_backend_answers(ans), 'summary': summary, 'files': []}, tok)
             check(r.get('ok'), 'API 直送巡檢 %s %s by %s：%s' % (unit, date, roles[role_key]['label'], r))
             records.append(dict(id=rid, unit=unit, exp=exp, ndef=defects(forms, ans), nphoto=0, inspector=roles[role_key]['label'], date=date))

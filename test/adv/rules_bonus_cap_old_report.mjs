@@ -30,8 +30,10 @@ const oldStoredScore = Math.round((base + 24) * 10) / 10;
 ok(oldStoredScore !== now.scoreRounded, '舊報告存的分數（含 24）≠ 新版現算（含 20）→ 報告頭用存檔、不重算：對', { old: oldStoredScore, now: now.scoreRounded });
 // list.js 報告頁：分數欄用 stored.score、說明欄用 fr.bonus.total → 同一列寫「分數含 24」與「加分 ＋20」
 const view = fs.readFileSync(new URL('../../modules/inspection/views/list.js', import.meta.url), 'utf8');
-ok(view.includes('const score = stored ? stored.score : fr.scoreRounded') && view.includes('；加分 ＋${fr.bonus.total}'), '（佐證）報告頁分數欄用存檔、加分文字用現算');
-const shownBonus = now.bonus.total, impliedBonus = oldStoredScore - base;
+ok(view.includes('const score = stored ? stored.score : fr.scoreRounded') && view.includes('stored.bonus') && view.includes('fr.bonus.raw') && !view.includes('；加分 ＋${fr.bonus.total}'), '（佐證）報告頁分數欄用存檔；加分文字用存檔 bonus、舊報告沒存就用 raw（2026-10-30 修）');
+// 舊報告（封頂前送出）沒有 stored.bonus → 報告頁用 raw；新報告 summaryOf 存 bonus（封頂後）→ 用它
+const shownBonus = now.bonus.raw, impliedBonus = oldStoredScore - base;
+ok(summaryOf(forms, ans).forms.find((f) => f.id === 'management').bonus === 20, '新報告的摘要 forms[].bonus＝封頂後的 20（與分數欄一致）');
 ok(shownBonus === impliedBonus, '【低：自相矛盾】舊報告在新版報告頁：分數欄含加分 ' + impliedBonus + '、同列文字卻寫「加分 ＋' + shownBonus + '」；舊報告的加分文字應用 raw（或摘要）而不是封頂值', { shownBonus, impliedBonus });
 
 console.log(`\n${passed} passed, ${failed} failed`);

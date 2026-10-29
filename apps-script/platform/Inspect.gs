@@ -238,7 +238,9 @@ function inspNum_(v) { return typeof v === 'number' && isFinite(v) ? Math.round(
 function inspCleanSummary_(s) {
   s = s && typeof s === 'object' ? s : {};
   var forms = Array.isArray(s.forms) ? s.forms.slice(0, 8).map(function (f) {
-    return { id: inspStr_(f && f.id).slice(0, 20), name: inspStr_(f && f.name).slice(0, 20), score: inspNum_(f && f.score) };
+    var o = { id: inspStr_(f && f.id).slice(0, 20), name: inspStr_(f && f.name).slice(0, 20), score: inspNum_(f && f.score) };
+    if (f && typeof f.bonus === 'number' && isFinite(f.bonus)) o.bonus = Math.max(0, Math.min(999, Math.floor(f.bonus)));   // 實際算進分數的加分（封頂後；2026-10-30，報告頁加分文字用）
+    return o;
   }) : [];
   return {
     operationalScore: inspNum_(s.operationalScore), operationalGrade: inspStr_(s.operationalGrade).slice(0, 4),
@@ -316,9 +318,9 @@ function handleInspVoid_(token, payload) {
     var hit = null;
     inspRows_().forEach(function (o) { if (o.id === id) hit = o; });
     if (!hit) return inspFail_('not_found', '找不到這筆巡檢');
+    if (!c.isAdmin && !c.scope.view[inspStr_(hit.unit)]) return inspFail_('not_found', '找不到這筆巡檢，或你沒有權限看');   // 2026-10-30 對抗驗證：作廢也受「看得到的店」限制（admin 照舊）
     if (inspStr_(hit.state) === 'void') return { ok: true, data: { id: id } };
     hit.state = 'void';
-    if (!c.isAdmin && !c.scope.view[inspStr_(hit.unit)]) return inspFail_('not_found', '找不到這筆巡檢，或你沒有權限看');   // 2026-10-30 對抗驗證：作廢也受「看得到的店」限制（admin 照舊）
     hit.void_by = c.me ? c.me.emp : 'U:' + String(c.user.id);
     hit.void_at = inspNow_();
     var sh = stfSheet_(INSP_SHEET);

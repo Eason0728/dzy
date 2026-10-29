@@ -125,7 +125,7 @@ export function summaryOf(forms, ans) {
   return {
     operationalScore: r.operationalScore, operationalGrade: r.operationalGrade,
     managementScore: r.managementScore, managementGrade: r.managementGrade, penaltyTotal: r.penaltyTotal,
-    forms: forms.map((f) => ({ id: f.id, name: f.name, score: r.byForm[f.id].scoreRounded })),
+    forms: forms.map((f) => ({ id: f.id, name: f.name, score: r.byForm[f.id].scoreRounded, bonus: r.byForm[f.id].bonus.total })),   // bonus＝實際算進分數的加分（封頂後；2026-10-30）
     defects: deficiencies(forms, ans).length
   };
 }

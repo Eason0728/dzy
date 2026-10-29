@@ -62,7 +62,7 @@ function oracle(forms, ans) {
     let score = null;
     bonus = Math.min(bonus, 20);   // 2026-10-30 Eason 照推薦：每張表加分總額上限 +20
     if (cats.length) { const w = cats.reduce((s, x) => s + x[0], 0); score = cats.reduce((s, x) => s + x[0] * x[1], 0) / w * 100 + bonus; }
-    out[f.id] = { score, pen, inop: !!f.inOperational, name: f.name };
+    out[f.id] = { score, pen, bonus, inop: !!f.inOperational, name: f.name };
   }
   const ev = Object.values(out).filter((v) => v.inop && v.score !== null);
   const penTotal = Object.values(out).filter((v) => v.inop).reduce((s, v) => s + v.pen, 0);
@@ -72,7 +72,7 @@ function oracle(forms, ans) {
     operationalScore: op, operationalGrade: op === null ? '未評' : gradeOf(op),
     managementScore: mg, managementGrade: mg === null ? '未評' : gradeOf(mg),
     penaltyTotal: penTotal,
-    forms: forms.map((f) => ({ id: f.id, name: f.name, score: r1(out[f.id].score) })),
+    forms: forms.map((f) => ({ id: f.id, name: f.name, score: r1(out[f.id].score), bonus: out[f.id].bonus })),   // bonus＝封頂後實際算進去的加分（2026-10-30）
     defects
   };
 }
