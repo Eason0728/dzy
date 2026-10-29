@@ -275,3 +275,25 @@
 
 ## 18. 區域（督導負責區，2026-10-25 起草）
 另見 `docs/regions/spec.md`（新分頁 regions、通訊錄「我的區域」、審核與稽核限區、REGIONS_ON 開關）。
+
+## 19. 重新啟用墨竹亭台中美村（Eason 2026-10-29）
+
+墨竹亭台中美村要開始用管理系統。`mzt-mc`「台中美村」在第 2 節改版時停用（停用不刪），這次只把啟用那一格改回 TRUE，名稱、品牌、順序都不動。
+
+- 一次性 action `orgEnableMztMc202610`（`dryrun:true` 預覽，試跑模式放行）／`orgEnableMztMcRollback202610`，只有 role admin；同仁名單 `?orgtools=1` 下的「啟用墨竹亭台中美村（10/29）」「退回墨竹亭台中美村」。
+- apply：停用→啟用；已啟用→略過；沒有列→新增（order＝墨竹亭現有單位最大值＋1）；名稱／品牌／階梯不符→整批拒絕。
+- rollback：只有「沒有非停用同仁的 unit 或 p_unit 是 mzt-mc」才停用，否則只列 emp_no。
+- staff_log：`org_enable_mztmc_2610`／`org_enable_mztmc_2610_rollback`。
+- **不在這次範圍**（要用到才各自處理）：打卡（clock_stores 沒有這家店，考勤、同仁同步、LINE 重設密碼都接不上）、稽核門市清單（盤點抽查 → 門市管理）、區域劃分、人員管理系統帳號節點 `USR_VALID_NODES`、薪酬門市代碼、營運系統門市。
+- 種子 `STF_DEFAULT_ORG` 刻意維持 FALSE（第 2 節切換與既有測試依賴它）。
+
+## 20. 品牌辦公室改由總監審、停用營運部（Eason 2026-10-29；覆蓋第 13 節「品牌辦公室 → 營運部主管」）
+
+- 起因：墨竹亭品牌總監看不到區督導的認領；同仁又常把自己誤選成「總部・營運部」。營運部實際上只有墨竹亭、小辛辣（、一悟）三個品牌辦公室。
+- 審核（`Staff.gs stfReviewNeed_`，認領、人事異動第一關直屬主管、績效評核主管範圍同一套）：
+  - 品牌辦公室行政同仁／區督導／區經理 → **同辦公室總監**（kind `office_head`，`STF_OFFICE_HEAD_TITLES = ['odir']`）。
+  - 品牌辦公室總監 → **執行長以上**（kind `exec`，比照總部部門總監）。
+  - 營運部主管（kind `ops`）不再審任何人；辦公室沒有總監時（例：一悟）只剩人資。
+- 停用營運部：一次性 `orgDisableOps202610`（dryrun 預覽）／`orgDisableOpsRollback202610`，同仁名單 `?orgtools=1`「停用營運部（10/29）」「退回停用營運部」；只寫 org 那一格啟用；dept／p_dept／兼任部門有非停用同仁 → 拒絕只列 emp_no。停用後認領的部門下拉不再出現營運部；營運部的預設權限規則（Perms.gs audit.read、Inspect.gs insp-*）沒人掛就不生效，不刪。
+- 考勤（StoreOps.gs）本來就是同辦公室總監，不受影響。
+- 測試：`test/org-upgrade.mock.test.mjs` T3、第 20 節；`test/org-front.test.mjs` 20。
