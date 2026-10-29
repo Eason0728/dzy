@@ -440,7 +440,7 @@ def main():
             'mztAm': dict(user=acc['mztAm'], view=['mzt-gf'], do=True, void=False, bank=[], label='墨竹亭區經理'),
             'gfPt': dict(user=acc['gfPt'], view=[], do=False, void=False, bank=[], label='光復計時'),
             'hr': dict(user=acc['hr'], view=[], do=False, void=False, bank=[], label='人資同仁'),
-            'ceo': dict(user=acc['ceo'], view=ALL, do=False, void=True, bank=[], label='執行長'),
+            'ceo': dict(user=acc['ceo'], view=ALL, do=False, void=False, bank=[], label='執行長'),   # 2026-10-30 作廢改看 platform.insp-void（預設只給營運部）
         }
         for e in extra:
             v = ALL if False else ({'osv': MALA if e['brand'] == 'mala' else MZT, 'am': [e['unit']], 'pt': [], 'ft': []}[e['title']])

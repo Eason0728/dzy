@@ -71,7 +71,7 @@ const me = (k) => post('inspMe', {}, T(k));
 ok(post('inspList', {}, T('ops')).error === 'not_inited', '3a 沒初始化 → not_inited');
 ok(post('inspSetup', {}, T('ops')).error === 'forbidden', '3b 非 admin 不能初始化');
 const setup = post('inspSetup', {}, A);
-ok(setup.ok && setup.data.permAdded.length === 14, '3c admin 初始化：補 14 條預設規則（含題目設定 2 條）', setup);
+ok(setup.ok && setup.data.permAdded.length === 15, '3c admin 初始化：補 15 條預設規則（含題目設定 2 條、作廢 1 條）', setup);
 ok(post('inspSetup', {}, A).data.permAdded.length === 0, '3d 再按一次不重複補');
 
 const units = (k) => (me(k).data.stores || []).map((s) => s.unit).sort().join(',');

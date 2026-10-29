@@ -18,7 +18,8 @@ var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit
   'pnl.read', 'pnl.write', 'pnl.admin',   // 2026-10-24 損益系統：看／填（財務部門預設）／管（定稿與設定，鎖碼）
   'transfer.write',            // 2026-10-24 調撥管理（財務部門看調撥月報、品項記憶、卡關總覽；不鎖碼，Eason Q1 B：人資可在權限設定打開）
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
-  'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank'];   // 2026-10-27 營運巡檢（docs/inspection/spec.md；預設規則在 Inspect.gs INSP_PERM_DEFAULT_RULES，inspSetup 補進 perm_map；不鎖碼）   // 2026-10-26 績效評核（docs/eval/spec.md §2.2；預設規則在 Eval.gs EV_PERM_DEFAULT_RULES，evSetup 補進 perm_map）
+  'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank',
+  'platform.insp-void'];   // 2026-10-30 作廢巡檢獨立權限碼（Eason 照推薦；預設只給營運部，不鎖碼；正式環境 admin 要再按一次「初始化營運巡檢」補規則）   // 2026-10-27 營運巡檢（docs/inspection/spec.md；預設規則在 Inspect.gs INSP_PERM_DEFAULT_RULES，inspSetup 補進 perm_map；不鎖碼）   // 2026-10-26 績效評核（docs/eval/spec.md §2.2；預設規則在 Eval.gs EV_PERM_DEFAULT_RULES，evSetup 補進 perm_map）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
 var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin'];   // 2026-10-19 加薪酬系統；2026-10-25 加收支管理、2026-10-27 Eason 改回不鎖（人資可開，與貨單／調撥／損益同一套）
@@ -624,7 +625,7 @@ var PERM_NAMES = {
   'payroll.write': '薪酬系統', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對',
   'pnl.read': '損益系統：看', 'pnl.write': '損益系統：填', 'pnl.admin': '損益系統：管', 'transfer.write': '調撥管理',
   'platform.eval-manage': '績效評核：替所屬同仁打分', 'platform.eval-brand': '績效評核：看自己品牌各店', 'platform.eval-all': '績效評核：看全集團', 'platform.eval-admin': '績效評核：題目設定與定稿',
-  'platform.insp-do': '營運巡檢：到店巡檢', 'platform.insp-own': '營運巡檢：看自己店', 'platform.insp-brand': '營運巡檢：看自己品牌各店', 'platform.insp-all': '營運巡檢：看全集團', 'platform.insp-bank': '營運巡檢：題目設定'
+  'platform.insp-do': '營運巡檢：到店巡檢', 'platform.insp-own': '營運巡檢：看自己店', 'platform.insp-brand': '營運巡檢：看自己品牌各店', 'platform.insp-all': '營運巡檢：看全集團', 'platform.insp-bank': '營運巡檢：題目設定', 'platform.insp-void': '營運巡檢：作廢巡檢'
 };
 function permName_(code) {
   if (PERM_NAMES[code]) return PERM_NAMES[code];

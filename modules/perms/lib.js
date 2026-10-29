@@ -8,7 +8,8 @@
 export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase',
   'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write',
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
-  'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank'];
+  'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank',
+  'platform.insp-void'];   // 2026-10-30 作廢巡檢獨立權限碼
 
 /**
  * 個別例外的功能下拉清單（2026-10-29）：以後端 permExList 回的 grantable 為準（admin＝全部、人資主管＝STORE_HR_GRANTABLE，與對照表頁一致）；
@@ -51,7 +52,8 @@ export const FEATURE_NAMES = {
   'platform.insp-own': '營運巡檢：看自己店',
   'platform.insp-brand': '營運巡檢：看自己品牌各店',
   'platform.insp-all': '營運巡檢：看全集團',
-  'platform.insp-bank': '營運巡檢：題目設定'
+  'platform.insp-bank': '營運巡檢：題目設定',
+  'platform.insp-void': '營運巡檢：作廢巡檢'
 };
 
 /** 其他會出現在 myPerms／異動裡的碼 */
@@ -375,8 +377,9 @@ export const FEATURE_DESC = {
   'platform.insp-do': '到店做營運巡檢、送出巡檢報告（督導、營運部預設有）',
   'platform.insp-own': '看自己店的營運巡檢報告（店長預設有）',
   'platform.insp-brand': '看自己品牌各店的營運巡檢報告（區經理、品牌辦公室預設有）',
-  'platform.insp-all': '看全集團的營運巡檢報告、作廢巡檢（營運部預設有）',
-  'platform.insp-bank': '設定營運巡檢題目（墨竹亭、一悟自訂題庫）'
+  'platform.insp-all': '看全集團的營運巡檢報告（營運部、執行長以上預設有）',
+  'platform.insp-bank': '設定營運巡檢題目（墨竹亭、一悟自訂題庫）',
+  'platform.insp-void': '作廢巡檢報告（打錯店、測試資料），作廢後只有有這個權限的人看得到該筆與照片（營運部預設有）'
 };
 
 /** 總部高層（不分部門）的職稱代碼 */

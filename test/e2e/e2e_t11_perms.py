@@ -130,7 +130,7 @@ class Mock11(MockBackend):
                 return {'ok': True, 'data': {'inited': False}}
             return {'ok': True, 'data': {
                 'inited': True, 'rules': list(self.rules),
-                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank'],
+                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void'],
                 'locked': LOCKED, 'names': {},
                 'counts': self.counts(),
                 'ladders': [{'code': 'store', 'name': '門市'}, {'code': 'office', 'name': '品牌辦公室'}, {'code': 'hq', 'name': '總部'}],
@@ -306,8 +306,8 @@ def main():
             check('3 人' in role('店長').inner_text(), '身分顯示人數（店長 3 人）：%s' % role('店長').inner_text().replace('\n', ' '))
             role('店長').click()
             perms_order = [r.get_attribute('data-perm') for r in ad.locator('[data-role="feature-row"]').all()]
-            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank'],
-                  '★右側 28 個功能列（＝後端 grantable，2026-10-29 mock 補營運巡檢五碼與 Perms.gs 一致）、順序正確：%s' % perms_order)
+            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void'],
+                  '★右側 29 個功能列（＝後端 grantable；2026-10-30 作廢巡檢 insp-void）、順序正確：%s' % perms_order)
             sw = lambda pg, perm: pg.locator('[data-role="feature-row"][data-perm="%s"] [data-act="toggle"]' % perm)
             on = lambda pg, perm: sw(pg, perm).get_attribute('aria-checked') == 'true'
             check(on(ad, 'audit.read.own') and not on(ad, 'dorm.read') and not on(ad, 'audit.read'), '店長：看自己店稽核＝開，其餘關')
@@ -523,7 +523,7 @@ def main():
             check(lk.count() == 6, '鎖住的六列仍顯示（含薪酬管理、損益定稿）')
             check(lk.locator('[data-act="toggle"][disabled]').count() == 6, '★鎖碼六列對非 admin：開關 disabled（含薪酬管理、損益定稿）')
             check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 6, '鎖列標示「只有系統管理員能改」')
-            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 22, '其餘 22 列可開關（含收支作廢、額外考勤核定、公告管理、貨單核對、調撥管理、收支管理（2026-10-27 改回不鎖）、績效評核四碼、營運巡檢五碼、看損益、填損益）')
+            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 23, '其餘 23 列可開關（含收支作廢、額外考勤核定、公告管理、貨單核對、調撥管理、收支管理（2026-10-27 改回不鎖）、績效評核四碼、營運巡檢六碼、看損益、填損益）')
             # 2026-10-27 Eason：權限設定移到資訊部門；收支管理人資也能開
             check(hr.locator('[data-dept="it"] [data-nav="perms"]').count() == 1 and hr.locator('[data-dept="hr"] [data-nav="perms"]').count() == 0, '★權限設定在左側「資訊部門」底下（不在人資部門）')
             cbt = hr.locator('[data-perm="cashbook.write"]:not([data-locked]) [data-act="toggle"]:not([disabled])')

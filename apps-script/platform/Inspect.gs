@@ -46,6 +46,7 @@ var INSP_PERM_DEFAULT_RULES = (function () {
     titles.forEach(function (t) { perms.forEach(function (p) { out.push([ladder, dept, t, p]); }); });
   };
   add('hq', 'ops', ['*'], ['platform.insp-all', 'platform.insp-do']);        // 營運部：看全部、可巡
+  add('hq', 'ops', ['*'], ['platform.insp-void']);                           // 營運部：作廢巡檢（2026-10-30 獨立權限碼；正式環境 admin 要再按一次「初始化營運巡檢」補這條）
   add('hq', '', ['ceo', 'gm', 'chair'], ['platform.insp-all']);              // 執行長以上：看全部
   add('office', '', ['odir', 'osv'], ['platform.insp-brand', 'platform.insp-do']);   // 品牌總監、區督導：看自己品牌、可巡
   add('store', '', ['am'], ['platform.insp-own', 'platform.insp-do']);       // 區經理：只看自己店、可巡
@@ -114,7 +115,7 @@ function inspScopeOf_(c) {
     bankBrands: bankBrands,
     view: view,
     canDo: canDo,
-    canVoid: has('platform.insp-all'),
+    canVoid: has('platform.insp-void'),   // 2026-10-30 Eason 照推薦：作廢改看獨立權限碼 platform.insp-void（admin 照舊；作廢報告與其照片的可見性都跟著這個）
     stores: stores.filter(function (u) { return view[u]; }),
     doStores: canDo ? stores.filter(function (u) { return view[u]; }) : []
   };
@@ -309,7 +310,7 @@ function handleInspVoid_(token, payload) {
   var c = inspEnter_(token);
   if (!c.ok) return c;
   if (!inspReady_()) return inspNotInited_();
-  if (!c.scope.canVoid) return inspFail_('forbidden', '只有營運部可以作廢巡檢');
+  if (!c.scope.canVoid) return inspFail_('forbidden', '沒有作廢巡檢的權限（platform.insp-void）');
   var id = inspStr_(payload && payload.id);
   return inspWithLock_(function () {
     var hit = null;

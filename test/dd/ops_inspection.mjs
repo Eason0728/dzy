@@ -242,7 +242,7 @@ function scopeOf(p) {
   else if (brand) view = storesOf(p.brand);
   else if (own) view = [p.unit];
   const canDo = (p.unit === 'dzy-hq' && p.dept === 'ops') || (brand) || (p.title === 'am' && own);
-  const canVoid = all;
+  const canVoid = p.unit === 'dzy-hq' && p.dept === 'ops';   // 2026-10-30：作廢改看 platform.insp-void，預設只給營運部（執行長以上只看不作廢）
   let bank = [];
   if (p.unit === 'dzy-hq' && p.dept === 'ops') bank = BRANDS.slice();
   else if (brand && p.title === 'odir') bank = [p.brand];
@@ -256,7 +256,7 @@ const anyOps = people.find((p) => p.kind === 'ops');
 ok(post('inspList', {}, anyOps.token).error === 'not_inited', '1a 沒初始化 → not_inited');
 ok(post('inspSetup', {}, anyOps.token).error === 'forbidden', '1b 非 admin 不能初始化');
 const setup = post('inspSetup', {}, A);
-ok(setup.ok && setup.data.permAdded.length === 14, '1c admin 初始化補 14 條預設規則', setup);
+ok(setup.ok && setup.data.permAdded.length === 15, '1c admin 初始化補 15 條預設規則（2026-10-30 加作廢 insp-void）', setup);
 ok(post('inspSetup', {}, A).data.permAdded.length === 0, '1d 再按一次不重複補');
 
 for (const p of people) {
