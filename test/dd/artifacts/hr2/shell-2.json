@@ -1,0 +1,98 @@
+{
+ "seed": 2,
+ "scenario": {
+  "pay_stores": [
+   "HQ",
+   "MZTMC",
+   "SSLGF"
+  ],
+  "fin_scope": [],
+  "att_alerts": {
+   "ok": true,
+   "data": {
+    "items": [
+     {
+      "kind": "request",
+      "count": 19
+     },
+     {
+      "kind": "device",
+      "count": 9
+     }
+    ],
+    "partial": false,
+    "asOf": "2026-10-29T00:00:00Z",
+    "pending": false
+   }
+  },
+  "sched_alerts": {
+   "ok": true,
+   "data": {
+    "items": [
+     {
+      "code": "st0",
+      "name": "假店0",
+      "periods": [
+       "T02",
+       "T03",
+       "T09"
+      ]
+     }
+    ],
+    "asOf": "2026-10-29T00:00:00Z",
+    "self": {},
+    "fixed": [
+     {
+      "code": "cf",
+      "name": "中央廚房",
+      "missing": 2
+     }
+    ]
+   }
+  },
+  "gaps": {
+   "items": 0,
+   "unmapped": 1
+  },
+  "duty_tabs": [
+   {
+    "id": "approve",
+    "label": "核定工時",
+    "badge": 24
+   },
+   {
+    "id": "request",
+    "label": "申請審核",
+    "err": true
+   }
+  ],
+  "sched_tabs": [
+   {
+    "id": "board",
+    "label": "班表",
+    "err": true
+   },
+   {
+    "id": "needs",
+    "label": "指定與需求",
+    "err": true
+   },
+   {
+    "id": "staff",
+    "label": "同仁",
+    "badge": 11
+   },
+   {
+    "id": "shifts",
+    "label": "班別與設定",
+    "err": true
+   }
+  ]
+ },
+ "clickmap": {
+  "total": 25,
+  "clicked": 31,
+  "missed": {}
+ },
+ "failures": []
+}
