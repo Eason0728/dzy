@@ -1418,6 +1418,14 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // 人資主管看不到這種例外；admin 的列表多回可選門市
   const lsHr = post(sb, 'permExList', {}, hrTok);
   ok(lsHr.ok && !lsHr.data.items.some((i) => i.perm.indexOf('att.view@') === 0) && lsHr.data.att_view_units === undefined, '10 人資主管 permExList 看不到 att.view@、也不回門市清單');
+  // payroll-scope spec §5「permExList 只對 admin 回」：薪酬負責門市 payroll.store@ 例外人資主管看不到（final review minor）
+  const psv = exSave(app.adminTok, 'DZY356', 'payroll.store@CF');
+  ok(psv.ok, '10p admin 可存 payroll.store@CF 例外', psv);
+  ok(!post(sb, 'permExList', {}, hrTok).data.items.some((i) => i.perm.indexOf('payroll.store@') === 0), '10p 人資主管 permExList 看不到 payroll.store@');
+  ok(post(sb, 'permExList', {}, app.login('DZY357')).code === 'no_perm', '10p 非人資主管（總監）permExList no_perm');
+  const lsPs = post(sb, 'permExList', {}, app.adminTok).data.items.find((i) => i.perm === 'payroll.store@CF' && i.emp_no === 'DZY356');
+  ok(!!lsPs, '10p admin permExList 看得到 payroll.store@CF');
+  post(sb, 'permExRevoke', { ex_id: lsPs.ex_id }, app.adminTok);
   const lsAd = post(sb, 'permExList', {}, app.adminTok);
   const codes = (lsAd.data.att_view_units || []).map((u) => u.code);
   ok(has(codes, 'mala-gf') && has(codes, 'ck') && has(codes, 'mzt-gf') && !has(codes, 'mala-hq') && !has(codes, 'dzy-hq') && !has(codes, 'mzt-wx') && lsAd.data.att_view_units.find((u) => u.code === 'mzt-gf').name === '墨竹亭 新竹光復', '10 admin permExList.att_view_units：active 門市＋央廚（名稱含品牌）', lsAd.data.att_view_units);
