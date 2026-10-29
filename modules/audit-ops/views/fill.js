@@ -428,7 +428,11 @@ export function mountFill(root, ctx, moduleState) {
       submitting = false;
       submitBtn.disabled = false;
       submitBtn.textContent = '送出營運稽核';
-      if (res && res.ok) {
+      if (res && res.ok && res.data && res.data.dryRun) {
+        // 試跑模式（?dryrun=1）：寫入被 audit-shared/api.js 攔下。不當成功——草稿保留、不導頁（2026-10-29，同 audit-stock）。
+        hideMessage();
+        ctx.ui.toast('試跑模式：未實際寫入，草稿已保留', 'ok');
+      } else if (res && res.ok) {
         // submit() 成功時已經呼叫過 invalidate()（見 audit-shared/api.js），下一次進報告頁
         // 呼叫 getAll() 就會拿到剛送出的新資料，不必像舊版 app.reload() 那樣手動重抓一次。
         FillSubmit.clearDraft(draftOwner, record.record_key);
