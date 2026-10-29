@@ -61,7 +61,7 @@ export default {
     }));
     const out = storesToAlert(stores, locksByStore, month, liveByStore)
       .map((s) => ({ level: 'warn', text: `${s.name || s.code} ${monthNum(month)} 月還沒月結`, view: 'lock', params: { store: s.code, month } }));
-    if (unreadable) out.push({ level: 'note', text: '部分門市暫時讀不到，稍後再看' });
+    if (unreadable) out.push({ level: 'info', text: '部分門市暫時讀不到，稍後再看' });   // level 要在殼的 ALERT_LEVELS（error/warn/info）裡；沒有 view → 殼不給連結
     return out;
   }
 };

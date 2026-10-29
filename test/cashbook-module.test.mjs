@@ -253,10 +253,10 @@ await t('alerts()：1–10 日列出上個月沒被會計鎖的店；文字「�
     });
     assert.deepEqual(await cashbook.alerts(partial), [
       { level: 'warn', text: '台中美村 9 月還沒月結', view: 'lock', params: { store: 'mc', month: '2026-09' } },
-      { level: 'note', text: '部分門市暫時讀不到，稍後再看' }
+      { level: 'info', text: '部分門市暫時讀不到，稍後再看' }
     ], '某店讀失敗：不斷言還沒月結，列「暫時讀不到」');
     const lockFail = fakeCtx((action, p) => action === 'adminStores' ? ST : action === 'adminLocks' ? (p.store === 'gf' ? { ok: false, error: 'x' } : { ok: true, data: { locks: [LOCK('2026-09', 'acct', '甲')] } }) : { ok: true, data: { rows: [{ status: '正常' }] } });
-    assert.deepEqual(await cashbook.alerts(lockFail), [{ level: 'note', text: '部分門市暫時讀不到，稍後再看' }], '鎖定讀失敗也不斷言');
+    assert.deepEqual(await cashbook.alerts(lockFail), [{ level: 'info', text: '部分門市暫時讀不到，稍後再看' }], '鎖定讀失敗也不斷言（level 用殼認得的 info，不是 note）');
   } finally { globalThis.Date = RealDate; }
 });
 await t('alerts()：11 日起不出提醒、也不打任何後端', async () => {
