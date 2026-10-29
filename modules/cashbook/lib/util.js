@@ -82,7 +82,8 @@ export function needsAcctLock(locks, month) {
  * 沒帳的店（例如新店還沒開始記）不提醒。回 [{code,name}]
  */
 export function storesToAlert(stores, locksByStore, month, liveByStore) {
-  return (Array.isArray(stores) ? stores : []).filter((s) => s && needsAcctLock((locksByStore || {})[s.code], month) && (liveByStore || {})[s.code] !== false);
+  // null＝那家店讀取失敗（鎖定或明細讀不到），不能斷言「還沒月結」→ 不列（2026-10-29）；undefined＝沒查（已被會計鎖的店）照原規則
+  return (Array.isArray(stores) ? stores : []).filter((s) => s && (locksByStore || {})[s.code] !== null && needsAcctLock((locksByStore || {})[s.code], month) && (liveByStore || {})[s.code] !== false && (liveByStore || {})[s.code] !== null);
 }
 
 /** 錯誤碼（現金帳伺服器）與代轉層訊息 → 給人看的話 */
