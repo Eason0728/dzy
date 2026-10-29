@@ -100,8 +100,9 @@ const fmt = { datetime, esc };
   eq(purgeLogoutDrafts(null, 'u001'), 0, '沒有 storage 不拋錯');
   // 殼的登出流程真的有接（platform/shell.js doLogout 在 auth.logout 之前呼叫）
   const shell = fs.readFileSync(path.join(ROOT, 'platform', 'shell.js'), 'utf8');
-  const i1 = shell.indexOf('purgeLogoutDrafts('), i2 = shell.indexOf('await auth.logout()');
+  const i1 = shell.indexOf('purgeLogoutDrafts('), i2 = shell.indexOf('await auth.logout()'), i3 = shell.indexOf('auth.expireLocal()');
   ok(i1 !== -1 && i2 !== -1 && i1 < i2, 'shell.js doLogout：auth.logout() 之前先清簽核草稿');
+  ok(i3 !== -1 && i1 < i3, 'shell.js doLogout：被踢登出（expired → auth.expireLocal）也要先清簽核草稿（對抗驗證 A）');
 }
 
 // ── 4. 照片壓縮：大小分支（假 canvas）──────────────────
