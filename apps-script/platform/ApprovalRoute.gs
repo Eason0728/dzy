@@ -120,6 +120,8 @@ function apvPerson_(values, org, extraCodes, userActive) {
     ladder: u ? (u.ladder || 'store') : '',
     rank: t ? t.rank : 0,
     extra: extraCodes || [],
+    // 兼任店長的門市（Perms.gs store.sm@<單位>，docs/att-hr-acting/spec.md §2.3）：請購請款第一關 head 比照該店店長
+    acting: (typeof permActingUnitsOf_ === 'function' && status === 'active') ? permActingUnitsOf_(String(values[STF_COL.emp_no] || '').trim()) : [],
     opened: status === 'active' && uid !== '' && userActive !== false,
     values: values
   };
@@ -157,9 +159,15 @@ function apvRoleMembers_(role, of, ctx, opts) {
     var p = ctx.people[i];
     if (!p.opened || apvExcluded_(ctx, p.emp)) continue;
     var hit = false;
+    var actingHit = false;
     if (role === 'head') {
       if (of) {
         if (of.ladder === 'store') hit = p.unit === of.unit && STF_STORE_HEAD_TITLES.indexOf(p.title) !== -1;
+        // 兼任店長：職級比照店長（同店店長以上送的單不給他簽；改派 noRank 也一樣，Codex 審查 4）。有效兼任已由 permActingUnitsOf_ 把關（在職、主要身分有效、試點）
+        if (!hit && of.ladder === 'store' && p.acting && p.acting.indexOf(of.unit) !== -1) {
+          var smT = ctx.org && ctx.org.title ? ctx.org.title.sm : null;
+          actingHit = of.rank < (smT ? smT.rank : 3);
+        }
         else if (of.ladder === 'hq') hit = of.dept !== '' && p.unit === of.unit && p.dept === of.dept && p.title === 'hm';
         else if (of.ladder === 'office') hit = p.unit === of.unit && p.ladder === 'office' && p.rank === 2;
       }
@@ -169,6 +177,7 @@ function apvRoleMembers_(role, of, ctx, opts) {
     } else if (role === 'ceo' || role === 'gm' || role === 'chair') {
       hit = p.title === role;
     }
+    if (actingHit) { out.push(p); continue; }
     if (!hit) continue;
     if (!noRank && of && p.ladder === of.ladder && p.rank <= of.rank) continue;
     out.push(p);

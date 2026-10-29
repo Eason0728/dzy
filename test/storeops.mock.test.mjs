@@ -394,8 +394,8 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(eq(subs('DZY014'), ['DZY015']), '3 另一品牌總監只核自己辦公室的行政', subs('DZY014'));
   // 總部
   const fin = subs('DZY022');
-  ok(eq(fin, ['DZY023']), '3 部門主管只核同部門同仁（不含自己、不含別部門）', fin);
-  ok(!has(subs('DZY022'), 'DZY021') && !has(subs('DZY022'), 'DZY024'), '3 財務主管看不到人資與管理部同仁');
+  ok(eq(fin, []), '3 ★財務總監不核任何人（2026-10-29 財務部改人資主管核；一般部門的同部門規則見 3b 資訊部）', fin);
+  ok(has(subs('DZY020'), 'DZY023'), '3 財務部同仁由人資主管核');
   ok(eq(subs('DZY025'), ['DZY024']) && eq(subs('DZY026'), ['DZY024']) && eq(subs('DZY027'), ['DZY024']), '3 管理部同仁由執行長／總經理／董事長核', subs('DZY025'));
   ok(subs('DZY021').length === 0 && subs('DZY023').length === 0, '3 一般同仁名單空');
   // 人資主管
@@ -425,7 +425,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   // attNeedOf_／attApproverOf_ 直接驗
   const need = (t) => app.sb.attNeedOf_(t, org);
   ok(need({ unit: 'mzt-hq', title: 'odir' }) === null && need({ unit: 'dzy-hq', dept: 'hr', title: 'hm' }) === null && need({ unit: 'dzy-hq', dept: 'mgmt', title: 'chair' }) === null, '3 attNeedOf_：責任制職稱回 null');
-  ok(need({ unit: 'mzt-gf', title: 'sm' }).kind === 'unit' && need({ unit: 'mzt-gf', title: 'pt' }).kind === 'unit' && need({ unit: 'mzt-hq', title: 'osv' }).kind === 'office' && need({ unit: 'dzy-hq', dept: 'fin', title: 'hs' }).kind === 'dept' && need({ unit: 'dzy-hq', dept: 'mgmt', title: 'hs' }).kind === 'mgmt', '3 attNeedOf_：五種被核者');
+  ok(need({ unit: 'mzt-gf', title: 'sm' }).kind === 'unit' && need({ unit: 'mzt-gf', title: 'pt' }).kind === 'unit' && need({ unit: 'mzt-hq', title: 'osv' }).kind === 'office' && need({ unit: 'dzy-hq', dept: 'it', title: 'hs' }).kind === 'dept' && need({ unit: 'dzy-hq', dept: 'fin', title: 'hs' }).kind === 'hr_only' && need({ unit: 'dzy-hq', dept: 'mgmt', title: 'hs' }).kind === 'mgmt', '3 attNeedOf_：五種被核者');
   ok(need({ unit: 'mzt-gf', title: 'odir' }) === null && need({ unit: 'nope', title: 'pt' }) === null && need({ unit: 'mzt-wx', title: 'pt' }) === null, '3 attNeedOf_：職稱與階梯不合、單位不存在、單位停用 → null');
   const ap = (a, t) => app.sb.attApproverOf_(a, t, org);
   ok(ap(mk('DZY011', 'mzt-hq', '', 'oam'), mk('DZY013', 'mzt-hq', '', 'ofs')) === false && ap(mk('DZY011', 'mzt-hq', '', 'oam'), mk('DZY012', 'mzt-hq', '', 'osv')) === false, '3 attApproverOf_：區經理核行政／督導 → false');
@@ -494,8 +494,8 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
     ['DZY123', '小辛辣區督導', 'mala-hq', '', 'osv', 'active', '2026-01-01'],
     ['DZY124', '小辛辣總監', 'mala-hq', '', 'odir', 'active', '2026-01-01'],
     ['DZY130', '人資主管', 'dzy-hq', 'hr', 'hm', 'active', '2026-01-01'],
-    ['DZY131', '財務主管', 'dzy-hq', 'fin', 'hm', 'active', '2026-01-01'],
-    ['DZY132', '財務同仁', 'dzy-hq', 'fin', 'hs', 'active', '2026-01-01'],
+    ['DZY131', '資訊主管', 'dzy-hq', 'it', 'hm', 'active', '2026-01-01'],
+    ['DZY132', '資訊同仁', 'dzy-hq', 'it', 'hs', 'active', '2026-01-01'],
     ['DZY133', '管理部同仁', 'dzy-hq', 'mgmt', 'hs', 'active', '2026-01-01'],
     ['DZY134', '執行長', 'dzy-hq', 'mgmt', 'ceo', 'active', '2026-01-01'],
     ['DZY135', '總經理', 'dzy-hq', 'mgmt', 'gm', 'active', '2026-01-01'],
@@ -838,7 +838,8 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   const att = (u) => { const p = perms(u); return !!p && has(p, 'platform.att'); };
   ok(att('DZY001'), '7 店長（sm）有 platform.att');
   ok(att('DZY010'), '7 總監（odir）有');
-  ok(att('DZY020') && att('DZY022'), '7 人資主管、部門主管（hm）有');
+  ok(att('DZY020'), '7 人資主管有');
+  ok(!att('DZY022'), '7 ★財務總監沒有（2026-10-29 Q4 B；其他部門總監照舊有，見第 16 節）');
   ok(att('DZY025') && att('DZY026') && att('DZY027'), '7 ceo／gm／chair 有');
   ok(!att('DZY002') && !att('DZY003') && !att('DZY011') && !att('DZY013') && !att('DZY021') && !att('DZY023'), '7 正職、計時、停用的品牌辦公室區經理、行政、人資同仁、部門同仁沒有');
   ok(att('DZY012'), '7 區督導（osv）有（2026-10-21 起核品牌內店長的申請）');

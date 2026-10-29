@@ -1,12 +1,13 @@
 /**
  * modules/perms/views/ex.js — 個別例外分頁（admin；人資主管只看得到、只能設 store.void／att.extra／platform.bulletin；spec §7.1-2、docs/approver/spec.md §13.1）
  * 2026-10-26：admin 多一個「指定門市只看考勤」→ 出現門市下拉，送出 att.view@<門市>（docs/att-support/spec.md §2）。
+ * 2026-10-29：admin 與人資主管多一個「兼任店長」→ 出現門市下拉，送出 store.sm@<門市>（docs/att-hr-acting/spec.md）。
  * 清單：同仁、功能、多給／拿掉、到期、原因、建立者；過期與已撤銷灰掉；可撤銷。
  * 新增：同仁（編號或姓名，名單取自 staffList）、功能、模式、到期日（可空）、原因（必填 ≤50 字）。
  */
 'use strict';
 
-import { FEATURE_ORDER, HR_EX_FEATURES, ATT_VIEW_CHOICE, ATT_VIEW_CHOICE_NAME, attViewCode, PAYROLL_STORE_CHOICE, PAYROLL_STORE_CHOICE_NAME, payrollStoreCode, parsePayrollStores, payrollStoreLabel, featureName, errorText, exStatus, untilText, sortExItems, resolvePerson, removeAuditReadHint } from '../lib.js';
+import { FEATURE_ORDER, HR_EX_FEATURES, ATT_VIEW_CHOICE, ATT_VIEW_CHOICE_NAME, attViewCode, ACTING_CHOICE, ACTING_CHOICE_NAME, actingCode, PAYROLL_STORE_CHOICE, PAYROLL_STORE_CHOICE_NAME, payrollStoreCode, parsePayrollStores, payrollStoreLabel, featureName, errorText, exStatus, untilText, sortExItems, resolvePerson, removeAuditReadHint } from '../lib.js';
 
 export function mountEx(el, ctx) {
   const esc = ctx.fmt.esc;
@@ -14,6 +15,7 @@ export function mountEx(el, ctx) {
   let items = [];
   let staff = [];
   let units = [];   // 2026-10-26 指定門市只看考勤：後端只回給 admin（permExList.att_view_units）
+  let actingUnits = [];   // 2026-10-29 兼任店長：admin 與人資主管都有（permExList.acting_units）
   let payStores = null;   // 薪資門市清單（只在 admin 開表單時讀；null＝沒讀到，改手動輸入）
   let payStoresTried = false;
   let notInited = false;
@@ -27,6 +29,7 @@ export function mountEx(el, ctx) {
     notInited = r.data.inited === false;
     items = r.data.items || [];
     units = Array.isArray(r.data.att_view_units) ? r.data.att_view_units : [];
+    actingUnits = Array.isArray(r.data.acting_units) ? r.data.acting_units : [];
     if (ctx.can('platform.permex') && !payStoresTried) {   // 只有 admin 會用到；失敗不擋畫面
       payStoresTried = true;
       try { payStores = parsePayrollStores(await ctx.api.call('payroll', 'payroll_store_get', {})); } catch (e) { payStores = null; }
@@ -36,6 +39,9 @@ export function mountEx(el, ctx) {
     draw();
   }
 
+  // 清單顯示名稱用：兩份門市清單合起來
+  const allUnits = () => units.concat(actingUnits);
+
   function listHtml() {
     if (!items.length) return '<div class="card"><p class="text-muted" data-role="ex-empty">目前沒有任何例外。</p></div>';
     return sortExItems(items).map((x) => {
@@ -43,7 +49,7 @@ export function mountEx(el, ctx) {
       const modeTag = x.mode === 'remove' ? '<span class="tag tag-danger">拿掉</span>' : '<span class="tag tag-ok">多給</span>';
       return `<div class="card stack${st.dim ? ' is-dim' : ''}" data-role="ex-item" data-ex="${esc(x.ex_id)}" data-status="${esc(x.status)}">
         <div class="card-row"><div class="card-title">${esc(x.name || '')} ${esc(x.emp_no)}</div><span class="tag${st.dim ? '' : ' tag-ok'}">${st.text}</span></div>
-        <div>${modeTag} ${esc(featureName(x.perm, units, payStores))}　<span class="text-muted">${esc(untilText(x.until))}</span></div>
+        <div>${modeTag} ${esc(featureName(x.perm, allUnits(), payStores))}　<span class="text-muted">${esc(untilText(x.until))}</span></div>
         <div class="text-muted">原因：${esc(x.note)}　建立者：${esc(x.created_by)}${x.created_at ? `（${esc(String(x.created_at).slice(0, 10))}）` : ''}</div>
         ${st.revocable ? `<div><button type="button" class="btn btn-secondary" data-act="revoke" data-ex="${esc(x.ex_id)}">撤銷</button></div>` : ''}
       </div>`;
@@ -60,11 +66,14 @@ export function mountEx(el, ctx) {
     const featList = isAdmin ? FEATURE_ORDER : HR_EX_FEATURES;
     // 2026-10-26「指定門市只看考勤」只給 admin（後端也只有 admin 能存）；選了才出現門市下拉
     const attViewOn = isAdmin && units.length > 0;
+    const actingOn = actingUnits.length > 0;
     const featOpts = featList.map((p) => `<option value="${esc(p)}">${esc(featureName(p))}</option>`).join('') +
       (attViewOn ? `<option value="${ATT_VIEW_CHOICE}">${esc(ATT_VIEW_CHOICE_NAME)}</option>` : '') +
+      (actingOn ? `<option value="${ACTING_CHOICE}">${esc(ACTING_CHOICE_NAME)}</option>` : '') +
       (isAdmin ? `<option value="${PAYROLL_STORE_CHOICE}">${esc(PAYROLL_STORE_CHOICE_NAME)}</option>` : '');   // 薪酬負責門市：只有 admin（人資主管的 featList 只有三碼）
     const payOpts = '<option value="">請選擇門市</option>' + (payStores || []).map((st) => `<option value="${esc(st.code)}">${esc(payrollStoreLabel(st))}</option>`).join('');
     const unitOpts = '<option value="">請選擇門市</option>' + units.map((u) => `<option value="${esc(u.code)}">${esc(u.name || u.code)}</option>`).join('');
+    const actingOpts = '<option value="">請選擇門市</option>' + actingUnits.map((u) => `<option value="${esc(u.code)}">${esc(u.name || u.code)}</option>`).join('');
     const staffOpts = staff.map((p) => `<option value="${esc(p.emp_no)} ${esc(p.name)}"></option>`).join('');
     el.innerHTML = `
       <form class="card stack" data-role="ex-form" novalidate>
@@ -78,6 +87,8 @@ export function mountEx(el, ctx) {
             <select class="input" id="ex-perm" data-role="ex-perm">${featOpts}</select></div>
           ${attViewOn ? `<div class="field" data-role="ex-unit-field" hidden><label class="field-label" for="ex-unit">門市（只看這家店的考勤）</label>
             <select class="input" id="ex-unit" data-role="ex-unit">${unitOpts}</select></div>` : ''}
+          ${actingOn ? `<div class="field" data-role="ex-acting-field" hidden><label class="field-label" for="ex-acting">兼任哪一家店的店長</label>
+            <select class="input" id="ex-acting" data-role="ex-acting">${actingOpts}</select></div>` : ''}
           ${isAdmin ? (payStores
             ? `<div class="field" data-role="ex-pay-field" hidden><label class="field-label" for="ex-pay">薪酬負責門市（一次一家，要多家就新增多筆）</label>
             <select class="input" id="ex-pay" data-role="ex-pay">${payOpts}</select></div>`
@@ -102,16 +113,21 @@ export function mountEx(el, ctx) {
     const box = el.querySelector('[data-role="ex-error"]');
     const unitField = el.querySelector('[data-role="ex-unit-field"]');
     const unitEl = el.querySelector('[data-role="ex-unit"]');
+    const actingField = el.querySelector('[data-role="ex-acting-field"]');
+    const actingEl = el.querySelector('[data-role="ex-acting"]');
     const payField = el.querySelector('[data-role="ex-pay-field"]');
     const payEl = el.querySelector('[data-role="ex-pay"]');
     const syncHint = () => {
       const av = permEl.value === ATT_VIEW_CHOICE;
+      const ac = permEl.value === ACTING_CHOICE;
       const pv = permEl.value === PAYROLL_STORE_CHOICE;
       if (unitField) unitField.hidden = !av;
+      if (actingField) actingField.hidden = !ac;
       if (payField) payField.hidden = !pv;
-      if (av || pv) modeEl.value = 'add';   // 只看考勤／負責門市只能多給（要收回＝撤銷那筆例外）
-      modeEl.disabled = av || pv;
+      if (av || ac || pv) modeEl.value = 'add';   // 只看考勤、兼任店長、負責門市只能多給（要收回＝撤銷那筆例外）
+      modeEl.disabled = av || ac || pv;
       const h = av ? '只看不核：對方在考勤管理看得到這家店所有打卡同仁的工時與申請，不能核定。'
+        : ac ? '當作這家店的店長：核同仁工時與加班／請假／忘打卡、排班、門市營運、新人開通審核、人事異動與 5,000 元以下請購請款第一關、績效評核打分、看這家店的稽核。本人的考勤照原身分。建議設到期日。'
         : pv ? '對方在薪酬管理只看得到、算得了這家店的薪資；要多家就各新增一筆。集團總覽仍只有系統管理者看得到。'
         : removeAuditReadHint(permEl.value, modeEl.value);
       hintEl.textContent = h;
@@ -129,6 +145,9 @@ export function mountEx(el, ctx) {
       if (perm === ATT_VIEW_CHOICE) {
         perm = attViewCode(unitEl ? unitEl.value : '');
         if (!perm) return fail('請選擇門市');
+      } else if (perm === ACTING_CHOICE) {
+        perm = actingCode(actingEl ? actingEl.value : '');
+        if (!perm) return fail('請選擇門市');
       }
       if (perm === PAYROLL_STORE_CHOICE) {
         perm = payrollStoreCode(payEl ? payEl.value : '');
@@ -142,7 +161,7 @@ export function mountEx(el, ctx) {
       let r;
       try {
         r = await ctx.api.call('perms', 'permExSave', {
-          emp_no: who.person.emp_no, perm, mode: permEl.value === ATT_VIEW_CHOICE || permEl.value === PAYROLL_STORE_CHOICE ? 'add' : modeEl.value,
+          emp_no: who.person.emp_no, perm, mode: permEl.value === ATT_VIEW_CHOICE || permEl.value === ACTING_CHOICE || permEl.value === PAYROLL_STORE_CHOICE ? 'add' : modeEl.value,
           until: el.querySelector('[data-role="ex-until"]').value || '', note
         });
       } finally { ctx.ui.loading(false); }
@@ -155,7 +174,7 @@ export function mountEx(el, ctx) {
 
   async function onRevoke(id) {
     const x = items.find((i) => i.ex_id === id);
-    const yes = await ctx.ui.confirm(`要撤銷這筆例外嗎？（${x ? `${x.name} ${x.emp_no}：${x.mode === 'remove' ? '拿掉' : '多給'}${featureName(x.perm, units, payStores)}` : id}）`);
+    const yes = await ctx.ui.confirm(`要撤銷這筆例外嗎？（${x ? `${x.name} ${x.emp_no}：${x.mode === 'remove' ? '拿掉' : '多給'}${featureName(x.perm, allUnits(), payStores)}` : id}）`);
     if (!yes || !alive) return;
     ctx.ui.loading(true);
     let r;

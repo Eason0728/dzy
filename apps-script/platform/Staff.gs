@@ -960,10 +960,14 @@ function stfReviewScope_(values, org) {
       }
     }
   }
-  if (!kinds.length) return null;
+  // 兼任店長（Perms.gs store.sm@<單位>，docs/att-hr-acting/spec.md §2.3）：另外當作那些門市的店長（stfScopeMeets_ 比對）
+  var acting = typeof permActingUnitsOf_ === 'function' ? permActingUnitsOf_(stfNormEmp_(values[STF_COL.emp_no])).filter(function (c) {
+    var au = org.unit[c]; return !!(au && au.active && (au.ladder || 'store') === 'store' && c !== 'ck');
+  }) : [];
+  if (!kinds.length && !acting.length) return null;
   // emp／title（區域，docs/regions/spec.md 第 5 節）：給 stfScopeMeetsKind_ 問 regionOfficeCovers_ 用
   return { kinds: kinds, unit: unitCode, unit_name: unit.name, brand: unit.parent, dept: dept, rank: title.rank, titleLadder: title.parent,
-    emp: stfNormEmp_(values[STF_COL.emp_no]), title: title.code };
+    emp: stfNormEmp_(values[STF_COL.emp_no]), title: title.code, acting: acting, actingRank: org.title.sm ? org.title.sm.rank : 3 };
 }
 
 /** 被審的一個身分（單位、部門、職稱）需要哪一種審核者；回 null＝資料已不合規或沒有上一層 → 只有人資 */
@@ -1015,9 +1019,19 @@ function stfReviewNeed_(org, unitCode, dept, titleCode) {
 /** rctx＝區域 {on, idx}（regionCtx_()）；省略＝視為開關關（行為同區域上線前） */
 function stfScopeMeets_(scope, need, rctx) {
   if (!scope || !need) return false;
+  if (stfScopeActingMeets_(scope, need)) return true;
   // 同一個職稱階梯才比職級：被審的人職級跟審核者同級或更高 → 擋（不同階梯不比；第二期起職稱＝權限，不能核准同級或更高）
   if (scope.titleLadder === need.title.parent && scope.rank <= need.title.rank) return false;
   return [need].concat(need.alt || []).some(function (o) { return stfScopeMeetsKind_(scope, o, rctx); });
+}
+/**
+ * 兼任店長：被審身分的任一種需求是「門市 store、單位在 scope.acting」，且被審職稱在門市階梯、職級低於店長 sm（同一般店長「同階梯職級要更高」）。
+ * 只在 stfReviewScope_ 帶了 acting 時有作用；主要身分的判斷照舊在 stfScopeMeets_ 後半。
+ */
+function stfScopeActingMeets_(scope, need) {
+  if (!scope.acting || !scope.acting.length || !need.title || need.title.parent !== 'store') return false;
+  if (need.title.rank >= scope.actingRank) return false;
+  return [need].concat(need.alt || []).some(function (o) { return o.kind === 'store' && scope.acting.indexOf(o.unit) !== -1; });
 }
 function stfScopeMeetsKind_(scope, o, rctx) {
   // 品牌辦公室同仁（第 20 節）：同辦公室的總監；不靠 kinds

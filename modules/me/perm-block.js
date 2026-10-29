@@ -26,6 +26,7 @@ export function sourceText(src, profile) {
     case 'dept': return `因為部門：${profile.dept_name || '你的部門'}`;
     case 'exception': return src.until ? `個別例外，到 ${shortDate(src.until)}` : '個別例外';
     case 'implied': return '因為能填稽核單';
+    case 'acting': return '因為兼任店長';
     case 'role': return '系統角色';
     default: return String(src.source || '');
   }

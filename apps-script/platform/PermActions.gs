@@ -29,7 +29,7 @@ function permAcAdmin_(token) {
   return sess;
 }
 /**
- * 個別例外專用：admin 放行所有碼；人資主管（stfIsHrHead_）只能動 STORE_HR_GRANTABLE 三碼（store.void、att.extra、platform.bulletin），
+ * 個別例外專用：admin 放行所有碼；人資主管（stfIsHrHead_）只能動 STORE_HR_GRANTABLE 三碼（store.void、att.extra、platform.bulletin）與兼任店長 store.sm@<單位>，
  * 且不能對自己設。其他碼、其他人一律 no_perm。perm＝這次要動的權限碼（列表時傳空字串＝只驗身分）。
  * 回 session（附 hrOnly:true 表示非 admin）或錯誤物件。
  */
@@ -40,7 +40,7 @@ function permAcExAuth_(token, perm, targetEmp) {
   if (String(sess.user.role) !== 'staff' || typeof stfIsHrHead_ !== 'function') return permAcNoPerm_();
   var hit = stfFindByUserId_(sess.user.id);
   if (!hit || !stfIsHrHead_({ status: permStr_(hit.values[STF_COL.status]), dept: permStr_(hit.values[STF_COL.dept]), title: permStr_(hit.values[STF_COL.title]) })) return permAcNoPerm_();
-  if (perm !== '' && STORE_HR_GRANTABLE.indexOf(perm) === -1) return permAcNoPerm_();
+  if (perm !== '' && STORE_HR_GRANTABLE.indexOf(perm) === -1 && !permActingUnit_(perm)) return permAcNoPerm_();   // 2026-10-29 兼任店長 store.sm@<單位> 人資也能設
   if (targetEmp && permStr_(hit.values[STF_COL.emp_no]).toUpperCase() === permStr_(targetEmp).toUpperCase()) {
     return permAcFail_('perm_self', '不能對自己設定例外');
   }
@@ -348,7 +348,7 @@ function handlePermExList_(token, payload) {
   permReadTable_(ss, PERM_SHEET_EX, PERM_EX_HEADERS).rows.forEach(function (r) {
     var emp = permStr_(r[1]).toUpperCase();
     if (want && emp !== want) return;
-    if (sess.hrOnly && STORE_HR_GRANTABLE.indexOf(permStr_(r[2])) === -1) return;   // 人資主管只看得到自己能管的三碼
+    if (sess.hrOnly && STORE_HR_GRANTABLE.indexOf(permStr_(r[2])) === -1 && !permActingUnit_(r[2])) return;   // 人資主管只看得到自己能管的三碼＋兼任店長
     var active = permIsActive_(r[6]);
     var until = permNormDate_(r[4]);
     items.push({
@@ -361,6 +361,7 @@ function handlePermExList_(token, payload) {
   var data = { inited: true, items: items };
   // 2026-10-26「指定門市只看考勤」（att.view@<單位>，只有 admin 能設）：admin 才多回可選的門市（active、store 階梯含 ck），名稱同 permAttViewLabel_
   if (!sess.hrOnly) data.att_view_units = permAcAttViewUnits_();
+  data.acting_units = permAcActingUnits_();   // 2026-10-29 兼任店長：admin 與人資主管都有
   return { ok: true, data: data };
 }
 
@@ -373,6 +374,23 @@ function permAcAttViewUnits_() {
   });
 }
 
+/** 可設「兼任店長」的門市：[{code, name}]（org 分頁順序；不含央廚） */
+function permAcActingUnits_() {
+  var org = stfReadOrg_();
+  var pidx = permOrgIndex_();
+  return org.list.unit.filter(function (u) { return permActingUnitOk_(u.code, pidx); }).map(function (u) {
+    return { code: u.code, name: permAttViewLabel_(u.code, org) };
+  });
+}
+
+/** perm_ex 一列是不是「emp 的 perm（兼任店長）且目前生效」（active、add、沒過期） */
+function permAcSameActingLive_(r, emp, perm, today) {
+  if (!permIsActive_(r[6]) || permStr_(r[1]).toUpperCase() !== emp || permStr_(r[2]) !== perm || permStr_(r[3]).toLowerCase() !== 'add') return false;
+  if (permStr_(r[4]) === '') return true;
+  var u = permNormDate_(r[4]);
+  return !!u && u >= today;
+}
+
 function handlePermExSave_(token, payload) {
   payload = payload || {};
   var sess = permAcExAuth_(token, permStr_(payload.perm), permStr_(payload.emp_no));
@@ -383,6 +401,9 @@ function handlePermExSave_(token, payload) {
   if (!STF_EMP_RE.test(emp)) return permAcBad_('同仁編號格式錯誤');
   var hit = stfFindByEmp_(emp);
   if (!hit) return permAcFail_('no_staff', '找不到這位同仁');
+  var actU = permActingUnit_(payload.perm);
+  if (actU && permStr_(hit.values[STF_COL.status]) !== 'active') return permAcFail_('bad_target', '兼任店長只能設給在職、已開通的同仁');
+  if (actU && permStr_(hit.values[STF_COL.unit]) === actU) return permAcFail_('bad_target', '這位同仁本來就在這家店，不用設兼任店長');
   var today = permTodayTaipei_();
   var ex = { perm: permStr_(payload.perm), mode: permStr_(payload.mode), until: payload.until, note: typeof payload.note === 'string' ? payload.note : '' };
   var org = permOrgIndex_();   // 2026-10-26：att.view@<單位> 要驗單位
@@ -391,6 +412,8 @@ function handlePermExSave_(token, payload) {
   var until = permNormDate_(payload.until);   // 驗證已通過：空＝不到期
   var ss = SpreadsheetApp.getActive();
   var exT = permReadTable_(ss, PERM_SHEET_EX, PERM_EX_HEADERS);
+  // 兼任店長：同一人同一家店已有生效中的那筆 → 擋（避免撤銷一筆後另一筆還在；Codex 審查 3）
+  if (actU && exT.rows.some(function (r) { return permAcSameActingLive_(r, emp, ex.perm, today); })) return permAcFail_('dup', '這位同仁已經是這家店的兼任店長（要改到期日請先撤銷原本那筆）');
   var exId = permAcNextId_(exT.rows, 'X')();
   var now = permNowText_();
   var by = permStr_(sess.user.id);
@@ -405,6 +428,8 @@ function handlePermExSave_(token, payload) {
   var sh = ss.getSheetByName(PERM_SHEET_EX);
   sh.getRange(sh.getLastRow() + 1, 1, 1, PERM_EX_HEADERS.length).setValues([[exId, emp, ex.perm, ex.mode, until, note, 'TRUE', now, by, '', '']]);
   stfLog_(emp, 'perm_ex_save', by, exId + ' ' + ex.mode + ' ' + ex.perm + (until ? ' until ' + until : ''));
+  permActingReset_();
+  if (actU) permAuditAppend_(by, emp, ex.perm, '', 'perm_ex');   // 兼任店長不在 perms 裡、下面的 diff 看不到，直接記（Codex 審查 6）
   var d = permDiff_(pb, pa);
   if (d) permAuditAppend_(by, emp, d.added.join(','), d.removed.join(','), 'perm_ex');
   return { ok: true, data: { ex_id: exId } };
@@ -443,6 +468,17 @@ function handlePermExRevoke_(token, payload) {
   sh.getRange(rowNo, 7).setValue('FALSE');
   sh.getRange(rowNo, 10, 1, 2).setValues([[permNowText_(), by]]);
   stfLog_(emp, 'perm_ex_revoke', by, id + ' ' + permStr_(r[3]) + ' ' + permStr_(r[2]));
+  if (permActingUnit_(r[2])) {
+    // 兼任店長：同一人同一家店其他還生效的列一起停（舊資料可能重複；撤銷＝真的收回）
+    exT.rows.forEach(function (o, j) {
+      if (j === idx || !permIsActive_(o[6]) || permStr_(o[1]).toUpperCase() !== emp || permStr_(o[2]) !== permStr_(r[2])) return;
+      sh.getRange(j + 2, 7).setValue('FALSE');
+      sh.getRange(j + 2, 10, 1, 2).setValues([[permNowText_(), by]]);
+      stfLog_(emp, 'perm_ex_revoke', by, permStr_(o[0]) + ' ' + permStr_(o[3]) + ' ' + permStr_(o[2]) + '（同碼一起撤銷）');
+    });
+    permAuditAppend_(by, emp, '', permStr_(r[2]), 'perm_ex');
+  }
+  permActingReset_();
   if (d) permAuditAppend_(by, emp, d.added.join(','), d.removed.join(','), 'perm_ex');
   return { ok: true, data: { ex_id: id } };
 }
