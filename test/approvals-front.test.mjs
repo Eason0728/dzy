@@ -10,6 +10,8 @@ class MemoryStorage {
   getItem(k) { return this._m.has(k) ? this._m.get(k) : null; }
   setItem(k, v) { this._m.set(k, String(v)); }
   removeItem(k) { this._m.delete(k); }
+  key(i) { return Array.from(this._m.keys())[i] ?? null; }
+  get length() { return this._m.size; }
 }
 globalThis.localStorage = new MemoryStorage();
 
@@ -78,6 +80,28 @@ const fmt = { datetime, esc };
   eq(lib.loadDraft(st, 'u001', 'purchase'), null, '清掉草稿');
   st.setItem('dzy.u.u001.apv_draft_expense', '{壞掉');
   eq(lib.loadDraft(st, 'u001', 'expense'), null, '壞掉的 JSON 不拋錯');
+}
+
+// ── 3b. 登出清草稿（spec §14.7：登出時清掉 dzy.u.<id>.apv_draft_*；稽核草稿 draft_*／ops_draft_* 刻意跨登入保留）──
+{
+  const { purgeLogoutDrafts } = await import('../platform/auth.js');
+  const st = new MemoryStorage();
+  st.setItem('dzy.u.u001.apv_draft_purchase', '{}');
+  st.setItem('dzy.u.u001.apv_draft_expense', '{}');
+  st.setItem('dzy.u.u002.apv_draft_purchase', '{}');          // 別人的不動（共用電腦上另一個帳號）
+  st.setItem('dzy.u.u001.draft_sxl-gf_2026-10_regular', '{}'); // 盤點稽核草稿：保留
+  st.setItem('dzy.u.u001.ops_draft_sxl-gf_2026-10', '{}');     // 營運稽核草稿：保留
+  st.setItem('dzy.token', 'x');
+  eq(purgeLogoutDrafts(st, 'u001'), 2, '登出清掉本人兩份簽核草稿');
+  eq(st.getItem('dzy.u.u001.apv_draft_purchase'), null, '請購草稿清掉');
+  eq(st.getItem('dzy.u.u001.apv_draft_expense'), null, '請款草稿清掉');
+  ok(st.getItem('dzy.u.u002.apv_draft_purchase') && st.getItem('dzy.u.u001.draft_sxl-gf_2026-10_regular') && st.getItem('dzy.u.u001.ops_draft_sxl-gf_2026-10') && st.getItem('dzy.token'), '別人的簽核草稿、稽核草稿、token 都不動');
+  eq(purgeLogoutDrafts(st, ''), 0, '沒有 user id → 不動任何東西');
+  eq(purgeLogoutDrafts(null, 'u001'), 0, '沒有 storage 不拋錯');
+  // 殼的登出流程真的有接（platform/shell.js doLogout 在 auth.logout 之前呼叫）
+  const shell = fs.readFileSync(path.join(ROOT, 'platform', 'shell.js'), 'utf8');
+  const i1 = shell.indexOf('purgeLogoutDrafts('), i2 = shell.indexOf('await auth.logout()');
+  ok(i1 !== -1 && i2 !== -1 && i1 < i2, 'shell.js doLogout：auth.logout() 之前先清簽核草稿');
 }
 
 // ── 4. 照片壓縮：大小分支（假 canvas）──────────────────

@@ -1017,11 +1017,14 @@ function showLogin() {
  */
 async function doLogout(opts) {
   const expired = !!(opts && opts.expired);
+  const leavingUser = auth.getUser();   // 先記下是誰（teardown／logout 之後就拿不到了）
   await teardownCurrent({ destroy: true });
   await destroyAllParked();   // 保留中的嵌入頁一起卸載（營運系統等會收到登出）
   if (expired) {
     auth.expireLocal();
   } else {
+    // 主動登出：先清本人的表單簽核草稿（spec approvals §14.7；稽核草稿刻意保留，見 auth.purgeLogoutDrafts）
+    try { auth.purgeLogoutDrafts(window.localStorage, leavingUser && leavingUser.id); } catch (e) { /* 共用電腦 storage 被鎖也不擋登出 */ }
     ui.loading(true); // 等後端登出最多 5 秒，期間顯示載入中
     // 2026-10-12：登出＝全部裝置一起登出。auth.logout() 先等後端（最多 5 秒）再清本機，
     // 一定要 await，否則下面的整頁重載會把還在路上的登出請求砍掉
