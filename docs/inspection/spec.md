@@ -76,3 +76,9 @@ Eason 2026-10-27 在確認頁回答（https://claude.ai/artifact/FrnJiNgcDTvDa5q
    只套這幾個檔的差異（不要整包 sync-gas）；mini pull＋重啟 dzy-platform。
 3. 第二段推 registry＋模組＋圖示 → admin 開「營運巡檢」按「初始化營運巡檢」。
 4. 舊站 mala-inspection 換搬家頁；舊 Apps Script 通行碼換成隨機長碼（或停用部署）。
+
+## 7. 2026-10-30 Eason 照推薦（三題）
+
+- **加分題封頂**：每張表加分總額上限 **+20**（`modules/inspection/scoring.js` `BONUS_CAP`，`computeBonus` 回 `{total（封頂後）, raw, capped}`）。題目設定頁說明文字寫明上限，且一張表全部加分題可拿的總分 > 40（上限兩倍＝明顯超額）前端 `check()` 與後端 `inspCleanForms_`（`INSP_BONUS_MAX_POSSIBLE`）都擋 `bad_request`。舊報告存的 summary 不重算。
+- **作廢巡檢改獨立權限碼**：見下一節（本檔 §8，與 §2 表合併閱讀）。
+- **分數捨入**：維持舊站／scoring.js 的 `Math.round(x*10)/10`（各表不先四捨五入；68.95 在浮點裡是 689.4999…→ 68.9）。測試 oracle（test/dd/ops_inspection.mjs、test/e2e/dd_ops_inspection.py）原本用 `floor(x*10+0.5+1e-9)` 才會算成 69，已改成同一套。

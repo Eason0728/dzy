@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import { buildWorld } from './e2e/inspect_backend.mjs';
 import { defaultForms } from '../modules/inspection/questions.js';
-import { computeAll, summaryOf, deficiencies, itemKey } from '../modules/inspection/scoring.js';
+import { computeAll, BONUS_CAP, summaryOf, deficiencies, itemKey } from '../modules/inspection/scoring.js';
 import manifest from '../modules/inspection/manifest.js';
 import { validateManifest } from '../platform/manifest-check.js';
 import { READ_ACTIONS } from '../platform/dryrun.js';
@@ -32,6 +32,16 @@ function ok(cond, label, extra) {
   const bonus = JSON.parse(JSON.stringify(full));
   bonus.bonuses['management.bonus.1'] = true;
   ok(computeAll(forms, bonus).managementScore === 110, '1d 經營加分可超過 100（公益 +10）');
+  // 2026-10-30 Eason 照推薦：每張表加分總額上限 +20
+  const capForms = JSON.parse(JSON.stringify(forms));
+  const svc = capForms.find((f) => f.id === 'service');
+  svc.categories.push({ id: 'big', name: '大加分', role: 'bonus', items: [{ n: 1, type: 'bonus', points: 15, text: 'a' }, { n: 2, type: 'bonus', points: 15, text: 'b' }, { n: 3, type: 'bonus_free', points: 10, max: 3, text: 'c' }] });
+  const capAns = JSON.parse(JSON.stringify(full));
+  svc.categories.filter((c) => c.role === 'scored').forEach((c) => c.items.forEach((it) => { capAns.scores[`service.${c.id}.${it.n}`] = 5; }));
+  capAns.bonuses['service.big.1'] = true; capAns.bonuses['service.big.2'] = true; capAns.freeBonuses['service.big.3'] = ['x', 'y', 'z'];
+  const capped = computeAll(capForms, capAns).byForm.service;
+  ok(capped.bonus.total === BONUS_CAP && capped.bonus.raw === 60 && capped.bonus.capped === true && Math.round(capped.score) === 100 + BONUS_CAP, '1e2 ★加分總額封頂 +20（原始 60）', capped.bonus);
+  ok(BONUS_CAP === 20, '1f2 BONUS_CAP＝20');
   ok(computeAll(forms, {}).operationalGrade === '未評', '1e 一題都沒評＝未評');
   const half = { scores: { 'service.attitude.1': 3 } };
   ok(computeAll(forms, half).operationalScore === 60 && deficiencies(forms, half).length === 1, '1f 只評一題 3 分 → 60 分、1 項缺失');

@@ -33,6 +33,8 @@ var INSP_TYPES_BY_ROLE = { scored: ['score', 'critical', 'binary'], bonus: ['bon
 var INSP_BRANDS = ['mzt', 'mala', 'yiwu'];   // 有門市的三個品牌；中央工廠（ck）不巡
 var INSP_ID_RE = /^INS-[0-9A-Z]{6,16}-[0-9A-Z]{4,8}$/;
 var INSP_MAX_ANSWERS = 200000;
+var INSP_BONUS_CAP = 20;          // 每張表加分總額上限（前端 scoring.js BONUS_CAP 封頂；2026-10-30 Eason 照推薦）
+var INSP_BONUS_MAX_POSSIBLE = INSP_BONUS_CAP * 2;   // 題目設定：一張表全部加分題可拿的總分超過這個數＝明顯超額，擋下
 var INSP_MAX_ITEMS = 300;        // 一個品牌全部題目上限   // 作答 JSON 字元上限（全部四張表約 10KB）
 var INSP_MAX_FILES = 60;
 var INSP_LIST_MAX = 300;
@@ -381,7 +383,7 @@ function inspCleanForms_(forms) {
     if (!f || inspStr_(f.id) !== shell.id) return inspFail_('bad_request', '題目格式錯誤（表的順序不對）');
     var cats = Array.isArray(f.categories) ? f.categories : [];
     if (cats.length > 20) return inspFail_('bad_request', '「' + shell.name + '」分類太多');
-    var oc = [], wsum = 0, nScored = 0;
+    var oc = [], wsum = 0, nScored = 0, formBonusPossible = 0;
     for (var ci = 0; ci < cats.length; ci++) {
       var c = cats[ci] || {};
       var role = inspStr_(c.role);
@@ -399,6 +401,7 @@ function inspCleanForms_(forms) {
         wsum += cat.weight; nScored++;
       }
       var items = Array.isArray(c.items) ? c.items : [];
+      var bonusPossible = 0;
       for (var ii = 0; ii < items.length; ii++) {
         var it = items[ii] || {};
         var type = inspStr_(it.type);
@@ -414,12 +417,17 @@ function inspCleanForms_(forms) {
           o.max = inspIntIn_(it.max, 1, 10);
           if (o.max === null) return inspFail_('bad_request', '「' + text.slice(0, 12) + '」最多項數要在 1～10');
         }
+        if (type === 'bonus') bonusPossible += o.points;
+        if (type === 'bonus_free') bonusPossible += o.points * o.max;
         cat.items.push(o);
         total++;
       }
+      formBonusPossible += bonusPossible;
       oc.push(cat);
     }
     if (nScored && Math.abs(wsum - 1) > 0.011) return inspFail_('bad_request', '「' + shell.name + '」評分分類的權重加起來要 100%（目前 ' + Math.round(wsum * 100) + '%）');
+    // 2026-10-30 Eason 照推薦：每張表加分總額上限 +INSP_BONUS_CAP（前端算分封頂）；題目可拿的加分合計明顯超額（> 上限兩倍）就擋
+    if (formBonusPossible > INSP_BONUS_MAX_POSSIBLE) return inspFail_('bad_request', '「' + shell.name + '」加分題合計可拿 ' + formBonusPossible + ' 分，超過上限 ' + INSP_BONUS_CAP + ' 太多（最多 ' + INSP_BONUS_MAX_POSSIBLE + '）');
     var of = { id: shell.id, name: shell.name, inOperational: shell.inOperational, heading: inspStr_(f.heading).slice(0, 60), categories: oc };
     if (shell.standalone) of.standalone = true;
     out.push(of);

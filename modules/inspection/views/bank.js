@@ -7,8 +7,13 @@
 'use strict';
 
 import { defaultForms } from '../questions.js';
+import { BONUS_CAP } from '../scoring.js';
 import { errText } from '../lib.js';
 
+/** 一張表全部加分題可拿的總分（打勾加分 points、自由填寫 points×max） */
+export function bonusPossible(f) {
+  return f.categories.filter((c) => c.role === 'bonus').reduce((s, c) => s + c.items.reduce((t, it) => t + (it.type === 'bonus_free' ? (Number(it.points) || 0) * (Number(it.max) || 0) : (Number(it.points) || 0)), 0), 0);
+}
 const ROLE_NAME = { scored: '評分題', bonus: '加分項', penalty: '加重扣分' };
 const TYPE_BY_ROLE = {
   scored: [['score', '0～5 分'], ['critical', '重大缺失（正常 5／發生 0）'], ['binary', '只有 0 或 5']],
@@ -61,7 +66,7 @@ export function mountBank(el, ctx) {
     el.innerHTML = `<div class="card"><div class="ip-row">
         <label>品牌 <select class="input" data-role="brand">${brands.map((b) => `<option value="${esc(b.brand)}"${b.brand === brand ? ' selected' : ''}>${esc(b.brand_name)}</option>`).join('')}</select></label>
         <span class="ip-note">${ver ? `目前版本 ${esc(ver)}` : '尚未存過（顯示的是預設）'}・共 ${n} 題</span></div>
-        <p class="ip-note">存檔後，新開的巡檢用新題目；已送出的巡檢不受影響。評分題的分類權重加起來要 100%。</p></div>
+        <p class="ip-note">存檔後，新開的巡檢用新題目；已送出的巡檢不受影響。評分題的分類權重加起來要 100%。每張表的加分總額上限 +${BONUS_CAP}（超過不計；一張表可拿的加分加起來不能超過 ${BONUS_CAP * 2}）。</p></div>
       <div class="ip-tabs">${forms.map((x) => `<button class="ip-tab${x.id === tab ? ' on' : ''}" data-tab="${x.id}">${esc(x.name)}<span class="n">${x.categories.reduce((t, c) => t + c.items.length, 0) || ''}</span></button>`).join('')}</div>
       <div class="card"><div class="card-title">${esc(f.name)}${f.inOperational ? '（算進營運巡檢總分）' : '（單獨計分）'}</div>
         <label>表頭說明 <input class="input" data-role="heading" value="${esc(f.heading || '')}" maxlength="60"></label>
@@ -192,6 +197,9 @@ export function mountBank(el, ctx) {
         const sum = sc.reduce((s, c) => s + Math.round((c.weight || 0) * 100), 0);
         if (sum !== 100) return `「${f.name}」評分分類的權重加起來是 ${sum}%，要剛好 100%`;
       }
+      // 2026-10-30：每張表可拿的加分合計不能明顯超過上限（後端 inspCleanForms_ 同一條：> BONUS_CAP×2 擋下）
+      const possible = bonusPossible(f);
+      if (possible > BONUS_CAP * 2) return `「${f.name}」加分題合計可拿 ${possible} 分，超過上限 ${BONUS_CAP} 太多（最多 ${BONUS_CAP * 2}），請調低分數或減少題目`;
     }
     return '';
   }

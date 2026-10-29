@@ -88,6 +88,7 @@ def expect(forms, ans):
         score = None
         if cats:
             w = sum(x for x, _ in cats)
+            bonus = min(bonus, 20)   # 2026-10-30 Eason 照推薦：每張表加分總額上限 +20
             score = sum(x * r for x, r in cats) / w * 100 + bonus
         per[f['id']] = {'score': score, 'pen': pen, 'inop': f['inOperational']}
     ev = [v for v in per.values() if v['inop'] and v['score'] is not None]
@@ -144,11 +145,19 @@ def random_bank():
                 f['categories'].append({'id': cid(), 'name': '分類%d' % rnd.randrange(100), 'role': 'scored', 'weight': ws[i] / 100.0, 'items': items})
         if rnd.random() < 0.5:
             items = []
+            left = 40   # 一張表全部加分題可拿的總分不能超過 40（後端 2026-10-30 擋明顯超額；封頂 20 常被超過才測得到）
             for j in range(rnd.randint(1, 2)):
+                if left < 1:
+                    break
                 t = rnd.choice(['bonus', 'bonus_free'])
-                it = {'n': j + 1, 'type': t, 'text': '加分 %d' % rnd.randrange(1000), 'points': rnd.randint(1, 20)}
+                it = {'n': j + 1, 'type': t, 'text': '加分 %d' % rnd.randrange(1000)}
                 if t == 'bonus_free':
                     it['max'] = rnd.randint(1, 4)
+                    it['points'] = rnd.randint(1, max(1, min(20, left // it['max'])))
+                    left -= it['points'] * it['max']
+                else:
+                    it['points'] = rnd.randint(1, min(20, left))
+                    left -= it['points']
                 items.append(it)
             f['categories'].append({'id': cid(), 'name': '加分項', 'role': 'bonus', 'items': items})
         if rnd.random() < 0.5:

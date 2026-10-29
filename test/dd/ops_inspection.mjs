@@ -60,6 +60,7 @@ function oracle(forms, ans) {
       }
     }
     let score = null;
+    bonus = Math.min(bonus, 20);   // 2026-10-30 Eason 照推薦：每張表加分總額上限 +20
     if (cats.length) { const w = cats.reduce((s, x) => s + x[0], 0); score = cats.reduce((s, x) => s + x[0] * x[1], 0) / w * 100 + bonus; }
     out[f.id] = { score, pen, inop: !!f.inOperational, name: f.name };
   }
@@ -102,10 +103,13 @@ function randomBank(brand) {
     }
     if (chance(0.5)) {
       const items = [];
-      for (let j = 0; j < ri(1, 3); j++) {
+      // 一張表全部加分題可拿的總分不能超過 40（後端 2026-10-30 擋明顯超額）；分層：常常超過封頂 20 讓封頂真的被測到
+      let left = 40;
+      for (let j = 0; j < ri(1, 3) && left >= 1; j++) {
         const t = pick(['bonus', 'bonus_free']);
-        const it = { n: j + 1, type: t, text: '加分 ' + ri(1, 999), points: ri(1, 20) };
-        if (t === 'bonus_free') it.max = ri(1, 10);
+        const it = { n: j + 1, type: t, text: '加分 ' + ri(1, 999) };
+        if (t === 'bonus_free') { it.max = ri(1, 4); it.points = ri(1, Math.max(1, Math.min(20, Math.floor(left / it.max)))); left -= it.points * it.max; }
+        else { it.points = ri(1, Math.min(20, left)); left -= it.points; }
         items.push(it);
       }
       f.categories.push({ id: cid(), name: '加分項', role: 'bonus', items });
@@ -324,6 +328,13 @@ for (const b of shuffle(['mzt', 'yiwu'])) {
   const sv = post('inspBankSave', { brand: b, forms, expected_ver: '' }, tok);
   ok(sv.ok && sv.data.ver === b + '-v1' && sv.data.total === countItems(forms), `2f ${b} 隨機題庫存檔（${countItems(forms)} 題，${saver ? saver.kind : 'admin'}）`, sv);
   ok(post('inspBankSave', { brand: b, forms, expected_ver: '' }, tok).error === 'conflict', `2g ${b} 拿舊版本號再存 → conflict`);
+  { // 2026-10-30：加分題合計可拿 > 40 → bad_request（封頂 20 的兩倍＝明顯超額）
+    const over = JSON.parse(JSON.stringify(forms));
+    over[0].categories.push({ id: 'zz_over', name: '超額加分', role: 'bonus', items: [{ n: 1, type: 'bonus', points: 20, text: 'a' }, { n: 2, type: 'bonus_free', points: 20, max: 2, text: 'b' }] });
+    const cur = post('inspBankGet', { brand: b }, tok).data.ver;
+    const r = post('inspBankSave', { brand: b, forms: over, expected_ver: cur }, tok);
+    ok(r.error === 'bad_request' && /加分題合計/.test(r.message), `2h ${b} 加分題可拿 60 分 → 擋（${r.message || r.error}）`, r);
+  }
   const got = bg(anyOps, b).data;
   ok(got.ver === b + '-v1' && eq(got.forms, cleanedForms(forms)), `2h ${b} 讀回的題目＝送出的（清洗後：n 重編、權重三位小數）`, { got: got.forms, want: cleanedForms(forms) });
   bank[b] = got.forms; ver[b] = got.ver;
