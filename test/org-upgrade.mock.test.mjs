@@ -396,6 +396,7 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   sub('offOfs', '待審丁', { brand: 'mala', unit: 'mala-hq', title: 'ofs' });
   sub('offOdir', '待審丁二', { brand: 'mala', unit: 'mala-hq', title: 'odir' });
   sub('mztOff', '待審丁三', { brand: 'mzt', unit: 'mzt-hq', title: 'osv' });
+  sub('offOsv', '待審丁四', { brand: 'mala', unit: 'mala-hq', title: 'osv' });
   sub('deptHs', '待審戊', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
   sub('deptHm', '待審戊二', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hm' });
   sub('opsHsP', '待審戊三', { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs' });
@@ -416,14 +417,20 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   // 中央工廠
   ok(whoCan(P.ckPt.emp) === exp('ckSm', 'ckSm2'), 'T3 中央工廠計時：正＝ck 店長；反＝品牌辦公室（不能審 ck）、營運部主管、執行長、門市店長', whoCan(P.ckPt.emp));
   ok(whoCan(P.ckSm.emp) === exp('ceo'), 'T3 中央工廠店長：正＝執行長以上；反＝另一位 ck 店長、品牌辦公室、營運部主管', whoCan(P.ckSm.emp));
-  // 品牌辦公室任何人 → 營運部主管
-  ok(whoCan(P.offOfs.emp) === exp('opsHm') && whoCan(P.offOdir.emp) === exp('opsHm') && whoCan(P.mztOff.emp) === exp('opsHm'), 'T3 品牌辦公室任何人：正＝營運部主管；反＝區經理／區督導／總監（同辦公室）、執行長、他部門主管', [whoCan(P.offOfs.emp), whoCan(P.offOdir.emp)]);
+  // 品牌辦公室任何人 → 營運部主管；2026-10-29 起認領另可由同辦公室總監審（總監本人仍只有營運部主管）
+  ok(whoCan(P.offOfs.emp) === exp('opsHm', 'odirMala') && whoCan(P.offOsv.emp) === exp('opsHm', 'odirMala'), 'T3 品牌辦公室行政同仁／區督導：正＝營運部主管、同辦公室總監；反＝同辦公室區經理／區督導、他品牌、執行長、他部門主管', [whoCan(P.offOfs.emp), whoCan(P.offOsv.emp)]);
+  ok(whoCan(P.offOdir.emp) === exp('opsHm'), 'T3 品牌辦公室總監：只有營運部主管（另一位總監同級不能審）', whoCan(P.offOdir.emp));
+  ok(whoCan(P.mztOff.emp) === exp('opsHm'), 'T3 墨竹亭區督導：小辛辣總監看不到（只認同辦公室）', whoCan(P.mztOff.emp));
+  {
+    const n = sb.stfReviewNeed_(sb.stfReadOrg_(), 'mala-hq', '', 'osv');
+    ok(n.kind === 'ops' && !n.alt, 'T3 stfReviewNeed_ 不變（人事異動直屬主管、績效評核照舊只有營運部主管）', n);
+  }
   // 總部部門
   ok(whoCan(P.deptHs.emp) === exp('itHm'), 'T3 部門同仁：正＝同主要部門的部門主管；反＝財務部主管、營運部主管、執行長', whoCan(P.deptHs.emp));
   ok(whoCan(P.opsHsP.emp) === exp('opsHm'), 'T3 營運部同仁：營運部主管（同部門）可審', whoCan(P.opsHsP.emp));
   ok(whoCan(P.deptHm.emp) === exp('ceo'), 'T3 部門主管：正＝執行長以上；反＝同部門另一位／他部門／營運部主管', whoCan(P.deptHm.emp));
   ok(whoCan(P.ceoP.emp) === exp(), 'T3 執行長以上：只有人資（和 BOSS）；另一位執行長也不行', whoCan(P.ceoP.emp));
-  ok(pend.HR.length === 13 && pend.BOSS.length === 13, 'T3 人資、BOSS 全可審（13 筆全看得到）', [pend.HR.length, pend.BOSS.length]);
+  ok(pend.HR.length === 14 && pend.BOSS.length === 14, 'T3 人資、BOSS 全可審（14 筆全看得到）', [pend.HR.length, pend.BOSS.length]);
 
   // 反例走實際 action：明確點名的幾個
   const appr = (k, p) => post(sb, 'unitApprove', { emp_no: p.emp }, R[k].token);
@@ -444,6 +451,8 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   ok(appr('ckSm', P.ckPt).ok, 'T3 正：ck 店長核准 ck 計時');
   ok(appr('ceo', P.ckSm).ok && appr('ceo', P.deptHm).ok, 'T3 正：執行長核准 ck 店長與部門主管');
   ok(appr('opsHm', P.offOfs).ok && appr('opsHm', P.offOdir).ok, 'T3 正：營運部主管核准品牌辦公室同仁／總監');
+  ok(appr('osvMala', P.offOsv).ok === false && staffOf(app, P.offOsv.emp).status === 'pending', 'T3 反：同辦公室區督導不能審區督導');
+  ok(appr('odirMala', P.offOsv).ok && staffOf(app, P.offOsv.emp).status === 'active', 'T3 正：同辦公室總監核准區督導認領（2026-10-29）');
   ok(appr('itHm', P.deptHs).ok, 'T3 正：資訊部主管核准資訊部同仁');
   ok(post(sb, 'unitApprove', { emp_no: P.ceoP.emp }, hrTok).code === 'perm_admin_only', 'T3 人資核准人資部執行長 → 改變 platform.staff，鎖碼擴大後只有 admin（2026-10-17）');
   ok(post(sb, 'unitApprove', { emp_no: P.ceoP.emp }, tok).ok, 'T3 正：admin 核准人資部執行長');

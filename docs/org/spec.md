@@ -286,3 +286,11 @@
 - staff_log：`org_enable_mztmc_2610`／`org_enable_mztmc_2610_rollback`。
 - **不在這次範圍**（要用到才各自處理）：打卡（clock_stores 沒有這家店，考勤、同仁同步、LINE 重設密碼都接不上）、稽核門市清單（盤點抽查 → 門市管理）、區域劃分、人員管理系統帳號節點 `USR_VALID_NODES`、薪酬門市代碼、營運系統門市。
 - 種子 `STF_DEFAULT_ORG` 刻意維持 FALSE（第 2 節切換與既有測試依賴它）。
+
+## 20. 品牌辦公室同仁的認領：同辦公室總監也能審（Eason 2026-10-29）
+
+- 起因：墨竹亭品牌總監看不到區督導的認領申請（照第 13 節，品牌辦公室任何人 → 只有營運部主管）。
+- 改法：**只改認領審核**（`Staff.gs stfCanReview_` 改用 `stfClaimNeed_`）：品牌辦公室單位的人，除營運部主管外，同辦公室的總監（`STF_CLAIM_OFFICE_HEAD_TITLES = ['odir']`）也能審。
+- 「同階梯職級要更高」照舊：總監審得到行政同仁、區督導（含停用的區經理），審不到另一位總監；區督導不能審行政同仁或區督導。
+- 不變：`stfReviewNeed_` 本身、人事異動單第一關直屬主管（ApprovalRoute.gs）、績效評核主管範圍（Eval.gs）、考勤（StoreOps.gs 本來就是同辦公室總監）。
+- 測試：`test/org-upgrade.mock.test.mjs` T3。
