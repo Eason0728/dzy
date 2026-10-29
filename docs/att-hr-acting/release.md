@@ -10,8 +10,8 @@
 ## 步驟 1　合併兩個 PR（Eason 在 MacBook；auto mode 不讓 Claude 合 main）
 照順序貼（先取完整 sha 防止合到別人後來推的東西）：
 ```
-gh pr merge <dzy PR 號> -R Eason0728/dzy --merge --match-head-commit "$(gh pr view <dzy PR 號> -R Eason0728/dzy --json headRefOid -q .headRefOid)"
-gh pr merge <minikit PR 號> -R Eason0728/dzy-minikit --merge --match-head-commit "$(gh pr view <minikit PR 號> -R Eason0728/dzy-minikit --json headRefOid -q .headRefOid)"
+gh pr merge 60 -R Eason0728/dzy --merge --match-head-commit "$(gh pr view 60 -R Eason0728/dzy --json headRefOid -q .headRefOid)"
+gh pr merge 50 -R Eason0728/dzy-minikit --merge --match-head-commit "$(gh pr view 50 -R Eason0728/dzy-minikit --json headRefOid -q .headRefOid)"
 ```
 
 ## 步驟 2　Mac mini（整段貼給 mini 的 Claude）
