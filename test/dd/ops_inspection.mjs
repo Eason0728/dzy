@@ -33,7 +33,9 @@ const eq = (a, b) => J(a) === J(b);
 const sortU = (a) => a.slice().sort();
 
 // ── oracle：算分（照 spec；不碰 scoring.js）──────────────────
-function r1(x) { if (x === null || x === undefined) return null; const s = x < 0 ? -1 : 1; return s * Math.floor(Math.abs(x) * 10 + 0.5 + 1e-9) / 10; }
+// 2026-10-30 Eason 照推薦：維持舊站算法＝JS Math.round(x*10)/10（例 68.95 在浮點裡是 689.4999…→ 68.9，不是 69）。
+// 原本 oracle 加 1e-9 把 689.4999… 推成 69，那是 oracle 自己的捨入定義不同，不是系統算錯。
+function r1(x) { if (x === null || x === undefined) return null; return Math.round(x * 10) / 10; }
 function gradeOf(s) { for (const b of GRADE_BANDS) if (s >= b.min) return b.grade; return '未達'; }
 const key = (f, c, it) => f.id + '.' + c.id + '.' + it.n;
 function oracle(forms, ans) {

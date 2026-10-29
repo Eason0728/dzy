@@ -14,6 +14,7 @@
 用法：python3 test/e2e/dd_ops_inspection.py　　重現：E2E_SEED=<種子>　　埠：E2E_PORT（預設 9100）、E2E_BACKEND_PORT（預設 9101）
 """
 import json
+import math
 import os
 import random
 import re
@@ -45,10 +46,10 @@ BANK = json.loads(subprocess.check_output(['node', '-e',
 
 # ───────────────────────── oracle（獨立算式）─────────────────────────
 def r1(x):
+    # 2026-10-30 Eason 照推薦：維持舊站算法＝JS Math.round(x*10)/10（IEEE 雙精度同 JS；68.95 在浮點裡是 689.4999…→ 68.9，不是 69）
     if x is None:
         return None
-    s = -1 if x < 0 else 1
-    return s * int(abs(x) * 10 + 0.5 + 1e-9) / 10.0
+    return math.floor(x * 10 + 0.5) / 10.0
 
 
 def grade(s):
