@@ -477,6 +477,7 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ok(rb && rb.includes('DZY007'), '19 退回被拒：列出還在店的同仁編號', rb);
   const { isReadAction } = await import('../platform/dryrun.js');
   ok(isReadAction('platform', 'orgEnableMztMc202610', { dryrun: true }) && !isReadAction('platform', 'orgEnableMztMc202610', { dryrun: false }) && !isReadAction('platform', 'orgEnableMztMc202610', {}) && !isReadAction('platform', 'orgEnableMztMcRollback202610', { dryrun: true }), '19 dryrun.js：預覽放行、執行與退回攔下');
+  ok(isReadAction('platform', 'orgDisableOps202610', { dryrun: true }) && !isReadAction('platform', 'orgDisableOps202610', { dryrun: false }) && !isReadAction('platform', 'orgDisableOpsRollback202610', { dryrun: true }), '20 dryrun.js：停用營運部預覽放行、執行與退回攔下');
 }
 { // 左側選單：品牌發展緊接在行銷部門之後
   const { DEPARTMENTS } = await import('../platform/config.js');
