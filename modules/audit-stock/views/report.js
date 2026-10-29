@@ -249,6 +249,7 @@ export function mountReport(root, ctx, moduleState) {
     storeSelect.value = store;
     storeSelect.addEventListener('change', () => {
       store = storeSelect.value;
+      annualStore = store;   // 單月報告與年度總表永遠同一家店（2026-10-30 Eason 照推薦）
       syncModuleState();
       renderReport();
     });
@@ -278,6 +279,7 @@ export function mountReport(root, ctx, moduleState) {
     sel.value = annualStore;
     sel.addEventListener('change', () => {
       annualStore = sel.value;
+      store = annualStore;   // 單月報告跟著年度總表的店（2026-10-30 Eason 照推薦：兩邊永遠同一家店）
       // 年度總表沒有「月份」概念，只把店別同步回模組層狀態（同 buildMonthControls 的理由）。
       writeModuleState(moduleState, { store: annualStore });
       renderReport();

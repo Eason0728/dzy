@@ -473,8 +473,7 @@ def acct_stock(page, mock):
     cm.click(page, '.mode-btn[data-mode="annual"]', '切年度總表')
     page.wait_for_selector('#report-annual-store-select', timeout=5000)
     annual_store = page.locator('#report-annual-store-select').input_value()
-    if annual_store != other['store']:
-        print('ISSUE(低): 單月報告切到店別 %s 後按「年度總表」，年度總表停在 %s（annualStore 只在掛載時同步一次，之後不跟單月店別連動）' % (other['store'], annual_store))
+    check(annual_store == other['store'], '單月報告切到店別 %s 後按「年度總表」，年度總表也是這家店（2026-10-30 Eason 照推薦：兩邊永遠同一家店；實際 %s）' % (other['store'], annual_store))
     check_annual(page, mock, annual_store, '年度總表')
     cm.scan(page, 'stock-annual')
     another = RNG.choice(DS.store_codes)
