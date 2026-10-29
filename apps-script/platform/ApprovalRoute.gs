@@ -163,10 +163,10 @@ function apvRoleMembers_(role, of, ctx, opts) {
     if (role === 'head') {
       if (of) {
         if (of.ladder === 'store') hit = p.unit === of.unit && STF_STORE_HEAD_TITLES.indexOf(p.title) !== -1;
-        // 兼任店長：職級比照店長（同店店長以上送的單不給他簽）；主要身分要有效（p.ladder 非空）
-        if (!hit && of.ladder === 'store' && p.ladder !== '' && p.acting && p.acting.indexOf(of.unit) !== -1) {
+        // 兼任店長：職級比照店長（同店店長以上送的單不給他簽；改派 noRank 也一樣，Codex 審查 4）。有效兼任已由 permActingUnitsOf_ 把關（在職、主要身分有效、試點）
+        if (!hit && of.ladder === 'store' && p.acting && p.acting.indexOf(of.unit) !== -1) {
           var smT = ctx.org && ctx.org.title ? ctx.org.title.sm : null;
-          actingHit = noRank || of.rank < (smT ? smT.rank : 3);
+          actingHit = of.rank < (smT ? smT.rank : 3);
         }
         else if (of.ladder === 'hq') hit = of.dept !== '' && p.unit === of.unit && p.dept === of.dept && p.title === 'hm';
         else if (of.ladder === 'office') hit = p.unit === of.unit && p.ladder === 'office' && p.rank === 2;

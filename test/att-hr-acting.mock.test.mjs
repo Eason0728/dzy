@@ -433,6 +433,52 @@ function setup() {
 })();
 
 // ============================================================
+// 7. 審查修正（2026-10-29 夜間 Codex／Fable）
+// ============================================================
+(() => {
+  const app = setup();
+  const { sb, sheets } = app;
+  // 7-1 本人主要單位＝兼任店：存不進去；硬寫進表也不生效
+  ok(app.ex(app.tok.DZY220, 'DZY202', 'store.sm@mzt-lzl').code === 'bad_target', '7-1 ★本人就在這家店 → 不能設');
+  sheets.perm_ex._data.push(['X900', 'DZY202', 'store.sm@mzt-lzl', 'add', '', '硬寫', 'TRUE', '', 'tester', '', '']);
+  sb.permActingReset_();
+  ok(eq(sb.permActingUnitsOf_('DZY202'), []) && !has(app.ident('DZY202').units_managed, 'mzt-lzl'), '7-1 ★硬寫進表也不生效');
+  sheets.perm_ex._data.pop(); sb.permActingReset_();
+  // 7-3 重複：第二筆擋；舊資料重複時撤銷一筆＝全部撤
+  const a1 = app.ex(app.tok.DZY220, 'DZY201', 'store.sm@mzt-lzl');
+  ok(a1.ok && app.ex(app.tok.DZY220, 'DZY201', 'store.sm@mzt-lzl').code === 'dup', '7-3 ★同人同店第二筆 → dup');
+  sheets.perm_ex._data.push(['X901', 'DZY201', 'store.sm@mzt-lzl', 'add', '', '舊資料重複', 'TRUE', '', 'tester', '', '']);
+  const auditN = () => sheets.perm_audit._data.length;
+  const n0 = auditN();
+  const rv = post(sb, 'permExRevoke', { ex_id: a1.data.ex_id }, app.tok.DZY220); sb.permActingReset_();
+  ok(rv.ok && eq(sb.permActingUnitsOf_('DZY201'), []) && !has(app.H('DZY201'), 'mztlzl:DZY202'), '7-3 ★撤銷一筆 → 同人同店的重複列一起撤、權限收回');
+  ok(auditN() === n0 + 1 && sheets.perm_audit._data[n0][4] === 'store.sm@mzt-lzl', '7-6 ★撤銷寫 perm_audit（removed＝兼任碼）', sheets.perm_audit._data[n0]);
+  const n1 = auditN();
+  ok(app.ex(app.tok.DZY220, 'DZY201', 'store.sm@mzt-lzl').ok && auditN() === n1 + 1 && sheets.perm_audit._data[n1][3] === 'store.sm@mzt-lzl', '7-6 ★新增寫 perm_audit（added＝兼任碼）', sheets.perm_audit._data[n1]);
+  // 7-4 改派（noRank）也不能讓兼任者簽店長以上的單
+  const dir = sb.apvDirectory_();
+  ok(!sb.apvRoleMembers_('head', dir.byEmp.DZY206, dir, { noRank: true }).some((p) => p.emp === 'DZY201'), '7-4 ★改派候選人：區經理的單不含兼任者');
+  ok(sb.apvRoleMembers_('head', dir.byEmp.DZY202, dir, { noRank: true }).some((p) => p.emp === 'DZY201'), '7-4 改派候選人：正職的單仍含兼任者');
+  // 7-5 不在試點 → 全部功能都沒有
+  app.props.STORE_SSO_UNITS = 'ck,dzy-hq,mala-gf,mala-hq,mzt-gf,mzt-hq,mzt-js'; sb.permActingReset_();
+  const sc = sb.stfReviewScope_(sheets.staff._data.find((r) => r[0] === 'DZY201'), sb.stfReadOrg_());
+  const d2 = sb.apvDirectory_();
+  ok(eq(sb.permActingUnitsOf_('DZY201'), []) && !(sc.acting || []).length && !sb.apvRoleMembers_('head', d2.byEmp.DZY202, d2, null).some((p) => p.emp === 'DZY201'), '7-5 ★兼任店不在試點 → 認領、請購、績效、稽核都沒有');
+  app.props.STORE_SSO_UNITS = PILOT; sb.permActingReset_();
+  // 7-9 主要單位停用 → 請購也收回
+  const orgRow = sheets.org._data.find((r) => r[0] === 'unit' && r[1] === 'mzt-hq');
+  orgRow[7] = 'FALSE'; sb.permActingReset_();
+  const d3 = sb.apvDirectory_();
+  ok(!sb.apvRoleMembers_('head', d3.byEmp.DZY202, d3, null).some((p) => p.emp === 'DZY201') && eq(sb.permActingUnitsOf_('DZY201'), []), '7-9 ★兼任者主要單位停用 → 請購第一關也收回');
+  orgRow[7] = 'TRUE'; sb.permActingReset_();
+  // 7-2 財務同仁到門市打卡：不算支援、店長不核，人資主管核
+  sheets.staff_clock._data.push(['DZY222', 'mztgf', 'MZTGF222', 'staff', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
+  ok(!has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222') && !has(app.V('DZY231'), 'mztgf:DZY222'), '7-2 ★財務同仁在門市打卡：店長不核也不看');
+  ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2 人資主管核財務同仁的門市帳號');
+  ok(eq(app.H('DZY221'), []), '7-2 財務總監仍空');
+})();
+
+// ============================================================
 // 6. 前端純函式
 // ============================================================
 (async () => {

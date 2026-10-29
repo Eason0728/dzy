@@ -411,6 +411,8 @@ function storeAttIsSupport_(t, storeCode, units, org) {
   // 2026-10-26 Eason：品牌辦公室同仁（區督導、行政、區經理 oam）到門市打卡不算支援，照原規則由辦公室總監核（不讓店長核督導）
   var tu = org && org.unit ? org.unit[stfStr_(t.unit)] : null;
   if (tu && tu.ladder === 'office') return false;
+  // 2026-10-29 人資核的部門（STORE_ATT_HR_ONLY_DEPTS，例財務部）到門市打卡也不算支援：只給人資主管、admin、本單位 att.extra（Codex 審查 2）
+  if (org && STORE_ATT_HR_ONLY_DEPTS.indexOf(stfStr_(t.dept)) !== -1) { var nd = attNeedOf_(t, org, 'hours'); if (nd && nd.kind === 'hr_only') return false; }
   if (!units || !units.length) return false;
   return units.indexOf(stfStr_(t.unit)) === -1;
 }
