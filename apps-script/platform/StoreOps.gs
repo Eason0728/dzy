@@ -408,6 +408,7 @@ function storeAnyIn_(arr, set) {
 function storeAttIsSupport_(t, storeCode, units, org) {
   if (!t || t.inferred || t.orphan) return false;
   if (storeCode === STORE_SELF_CLOCK) return false;
+  if ((STORE_NOT_SUPPORT_EX[stfStr_(t.emp)] || []).indexOf(stfStr_(storeCode)) !== -1) return false;   // 個人例外：在這家打卡不算支援
   // 2026-10-26 Eason：品牌辦公室同仁（區督導、行政、區經理 oam）到門市打卡不算支援，照原規則由辦公室總監核（不讓店長核督導）
   var tu = org && org.unit ? org.unit[stfStr_(t.unit)] : null;
   if (tu && tu.ladder === 'office') return false;
@@ -415,6 +416,10 @@ function storeAttIsSupport_(t, storeCode, units, org) {
   if (!units || !units.length) return false;
   return units.indexOf(stfStr_(t.unit)) === -1;
 }
+
+/** 個人例外：這些人在指定的打卡店上班不算支援（工時、申請都照原身分核；薪資歸原單位）。{emp: [store_code…]}
+ *  2026-10-29 Eason：財務部一位同仁固定在央廚上班，不算支援、薪水算總部 → 工時與申請都由人資主管核，央廚主管只看不核。 */
+var STORE_NOT_SUPPORT_EX = { DZY027: ['cf'] };
 
 /** 對象所屬單位是總部（hq 階梯）→ true（支援帳號的申請照原身分簽，storeAttLists_） */
 function storeIsHqTarget_(t, org) {

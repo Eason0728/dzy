@@ -476,6 +476,13 @@ function setup() {
   ok(has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222'), '7-2 ★財務同仁在門市打卡：店長核工時、不簽申請');
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2 人資主管核財務同仁的門市帳號（工時與申請）');
   ok(eq(app.H('DZY221'), []), '7-2 財務總監仍空');
+  // 7-2b 個人例外（STORE_NOT_SUPPORT_EX，2026-10-29 Eason）：在指定打卡店不算支援 → 店長不核不看，人資主管核工時與申請
+  sb.STORE_NOT_SUPPORT_EX.DZY222 = ['mztgf'];
+  ok(!has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222') && !has(app.V('DZY231'), 'mztgf:DZY222'), '7-2b ★例外：店長不核也不看');
+  ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2b 例外：人資主管核工時與申請');
+  sb.STORE_NOT_SUPPORT_EX.DZY222 = ['gf'];
+  ok(has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222'), '7-2b 例外只限指定的店：別家照支援');
+  delete sb.STORE_NOT_SUPPORT_EX.DZY222;
 })();
 
 // 8. Fable 只有一邊找到的兩條（先寫測試重現再修）
