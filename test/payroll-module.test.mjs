@@ -53,9 +53,13 @@ t('模組程式裡沒有任何金鑰樣子的字串', () => {
     assert.ok(!/AKfycb/.test(src), f + ' 不寫後端網址');
   }
 });
-t('分頁：manifest views＝PAYROLL_PAGES（順序、名稱），全部只認 payroll.write', () => {
+t('分頁：manifest views＝PAYROLL_PAGES（順序、名稱），集團總覽只認 payroll.admin，其餘 10 個認 payroll.write', () => {
   assert.deepEqual(manifest.views.map((v) => [v.id, v.name]), PAYROLL_PAGES);
-  for (const v of manifest.views) assert.deepEqual(v.requires, ['payroll.write']);
+  for (const v of manifest.views) assert.deepEqual(v.requires, v.id === 'group' ? ['payroll.admin'] : ['payroll.write']);
+  assert.equal(manifest.views.filter((v) => v.requires[0] === 'payroll.write').length, 10);
+  assert.equal(manifest.views[0].id, 'dash');
+  assert.deepEqual(manifest.requires, ['payroll.write']);
+  assert.deepEqual(validateManifest(manifest).errors || [], []);
 });
 t('切換訊息：認得的分頁照送，其他一律回儀表板', () => {
   assert.deepEqual(navMessage('att'), { type: 'dzy-payroll-nav', v: 1, p: 'att' });

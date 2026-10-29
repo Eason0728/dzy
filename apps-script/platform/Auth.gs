@@ -485,6 +485,9 @@ function proxyWithOperator_(res, ns, user, perms) {
   res.operator = (name || uname || '未知') + (uname ? '（' + uname + '）' : '') + '（管理系統）';
   // 損益系統（2026-10-24）：level 決定損益影子帳號的角色；影子帳號鍵用 account（登入帳號本身），不從 operator 反解（Fable 審查必修 1）
   if (ns === 'pnl') { res.level = proxyPnlLevel_(perms); res.account = uname; }
+  // 薪酬系統（2026-10-29，docs/payroll-scope/spec.md §2）：scope 決定薪資後端能碰哪些門市。role admin（或 perms 含 *）→ '*'；
+  // 其他 → payroll.store@X 的 X 組成的陣列（排序去重，可為空陣列）。mini 的 proxy-hook 強制覆寫上游 body.scope。
+  if (ns === 'payroll') res.scope = (Array.isArray(perms) && perms.indexOf('*') !== -1) ? '*' : permPayrollStoresOf_(perms);
   return res;
 }
 
