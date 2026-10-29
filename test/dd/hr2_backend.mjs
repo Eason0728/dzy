@@ -496,6 +496,7 @@ function oracle(W) {
   };
   const isSupport = (t, store, units) => {
     if (t.orphan) return false;   // 2026-10-30 Eason 照推薦：推算者（inferred，單位＝主店推算出來的）到非主店打卡也算支援、由打卡店主管核；orphan 照舊不算
+    if (t.inferred && !units.some((u) => W.pilot.indexOf(u) !== -1)) return false;   // 推算者只有打卡店在試點才走支援規則（對抗驗證）
     if (store === 'hq') return false;
     const tu = unit(t.unit);
     if (tu && tu.ladder === 'office') return false;
@@ -639,11 +640,13 @@ function oracle(W) {
       if (!accts.length) return;
       const te = eff(p);
       let gap = false;
+      // att.extra 持有人（非本人、在職、身分有效）核「被核者單位＝自己單位」；支援帳號看打卡店單位（對抗驗證 2026-10-30）
+      const extraCovers = (units) => W.people.some((h) => h.emp !== p.emp && h.status === 'active' && identityOk(W, h) && permsOf(h).indexOf('att.extra') !== -1 && units.indexOf(h.unit) !== -1);
       accts.forEach((a) => {
         const units = storeUnits[a.store] || [];
         if (te && isSupport(te, a.store, units)) {
-          if (!Object.keys(supportApprovers(units, false, inter(units, te.acting) ? p.emp : '')).length) gap = true;
-        } else if (!W.people.some((ap) => approver(Object.assign({}, ap), t, 'hours'))) gap = true;
+          if (!Object.keys(supportApprovers(units, false, inter(units, te.acting) ? p.emp : '')).length && !extraCovers(units)) gap = true;
+        } else if (!W.people.some((ap) => approver(Object.assign({}, ap), t, 'hours')) && !extraCovers([t.unit])) gap = true;
       });
       if (gap) out.push(p.emp);
     });

@@ -209,6 +209,22 @@ function permStaffIdentityOk_(org, values) {
   return !(org.unitRules && typeof stfTitleUnitOk_ === 'function' && !stfTitleUnitOk_(org.unitRules, title, permStr_(values[STF_COL.unit])));
 }
 /** 某人兼任店長的單位（[]＝沒有） */
+/** 目前持有 att.extra（額外考勤核定）的同仁編號（大寫）→ true：只走個別例外（add、active、未到期）。StoreOps.gs storeHoursGaps_ 用（2026-10-30）。 */
+function permAttExtraEmps_() {
+  var out = {};
+  try {
+    var t = permReadTable_(SpreadsheetApp.getActive(), PERM_SHEET_EX, PERM_EX_HEADERS);
+    if (t.missing || t.mismatch) return out;
+    var today = permTodayTaipei_();
+    t.rows.forEach(function (r) {
+      if (permStr_(r[2]) !== 'att.extra' || !permIsActive_(r[6]) || permStr_(r[3]).toLowerCase() !== 'add') return;
+      if (permStr_(r[4]) !== '') { var u = permNormDate_(r[4]); if (!u || u < today) return; }
+      var emp = permStr_(r[1]).toUpperCase();
+      if (emp) out[emp] = true;
+    });
+  } catch (e) { return {}; }
+  return out;
+}
 function permActingUnitsOf_(emp) {
   var e = permStr_(emp).toUpperCase();
   return e ? (permActingMap_()[e] || []).slice() : [];

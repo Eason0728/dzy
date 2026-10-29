@@ -669,6 +669,10 @@ function storeHoursGaps_(people, org, rctx, maps, storeUnits) {
     if (stfStr_(t.status) !== 'active' || !stfStr_(t.emp)) return;
     if (!storeOrgOf_(t, org)) return;
     var need = attNeedOf_(t, org, 'hours');
+  // att.extra（額外考勤核定，只走個別例外）持有人：在職、身分有效，核「被核者單位＝自己單位」（支援帳號看打卡店單位），不核自己（對抗驗證 2026-10-30）
+  var extraEmps = typeof permAttExtraEmps_ === 'function' ? permAttExtraEmps_() : {};
+  var extraHolders = people.filter(function (p) { return extraEmps[stfStr_(p.emp).toUpperCase()] && stfStr_(p.status) === 'active' && !!storeOrgOf_(p, org); });
+  var extraCovers = function (units, selfEmp) { return extraHolders.some(function (h) { return stfStr_(h.emp) !== selfEmp && units.indexOf(stfStr_(h.unit)) !== -1; }); };
     if (!need || need.kind === 'hr_only') return;
     var list = acct[t.emp] || [];
     if (!list.length) return;
@@ -676,8 +680,8 @@ function storeHoursGaps_(people, org, rctx, maps, storeUnits) {
     list.forEach(function (a) {
       if (a.support) {
         var selfEx = a.units.some(function (u) { return storeActingHas_(t, u); }) ? stfStr_(t.emp) : '';
-        if (!Object.keys(storeSupportApprovers_(a.units, people, org, rctx, false, selfEx)).length) gap = true;
-      } else if (!people.some(function (ap) { return attApproverOf_(ap, t, org, 'hours', rctx); })) gap = true;
+        if (!Object.keys(storeSupportApprovers_(a.units, people, org, rctx, false, selfEx)).length && !extraCovers(a.units, stfStr_(t.emp))) gap = true;
+      } else if (!people.some(function (ap) { return attApproverOf_(ap, t, org, 'hours', rctx); }) && !extraCovers([stfStr_(t.unit)], stfStr_(t.emp))) gap = true;
     });
     if (gap) out.push({ emp: t.emp, name: stfStr_(t.name), unit: stfStr_(t.unit) });
   });
