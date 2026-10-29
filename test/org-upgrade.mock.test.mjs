@@ -417,13 +417,14 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   // 中央工廠
   ok(whoCan(P.ckPt.emp) === exp('ckSm', 'ckSm2'), 'T3 中央工廠計時：正＝ck 店長；反＝品牌辦公室（不能審 ck）、營運部主管、執行長、門市店長', whoCan(P.ckPt.emp));
   ok(whoCan(P.ckSm.emp) === exp('ceo'), 'T3 中央工廠店長：正＝執行長以上；反＝另一位 ck 店長、品牌辦公室、營運部主管', whoCan(P.ckSm.emp));
-  // 品牌辦公室任何人 → 營運部主管；2026-10-29 起認領另可由同辦公室總監審（總監本人仍只有營運部主管）
-  ok(whoCan(P.offOfs.emp) === exp('opsHm', 'odirMala') && whoCan(P.offOsv.emp) === exp('opsHm', 'odirMala'), 'T3 品牌辦公室行政同仁／區督導：正＝營運部主管、同辦公室總監；反＝同辦公室區經理／區督導、他品牌、執行長、他部門主管', [whoCan(P.offOfs.emp), whoCan(P.offOsv.emp)]);
-  ok(whoCan(P.offOdir.emp) === exp('opsHm'), 'T3 品牌辦公室總監：只有營運部主管（另一位總監同級不能審）', whoCan(P.offOdir.emp));
-  ok(whoCan(P.mztOff.emp) === exp('opsHm'), 'T3 墨竹亭區督導：小辛辣總監看不到（只認同辦公室）', whoCan(P.mztOff.emp));
+  // 品牌辦公室（2026-10-29 第 20 節）：同仁 → 同辦公室總監；總監 → 執行長以上；營運部主管不再審
+  ok(whoCan(P.offOfs.emp) === exp('odirMala') && whoCan(P.offOsv.emp) === exp('odirMala'), 'T3 品牌辦公室行政同仁／區督導：正＝同辦公室總監；反＝營運部主管、同辦公室區經理／區督導、執行長、他部門主管', [whoCan(P.offOfs.emp), whoCan(P.offOsv.emp)]);
+  ok(whoCan(P.offOdir.emp) === exp('ceo'), 'T3 品牌辦公室總監：正＝執行長以上；反＝另一位總監、營運部主管', whoCan(P.offOdir.emp));
+  ok(whoCan(P.mztOff.emp) === exp(), 'T3 墨竹亭區督導：小辛辣總監、營運部主管都看不到（墨竹亭沒有總監時只剩人資）', whoCan(P.mztOff.emp));
   {
-    const n = sb.stfReviewNeed_(sb.stfReadOrg_(), 'mala-hq', '', 'osv');
-    ok(n.kind === 'ops' && !n.alt, 'T3 stfReviewNeed_ 不變（人事異動直屬主管、績效評核照舊只有營運部主管）', n);
+    const org = sb.stfReadOrg_();
+    const a = sb.stfReviewNeed_(org, 'mala-hq', '', 'osv'), b = sb.stfReviewNeed_(org, 'mala-hq', '', 'odir');
+    ok(a.kind === 'office_head' && a.unit === 'mala-hq' && b.kind === 'exec', 'T3 stfReviewNeed_：辦公室同仁 office_head（人事異動直屬主管、績效評核同一套）、總監 exec', [a.kind, b.kind]);
   }
   // 總部部門
   ok(whoCan(P.deptHs.emp) === exp('itHm'), 'T3 部門同仁：正＝同主要部門的部門主管；反＝財務部主管、營運部主管、執行長', whoCan(P.deptHs.emp));
@@ -450,7 +451,8 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   ok(appr('oamMala', P.storeSm).ok && staffOf(app, P.storeSm.emp).status === 'active', 'T3 正：品牌辦公室區經理核准店長');
   ok(appr('ckSm', P.ckPt).ok, 'T3 正：ck 店長核准 ck 計時');
   ok(appr('ceo', P.ckSm).ok && appr('ceo', P.deptHm).ok, 'T3 正：執行長核准 ck 店長與部門主管');
-  ok(appr('opsHm', P.offOfs).ok && appr('opsHm', P.offOdir).ok, 'T3 正：營運部主管核准品牌辦公室同仁／總監');
+  ok(appr('opsHm', P.offOfs).ok === false && appr('opsHm', P.offOdir).ok === false, 'T3 反：營運部主管不再審品牌辦公室（2026-10-29）');
+  ok(appr('odirMala', P.offOfs).ok && appr('ceo', P.offOdir).ok, 'T3 正：同辦公室總監核准行政同仁、執行長核准總監');
   ok(appr('osvMala', P.offOsv).ok === false && staffOf(app, P.offOsv.emp).status === 'pending', 'T3 反：同辦公室區督導不能審區督導');
   ok(appr('odirMala', P.offOsv).ok && staffOf(app, P.offOsv.emp).status === 'active', 'T3 正：同辦公室總監核准區督導認領（2026-10-29）');
   ok(appr('itHm', P.deptHs).ok, 'T3 正：資訊部主管核准資訊部同仁');
@@ -1561,6 +1563,46 @@ function noBranddev(app) { const d = app.sheets.org._data; for (let i = d.length
   const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
   ok(/'orgEnableMztMc202610', 'orgEnableMztMcRollback202610'/.test(src) && /orgEnableMztMc202610: 1, orgEnableMztMcRollback202610: 1/.test(src) && /case 'orgEnableMztMc202610'/.test(src) && /case 'orgEnableMztMcRollback202610'/.test(src), '19 兩個 action 在白名單、寫入鎖、分派表');
   ok(!/READ_ACTIONS[^\n]*orgEnableMztMc/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '19 不在任何讀取清單');
+})();
+
+// ── 第 20 節（2026-10-29）：停用營運部 orgDisableOps202610／orgDisableOpsRollback202610 ──
+(() => {
+  const en = (app, payload, t) => post(app.sb, 'orgDisableOps202610', payload || {}, t === undefined ? app.tok : t);
+  const rb = (app, t) => post(app.sb, 'orgDisableOpsRollback202610', {}, t === undefined ? app.tok : t);
+  const opsRows = (app) => app.sheets.org._data.filter((r) => r[0] === 'dept' && r[1] === 'ops');
+  const isOn = (app) => String(opsRows(app)[0][7]).toUpperCase() === 'TRUE';
+  const app = freshNew();
+  ok(opsRows(app).length === 1 && isOn(app), '20 前提：ops 存在且啟用');
+  ok(en(app, { dryrun: true }, app.hrTok).ok === false && rb(app, app.hrTok).ok === false && en(app, {}, app.hrTok).ok === false, '20 ★非 admin（人資）都被擋');
+  // 有人在營運部 → 拒絕、只列 emp_no
+  const m = mk(app, '營運甲', { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs' });
+  const p = submitOnly(app, '營運待審', { brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs' });
+  const no = en(app, { dryrun: true });
+  ok(no.ok === false && no.data.members.slice().sort().join() === [m.emp, p.emp].sort().join() && JSON.stringify(no.data).indexOf('營運甲') === -1 && isOn(app), '20 ★有人（目前、送出待審）→ 預覽就拒絕、只列 emp_no', no);
+  setStaff(app, m.emp, 'status', 'disabled'); setStaff(app, p.emp, 'status', 'disabled');
+  const before = sheetDump(app);
+  const dr = en(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true && dr.data.action === 'deactivate' && sheetDump(app) === before, '20 dryrun 預覽停用、零寫入', dr);
+  const orgB = JSON.stringify(orgRows(app));
+  const run = en(app, {});
+  ok(run.ok && run.data.action === 'deactivate' && opsRows(app).length === 1 && !isOn(app), '20 執行：同一列改為停用', run);
+  const strip = (rows) => JSON.stringify(rows.map((r) => r.map((v, i) => (i === 7 ? '' : v))));
+  ok(strip(JSON.parse(orgB)) === strip(orgRows(app)), '20 ★只改啟用那一格');
+  ok(app.sb.stfReadOrg_().dept.ops.active === false, '20 讀組織：ops 停用');
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_disable_ops_2610').length === 1, '20 staff_log 一筆');
+  ok(en(app, {}).data.action === 'skip' && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_disable_ops_2610').length === 1, '20 重跑冪等');
+  const r2 = rb(app);
+  ok(r2.ok && r2.data.action === 'reactivate' && isOn(app) && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_disable_ops_2610_rollback').length === 1, '20 退回：重新啟用、有紀錄', r2);
+  ok(rb(app).data.action === 'skip', '20 退回重跑冪等');
+  // 衝突：名稱不同 → 拒絕不動
+  const app3 = freshNew();
+  opsRows(app3)[0][2] = '別的名字';
+  const snap3 = JSON.stringify(orgRows(app3));
+  const c1 = en(app3, {});
+  ok(c1.ok === false && c1.data.bad.length === 1 && JSON.stringify(orgRows(app3)) === snap3 && rb(app3).ok === false, '20 ★衝突：停用與退回都拒絕、org 不動', c1);
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/'orgDisableOps202610', 'orgDisableOpsRollback202610'/.test(src) && /orgDisableOps202610: 1, orgDisableOpsRollback202610: 1/.test(src) && /case 'orgDisableOps202610'/.test(src) && /case 'orgDisableOpsRollback202610'/.test(src), '20 兩個 action 在白名單、寫入鎖、分派表');
+  ok(!/READ_ACTIONS[^\n]*orgDisableOps/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '20 不在任何讀取清單');
 })();
 
 console.log(`\n通過 ${passed}／${passed + failed}`);

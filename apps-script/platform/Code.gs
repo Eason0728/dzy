@@ -36,6 +36,7 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   // 2026-10-23：鼎兆元總部新增品牌發展部 branddev 一次性新增／退回（只有 role admin；Staff.gs 第 13 節）
   'orgAddBranddev202610', 'orgAddBranddevRollback202610',
   'orgEnableMztMc202610', 'orgEnableMztMcRollback202610',
+  'orgDisableOps202610', 'orgDisableOpsRollback202610',
   // 2026-10-16：公告專區自動登入電子佈告欄（StaffClock.gs SSO 節）
   'ssoTicket', 'svcSsoRedeem',
   // 2026-10-17：個人帳號第二期，依單位＋職稱給權限（PermActions.gs）
@@ -120,7 +121,7 @@ function dispatch_(e) {
     staffCreateByUnit: 1, staffLeave: 1, staffLeaveCancel: 1, staffRename: 1, staffReinstate: 1,
     clockMapBuild: 1, clockMapDecide: 1, clockCandidateCreate: 1, clockCandidateDismiss: 1,
     clockOutboxRetry: 1, clockOutboxCancel: 1, clockSetHome: 1, clockOldHomeDecide: 1, clockLink: 1, clockAddHome: 1,
-    orgUpgrade2026: 1, orgRollback2026: 1, orgUpgrade202610: 1, orgRollback202610: 1, orgRename202610: 1, orgRenameRollback202610: 1, orgAddBranddev202610: 1, orgAddBranddevRollback202610: 1, orgEnableMztMc202610: 1, orgEnableMztMcRollback202610: 1,
+    orgUpgrade2026: 1, orgRollback2026: 1, orgUpgrade202610: 1, orgRollback202610: 1, orgRename202610: 1, orgRenameRollback202610: 1, orgAddBranddev202610: 1, orgAddBranddevRollback202610: 1, orgEnableMztMc202610: 1, orgEnableMztMcRollback202610: 1, orgDisableOps202610: 1, orgDisableOpsRollback202610: 1,
     permInit: 1, permMapSave: 1, permExSave: 1, permExRevoke: 1, permStoreSave: 1, permAuditSeen: 1,
     apvSetup: 1, apvThresholdSave: 1, apvSubmit: 1, apvResubmit: 1, apvWithdraw: 1, apvDecide: 1, apvSign: 1, apvHandle: 1, apvReassign: 1, apvVoid: 1,
     regionSave: 1, regionSwitch: 1, lineRevoke: 1 };
@@ -223,6 +224,8 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'orgAddBranddevRollback202610': return handleOrgAddBranddevRollback202610_(token, payload);
     case 'orgEnableMztMc202610': return handleOrgEnableMztMc202610_(token, payload);
     case 'orgEnableMztMcRollback202610': return handleOrgEnableMztMcRollback202610_(token, payload);
+    case 'orgDisableOps202610': return handleOrgDisableOps202610_(token, payload);
+    case 'orgDisableOpsRollback202610': return handleOrgDisableOpsRollback202610_(token, payload);
     case 'permInit': return handlePermInit_(token);
     case 'permMapGet': return handlePermMapGet_(token);
     case 'permMapSave': return handlePermMapSave_(token, payload);
