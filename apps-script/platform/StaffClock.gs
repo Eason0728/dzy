@@ -1693,7 +1693,14 @@ function clockUpperEmps_() {
     if (!stores[m.store_code]) stores[m.store_code] = [];
     if (stores[m.store_code].indexOf(m.emp_id) === -1) stores[m.store_code].push(m.emp_id);
   });
-  return { ok: true, stores: stores, unmapped: clkDutyUnmapped_(maps).length };
+  var out = { ok: true, stores: stores, unmapped: clkDutyUnmapped_(maps).length };
+  // 部門同仁／不算支援名單（2026-10-29，StoreOps.gs storeClockGuardLists_）：同仁每店都給 key，沒有＝空陣列（推空＝清掉）
+  if (typeof storeClockGuardLists_ === 'function') {
+    var g = storeClockGuardLists_(storePeople_(), stfReadOrg_(), maps, storeClockUnits_());
+    out.dept = {}; out.home = {};
+    Object.keys(stores).forEach(function (c) { out.dept[c] = g.dept[c] || []; out.home[c] = g.home[c] || []; });
+  }
+  return out;
 }
 
 // ---- 每日 ----

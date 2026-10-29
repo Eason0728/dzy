@@ -274,6 +274,8 @@ function storeInferFromHome_(t, org, home) {
   if (!home) return null;
   var h = home(stfStr_(t.emp));
   if (!h || !h.units || h.units.length !== 1) return null;
+  // 個人例外：主店是他「不算支援」的那家 → 不推算成那家的人（走 orphan，只剩人資主管／admin；2026-10-29 審查）
+  if ((STORE_NOT_SUPPORT_EX[stfStr_(t.emp)] || []).indexOf(stfStr_(h.store)) !== -1) return null;
   var u = org.unit[h.units[0]];
   if (!u || !u.active || (u.ladder || 'store') !== 'store') return null;
   var title = '';
@@ -418,13 +420,32 @@ function storeAttIsSupport_(t, storeCode, units, org) {
 }
 
 /** 個人例外：這些人在指定的打卡店上班不算支援（工時、申請都照原身分核；薪資歸原單位）。{emp: [store_code…]}
- *  2026-10-29 Eason：財務部一位同仁固定在央廚上班，不算支援、薪水算總部 → 工時與申請都由人資主管核，央廚主管只看不核。 */
+ *  2026-10-29 Eason：財務部一位同仁固定在央廚上班，不算支援、薪水算總部 → 工時與申請都由人資主管核，央廚主管看不到也核不了。 */
 var STORE_NOT_SUPPORT_EX = { DZY027: ['cf'] };
 
 /** 對象所屬單位是總部（hq 階梯）→ true（支援帳號的申請照原身分簽，storeAttLists_） */
 function storeIsHqTarget_(t, org) {
   var u = t && org && org.unit ? org.unit[stfStr_(t.unit)] : null;
   return !!(u && u.ladder === 'hq');
+}
+
+/**
+ * 打卡端保護名單（給 Mac mini 同步員，經 clockUpperEmps_ 帶出；2026-10-29）：每店 → emp_id
+ *   dept：總部同仁（hq 階梯）在門市／央廚的支援帳號——申請照原身分簽，打卡店值班核定頁不能審（REQ_DEPT_EMPS）。
+ *   home：STORE_NOT_SUPPORT_EX 指定的人在指定店的帳號——不算支援，打卡店值班核定頁看不到、核不了（REQ_HOME_EMPS）。
+ * home 不看推算與否（認領還在待確認的人也要擋）。回 { dept:{store:[…]}, home:{store:[…]} }。
+ */
+function storeClockGuardLists_(people, org, maps, storeUnits) {
+  var dept = {}, home = {};
+  var add = function (o, c, id) { if (!id) return; (o[c] = o[c] || []); if (o[c].indexOf(id) === -1) o[c].push(id); };
+  (maps || []).forEach(function (m) {
+    if (m.state !== 'confirmed' || m.roster_active === 'FALSE') return;
+    if ((STORE_NOT_SUPPORT_EX[stfStr_(m.emp_no)] || []).indexOf(stfStr_(m.store_code)) !== -1) add(home, m.store_code, stfStr_(m.emp_id));
+  });
+  storeAttAccounts_(people, org, null, maps || [], storeUnits || {}).forEach(function (a) {
+    if (a.support && storeIsHqTarget_(a.t, org)) add(dept, a.m.store_code, stfStr_(a.m.emp_id));
+  });
+  return { dept: dept, home: home };
 }
 
 /** 單位顯示名稱（同 att.view@ 的「品牌 單位」，例「麻的小辛辣 新竹光復」；央廚與已含品牌名的不加；查不到＝代碼）。Perms.gs 沒載入時只給單位名稱 */

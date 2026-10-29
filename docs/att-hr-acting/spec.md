@@ -92,7 +92,10 @@ dzy 後端（sync 只套 StoreOps.gs／Perms.gs／PermActions.gs 的改動到 mi
 - 新增、撤銷都寫 perm_audit（added／removed＝store.sm@<單位>）。
 - 請購請款改派（noRank）也不讓兼任者簽店長以上的單。
 - ~~財務部同仁到門市打卡不算支援~~（2026-10-29 Eason 改）：總部同仁（含財務部）到門市打卡＝支援，工時由該店主管核（店長才知道上下班時間）；請假／加班／忘打卡等申請照原身分簽（部門總監；財務部＝人資主管），原單位主管工時只看。`StoreOps.gs storeIsHqTarget_`、`storeAttLists_` 的 reqByHome。品牌辦公室同仁照 F5 不算支援。
-- 個人例外（2026-10-29 Eason）：`STORE_NOT_SUPPORT_EX = { DZY027: ['cf'] }`——財務部一位同仁固定在央廚上班，不算支援、薪水算總部 → 工時與申請都由人資主管核，央廚主管不核也不在名單上（`storeAttIsSupport_` 回 false，回到 #60 的財務部規則）。打卡端另在央廚設 `REQ_DEPT_EMPS`（申請）擋值班核定頁（mala-clock-in#15）。
+- 個人例外（2026-10-29 Eason）：`STORE_NOT_SUPPORT_EX = { DZY027: ['cf'] }`——財務部一位同仁固定在央廚上班，不算支援、薪水算總部 → 工時與申請都由人資主管核，央廚主管不核也不在名單上（`storeAttIsSupport_` 回 false，回到 #60 的財務部規則）。打卡端的值班核定頁另外要擋（mala-clock-in#15、#16）：
+  - `clockUpperEmps_` 多回 `dept`／`home`（`storeClockGuardLists_`）：dept＝總部同仁在門市／央廚的支援帳號（申請不歸打卡店主管）；home＝`STORE_NOT_SUPPORT_EX` 指定的帳號（工時與申請都不歸打卡店主管，認領待確認也算）。
+  - Mac mini 每日 00:10 同步經 `svc_set_upper` 帶 `dept_emp_ids`／`home_emp_ids` 推到各店 Script Property `REQ_DEPT_EMPS`／`REQ_HOME_EMPS`（CLOCK_WRITE=1 才推），不用手動設。
+  - 打卡端名單讀壞：先用上一份快照，沒有快照就打卡店主管全擋（管理系統代核照常）。
 - 兼任者本人（門市同仁）到兼任店支援打卡：先把他剔出候選再找層，店裡沒別的店長就往區經理／督導／總監（Fable 找到）。
 - 財務部值班主管不進「找不到上層」提醒（表上本來就只有人資，Fable 找到）。
 - 有效兼任也要求主要職稱符合單位限定（例：中央工廠沒有店長）。

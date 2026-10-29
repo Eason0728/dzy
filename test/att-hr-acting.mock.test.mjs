@@ -477,11 +477,21 @@ function setup() {
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2 人資主管核財務同仁的門市帳號（工時與申請）');
   ok(eq(app.H('DZY221'), []), '7-2 財務總監仍空');
   // 7-2b 個人例外（STORE_NOT_SUPPORT_EX，2026-10-29 Eason）：在指定打卡店不算支援 → 店長不核不看，人資主管核工時與申請
+  // 7-2c 打卡端保護名單（clockUpperEmps_ 的 dept／home，2026-10-29）：財務同仁在門市＝dept
+  { const u = sb.clockUpperEmps_(); ok(u.dept && u.dept.mztgf.indexOf('MZTGF222') !== -1 && u.home.mztgf.indexOf('MZTGF222') === -1 && Array.isArray(u.dept.cf) && Array.isArray(u.home.hq), '7-2c ★總部同仁門市帳號進 dept 名單、每店都有 key'); }
   sb.STORE_NOT_SUPPORT_EX.DZY222 = ['mztgf'];
+  { const u = sb.clockUpperEmps_(); ok(u.home.mztgf.indexOf('MZTGF222') !== -1 && u.dept.mztgf.indexOf('MZTGF222') === -1, '7-2c ★個人例外改進 home 名單、不在 dept'); }
   ok(!has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222') && !has(app.V('DZY231'), 'mztgf:DZY222'), '7-2b ★例外：店長不核也不看');
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2b 例外：人資主管核工時與申請');
   sb.STORE_NOT_SUPPORT_EX.DZY222 = ['gf'];
   ok(has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222'), '7-2b 例外只限指定的店：別家照支援');
+  // 7-2d 欄位不完整時不推算成例外那家的人（2026-10-29 Codex 審查、Fable 驗證）
+  { const org = sb.stfReadOrg_(); const su = Object.keys(org.unit).filter((c) => org.unit[c].active && (org.unit[c].ladder || 'store') === 'store');
+    const home = () => ({ store: 'mztgf', units: [su[0]] });
+    sb.STORE_NOT_SUPPORT_EX.DZY222 = ['mztgf'];
+    ok(sb.storeInferFromHome_({ emp: 'DZY222' }, org, home) === null, '7-2d ★例外者主店是例外那家 → 不推算（走 orphan）');
+    sb.STORE_NOT_SUPPORT_EX.DZY222 = ['gf'];
+    ok(sb.storeInferFromHome_({ emp: 'DZY222' }, org, home) !== null, '7-2d 例外不是這家 → 照常推算'); }
   delete sb.STORE_NOT_SUPPORT_EX.DZY222;
 })();
 
