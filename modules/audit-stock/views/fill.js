@@ -737,13 +737,12 @@ export function mountFill(root, ctx, moduleState) {
       // 落在那份草稿的月份與模式上（同舊版 latestDraftForStore()：否則只回到店、月份卻是
       // 當月，看起來像內容不見了）。
       const resumeTarget = (params.month || useCarriedMonth) ? null : FillSubmit.latestDraftForStore(draftOwner, currentStore);
-      const now = new Date();
-      const realMonthStr = String(now.getFullYear()) + '-' + pad2(now.getMonth() + 1);
+      const realMonthStr = FillSubmit.currentMonth(); // 台北時間（2026-10-29，同 index.js badge）
       currentMonth = params.month
         ? params.month
         : (useCarriedMonth
             ? carriedMonth
-            : (resumeTarget ? resumeTarget.month : (String(now.getFullYear()) === YEAR ? realMonthStr : months[0])));
+            : (resumeTarget ? resumeTarget.month : (realMonthStr.slice(0, 4) === YEAR ? realMonthStr : months[0])));
       if (months.indexOf(currentMonth) === -1) currentMonth = months[0];
       monthSelect.value = currentMonth;
       mode = resumeTarget ? resumeTarget.mode : mode;

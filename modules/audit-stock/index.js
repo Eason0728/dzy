@@ -35,6 +35,7 @@ import { mountAnalysis } from './views/analysis.js';
 import { mountMy } from './views/my.js';
 import { mountStores } from './views/stores.js';
 import * as sharedApi from '../audit-shared/api.js';
+import { currentMonth as taipeiMonth } from './views/fill-submit.js';
 
 const VIEW_MOUNTERS = {
   overview: mountOverview,
@@ -48,15 +49,11 @@ const VIEW_MOUNTERS = {
 // 本模組唯一支援的年份，同各分頁的 YEAR 常數（badge 算「本月」要落在資料涵蓋的年份內）。
 const YEAR = '2026';
 
-function pad2(n) {
-  return (n < 10 ? '0' : '') + n;
-}
-
-/** 同 fill.js 的月份預設邏輯：真實現在年份對得上資料年份才用真實月份，否則退回一月。 */
-function currentMonthStr() {
-  const now = new Date();
-  const y = String(now.getFullYear());
-  return y === YEAR ? y + '-' + pad2(now.getMonth() + 1) : YEAR + '-01';
+/** 同 fill.js 的月份預設邏輯：真實現在年份對得上資料年份才用真實月份，否則退回一月。
+ *  「現在」一律台北時間（同 fill-submit.js todayStr，2026-10-29）：手機時區設錯或人在境外時，月初的待辦不會跑到上個月。 */
+export function currentMonthStr(d) {
+  const m = taipeiMonth(d);
+  return m.slice(0, 4) === YEAR ? m : YEAR + '-01';
 }
 
 let currentEl = null;

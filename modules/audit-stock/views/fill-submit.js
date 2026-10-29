@@ -136,6 +136,12 @@ export function todayStr(d) {
   return t.getUTCFullYear() + '-' + pad2(t.getUTCMonth() + 1) + '-' + pad2(t.getUTCDate());
 }
 
+/** 今天所在的年月（台北時間；給 index.js 的 badge／首頁待辦與 fill.js 月份預設用，2026-10-29）。 */
+export function currentMonth(d) {
+  const t = taipei(d);
+  return t.getUTCFullYear() + '-' + pad2(t.getUTCMonth() + 1);
+}
+
 export function nowIso(d) {
   d = d || new Date();
   const tzOffsetMin = -d.getTimezoneOffset();
