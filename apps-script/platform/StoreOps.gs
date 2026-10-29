@@ -669,14 +669,14 @@ function storeHoursGaps_(people, org, rctx, maps, storeUnits) {
   var out = [];
   var acct = {};
   storeAttAccounts_(people, org, null, maps || [], storeUnits || {}).forEach(function (a) { (acct[a.t.emp] = acct[a.t.emp] || []).push(a); });
-  people.forEach(function (t) {
-    if (stfStr_(t.status) !== 'active' || !stfStr_(t.emp)) return;
-    if (!storeOrgOf_(t, org)) return;
-    var need = attNeedOf_(t, org, 'hours');
   // att.extra（額外考勤核定，只走個別例外）持有人：在職、身分有效，核「被核者單位＝自己單位」（支援帳號看打卡店單位），不核自己（對抗驗證 2026-10-30）
   var extraEmps = typeof permAttExtraEmps_ === 'function' ? permAttExtraEmps_() : {};
   var extraHolders = people.filter(function (p) { return extraEmps[stfStr_(p.emp).toUpperCase()] && stfStr_(p.status) === 'active' && !!storeOrgOf_(p, org); });
   var extraCovers = function (units, selfEmp) { return extraHolders.some(function (h) { return stfStr_(h.emp) !== selfEmp && units.indexOf(stfStr_(h.unit)) !== -1; }); };
+  people.forEach(function (t) {
+    if (stfStr_(t.status) !== 'active' || !stfStr_(t.emp)) return;
+    if (!storeOrgOf_(t, org)) return;
+    var need = attNeedOf_(t, org, 'hours');
     if (!need || need.kind === 'hr_only') return;
     var list = acct[t.emp] || [];
     if (!list.length) return;
@@ -897,6 +897,7 @@ function storeIdent_(sub) {
     var all = storePeople_();
     for (var i = 0; i < all.length; i++) if (all[i].emp === sub) { p = all[i]; break; }
     if (!p || p.status !== 'active' || !p.userId) return inactive;
+    if (typeof clkLeaveBlocks_ === 'function' && clkLeaveBlocks_(p.emp)) return inactive;   // 2026-10-30 離職日已到：營運系統與平台同一天停（svcStoreWho／svcStoreRoster 回 inactive，營運系統重查身分時會刪 session）
     var uf = findUserById_(p.userId);
     if (!uf || !isActiveValue_(uf.values[AUTH_USERS_COL.active])) return inactive;
     user = rowToUser_(uf.values);
@@ -905,7 +906,6 @@ function storeIdent_(sub) {
   } else {
     return inactive;
   }
-    if (typeof clkLeaveBlocks_ === 'function' && clkLeaveBlocks_(p.emp)) return inactive;   // 2026-10-30 離職日已到：營運系統與平台同一天停（svcStoreWho／svcStoreRoster 回 inactive，營運系統重查身分時會刪 session）
 
   var admin = String(user.role) === 'admin';
   var perms = p ? storePermsOf_(p) : [];
