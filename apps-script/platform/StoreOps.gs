@@ -274,6 +274,8 @@ function storeInferFromHome_(t, org, home) {
   if (!home) return null;
   var h = home(stfStr_(t.emp));
   if (!h || !h.units || h.units.length !== 1) return null;
+  // 個人例外：主店是他「不算支援」的那家 → 不推算成那家的人（走 orphan，只剩人資主管／admin；2026-10-29 審查）
+  if ((STORE_NOT_SUPPORT_EX[stfStr_(t.emp)] || []).indexOf(stfStr_(h.store)) !== -1) return null;
   var u = org.unit[h.units[0]];
   if (!u || !u.active || (u.ladder || 'store') !== 'store') return null;
   var title = '';

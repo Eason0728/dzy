@@ -485,6 +485,13 @@ function setup() {
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2b 例外：人資主管核工時與申請');
   sb.STORE_NOT_SUPPORT_EX.DZY222 = ['gf'];
   ok(has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222'), '7-2b 例外只限指定的店：別家照支援');
+  // 7-2d 欄位不完整時不推算成例外那家的人（2026-10-29 Codex 審查、Fable 驗證）
+  { const org = sb.stfReadOrg_(); const su = Object.keys(org.unit).filter((c) => org.unit[c].active && (org.unit[c].ladder || 'store') === 'store');
+    const home = () => ({ store: 'mztgf', units: [su[0]] });
+    sb.STORE_NOT_SUPPORT_EX.DZY222 = ['mztgf'];
+    ok(sb.storeInferFromHome_({ emp: 'DZY222' }, org, home) === null, '7-2d ★例外者主店是例外那家 → 不推算（走 orphan）');
+    sb.STORE_NOT_SUPPORT_EX.DZY222 = ['gf'];
+    ok(sb.storeInferFromHome_({ emp: 'DZY222' }, org, home) !== null, '7-2d 例外不是這家 → 照常推算'); }
   delete sb.STORE_NOT_SUPPORT_EX.DZY222;
 })();
 
