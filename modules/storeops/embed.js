@@ -45,10 +45,13 @@ function dryRunWarn() {
 }
 
 /** 營運系統送來的選單 → ctx.tabs 的格式；不合格回 null */
+/** badge 只收數字（布林 true 不能變 1；2026-10-29）：非 number／NaN／負數→0，小數無條件捨去 */
+function badgeNum(v) { return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0; }
+
 export function navTabs(d) {
   if (!d || d.type !== 'dzy-store-nav' || d.v !== 1 || !Array.isArray(d.items) || d.items.length > 20) return null;
   const tabs = d.items.filter((x) => x && typeof x.id === 'string' && NAV_ID_RE.test(x.id) && typeof x.label === 'string')
-    .map((x) => ({ id: x.id, name: x.label, badge: Number(x.badge) || 0, err: x.err === true }));
+    .map((x) => ({ id: x.id, name: x.label, badge: badgeNum(x.badge), err: x.err === true }));
   const cur = typeof d.cur === 'string' && tabs.some((t) => t.id === d.cur) ? d.cur : '';
   return { tabs, cur };
 }

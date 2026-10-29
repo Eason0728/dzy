@@ -5,6 +5,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { sanitizeTabs, pickDynamicView, TABS_MAX } from '../platform/tabs.js';
 import { navTabs } from '../modules/storeops/embed.js';
+import * as A from '../modules/attendance/embed.js';
+import * as S from '../modules/schedule/embed.js';
+import * as P from '../modules/purchase/embed.js';
 import storeops from '../modules/storeops/manifest.js';
 import attendance from '../modules/attendance/manifest.js';
 import schedule from '../modules/schedule/manifest.js';
@@ -41,6 +44,14 @@ t('navTabs：只認 dzy-store-nav v1；cur 要在清單裡', () => {
   assert.deepEqual(navTabs(d), { tabs: [{ id: 'home', name: '首頁', badge: 0, err: false }, { id: 'inventory', name: '庫存盤點', badge: 33, err: false }], cur: 'inventory' });
   assert.equal(navTabs({ ...d, cur: 'admin' }).cur, '');
   for (const bad of [null, { ...d, type: 'x' }, { ...d, v: 2 }, { ...d, items: 'x' }]) assert.equal(navTabs(bad), null);
+});
+t('navTabs：badge 只收數字（true／"7"／NaN／負數都當 0；四個 embed 同款，2026-10-29）', () => {
+  const items = [{ id: 'a', label: 'A', badge: true }, { id: 'b', label: 'B', badge: '7' }, { id: 'c', label: 'C', badge: NaN }, { id: 'd', label: 'D', badge: -2 }, { id: 'e', label: 'E', badge: 4.7 }, { id: 'f', label: 'F', badge: 9 }];
+  const want = [0, 0, 0, 0, 4, 9];
+  assert.deepEqual(navTabs({ type: 'dzy-store-nav', v: 1, items }).tabs.map((t) => t.badge), want);
+  assert.deepEqual(A.navTabs({ type: 'dzy-store-nav', v: 1, items }).tabs.map((t) => t.badge), want);
+  assert.deepEqual(S.navTabs({ type: 'dzy-store-nav', v: 1, items }).tabs.map((t) => t.badge), want);
+  assert.deepEqual(P.navTabs({ type: 'dzy-purchase-nav', v: 1, items }).tabs.map((t) => t.badge), want);
 });
 t('manifest：門市營運、考勤管理、排班管理都 dynamicTabs（考勤管理＝出勤核定子分頁 2026-10-20；排班管理＝自動排班四個分頁 2026-10-24）；都合規', () => {
   assert.equal(storeops.dynamicTabs, true);
