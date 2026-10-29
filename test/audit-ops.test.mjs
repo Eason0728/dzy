@@ -751,6 +751,25 @@ await at('★試跑模式送出：toast 提示未寫入、草稿保留、不導�
   }
 });
 
+await at('★點「追蹤」後頁頂統計的「追蹤 N」立刻更新（onTrackClick 要 renderStats，2026-10-29）', async () => {
+  resetAll();
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.getAll = () => okGetAll({ config: makeConfig(), ops_records: [], ops_details: [] });
+  const unmount = mountFill(root, ctx);
+  await flush();
+  const statTrack = byId(root, 'ops-s-track');
+  assert.ok(statTrack, '統計列要有 #ops-s-track');
+  assert.equal(statTrack.textContent, '0');
+  fireClick(allByDataAttr(root, 'data-track', '1')[0]);
+  await flush();
+  assert.equal(statTrack.textContent, '1', '點一次追蹤 → 統計 1');
+  fireClick(allByDataAttr(root, 'data-track', '1')[0]);
+  await flush();
+  assert.equal(statTrack.textContent, '0', '再點一次取消 → 統計回 0');
+  unmount();
+});
+
 // ============================================================
 // I. 追蹤／再點一次取消（回未檢查）等互動細節
 // ============================================================

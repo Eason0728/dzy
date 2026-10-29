@@ -170,7 +170,7 @@ export function mountFill(root, ctx, moduleState) {
   const statTotal = el('b', { text: '0' });
   const statPass = el('b', { id: 'ops-s-pass', text: '0' });
   const statFail = el('b', { id: 'ops-s-fail', text: '0' });
-  const statTrack = el('b', { text: '0' });
+  const statTrack = el('b', { id: 'ops-s-track', text: '0' });
   const statPending = el('b', { id: 'ops-s-pending', text: '0' });
   const statRate = el('b', { text: '0%' });
   const statsEl = el('div', { class: 'ops-stats card-row row-wrap' }, [
@@ -303,6 +303,7 @@ export function mountFill(root, ctx, moduleState) {
   function onTrackClick(id) {
     entries[id].track = !entries[id].track;
     saveDraftNow();
+    renderStats(); // 追蹤數也在頁頂統計裡（2026-10-29 資料帶入測試抓到沒更新）
     renderList();
   }
 
