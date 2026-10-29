@@ -354,6 +354,7 @@ def main():
                 row.click()
                 pg.wait_for_timeout(300)
                 check(pg.evaluate('location.hash') == h0, '點 partial 列不導頁（仍在 %s）' % h0)
+                cm.mark(key, '不導頁（沒有 view）')
                 continue
             row.click()
             pg.wait_for_selector('[data-keep="attendance"] iframe[data-role="store-frame"]')
