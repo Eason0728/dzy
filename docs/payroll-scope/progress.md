@@ -1,7 +1,7 @@
 # 薪酬依負責門市分權限 — 進度
 
-> 規格 `spec.md`、實作計畫 `plan.md`、上線步驟 `release.md`。更新：2026-10-29（fix2）。
-> **目前狀態：程式與本機整合實測完成，三個 repo 的分支都還沒 push、沒上線。** 上線由 Eason 依 `release.md` 執行。
+> 規格 `spec.md`、實作計畫 `plan.md`、上線步驟 `release.md`。更新：2026-10-29（fix3＋跟上 main）。
+> **目前狀態：程式與本機整合實測完成；分支已 push、PR 已開（dzy #54／#55、dzy-minikit #41、mala-clock-in #13），還沒合併、沒上線。** 上線由 Eason 依 `release.md` 執行。
 
 ## Task 狀態
 
@@ -78,6 +78,19 @@ dzy 分支又重排一次：後端 fix 插在 `114e4fc` 之後成為新的第一
 |---|---|---|---|
 | 1 | 差異清單非 admin 沒帶 `emp_ids` 時，仍回全集團每個打卡編號的 `{state, pay_store, pay_none}`，可列舉別店打卡編號與其薪資門市 | 非 admin 且 `emp_ids` 不是陣列 → `payScopeIds_` 之後把 `pay_store ∉ L` 的編號整筆刪掉；帶 `emp_ids` 照舊（薪資頁一律帶）；admin 不變。測試 13n-14～17（先紅後綠），13n-3／4／6／9 改成帶 emp_ids 驗三欄 | dzy `StaffClock.gs`（`6d3d526`，插在 `3049ad4` 之後成為第一段終點，前端／文件重放）；minikit gas 同步（`74383fa`） |
 | 2 | release／progress 的 mala-clock-in sha 是 rebase 到 PR #12 之前的舊值 | 全部換新（`1b89c09`／`56df4d3`／`5e1939e`／`4dac1a1`／`0df91af`）；release 補「PR #12 必須先合併」；dzy 第二段 HEAD 改用 gh 顯示的 PR head（本檔在第二段裡，寫死會循環） | `release.md`、`progress.md` |
+
+## 跟上 main（2026-10-29 晚）
+
+dzy main（#56-#59 品牌辦公室由總監審、墨竹亭台中美村 mztmc）、minikit main（#45-#49）、mala-clock-in main（#14 MZTMC 等）當天都動了，minikit PR 因 `SOURCE.sha256` 衝突。處理方式一律是「在分支上加合併 commit」，不重排、不 force push：
+
+| repo | 新 commit | 內容 |
+|---|---|---|
+| dzy 第一段 `payroll-scope-backend` | `a3a17f60005cad1a971623f776bd15e3775ca907` | `6d3d526` 合併 origin/main（自動合併無衝突）；全部 dzy 測試通過 |
+| dzy 第二段 `payroll-scope` | 合併 `a3a17f6` 的 merge commit＋本檔 commit | 第二段含第一段為祖先；平台 .gs 與第一段逐檔相同 |
+| dzy-minikit `payroll-scope` | `dbe9b2bf52eee38981f09ea742b5c1731ee57a88` | 合併 origin/main；18 個 gas 逐檔取自 `a3a17f6`，`SOURCE.sha256` 重算、render-docs 無變動、readActions 兩邊相同 |
+| mala-clock-in `payroll-scope` | `dc57374ead0a04f1fff09a9614e4ef1955a2da0c` | 合併 origin/main（#14）；`Payroll.gs`／`payroll.html` 與 `0df91af` 相同 |
+
+`release.md` 的第一段、minikit、mala-clock-in sha 已全部換新。
 
 ## 還沒做
 
