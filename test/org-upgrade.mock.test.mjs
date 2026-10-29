@@ -1498,5 +1498,61 @@ function noBranddev(app) { const d = app.sheets.org._data; for (let i = d.length
   odd('不存在單位', 'unit', 'zz-none');
 })();
 
+// ── 第 19 節（2026-10-29）：重新啟用墨竹亭台中美村 orgEnableMztMc202610／orgEnableMztMcRollback202610 ──
+(() => {
+  const en = (app, payload, t) => post(app.sb, 'orgEnableMztMc202610', payload || {}, t === undefined ? app.tok : t);
+  const rb = (app, t) => post(app.sb, 'orgEnableMztMcRollback202610', {}, t === undefined ? app.tok : t);
+  const mcRows = (app) => app.sheets.org._data.filter((r) => r[0] === 'unit' && r[1] === 'mzt-mc');
+  const isOn = (app) => String(mcRows(app)[0][7]).toUpperCase() === 'TRUE';
+  const app = freshNew();
+  ok(mcRows(app).length === 1 && !isOn(app), '19 前提：mzt-mc 存在且停用');
+  ok(en(app, { dryrun: true }, app.hrTok).ok === false && rb(app, app.hrTok).ok === false && en(app, {}, app.hrTok).ok === false, '19 ★非 admin（人資）預覽／執行／退回都被擋');
+  ok(en(app, { dryrun: true }, '').ok === false, '19 無 token 被擋');
+  const before = sheetDump(app);
+  const dr = en(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true && dr.data.action === 'reactivate' && dr.data.unit.code === 'mzt-mc' && sheetDump(app) === before, '19 dryrun 預覽重新啟用、零寫入', dr);
+  const orgB = JSON.stringify(orgRows(app));
+  const run = en(app, {});
+  ok(run.ok && run.data.dryrun === false && run.data.action === 'reactivate' && mcRows(app).length === 1 && isOn(app), '19 執行：同一列改為啟用', run);
+  const strip = (rows) => JSON.stringify(rows.map((r) => r.map((v, i) => (i === 7 ? '' : v))));
+  ok(strip(JSON.parse(orgB)) === strip(orgRows(app)), '19 ★只改啟用那一格（其他格逐格相同）');
+  ok(app.sb.stfReadOrg_().unit['mzt-mc'].active === true, '19 讀組織：mzt-mc 啟用');
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_enable_mztmc_2610').length === 1, '19 staff_log 一筆');
+  const again = en(app, {});
+  ok(again.ok && again.data.action === 'skip' && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_enable_mztmc_2610').length === 1, '19 重跑冪等：略過、不重複紀錄', again);
+  // 啟用後同仁可選、店長可建
+  const sm = mk(app, '美村店長', { brand: 'mzt', unit: 'mzt-mc', title: 'sm' });
+  ok(staffOf(app, sm.emp).unit === 'mzt-mc', '19 同仁可掛墨竹亭台中美村（店長）');
+  // 退回：有人 → 拒絕只列 emp_no
+  const rbNo = rb(app);
+  ok(rbNo.ok === false && rbNo.data.members.join() === sm.emp && JSON.stringify(rbNo.data).indexOf('美村店長') === -1 && isOn(app), '19 ★退回：有人在店 → 拒絕、只列 emp_no、不動', rbNo);
+  setStaff(app, sm.emp, 'unit', 'mzt-gf');
+  const pend = submitOnly(app, '美村待審', { brand: 'mzt', unit: 'mzt-mc', title: 'pt' });
+  const rbP = rb(app);
+  ok(rbP.ok === false && rbP.data.members.join() === pend.emp, '19 ★退回：送出待審 p_unit＝mzt-mc 也拒絕', rbP);
+  setStaff(app, pend.emp, 'status', 'disabled');
+  const r2 = rb(app);
+  ok(r2.ok && r2.data.action === 'deactivate' && mcRows(app).length === 1 && !isOn(app), '19 停用的人不擋：退回成功、列還在', r2);
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_enable_mztmc_2610_rollback').length === 1, '19 退回有 staff_log');
+  ok(rb(app).data.action === 'skip', '19 退回重跑冪等');
+  ok(en(app, {}).data.action === 'reactivate' && isOn(app), '19 退回後再啟用');
+  // 沒有列 → 新增在墨竹亭最後
+  const app2 = freshNew();
+  const d2 = app2.sheets.org._data; for (let i = d2.length - 1; i >= 1; i--) if (d2[i][0] === 'unit' && d2[i][1] === 'mzt-mc') d2.splice(i, 1);
+  const mzMax = Math.max(...d2.filter((r) => r[0] === 'unit' && r[3] === 'mzt').map((r) => Number(r[6])));
+  const a2 = en(app2, {});
+  ok(a2.ok && a2.data.action === 'add' && mcRows(app2).length === 1 && mcRows(app2)[0].slice(0, 8).join('|') === `unit|mzt-mc|台中美村|mzt|store||${mzMax + 1}|TRUE`, '19 沒有列：新增一列（order＝墨竹亭最大＋1）', a2);
+  // 衝突：名稱或品牌不同 → 拒絕、不動
+  const app3 = freshNew();
+  mcRows(app3)[0][2] = '別的名字';
+  const snap3 = JSON.stringify(orgRows(app3));
+  const c1 = en(app3, {});
+  ok(c1.ok === false && c1.data.bad.length === 1 && JSON.stringify(orgRows(app3)) === snap3 && rb(app3).ok === false, '19 ★衝突（名稱不同）：啟用與退回都拒絕、org 不動', c1);
+  // Code.gs 登錄、dryrun
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/'orgEnableMztMc202610', 'orgEnableMztMcRollback202610'/.test(src) && /orgEnableMztMc202610: 1, orgEnableMztMcRollback202610: 1/.test(src) && /case 'orgEnableMztMc202610'/.test(src) && /case 'orgEnableMztMcRollback202610'/.test(src), '19 兩個 action 在白名單、寫入鎖、分派表');
+  ok(!/READ_ACTIONS[^\n]*orgEnableMztMc/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '19 不在任何讀取清單');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
