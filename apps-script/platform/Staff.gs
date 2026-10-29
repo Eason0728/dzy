@@ -981,7 +981,11 @@ function stfReviewNeed_(org, unitCode, dept, titleCode) {
   var ladder = u.ladder || 'store';
   if (!stfTitleFitsUnit_(org, titleCode, unitCode)) return null;
   var need = { title: t };
-  if (ladder === 'office') { need.kind = 'ops'; return need; }
+  if (ladder === 'office') {
+    // Eason 2026-10-29（docs/org/spec.md 第 20 節）：品牌辦公室同仁一律由同辦公室總監審；總監本人由執行長以上審（不再經營運部）
+    if (STF_OFFICE_HEAD_TITLES.indexOf(t.code) !== -1) { need.kind = 'exec'; return need; }
+    need.kind = 'office_head'; need.unit = unitCode; return need;
+  }
   if (ladder === 'store') {
     if (unitCode === 'ck') {
       need.unit = 'ck';
@@ -1016,8 +1020,8 @@ function stfScopeMeets_(scope, need, rctx) {
   return [need].concat(need.alt || []).some(function (o) { return stfScopeMeetsKind_(scope, o, rctx); });
 }
 function stfScopeMeetsKind_(scope, o, rctx) {
-  // 認領專用（stfClaimNeed_）：同辦公室總監；不靠 kinds（不給總監多一種審核資格）
-  if (o.kind === 'office_head') return scope.titleLadder === 'office' && scope.unit === o.unit && STF_CLAIM_OFFICE_HEAD_TITLES.indexOf(scope.title) !== -1;
+  // 品牌辦公室同仁（第 20 節）：同辦公室的總監；不靠 kinds
+  if (o.kind === 'office_head') return scope.titleLadder === 'office' && scope.unit === o.unit && STF_OFFICE_HEAD_TITLES.indexOf(scope.title) !== -1;
   if (scope.kinds.indexOf(o.kind) === -1) return false;
   if ((o.kind === 'store' || o.kind === 'ck') && scope.unit !== o.unit) return false;
   if (o.kind === 'brand' && scope.brand !== o.brand) return false;
@@ -1034,29 +1038,17 @@ function stfScopeMeetsKind_(scope, o, rctx) {
  */
 function stfCanReview_(scope, values, org, rctx) {
   if (!scope) return false;
-  var submitted = stfClaimNeed_(org, stfStr_(values[STF_COL.p_unit]), stfStr_(values[STF_COL.p_dept]), stfStr_(values[STF_COL.p_title]));
+  var submitted = stfReviewNeed_(org, stfStr_(values[STF_COL.p_unit]), stfStr_(values[STF_COL.p_dept]), stfStr_(values[STF_COL.p_title]));
   if (!stfScopeMeets_(scope, submitted, rctx)) return false;
   if (stfStr_(values[STF_COL.unit]) !== '') {
-    var current = stfClaimNeed_(org, stfStr_(values[STF_COL.unit]), stfStr_(values[STF_COL.dept]), stfStr_(values[STF_COL.title]));
+    var current = stfReviewNeed_(org, stfStr_(values[STF_COL.unit]), stfStr_(values[STF_COL.dept]), stfStr_(values[STF_COL.title]));
     if (!stfScopeMeets_(scope, current, rctx)) return false;
   }
   return true;
 }
 
-// 認領審核專用（Eason 2026-10-29）：品牌辦公室同仁的認領，除了營運部主管，同辦公室的這些職稱也能審。
-// 只加在認領（stfCanReview_）；人事異動直屬主管（ApprovalRoute.gs）與績效評核（Eval.gs）仍用 stfReviewNeed_，不受影響。
-// 「同階梯職級要更高」照樣適用：總監審得到行政同仁、區督導，審不到另一位總監。
-var STF_CLAIM_OFFICE_HEAD_TITLES = ['odir'];
-
-/** stfReviewNeed_＋認領專用的另一條路：品牌辦公室單位 → alt 多一個 {kind:'office_head', unit}（同辦公室總監） */
-function stfClaimNeed_(org, unitCode, dept, titleCode) {
-  var need = stfReviewNeed_(org, unitCode, dept, titleCode);
-  if (!need || need.kind !== 'ops') return need;
-  var u = org.unit[unitCode];
-  if (!u || u.ladder !== 'office') return need;
-  need.alt = (need.alt || []).concat([{ kind: 'office_head', unit: unitCode }]);
-  return need;
-}
+// 品牌辦公室的「總監」職稱（第 20 節）：同辦公室其他人由它審；它本人由執行長以上審
+var STF_OFFICE_HEAD_TITLES = ['odir'];
 
 /** 審核者：platform.staff（人資／admin）一律可審；否則要有審核者範圍（stfReviewScope_） */
 function stfReviewer_(token) {
@@ -2724,3 +2716,73 @@ function stf2610cRun_(token, payload, dir) {
 }
 function handleClockAddMztMc202610_(token, payload) { return stf2610cRun_(token, payload, 'apply'); }
 function handleClockAddMztMcRollback202610_(token, payload) { return stf2610cRun_(token, payload, 'rollback'); }
+
+// ============================================================
+// 15. 2026-10-29 停用營運部一次性停用／退回（docs/org/spec.md 第 20 節；只有 role admin）
+//   品牌辦公室改由同辦公室總監審、總監由執行長以上審後，營運部（dzy-hq › ops）沒有用途；同仁常誤選 → 只把啟用那一格改成 FALSE。
+//   apply：ops 列啟用中→停用；已停用→略過（冪等）；沒有列或名稱／上層不同→整批拒絕。
+//          只有「沒有非停用同仁」才行：dept／p_dept 是 ops、或兼任部門含 ops，且 status 不是 disabled → 拒絕，只列 emp_no。
+//   rollback：ops 改回啟用；已啟用→略過。
+//   寫 staff_log（org_disable_ops_2610／org_disable_ops_2610_rollback）；不另建備份。
+// ============================================================
+
+var STF_2610O = { code: 'ops', name: '營運部', parent: 'dzy-hq' };
+
+/** 計畫（唯讀）。回 { action: 'deactivate'|'reactivate'|'skip', row, bad, members } */
+function stf2610oPlan_(dir) {
+  var rows = stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length);
+  var idx = -1;
+  for (var i = 0; i < rows.length; i++) {
+    if (stfStr_(rows[i][STF_ORG_COL.kind]) === 'dept' && stfStr_(rows[i][STF_ORG_COL.code]) === STF_2610O.code) { idx = i; break; }
+  }
+  var plan = { action: 'skip', row: 0, bad: [], members: [] };
+  if (idx === -1) { plan.bad.push({ kind: 'dept', code: STF_2610O.code, expected: STF_2610O.name + '／' + STF_2610O.parent, actual: '（沒有這一列）' }); return plan; }
+  var r = rows[idx];
+  var name = stfStr_(r[STF_ORG_COL.name]), parent = stfStr_(r[STF_ORG_COL.parent]);
+  var active = stf2610bIsTrue_(r[STF_ORG_COL.active]);
+  plan.row = idx + 2;
+  if (name !== STF_2610O.name || parent !== STF_2610O.parent) {
+    plan.bad.push({ kind: 'dept', code: STF_2610O.code, expected: STF_2610O.name + '／' + STF_2610O.parent, actual: name + '／' + parent });
+    return plan;
+  }
+  if (dir === 'rollback') { plan.action = active ? 'skip' : 'reactivate'; return plan; }
+  if (!active) return plan;   // apply：已停用
+  var extra = stfReadExtraMap_();
+  stfAllRows_().forEach(function (x) {
+    var v = x.values;
+    if (stfStr_(v[STF_COL.status]) === 'disabled') return;
+    var emp = stfStr_(v[STF_COL.emp_no]);
+    if (stfStr_(v[STF_COL.dept]) === STF_2610O.code || stfStr_(v[STF_COL.p_dept]) === STF_2610O.code ||
+        stfSplitCodes_(extra[emp.toUpperCase()]).indexOf(STF_2610O.code) !== -1) plan.members.push(emp);
+  });
+  plan.action = 'deactivate';
+  return plan;
+}
+
+function stf2610oRun_(token, payload, dir) {
+  var auth = stfRequireAdmin_(token);
+  if (!auth.ok) return auth;
+  var problem = stfOrgSheetProblem_();
+  if (problem) return { ok: false, error: problem };
+  var dry = !!(payload && payload.dryrun === true);
+  var plan = stf2610oPlan_(dir);
+  var label = dir === 'apply' ? '停用營運部' : '退回停用營運部';
+  if (plan.bad.length) {
+    return { ok: false, error: label + '：組織表的營運部不是預期的值（可能被改過或不存在），為避免蓋掉別人的修改，什麼都沒有改', data: { bad: plan.bad } };
+  }
+  if (plan.members.length) {
+    return { ok: false, error: label + '：還有同仁的部門（目前、送出待審或兼任）是營運部，請先改掉他們的部門或停用帳號再停用', data: { members: plan.members } };
+  }
+  var data = { dryrun: dry, action: plan.action, dept: { code: STF_2610O.code, name: STF_2610O.name } };
+  if (dry || plan.action === 'skip') return { ok: true, data: data };
+  var by = String(auth.user.id);
+  var on = plan.action === 'reactivate';
+  stfSheet_(STF_SHEET_ORG).getRange(plan.row, STF_ORG_COL.active + 1, 1, 1).setValue(on ? 'TRUE' : 'FALSE');   // 只寫啟用那一格
+  stfLog_('', on ? 'org_disable_ops_2610_rollback' : 'org_disable_ops_2610', by, 'dept:ops:' + (on ? 'reactivate' : 'deactivate'));
+  var after = stf2610oPlan_(dir);
+  if (after.action !== 'skip' || after.bad.length) return { ok: false, error: label + '後驗證失敗（資料與目標不一致），請檢查 org 分頁後重跑' };
+  return { ok: true, data: data };
+}
+
+function handleOrgDisableOps202610_(token, payload) { return stf2610oRun_(token, payload, 'apply'); }
+function handleOrgDisableOpsRollback202610_(token, payload) { return stf2610oRun_(token, payload, 'rollback'); }

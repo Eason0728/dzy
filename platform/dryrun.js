@@ -115,6 +115,9 @@ export function isReadAction(backendId, action, payload) {
   // 2026-10-29 墨竹亭台中美村加進打卡對照同一套：dryrun:true 預覽放行；dryrun:false 與 clockAddMztMcRollback202610 仍攔
   if (backendId === 'platform' && action === 'clockAddMztMc202610'
     && payload && payload.dryrun === true) return true;
+  // 2026-10-29 停用營運部同一套：dryrun:true 預覽放行；dryrun:false 與 orgDisableOpsRollback202610 仍攔
+  if (backendId === 'platform' && action === 'orgDisableOps202610'
+    && payload && payload.dryrun === true) return true;
   // 區域存檔先 preview（只回差異、後端在寫入前就 return）視為讀取；真的存檔仍攔
   if (backendId === 'platform' && action === 'regionSave'
     && payload && payload.preview === true) return true;

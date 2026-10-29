@@ -125,7 +125,7 @@ export function mountList(el, ctx) {
     el.innerHTML = `<style>${CARD_CSS}</style>
       <div class="card stack">
         <div class="card-row"><div class="card-title">同仁名單（${staff.length} 位）</div>
-          <span>${orgTools ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-add-branddev-2610">新增品牌發展部（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-branddev-2610">退回品牌發展部</button> <button type="button" class="btn btn-secondary" data-role="org-enable-mztmc-2610">啟用墨竹亭台中美村（10/29）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-mztmc-2610">退回墨竹亭台中美村</button> <button type="button" class="btn btn-secondary" data-role="clock-add-mztmc-2610">美村加進打卡對照（10/29）</button> <button type="button" class="btn btn-danger" data-role="clock-rollback-mztmc-2610">退回美村打卡對照</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
+          <span>${orgTools ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-add-branddev-2610">新增品牌發展部（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-branddev-2610">退回品牌發展部</button> <button type="button" class="btn btn-secondary" data-role="org-enable-mztmc-2610">啟用墨竹亭台中美村（10/29）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-mztmc-2610">退回墨竹亭台中美村</button> <button type="button" class="btn btn-secondary" data-role="clock-add-mztmc-2610">美村加進打卡對照（10/29）</button> <button type="button" class="btn btn-danger" data-role="clock-rollback-mztmc-2610">退回美村打卡對照</button> <button type="button" class="btn btn-secondary" data-role="org-disable-ops-2610">停用營運部（10/29）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-ops-2610">退回停用營運部</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
         <div class="card-row"><span class="text-muted">未開通 ${counts.unclaimed || 0}・待確認 ${counts.pending || 0}・已開通 ${counts.active || 0}・已停用 ${counts.disabled || 0}</span></div>
         <div class="form-grid-2">
           <div class="field"><label class="field-label" for="stf-q">搜尋姓名或編號</label><input class="input" id="stf-q" type="search" value="${esc(state.q)}"></div>
@@ -177,6 +177,8 @@ export function mountList(el, ctx) {
       el.querySelector('[data-role="org-rollback-mztmc-2610"]').addEventListener('click', mztMcRollback2610Flow);
       el.querySelector('[data-role="clock-add-mztmc-2610"]').addEventListener('click', clockAddMztMc2610Flow);
       el.querySelector('[data-role="clock-rollback-mztmc-2610"]').addEventListener('click', clockMztMcRollback2610Flow);
+      el.querySelector('[data-role="org-disable-ops-2610"]').addEventListener('click', disableOps2610Flow);
+      el.querySelector('[data-role="org-rollback-ops-2610"]').addEventListener('click', opsRollback2610Flow);
     }
   }
 
@@ -469,6 +471,44 @@ export function mountList(el, ctx) {
     if (!r.ok) { if (mztmcRefused(r)) await mztmcRefuseDialog(r); else ctx.ui.toast(r.error || '退回失敗', 'danger'); return; }
     if (r.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
     await ctx.ui.dialog({ title: '墨竹亭台中美村已退回', body: domOf(mztmcHtml(r.data, true)), actions: OK_ONLY });
+    if (alive) load();
+  }
+
+  // 2026-10-29 停用營運部（同 mztmc 一套）
+  const OPS_ACT = { deactivate: '停用', reactivate: '重新啟用', skip: '已是目標狀態，略過' };
+  const opsHtml = (d, done) => `<p data-role="ops2610-sum">${done ? '已處理' : '會處理'}：${esc(OPS_ACT[d.action] || d.action)}（總部部門 ${esc((d.dept || {}).code)}「${esc((d.dept || {}).name)}」）</p>`;
+  async function opsRefuseDialog(r) {
+    const dd = r.data || {};
+    const bad = (dd.bad || []).map((x) => `部門 ${x.code}：應為「${x.expected}」，目前是「${x.actual}」`);
+    const members = (dd.members || []).map((e) => `${e}`);
+    await ctx.ui.dialog({ title: '停用營運部被拒絕', body: domOf(`<p>${esc(r.error)}</p>${li(bad)}${members.length ? '<p><b>還掛在營運部的同仁編號</b></p>' + li(members) : ''}`), actions: OK_ONLY });
+  }
+  async function disableOps2610Flow() {
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'orgDisableOps202610', { dryrun: true }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { if (mztmcRefused(r)) await opsRefuseDialog(r); else ctx.ui.toast(r.error || '預覽失敗', 'danger'); return; }
+    const go = await ctx.ui.dialog({ title: '停用營運部：預覽（還沒寫入）', body: domOf(opsHtml(r.data, false)), actions: [CANCEL, { label: '確定停用', value: 'go', variant: 'danger' }] });
+    if (go !== 'go') return;
+    ctx.ui.loading(true);
+    let w;
+    try { w = await ctx.api.call('staff', 'orgDisableOps202610', { dryrun: false }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!w.ok) { if (mztmcRefused(w)) await opsRefuseDialog(w); else ctx.ui.toast(w.error || '停用失敗', 'danger'); return; }
+    if (w.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '營運部已停用', body: domOf(opsHtml(w.data, true)), actions: OK_ONLY });
+    if (alive) load();
+  }
+  async function opsRollback2610Flow() {
+    if (!(await ctx.ui.confirm('退回停用營運部？營運部會重新啟用，同仁認領時又選得到。'))) return;
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'orgDisableOpsRollback202610', {}); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { if (mztmcRefused(r)) await opsRefuseDialog(r); else ctx.ui.toast(r.error || '退回失敗', 'danger'); return; }
+    if (r.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '營運部已重新啟用', body: domOf(opsHtml(r.data, true)), actions: OK_ONLY });
     if (alive) load();
   }
 
