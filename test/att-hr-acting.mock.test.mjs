@@ -483,6 +483,18 @@ function setup() {
   { const u = sb.clockUpperEmps_(); ok(u.home.mztgf.indexOf('MZTGF222') !== -1 && u.dept.mztgf.indexOf('MZTGF222') === -1, '7-2c ★個人例外改進 home 名單、不在 dept'); }
   ok(!has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222') && !has(app.V('DZY231'), 'mztgf:DZY222'), '7-2b ★例外：店長不核也不看');
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2b 例外：人資主管核工時與申請');
+  // 7-2e 試點沒含總部時：例外帳號的打卡店在試點，人資主管仍核得到（2026-10-29 審查低 3）
+  app.props.STORE_SSO_UNITS = PILOT.split(',').filter((u) => u !== 'dzy-hq').join(','); sb.permActingReset_();
+  ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222') && !has(app.H('DZY231'), 'mztgf:DZY222'), '7-2e ★試點沒含總部：例外帳號人資主管仍核得到、店長仍沒有');
+  app.props.STORE_SSO_UNITS = PILOT; sb.permActingReset_();
+  // 7-2f 總部同仁門市支援帳號、部門主管停用 → attUpperGaps 提醒（2026-10-29 審查低 2）
+  { sheets.staff_clock._data.push(['DZY224', 'mztgf', 'MZTGF224', 'staff', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
+    const org = sb.stfReadOrg_(), maps = sb.clkMaps_(), su = sb.storeClockUnits_();
+    const ppl = sb.storePeople_();
+    const g0 = sb.storeUpperGaps_(ppl, org, null, maps, su).map((x) => x.emp);
+    const g1 = sb.storeUpperGaps_(ppl.map((p) => (p.emp === 'DZY223' ? Object.assign({}, p, { status: 'disabled' }) : p)), org, null, maps, su).map((x) => x.emp);
+    ok(!has(g0, 'DZY224') && has(g1, 'DZY224') && !has(g1, 'DZY222'), '7-2f ★資訊總監停用 → 資訊同仁（有門市支援帳號）進提醒；財務（人資核）不進', { g0, g1 });
+    sheets.staff_clock._data.pop(); }
   sb.STORE_NOT_SUPPORT_EX.DZY222 = ['gf'];
   ok(has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222'), '7-2b 例外只限指定的店：別家照支援');
   // 7-2d 欄位不完整時不推算成例外那家的人（2026-10-29 Codex 審查、Fable 驗證）

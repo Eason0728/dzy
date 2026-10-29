@@ -475,7 +475,8 @@ function storeAttAccounts_(people, org, home, maps, storeUnits) {
       var units = ((storeUnits && storeUnits[m.store_code]) || []).filter(function (c) {
         var u = org.unit[c]; return !!(u && u.active && (u.ladder || 'store') === 'store');
       });
-      var a = { t: t, m: m, units: units, support: storeAttIsSupport_(t, m.store_code, units, org) };
+      var a = { t: t, m: m, units: units, support: storeAttIsSupport_(t, m.store_code, units, org),
+                ex: (STORE_NOT_SUPPORT_EX[stfStr_(t.emp)] || []).indexOf(stfStr_(m.store_code)) !== -1 };   // 個人例外（不算支援）
       if (a.support) { a.homeUnit = stfStr_(t.unit); a.homeName = storeUnitLabel_(a.homeUnit, org); }
       out.push(a);
     });
@@ -577,7 +578,8 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
     var needH = !t.orphan && !!attNeedOf_(t, org, 'hours');
     var viewable = needH && !self;   // 只看名單的共同條件（同 storeAttViewTargets_）
     if (!a.support) {
-      var pOk = storeAnyIn_(t.pilotUnits || [t.unit], pilot);
+      // 個人例外的帳號：打卡店在試點也算（試點沒含他的部門時，人資主管仍核得到；2026-10-29 審查低 3）
+      var pOk = storeAnyIn_(t.pilotUnits || [t.unit], pilot) || (a.ex && storeAnyIn_(a.units, pilot));
       if (pOk && hrsT[t.emp]) storeAttListAdd_(L.hours, a);
       if (pOk && reqT[t.emp]) storeAttListAdd_(L.req, a);
       if (pOk && viewable && viewUnits.indexOf(stfStr_(t.unit)) !== -1) storeAttListAdd_(L.view, a);
@@ -639,6 +641,15 @@ function storeUpperGaps_(people, org, rctx, maps, storeUnits) {
       });
     }
     if (gap) out.push({ emp: t.emp, name: stfStr_(t.name), unit: stfStr_(t.unit) });
+  });
+  // 總部同仁（非值班主管）有門市支援帳號、申請照原身分，但部門那條表上已沒有在職核定人（例：部門主管停用）→ 也提醒（2026-10-29 審查低 2）
+  var listed = {}; out.forEach(function (x) { listed[x.emp] = true; });
+  people.forEach(function (t) {
+    if (listed[t.emp] || storeIsDuty_(t) || stfStr_(t.status) !== 'active' || !stfStr_(t.emp)) return;
+    if (!(acct[t.emp] || []).length || !storeIsHqTarget_(t, org)) return;
+    var needR = attNeedOf_(t, org, 'req');
+    if (!needR || needR.kind === 'hr_only') return;
+    if (!people.some(function (ap) { return attApproverOf_(ap, t, org, 'req', rctx); })) out.push({ emp: t.emp, name: stfStr_(t.name), unit: stfStr_(t.unit) });
   });
   return out.sort(function (a, b) { return a.emp < b.emp ? -1 : (a.emp > b.emp ? 1 : 0); });
 }
