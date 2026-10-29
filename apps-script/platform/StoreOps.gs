@@ -462,6 +462,7 @@ function storeUnitLabel_(unit, org) {
  * [{t, m, units, support, homeUnit?, homeName?}]（homeUnit／homeName 只在支援帳號：本人單位代碼與顯示名稱，2026-10-26 營運系統「支援」標示）；t＝storeEffectiveTarget_（null 的人整個略過），units＝打卡店的單位清單（storeUnits[store_code]，沒有＝[]）。
  */
 function storeAttAccounts_(people, org, home, maps, storeUnits) {
+  var pilot = null;   // 推算者的支援判斷才需要，延後讀
   var byEmp = {};
   (maps || []).forEach(function (m) {
     if (m.state !== 'confirmed' || m.roster_active === 'FALSE') return;
@@ -476,7 +477,10 @@ function storeAttAccounts_(people, org, home, maps, storeUnits) {
       var units = ((storeUnits && storeUnits[m.store_code]) || []).filter(function (c) {
         var u = org.unit[c]; return !!(u && u.active && (u.ladder || 'store') === 'store');
       });
-      var a = { t: t, m: m, units: units, support: storeAttIsSupport_(t, m.store_code, units, org),
+      var support = storeAttIsSupport_(t, m.store_code, units, org);
+      // 推算者（inferred）：只有打卡店在試點才走支援規則（2026-10-30 對抗驗證）；非試點店維持改規則前的行為（不當支援，主店店長靠 pilotUnits 照舊核、人資主管／admin 看得到）
+      if (support && t.inferred) { if (pilot === null) pilot = storePilotUnits_(); support = storeAnyIn_(units, pilot); }
+      var a = { t: t, m: m, units: units, support: support,
                 ex: (STORE_NOT_SUPPORT_EX[stfStr_(t.emp)] || []).indexOf(stfStr_(m.store_code)) !== -1 };   // 個人例外（不算支援）
       if (a.support) { a.homeUnit = stfStr_(t.unit); a.homeName = storeUnitLabel_(a.homeUnit, org); }
       out.push(a);

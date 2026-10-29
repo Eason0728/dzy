@@ -45,4 +45,5 @@ dzy 後端（Mac mini）先，dzy 前端（權限設定的門市下拉）後。�
 - 沒填單位（或職稱）、靠主店打卡推算出主店的人（`storeEffectiveTarget_` inferred），到**非主店**的打卡帳號照 §1 的支援規則：由打卡店的店長→區經理→區督導→品牌總監核工時與申請；主店（推算出的單位）主管對那個帳號只看（進 view_people）。在主店打卡的帳號照舊由主店主管核。
 - orphan（推算不出主店）不變：只有人資主管／admin 看得到。
 - 實作：`storeAttIsSupport_` 不再排除 `t.inferred`（StoreOps.gs）；oracle 見 test/dd/hr2_backend.mjs isSupport。
+- 對抗驗證補強（2026-10-30）：推算者**只有打卡店在試點（STORE_SSO_UNITS）時**才走支援規則；非試點店的帳號維持改規則前的行為（不當支援，主店店長靠 pilotUnits 照舊核、人資主管／admin 看得到）。`storeAttAccounts_` 判斷。
 
