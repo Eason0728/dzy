@@ -35,6 +35,19 @@ const CLOCK_TEXT = { updated: '會更新（補上一悟總部）', skipped: '不
 export function mountList(el, ctx) {
   const esc = ctx.fmt.esc;
   let alive = true;
+  // 手機「更多」展開時的 Esc：原本只綁在清單 el 上，焦點不在清單內（例如剛點完按鈕焦點掉到 body）按 Esc 沒反應（2026-10-29 資料帶入測試）。
+  // 改掛 document：有任何一列展開就掛一個，全部收合（或卸載）就移除，不累積。
+  let docEsc = null;
+  const syncDocEsc = () => {
+    const anyOpen = el.querySelectorAll('tr.stf-open').length > 0;
+    if (anyOpen && !docEsc && typeof document !== 'undefined' && document.addEventListener) {
+      docEsc = (e) => { if (e.key === 'Escape' && el.__stfCloseMore) el.__stfCloseMore(null); };
+      document.addEventListener('keydown', docEsc);
+    } else if (!anyOpen && docEsc) {
+      document.removeEventListener('keydown', docEsc);
+      docEsc = null;
+    }
+  };
   let staff = [];
   let org = { brands: [], units: [], depts: [], titles: [] };
   let showPrivate = false;
@@ -148,18 +161,26 @@ export function mountList(el, ctx) {
     el.querySelector('#stf-priv').addEventListener('change', (e) => { showPrivate = e.target.checked; redraw(); });
     el.querySelector('[data-role="rows"]').addEventListener('click', (e) => {
       const more = e.target.closest ? e.target.closest('[data-more]') : null;
-      if (more) { const tr = more.closest('tr'); const open = tr.classList.toggle('stf-open'); more.setAttribute('aria-expanded', String(open)); more.textContent = open ? '收起 ▴' : '更多 ▾'; return; }
+      if (more) {
+        const tr = more.closest('tr'); const open = tr.classList.toggle('stf-open'); more.setAttribute('aria-expanded', String(open)); more.textContent = open ? '收起 ▴' : '更多 ▾';
+        syncDocEsc();   // 2026-10-29：Esc 改掛 document（展開時才監聽、全收合就移除），焦點不在清單內也能收
+        return;
+      }
       onAction(e);
     });
     // 「更多」展開後按 Esc、或點同仁名單其他地方都會收起（2026-10-26 Fable 複查建議）；el 跨重畫共用，只綁一次
     if (!el.__stfMoreBound) {
       el.__stfMoreBound = true;
-      const closeMore = (keep) => el.querySelectorAll('tr.stf-open').forEach((tr) => {
-        if (tr === keep) return;
-        tr.classList.remove('stf-open');
-        const b = tr.querySelector('[data-more]');
-        if (b) { b.setAttribute('aria-expanded', 'false'); b.textContent = '更多 ▾'; }
-      });
+      const closeMore = (keep) => {
+        el.querySelectorAll('tr.stf-open').forEach((tr) => {
+          if (tr === keep) return;
+          tr.classList.remove('stf-open');
+          const b = tr.querySelector('[data-more]');
+          if (b) { b.setAttribute('aria-expanded', 'false'); b.textContent = '更多 ▾'; }
+        });
+        syncDocEsc();
+      };
+      el.__stfCloseMore = closeMore;
       el.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMore(null); });
       el.addEventListener('click', (e) => { closeMore(e.target.closest ? e.target.closest('tr.stf-open') : null); }, true);
     }
@@ -644,5 +665,5 @@ export function mountList(el, ctx) {
   }
 
   load();
-  return () => { alive = false; };
+  return () => { alive = false; if (docEsc) { document.removeEventListener('keydown', docEsc); docEsc = null; } };
 }
