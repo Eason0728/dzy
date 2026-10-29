@@ -1605,5 +1605,54 @@ function noBranddev(app) { const d = app.sheets.org._data; for (let i = d.length
   ok(!/READ_ACTIONS[^\n]*orgDisableOps/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '20 不在任何讀取清單');
 })();
 
+// ── 第 21 節（2026-10-29）：墨竹亭台中美村加進打卡對照 clockAddMztMc202610／clockAddMztMcRollback202610 ──
+(() => {
+  const en = (app, payload, t) => post(app.sb, 'clockAddMztMc202610', payload || {}, t === undefined ? app.tok : t);
+  const rb = (app, t) => post(app.sb, 'clockAddMztMcRollback202610', {}, t === undefined ? app.tok : t);
+  const cs = (app) => app.sheets.clock_stores._data;
+  const mc = (app) => cs(app).filter((r) => String(r[0]) === 'mztmc');
+  const asProd = (app) => { const d = cs(app); for (let i = d.length - 1; i >= 1; i--) if (String(d[i][0]) === 'mztmc') d.splice(i, 1); };   // 正式表＝只有原本六家
+  const app = freshNew();
+  ok(app.sheets.clock_stores && mc(app).length === 1, '21 前提：新建的表預設就有 mztmc（CLK_DEFAULT_STORES 第七列）');
+  asProd(app);
+  ok(mc(app).length === 0, '21 前提：模擬正式表沒有 mztmc');
+  ok(en(app, { dryrun: true }, app.hrTok).ok === false && en(app, {}, app.hrTok).ok === false && rb(app, app.hrTok).ok === false, '21 ★非 admin（人資）預覽／執行／退回都被擋');
+  ok(en(app, { dryrun: true }, '').ok === false, '21 無 token 被擋');
+  const before = sheetDump(app);
+  const dr = en(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true && dr.data.action === 'add' && dr.data.store.unit === 'mzt-mc' && sheetDump(app) === before, '21 dryrun 預覽新增、零寫入', dr);
+  const others = JSON.stringify(cs(app));
+  const run = en(app, {});
+  ok(run.ok && run.data.action === 'add' && mc(app).length === 1 && mc(app)[0].slice(0, 5).join('|') === 'mztmc|墨竹亭 台中美村|mzt-mc|TRUE|MZTMC', '21 執行：新增一列 mztmc／mzt-mc／MZTMC', run);
+  ok(JSON.stringify(cs(app).filter((r) => String(r[0]) !== 'mztmc')) === others, '21 ★其他店的列逐格不動');
+  ok(app.sb.clkStoreOfUnit_('mzt-mc') && app.sb.clkStoreOfUnit_('mzt-mc').store_code === 'mztmc' && app.sb.clkUnitConflict_() === '', '21 單位 mzt-mc 對到打卡店 mztmc、沒有單位衝突');
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'clock_add_mztmc_2610').length === 1, '21 staff_log 一筆');
+  const again = en(app, {});
+  ok(again.ok && again.data.action === 'skip' && mc(app).length === 1 && rowsOf(app, 'staff_log').filter((r) => r.event === 'clock_add_mztmc_2610').length === 1, '21 重跑冪等：略過、不重複', again);
+  const r1 = rb(app);
+  ok(r1.ok && r1.data.action === 'deactivate' && mc(app).length === 1 && String(mc(app)[0][3]).toUpperCase() === 'FALSE', '21 退回：enabled 改 FALSE、列還在', r1);
+  ok(rb(app).data.action === 'skip', '21 退回重跑冪等');
+  const re = en(app, {});
+  ok(re.ok && re.data.action === 'reactivate' && String(mc(app)[0][3]).toUpperCase() === 'TRUE', '21 退回後再加入＝重新啟用', re);
+  // 已有確認的打卡對照 → 退回拒絕
+  app.sheets.staff_clock._data.push(['DZY999', 'mztmc', 'MZTMC01', 'home', 'confirmed', 'build', 'TRUE', '', '', '', '', '', '', '', '', '']);
+  const rbNo = rb(app);
+  ok(rbNo.ok === false && rbNo.data.maps === 1 && String(mc(app)[0][3]).toUpperCase() === 'TRUE', '21 ★已有同仁打卡對照：退回拒絕、不動', rbNo);
+  // 衝突：mztmc 列名稱或單位被改過 → 拒絕
+  const app2 = freshNew();
+  mc(app2)[0][1] = '別的店名';
+  const snap2 = JSON.stringify(cs(app2));
+  const c1 = en(app2, {});
+  ok(c1.ok === false && c1.data.bad.length === 1 && JSON.stringify(cs(app2)) === snap2 && rb(app2).ok === false, '21 ★衝突（店名被改過）：加入與退回都拒絕、不動', c1);
+  // 別的店的 unit_code 已含 mzt-mc → 加入拒絕
+  const app3 = freshNew(); asProd(app3);
+  const gfRow = cs(app3).find((r) => String(r[0]) === 'mztgf'); gfRow[2] = 'mzt-gf,mzt-mc';
+  const c3 = en(app3, {});
+  ok(c3.ok === false && mc(app3).length === 0, '21 ★別店 unit_code 已含 mzt-mc：拒絕、不新增', c3);
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/'clockAddMztMc202610', 'clockAddMztMcRollback202610'/.test(src) && /clockAddMztMc202610: 1, clockAddMztMcRollback202610: 1/.test(src) && /case 'clockAddMztMc202610'/.test(src) && /case 'clockAddMztMcRollback202610'/.test(src), '21 兩個 action 在 Code.gs 白名單、寫入表、分派');
+  ok(!/READ_ACTIONS[^\n]*clockAddMztMc/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '21 不在任何讀取清單');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

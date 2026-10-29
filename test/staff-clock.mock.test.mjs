@@ -168,7 +168,7 @@ function rowsOf(app, name) {
   return rows.slice(1).map((r) => Object.fromEntries(head.map((h, i) => [h, r[i] === undefined ? '' : r[i]])));
 }
 const maps = (app) => rowsOf(app, 'staff_clock');
-const eq6 = (a, b) => (b === undefined ? JSON.stringify(a) === JSON.stringify(['cf', 'gf', 'hq', 'mztgf', 'mztjs', 'mztlzl']) : JSON.stringify(a) === JSON.stringify(b));
+const eq6 = (a, b) => (b === undefined ? JSON.stringify(a) === JSON.stringify(['cf', 'gf', 'hq', 'mztgf', 'mztjs', 'mztlzl', 'mztmc']) : JSON.stringify(a) === JSON.stringify(b));
 const jobs = (app) => rowsOf(app, 'clock_outbox');
 const staffOf = (app, emp) => rowsOf(app, 'staff').find((r) => r.emp_no === emp);
 const mapOf = (app, emp, store) => maps(app).filter((m) => m.emp_no === emp && (!store || m.store_code === store));
@@ -211,8 +211,8 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(sheets.staff_clock._rows()[0].join() === 'emp_no,store_code,emp_id,role,state,source,roster_active,last_punch,confirmed_by,confirmed_at,updated_at,line_h,line_kid,line_bound_at,line_ok_at,duty_mgr', 'B1 staff_clock 表頭逐字（spec §2.3＋LINE 認身分四欄＋duty_mgr）');
   ok(sheets.clock_outbox._rows()[0].join() === 'job_id,kind,emp_no,store_code,emp_id,name,op_id,expect_json,state,tries,next_at,lease_until,last_error,created_at,updated_at,done_at', 'B1 clock_outbox 表頭逐字（spec §2.4 v2）');
   const stores = sheets.clock_stores._rows().slice(1);
-  ok(stores.length === 6 && stores.map((r) => r[0]).join() === 'gf,mztjs,mztgf,mztlzl,hq,cf', 'B1 預設六列、store_code 照契約', stores);
-  ok(stores.map((r) => r[2]).join('|') === 'mala-gf|mzt-js|mzt-gf|mzt-lzl|dzy-hq,mzt-hq,mala-hq,yiwu-hq|ck', 'B1 unit_code 依 org 預設單位對上（hq 一列放四個總部與品牌辦公室單位）', stores.map((r) => r[2]));
+  ok(stores.length === 7 && stores.map((r) => r[0]).join() === 'gf,mztjs,mztgf,mztlzl,mztmc,hq,cf', 'B1 預設七列（2026-10-29 加 mztmc）、store_code 照契約', stores);
+  ok(stores.map((r) => r[2]).join('|') === 'mala-gf|mzt-js|mzt-gf|mzt-lzl|mzt-mc|dzy-hq,mzt-hq,mala-hq,yiwu-hq|ck', 'B1 unit_code 依 org 預設單位對上（hq 一列放四個總部與品牌辦公室單位）', stores.map((r) => r[2]));
   ok(stores.every((r) => String(r[3]) === 'TRUE'), 'B1 預設全部啟用');
   const head = sheets.staff._rows()[0];
   ok(head.length === 28 && head[24] === 'hire_date' && head[25] === 'last_day' && head[26] === 'extra_depts' && head[27] === 'line_revoked_at', 'B1 staff 右側補 hire_date、last_day、extra_depts、line_revoked_at');
@@ -221,19 +221,19 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   sheets.clock_stores._data[1][3] = 'FALSE';
   sheets.clock_stores._data[1][1] = '自訂店名';
   sb.setupStaff();
-  ok(sheets.clock_stores._data[1][3] === 'FALSE' && sheets.clock_stores._data[1][1] === '自訂店名' && sheets.clock_stores._rows().length === 7, 'B1 重跑只補不覆蓋：總部改過的 clock_stores 列不動、不重複');
+  ok(sheets.clock_stores._data[1][3] === 'FALSE' && sheets.clock_stores._data[1][1] === '自訂店名' && sheets.clock_stores._rows().length === 8, 'B1 重跑只補不覆蓋：總部改過的 clock_stores 列不動、不重複');
   // 既有試算表（staff 只有 24 欄、沒有三個新分頁）→ 補上
   const old = load(freshSeed(HASHER));
   old.sb.setupStaff();
   old.sheets.staff._data[0].length = 24;          // 模擬舊版 24 欄表頭
   ['clock_stores', 'staff_clock', 'clock_outbox'].forEach((n) => delete old.sheets[n]);
   old.sb.setupStaff();
-  ok(old.sheets.staff._rows()[0].length === 28 && old.sheets.clock_outbox && old.sheets.clock_stores._rows().length === 7, 'B1 舊試算表（24 欄、無新分頁）跑 setupStaff 後補齊');
+  ok(old.sheets.staff._rows()[0].length === 28 && old.sheets.clock_outbox && old.sheets.clock_stores._rows().length === 8, 'B1 舊試算表（24 欄、無新分頁）跑 setupStaff 後補齊');
   // unit_code 查不到 → 留空（org 預設少了央廚單位時）
   const noCk = load(freshSeed(HASHER));
   noCk.sb.STF_DEFAULT_ORG = noCk.sb.STF_DEFAULT_ORG.filter((r) => !(r[0] === 'unit' && r[1] === 'ck'));
   const blank = noCk.sb.clkDefaultStoreRows_();
-  ok(blank.length === 6 && blank.find((r) => r[0] === 'cf')[2] === '' && blank.find((r) => r[0] === 'gf')[2] === 'mala-gf', 'B1 org 查不到對應單位 → unit_code 留空，其他照填');
+  ok(blank.length === 7 && blank.find((r) => r[0] === 'cf')[2] === '' && blank.find((r) => r[0] === 'gf')[2] === 'mala-gf', 'B1 org 查不到對應單位 → unit_code 留空，其他照填');
   // 表頭不一致 → 停下回錯
   const bad = fresh();
   bad.sheets.clock_outbox._data[0][3] = 'store_codeX';
@@ -1209,7 +1209,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const { sb, sheets, tok } = app;
   const gfRows = sheets.clock_stores._rows();
   { const m = {}; gfRows.slice(1).forEach((r) => { m[r[0]] = r[4]; });
-    ok(gfRows[0][4] === 'payroll_store' && JSON.stringify(m) === JSON.stringify({ gf: 'SSLGF', mztjs: 'MZTJS', mztgf: 'MZTGF', mztlzl: 'MZTLZL', hq: 'HQ', cf: 'CF' }), 'FIX1 clock_stores.payroll_store 預設列：gf=SSLGF／mztjs=MZTJS／mztlzl=MZTLZL／hq=HQ／cf=CF，mztgf=MZTGF（2026-10-28 薪酬門市表已建）', m); }
+    ok(gfRows[0][4] === 'payroll_store' && JSON.stringify(m) === JSON.stringify({ gf: 'SSLGF', mztjs: 'MZTJS', mztgf: 'MZTGF', mztlzl: 'MZTLZL', mztmc: 'MZTMC', hq: 'HQ', cf: 'CF' }), 'FIX1 clock_stores.payroll_store 預設列：gf=SSLGF／mztjs=MZTJS／mztlzl=MZTLZL／hq=HQ／cf=CF，mztgf=MZTGF（2026-10-28 薪酬門市表已建）', m); }
   const p = claimApprove(app, '薪光復甲', 'pw-fix1-pw-01', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
   giveMap(app, p.emp, 'gf', 'E5', 'home');
   const real = sb.clockRosterApply_('gf', [rosterRow('E5', '薪光復甲')], [{ store: 'SSLGF', emp_id: 'E5', name: '薪光復甲打錯' }], nowT(0));
@@ -1221,7 +1221,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   old.sb.setupStaff();
   old.sheets.clock_stores._data.forEach((r) => { r.length = 4; });
   old.sb.setupStaff();
-  ok(old.sheets.clock_stores._rows()[0][4] === 'payroll_store' && old.sheets.clock_stores._rows().find((r) => r[0] === 'gf')[4] === 'SSLGF' && old.sheets.clock_stores._rows().length === 7, 'FIX1 舊 4 欄 clock_stores 補欄不重複列');
+  ok(old.sheets.clock_stores._rows()[0][4] === 'payroll_store' && old.sheets.clock_stores._rows().find((r) => r[0] === 'gf')[4] === 'SSLGF' && old.sheets.clock_stores._rows().length === 8, 'FIX1 舊 4 欄 clock_stores 補欄不重複列');
 
   // ── 2 姓名上限 20 ──
   const mgr = claimApprove(app, '修店長', 'mgr-fix-pw-01', MZT_GF('sm'));
