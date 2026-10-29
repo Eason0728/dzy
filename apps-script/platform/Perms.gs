@@ -198,7 +198,9 @@ function permStaffIdentityOk_(org, values) {
   if (!unit || unit.active === false) return false;
   var title = permStr_(values[STF_COL.title]);
   var tdef = title && org.titles && org.titles[title];
-  return !!(tdef && tdef.active !== false && permStr_(tdef.parent) === permStr_(unit.ladder));
+  if (!(tdef && tdef.active !== false && permStr_(tdef.parent) === permStr_(unit.ladder))) return false;
+  // 單位限定職稱（例：中央工廠沒有店長；Fable 審查低 1）
+  return !(org.unitRules && typeof stfTitleUnitOk_ === 'function' && !stfTitleUnitOk_(org.unitRules, title, permStr_(values[STF_COL.unit])));
 }
 /** 某人兼任店長的單位（[]＝沒有） */
 function permActingUnitsOf_(emp) {

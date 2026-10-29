@@ -455,16 +455,18 @@ function storeAttAccounts_(people, org, home, maps, storeUnits) {
 /**
  * 支援帳號的核定人（不含人資主管、admin、att.extra）：回 {emp: true}。units＝打卡店單位清單（只取 org 裡 active 的 store 階梯）。
  * 多單位的店：每一層把所有單位的人合起來看，取第一層有人的那層（不逐單位各自往上找）。
+ * excludeEmp（選填）：把這個同仁編號剔出候選（被核者本人）。
  * excludeDuty（選填，值班主管本人的 req 申請用）：店長／廠長層整層跳過（值班主管的單不給店長）；打卡店單位的值班主管（duty_units 含任一 units）先剔除，再取第一層有人的那層。
  * people 只認 status=active、單位職稱合法（storeOrgOf_）、有同仁編號的人；推算出來的人不當核定人。
  */
-function storeSupportApprovers_(units, people, org, rctx, excludeDuty) {
+function storeSupportApprovers_(units, people, org, rctx, excludeDuty, excludeEmp) {
   var su = units.filter(function (c) { var u = org.unit[c]; return !!(u && u.active && (u.ladder || 'store') === 'store'); });
   var out = {};
   if (!su.length) return out;
   var cand = [];
   people.forEach(function (p) {
     if (stfStr_(p.status) !== 'active' || !stfStr_(p.emp)) return;
+    if (excludeEmp && stfStr_(p.emp) === excludeEmp) return;   // 被核者本人（例：兼任店長自己到兼任店支援）不算，免得第 1 層只有他、往上找不到人（Fable 審查中 2）
     var o = storeOrgOf_(p, org);
     if (o && excludeDuty && su.some(function (c) { return storeDutyHas_(p, c); })) return;   // 值班主管本人的申請：打卡店單位的值班主管不核
     if (o) cand.push({ emp: stfStr_(p.emp), title: stfStr_(p.title), unit: stfStr_(p.unit), ladder: o.ladder, brand: o.unit.parent, acting: p.acting_units || [] });
@@ -549,11 +551,13 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
       if (pOk && reqT[t.emp]) storeAttListAdd_(L.req, a);
       if (pOk && viewable && viewUnits.indexOf(stfStr_(t.unit)) !== -1) storeAttListAdd_(L.view, a);
     } else if (storeAnyIn_(a.units, pilot) && !self) {
-      var key = a.units.join(',');
-      if (!apprCache[key]) apprCache[key] = storeSupportApprovers_(a.units, people, org, rctx);
+      // 被核者本人兼任這家店：先把他剔出候選再找層（快取鍵帶他的編號）
+      var selfEx = a.units.some(function (u) { return storeActingHas_(t, u); }) ? stfStr_(t.emp) : '';
+      var key = a.units.join(',') + (selfEx ? '|x' + selfEx : '');
+      if (!apprCache[key]) apprCache[key] = storeSupportApprovers_(a.units, people, org, rctx, false, selfEx);
       var dutyT = storeIsDuty_(t);
       var keyR = dutyT ? key + '|duty' : key;   // 值班主管本人的申請（req）：打卡店單位的值班主管不核，往上找
-      if (!apprCache[keyR]) apprCache[keyR] = storeSupportApprovers_(a.units, people, org, rctx, true);
+      if (!apprCache[keyR]) apprCache[keyR] = storeSupportApprovers_(a.units, people, org, rctx, true, selfEx);
       var base = !!flags.admin || !!flags.hrHead;
       var extra = !!flags.attExtra && !!myUnit && a.units.indexOf(myUnit) !== -1;
       var extraBlockR = dutyT && a.units.some(function (u) { return storeDutyHas_(me, u); });   // 值班主管的申請：打卡店單位的值班主管（含 att.extra 例外）不核
@@ -589,12 +593,13 @@ function storeUpperGaps_(people, org, rctx, maps, storeUnits) {
   });
   people.forEach(function (t) {
     if (!storeIsDuty_(t) || stfStr_(t.status) !== 'active' || !stfStr_(t.emp)) return;
-    if (!attNeedOf_(t, org, 'req')) return;
+    var needR = attNeedOf_(t, org, 'req');
+    if (!needR || needR.kind === 'hr_only') return;   // 人資核的部門：表上本來就沒人，不算缺上層（Fable 審查低 4）
     var has = people.some(function (ap) { return attApproverOf_(ap, t, org, 'req', rctx); });
     var gap = !has;
     if (!gap) {
       (acct[t.emp] || []).forEach(function (a) {
-        var ap = storeSupportApprovers_(a.units, people, org, rctx, true);
+        var ap = storeSupportApprovers_(a.units, people, org, rctx, true, a.units.some(function (u) { return storeActingHas_(t, u); }) ? t.emp : '');
         if (!Object.keys(ap).length) gap = true;
       });
     }

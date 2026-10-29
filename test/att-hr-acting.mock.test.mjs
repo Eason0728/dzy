@@ -478,6 +478,22 @@ function setup() {
   ok(eq(app.H('DZY221'), []), '7-2 財務總監仍空');
 })();
 
+// 8. Fable 只有一邊找到的兩條（先寫測試重現再修）
+(() => {
+  const app = setup();
+  const { sb, sheets } = app;
+  // 8-1 金山店長兼任六張犁、又到六張犁支援打卡；六張犁沒有別的店長 → 應往第 2 層（六張犁區經理）
+  sheets.staff_clock._data.push(['DZY232', 'mztlzl', 'MZTLZL232', 'staff', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
+  app.ex(app.tok.DZY220, 'DZY232', 'store.sm@mzt-lzl');
+  ok(!has(app.H('DZY232'), 'mztlzl:DZY232'), '8-1 兼任者不核自己的支援帳號');
+  ok(has(app.H('DZY206'), 'mztlzl:DZY232') && has(app.R('DZY206'), 'mztlzl:DZY232'), '8-1 ★兼任者自己的支援帳號往下一層（區經理）核，不會沒人核', app.H('DZY206'));
+  // 8-2 財務同仁是值班主管 → 不該出現在「找不到上層」提醒（人資主管本來就核）
+  const clk = sheets.staff_clock._data.find((r) => r[0] === 'DZY222' && r[1] === 'hq');
+  while (clk.length < 16) clk.push(''); clk[15] = 'TRUE';
+  const gaps = post(sb, 'attUpperGaps', {}, app.adminTok).data.items.map((x) => x.emp);
+  ok(!has(gaps, 'DZY222'), '8-2 ★財務部值班主管不進 attUpperGaps', gaps);
+})();
+
 // ============================================================
 // 6. 前端純函式
 // ============================================================
