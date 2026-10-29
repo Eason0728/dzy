@@ -424,10 +424,21 @@ function expectReview(R, T) {
     ok(post(sb, 'staffList', {}, A).data.staff.find((x) => x.emp_no === e).status === 'active', 'F 啟用後回 active');
     // 離職：人資登記 last_day（今天）→ 名單帶 last_day；撤銷；再登記過去日期 → 每日同步停用 → 復職
     const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);   // 台北日期（後端 can_cancel 用台北「今天」比；UTC 晚上會差一天）
+    const stokBefore = post(sb, 'login', { username: e, password: 'fake-staff-pw-1' }).data.token;   // 離職前先登入拿一個 token
     const lv = post(sb, 'staffLeave', { emp_no: e, last_day: today }, A);
     ok(lv.ok && lv.data.can_cancel === true, 'F 登記離職（今天）可撤銷', lv);
     ok(post(sb, 'staffList', {}, A).data.staff.find((x) => x.emp_no === e).last_day === today, 'F 名單 last_day');
+    // 2026-10-30 Eason 照推薦：離職日 ≤ 台北今天 → 當場踢掉所有登入、之後登入／me 一律擋；撤銷後可重登；未來日期照舊等那天
+    ok(post(sb, 'me', {}, stokBefore).ok === false, 'F ★登記今天離職 → 之前的 token 立刻失效');
+    const lvLogin = post(sb, 'login', { username: e, password: 'fake-staff-pw-1' });
+    ok(lvLogin.ok === false && /離職/.test(lvLogin.error || ''), 'F ★登記今天離職 → 密碼登入被擋、訊息說明已離職：' + (lvLogin.error || ''), lvLogin);
     ok(post(sb, 'staffLeaveCancel', { emp_no: e }, A).ok, 'F 撤銷離職');
+    ok(post(sb, 'login', { username: e, password: 'fake-staff-pw-1' }).ok, 'F ★撤銷離職後可以重新登入');
+    const future = new Date(Date.now() + 8 * 3600e3 + 3 * 86400e3).toISOString().slice(0, 10);
+    ok(post(sb, 'staffLeave', { emp_no: e, last_day: future }, A).ok, 'F 登記未來離職日');
+    const futTok = post(sb, 'login', { username: e, password: 'fake-staff-pw-1' });
+    ok(futTok.ok && post(sb, 'me', {}, futTok.data.token).ok, 'F ★未來的離職日：照舊可登入、token 有效（等那天每晚同步停用）');
+    ok(post(sb, 'staffLeaveCancel', { emp_no: e }, A).ok, 'F 撤銷未來離職日');
     ok(post(sb, 'staffLeaveCancel', { emp_no: e }, A).code === 'no_leave', 'F 沒登記離職就撤銷 → no_leave');
     // 解除鎖定：被鎖的人 reset_locked → 解鎖後 false
     const lk = be.extra.locked;

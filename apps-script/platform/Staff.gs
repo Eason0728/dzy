@@ -913,6 +913,11 @@ function stfLoginGate_(userId) {
   var status = stfStr_(hit.values[STF_COL.status]);
   if (status === 'pending') return { block: STF_MSG.LOGIN_PENDING };
   if (status === 'rejected') return { block: STF_MSG.LOGIN_REJECTED };
+  // 2026-10-30 離職當場停（StaffClock.gs clkLeaveBlocks_）：last_day ≤ 台北今天 → 登入與 token 都擋，不等每晚 00:10 同步
+  if (status === 'active' && typeof clkLeaveBlocks_ === 'function') {
+    var left = clkLeaveBlocks_(stfStr_(hit.values[STF_COL.emp_no]));
+    if (left) return { block: left };
+  }
   // 衍生權限 platform.review 的「審核者資格」部分：改用新規則（stfReviewScope_）。人資／admin 由 Auth.gs 另外補
   // att＝衍生權限 platform.att（StoreOps.gs storeAttGate_；Auth.gs authPermsWithGate_ 補上）
   var att = typeof storeAttGate_ === 'function' ? storeAttGate_(hit.values) : false;
