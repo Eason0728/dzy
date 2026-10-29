@@ -43,7 +43,9 @@ const OTHER_NAMES = {
  * 功能碼 → 中文。units（選填）＝可設「只看考勤」的門市（permExList 的 att_view_units：[{code, name}]，或 {code: name}），
  * 只用在 att.view@<單位>（2026-10-26 指定門市只看考勤）；不是物件（例如 Array.map 傳進來的 index）就忽略。
  */
-export function featureName(code, units) {
+export function featureName(code, units, payStores) {
+  const ps = payrollStoreOf(code);
+  if (ps) return `薪酬負責門市：${payrollStoreName(ps, payStores)}`;
   const u = attViewUnitOf(code);
   if (u) return `只看考勤（${attViewUnitName(u, units)}）`;
   return FEATURE_NAMES[code] || OTHER_NAMES[code] || code;
@@ -72,6 +74,45 @@ function attViewUnitName(unit, units) {
     return hit && hit.name ? hit.name : unit;
   }
   return units[unit] || unit;
+}
+
+// ---- 薪酬負責門市（payroll.store@<薪資店代碼>，docs/payroll-scope/spec.md §5；只有 admin 能設、只能多給、只能用個別例外） ----
+export const PAYROLL_STORE_PREFIX = 'payroll.store@';
+/** 功能下拉裡「薪酬：負責門市」那一項的值（不是權限碼；送出時換成 payroll.store@<代碼>） */
+export const PAYROLL_STORE_CHOICE = '__payroll_store__';
+export const PAYROLL_STORE_CHOICE_NAME = '薪酬：負責門市';
+const PAYROLL_STORE_RE = /^payroll\.store@([A-Z0-9]{2,12})$/;   // 與後端 Perms.gs PERM_PAYROLL_STORE_RE 一致
+/** payroll.store@<代碼> → 代碼；其他 → '' */
+export function payrollStoreOf(perm) {
+  const m = PAYROLL_STORE_RE.exec(String(perm || ''));
+  return m ? m[1] : '';
+}
+/** 薪資店代碼（前後空白、大小寫都容忍）→ 權限碼；格式不對回 '' */
+export function payrollStoreCode(code) {
+  const c = PAYROLL_STORE_PREFIX + String(code == null ? '' : code).trim().toUpperCase();
+  return payrollStoreOf(c) ? c : '';
+}
+function payrollStoreName(code, stores) {
+  const hit = Array.isArray(stores) ? stores.find((x) => x && x.code === code) : null;
+  return hit && hit.name ? `${hit.name}（${code}）` : code;
+}
+/** 下拉顯示：名稱（代碼），停用的加「停用」 */
+/** 薪資後端門市表的 active 存字串 'true'／'false'（也可能是布林）：只有 false／'false'（不分大小寫、前後空白）算停用 */
+function payrollStoreOff(v) { return String(v).trim().toLowerCase() === 'false'; }
+export function payrollStoreLabel(st) {
+  return `${st.name || st.code}（${st.code}）${payrollStoreOff(st.active) ? '停用' : ''}`;
+}
+/**
+ * payroll_store_get 的回應 → [{code,name,active}]；失敗或讀不到陣列回 null。
+ * 殼對代轉 ns 的包法不固定（flat：r.data.stores；上游 {ok,data} 被整包塞進來：r.data.data.stores），兩種都收。
+ */
+export function parsePayrollStores(r) {
+  if (!r || r.ok === false) return null;
+  let d = r.data;
+  let arr = d && d.stores;
+  if (!Array.isArray(arr) && d && d.data) { d = d.data; arr = d && d.stores; }
+  if (!Array.isArray(arr)) return null;
+  return arr.filter((x) => x && typeof x === 'object' && x.code).map((x) => ({ code: String(x.code), name: x.name ? String(x.name) : '', active: !payrollStoreOff(x.active) }));
 }
 
 const LADDER_FALLBACK = { store: '門市', office: '品牌辦公室', hq: '總部' };

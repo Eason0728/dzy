@@ -191,6 +191,10 @@ ok(READ_ACTIONS.platform.includes('payrollStaffRoster') && !(WRITE_ACTIONS.platf
 const c1 = parseCall({ type: 'dzy-payroll-call', v: 1, id: 'c1', action: 'payroll_dzy_staff', body: { store: 'MZTJS', admin_key: 'x', extra: 1 } });
 const to = routeOf(c1);
 ok(to.ns === 'platform' && to.action === 'payrollStaffRoster' && JSON.stringify(to.payload) === '{"store":"MZTJS"}', '4a: payroll_dzy_staff 改送平台、只帶 store', to);
+const c1e = parseCall({ type: 'dzy-payroll-call', v: 1, id: 'c1e', action: 'payroll_dzy_staff', body: { store: 'CF', emp_ids: ['CF01', 7, 'CF02', null, { x: 1 }], admin_key: 'x' } });
+const toE = routeOf(c1e);
+ok(JSON.stringify(toE.payload) === '{"store":"CF","emp_ids":["CF01","CF02"]}', '4a2: emp_ids（字串陣列）也帶過去，非字串元素丟掉（fix2-2）', toE.payload);
+ok(!('emp_ids' in routeOf(parseCall({ type: 'dzy-payroll-call', v: 1, id: 'c1f', action: 'payroll_dzy_staff', body: { store: 'CF', emp_ids: 'CF01' } })).payload), '4a3: emp_ids 不是陣列就不帶');
 const c2 = parseCall({ type: 'dzy-payroll-call', v: 1, id: 'c2', action: 'payroll_master_get', body: { store: 'CF' } });
 ok(routeOf(c2).ns === 'payroll' && routeOf(c2).action === 'payroll_master_get', '4b: 其他照舊送薪資後端');
 ok(Object.keys(PLATFORM_ROUTES).join() === 'payroll_dzy_staff', '4c: 只有這一支改道');
