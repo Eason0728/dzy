@@ -11,7 +11,11 @@ export const TAB_ID_RE = /^[a-z][a-z0-9-]{0,30}$/;
 export const TABS_MAX = 20;
 const NAME_MAX = 12;
 
-/** list → [{id, name, badge, err}]；整個不合格回 null（殼就不更新）。重複 id 只留第一個。 */
+/** badge 只收數字（布林 true 不能變 1；2026-10-29）：非 number／NaN／負數→0，小數無條件捨去。
+ *  與 modules/<模組>/embed.js 的 badgeNum 逐字相同（模組不能 import 平台，各留一份；test/dynamic-tabs.test.mjs 比對本文）。 */
+export function badgeNum(v) { return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0; }
+
+/** list → [{id, name, badge, err}]；整個不合格回 null（殼就不更新）。重複 id 只留第一個。badge 上限 999。 */
 export function sanitizeTabs(list) {
   if (!Array.isArray(list) || list.length > TABS_MAX) return null;
   const out = [];
@@ -22,8 +26,7 @@ export function sanitizeTabs(list) {
     if (typeof id !== 'string' || !TAB_ID_RE.test(id) || seen.has(id)) continue;
     const name = typeof t.name === 'string' ? t.name.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX) : '';
     if (!name) continue;
-    const n = Number(t.badge);
-    const badge = Number.isInteger(n) && n > 0 ? Math.min(n, 999) : 0;
+    const badge = Math.min(badgeNum(t.badge), 999);
     seen.add(id);
     out.push({ id, name, badge, err: t.err === true });
   }

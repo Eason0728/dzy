@@ -1,7 +1,7 @@
 // node test/dd/home_shell_tabs.mjs —— 首頁殼：動態分頁清洗 sanitizeTabs／pickDynamicView 隨機模糊測試
 // 預期值照 platform/tabs.js 檔頭寫明的規則獨立算（不信任實作）：
 //   不是陣列或超過 20 個 → null；非物件項跳過；id 要符合 ^[a-z][a-z0-9-]{0,30}$ 且不重複；
-//   name 去頭尾空白、連續空白縮成一個、截 12 字、空字串跳過；badge 正整數才收、上限 999、其他 0；err 只認 === true。
+//   name 去頭尾空白、連續空白縮成一個、截 12 字、空字串跳過；badge 只收 number（有限、>0、無條件捨去）、上限 999、其他 0；err 只認 === true。
 // 重現：E2E_SEED=<種子> node test/dd/home_shell_tabs.mjs
 
 'use strict';
@@ -26,8 +26,10 @@ function expected(list) {
     if (typeof t.id !== 'string' || !ID_RE.test(t.id) || seen.has(t.id)) continue;
     const name = typeof t.name === 'string' ? t.name.replace(/\s+/g, ' ').trim().slice(0, 12) : '';
     if (!name) continue;
-    const n = Number(t.badge);
-    const badge = Number.isInteger(n) && n > 0 ? Math.min(n, 999) : 0;
+    // 2026-10-29 對抗驗證 B：殼與四個 embed 同一條——只收 number、有限、>0、無條件捨去（true／'7'／NaN 都 0），上限 999
+    const b = t.badge;
+    const n = typeof b === 'number' && Number.isFinite(b) && b > 0 ? Math.floor(b) : 0;
+    const badge = Math.min(n, 999);
     seen.add(t.id);
     out.push({ id: t.id, name, badge, err: t.err === true });
   }

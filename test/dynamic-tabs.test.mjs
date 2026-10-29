@@ -27,7 +27,7 @@ t('sanitizeTabs：壞的項目丟掉、重複 id 只留第一個、名稱截 12 
   assert.equal(r[0].name, '一');
   assert.equal(r[1].name.length, 12);
   assert.equal(r[2].badge, 0);
-  assert.equal(r[3].badge, 0);
+  assert.equal(r[3].badge, 2, '2026-10-29 對抗驗證 B：小數無條件捨去（同四個 embed 的 badgeNum），不再歸 0');
 });
 t('sanitizeTabs：不是陣列或太多 → null（殼不更新）', () => {
   assert.equal(sanitizeTabs('x'), null);
@@ -58,6 +58,12 @@ t('navTabs：只認 dzy-store-nav v1；cur 要在清單裡', () => {
   assert.deepEqual(navTabs(d), { tabs: [{ id: 'home', name: '首頁', badge: 0, err: false }, { id: 'inventory', name: '庫存盤點', badge: 33, err: false }], cur: 'inventory' });
   assert.equal(navTabs({ ...d, cur: 'admin' }).cur, '');
   for (const bad of [null, { ...d, type: 'x' }, { ...d, v: 2 }, { ...d, items: 'x' }]) assert.equal(navTabs(bad), null);
+});
+t('殼 sanitizeTabs 與四個 embed 的 badge 規則逐字相同（badgeNum 函式本文一致；模組不能 import 平台所以各留一份，2026-10-29）', () => {
+  const body = (src) => { const m = /function badgeNum\(v\) \{([^}]*)\}/.exec(src); assert.ok(m, 'badgeNum 不存在'); return m[1].replace(/\s+/g, ' ').trim(); };
+  const shell = body(fs.readFileSync(new URL('../platform/tabs.js', import.meta.url), 'utf8'));
+  for (const m of ['storeops', 'attendance', 'schedule', 'purchase']) assert.equal(body(fs.readFileSync(new URL(`../modules/${m}/embed.js`, import.meta.url), 'utf8')), shell, m);
+  assert.deepEqual(sanitizeTabs([{ id: 'a', name: 'A', badge: true }, { id: 'b', name: 'B', badge: '3' }, { id: 'c', name: 'C', badge: 3.9 }, { id: 'd', name: 'D', badge: 5000 }]).map((t) => t.badge), [0, 0, 3, 999]);
 });
 t('navTabs：badge 只收數字（true／"7"／NaN／負數都當 0；四個 embed 同款，2026-10-29）', () => {
   const items = [{ id: 'a', label: 'A', badge: true }, { id: 'b', label: 'B', badge: '7' }, { id: 'c', label: 'C', badge: NaN }, { id: 'd', label: 'D', badge: -2 }, { id: 'e', label: 'E', badge: 4.7 }, { id: 'f', label: 'F', badge: 9 }];
