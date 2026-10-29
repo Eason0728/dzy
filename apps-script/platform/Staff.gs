@@ -1016,6 +1016,8 @@ function stfScopeMeets_(scope, need, rctx) {
   return [need].concat(need.alt || []).some(function (o) { return stfScopeMeetsKind_(scope, o, rctx); });
 }
 function stfScopeMeetsKind_(scope, o, rctx) {
+  // 認領專用（stfClaimNeed_）：同辦公室總監；不靠 kinds（不給總監多一種審核資格）
+  if (o.kind === 'office_head') return scope.titleLadder === 'office' && scope.unit === o.unit && STF_CLAIM_OFFICE_HEAD_TITLES.indexOf(scope.title) !== -1;
   if (scope.kinds.indexOf(o.kind) === -1) return false;
   if ((o.kind === 'store' || o.kind === 'ck') && scope.unit !== o.unit) return false;
   if (o.kind === 'brand' && scope.brand !== o.brand) return false;
@@ -1032,13 +1034,28 @@ function stfScopeMeetsKind_(scope, o, rctx) {
  */
 function stfCanReview_(scope, values, org, rctx) {
   if (!scope) return false;
-  var submitted = stfReviewNeed_(org, stfStr_(values[STF_COL.p_unit]), stfStr_(values[STF_COL.p_dept]), stfStr_(values[STF_COL.p_title]));
+  var submitted = stfClaimNeed_(org, stfStr_(values[STF_COL.p_unit]), stfStr_(values[STF_COL.p_dept]), stfStr_(values[STF_COL.p_title]));
   if (!stfScopeMeets_(scope, submitted, rctx)) return false;
   if (stfStr_(values[STF_COL.unit]) !== '') {
-    var current = stfReviewNeed_(org, stfStr_(values[STF_COL.unit]), stfStr_(values[STF_COL.dept]), stfStr_(values[STF_COL.title]));
+    var current = stfClaimNeed_(org, stfStr_(values[STF_COL.unit]), stfStr_(values[STF_COL.dept]), stfStr_(values[STF_COL.title]));
     if (!stfScopeMeets_(scope, current, rctx)) return false;
   }
   return true;
+}
+
+// 認領審核專用（Eason 2026-10-29）：品牌辦公室同仁的認領，除了營運部主管，同辦公室的這些職稱也能審。
+// 只加在認領（stfCanReview_）；人事異動直屬主管（ApprovalRoute.gs）與績效評核（Eval.gs）仍用 stfReviewNeed_，不受影響。
+// 「同階梯職級要更高」照樣適用：總監審得到行政同仁、區督導，審不到另一位總監。
+var STF_CLAIM_OFFICE_HEAD_TITLES = ['odir'];
+
+/** stfReviewNeed_＋認領專用的另一條路：品牌辦公室單位 → alt 多一個 {kind:'office_head', unit}（同辦公室總監） */
+function stfClaimNeed_(org, unitCode, dept, titleCode) {
+  var need = stfReviewNeed_(org, unitCode, dept, titleCode);
+  if (!need || need.kind !== 'ops') return need;
+  var u = org.unit[unitCode];
+  if (!u || u.ladder !== 'office') return need;
+  need.alt = (need.alt || []).concat([{ kind: 'office_head', unit: unitCode }]);
+  return need;
 }
 
 /** 審核者：platform.staff（人資／admin）一律可審；否則要有審核者範圍（stfReviewScope_） */
