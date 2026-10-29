@@ -2563,3 +2563,88 @@ function stf2610bRun_(token, payload, dir) {
 
 function handleOrgAddBranddev202610_(token, payload) { return stf2610bRun_(token, payload, 'apply'); }
 function handleOrgAddBranddevRollback202610_(token, payload) { return stf2610bRun_(token, payload, 'rollback'); }
+
+// ============================================================
+// 14. 2026-10-29 重新啟用墨竹亭台中美村一次性啟用／退回（docs/org/spec.md 第 19 節；只有 role admin）
+//   mzt-mc「台中美村」在 2026-10-16 組織改版停用（停用不刪），墨竹亭台中美村要開始用管理系統 → 只把啟用那一格改回 TRUE。
+//   apply：已有同名同品牌的門市列且停用→啟用；已啟用→略過（冪等）；沒有列→新增（order＝墨竹亭現有單位最大值＋1）；
+//          名稱／品牌／階梯不同→整批拒絕並列出。
+//   rollback：mzt-mc 改回停用（不刪列）；只有「沒有非停用同仁」才行：unit 或 p_unit 是 mzt-mc 且 status 不是 disabled 就拒絕，
+//             只列 emp_no（不列姓名）；沒有列或已停用→略過。
+//   寫 staff_log（org_enable_mztmc_2610／org_enable_mztmc_2610_rollback）；不另建備份。
+//   不處理（另案）：打卡（clock_stores 沒有這家店）、稽核門市清單（盤點抽查 → 門市管理）、區域劃分、人員管理系統帳號節點。
+// ============================================================
+
+var STF_2610M = { code: 'mzt-mc', name: '台中美村', parent: 'mzt', ladder: 'store' };
+
+/** 計畫（唯讀）。回 { action: 'add'|'reactivate'|'deactivate'|'skip', row, order, bad, members } */
+function stf2610mPlan_(dir) {
+  var rows = stfReadRows_(STF_SHEET_ORG, STF_ORG_HEADERS.length);
+  var idx = -1, maxOrder = 0, i;
+  for (i = 0; i < rows.length; i++) {
+    if (stfStr_(rows[i][STF_ORG_COL.kind]) !== 'unit') continue;
+    if (stfStr_(rows[i][STF_ORG_COL.parent]) === STF_2610M.parent) {
+      var od = Number(rows[i][STF_ORG_COL.order]);
+      if (isFinite(od) && od > maxOrder) maxOrder = od;
+    }
+    if (stfStr_(rows[i][STF_ORG_COL.code]) === STF_2610M.code && idx === -1) idx = i;
+  }
+  var plan = { action: 'skip', row: 0, order: maxOrder + 1, bad: [], members: [] };
+  if (idx === -1) {
+    if (dir === 'apply') plan.action = 'add';
+    return plan;
+  }
+  var r = rows[idx];
+  var name = stfStr_(r[STF_ORG_COL.name]), parent = stfStr_(r[STF_ORG_COL.parent]), ladder = stfStr_(r[STF_ORG_COL.ladder]);
+  var active = stf2610bIsTrue_(r[STF_ORG_COL.active]);
+  plan.row = idx + 2;
+  plan.order = Number(r[STF_ORG_COL.order]);
+  if (name !== STF_2610M.name || parent !== STF_2610M.parent || ladder !== STF_2610M.ladder) {
+    plan.bad.push({ kind: 'unit', code: STF_2610M.code, expected: STF_2610M.name + '／' + STF_2610M.parent + '／' + STF_2610M.ladder, actual: name + '／' + parent + '／' + ladder });
+    return plan;
+  }
+  if (dir === 'apply') { plan.action = active ? 'skip' : 'reactivate'; return plan; }
+  if (!active) return plan;   // rollback：已停用
+  stfAllRows_().forEach(function (x) {
+    var v = x.values;
+    if (stfStr_(v[STF_COL.status]) === 'disabled') return;
+    if (stfStr_(v[STF_COL.unit]) === STF_2610M.code || stfStr_(v[STF_COL.p_unit]) === STF_2610M.code) plan.members.push(stfStr_(v[STF_COL.emp_no]));
+  });
+  plan.action = 'deactivate';
+  return plan;
+}
+
+function stf2610mRun_(token, payload, dir) {
+  var auth = stfRequireAdmin_(token);
+  if (!auth.ok) return auth;
+  var problem = stfOrgSheetProblem_();
+  if (problem) return { ok: false, error: problem };
+  var dry = !!(payload && payload.dryrun === true);
+  var plan = stf2610mPlan_(dir);
+  var label = dir === 'apply' ? '啟用墨竹亭台中美村' : '退回墨竹亭台中美村';
+  if (plan.bad.length) {
+    return { ok: false, error: label + '：組織表已有 mzt-mc 但名稱、品牌或階梯不是預期的值（可能被改過），為避免蓋掉別人的修改，什麼都沒有改', data: { bad: plan.bad } };
+  }
+  if (plan.members.length) {
+    return { ok: false, error: label + '：還有同仁的單位（目前或送出待審）是台中美村，請先改掉他們的單位或停用帳號再退回', data: { members: plan.members } };
+  }
+  var data = { dryrun: dry, action: plan.action, unit: { code: STF_2610M.code, name: STF_2610M.name, parent: STF_2610M.parent, order: plan.order } };
+  if (dry || plan.action === 'skip') return { ok: true, data: data };
+  var by = String(auth.user.id);
+  var osh = stfSheet_(STF_SHEET_ORG);
+  if (plan.action === 'add') {
+    osh.getRange(osh.getLastRow() + 1, 1, 1, STF_ORG_HEADERS.length)
+      .setValues([['unit', STF_2610M.code, STF_2610M.name, STF_2610M.parent, STF_2610M.ladder, '', plan.order, 'TRUE']]);
+    stfLog_('', 'org_enable_mztmc_2610', by, 'unit:mzt-mc:add:order=' + plan.order);
+  } else {
+    var on = plan.action === 'reactivate';
+    osh.getRange(plan.row, STF_ORG_COL.active + 1, 1, 1).setValue(on ? 'TRUE' : 'FALSE');   // 只寫啟用那一格
+    stfLog_('', on ? 'org_enable_mztmc_2610' : 'org_enable_mztmc_2610_rollback', by, 'unit:mzt-mc:' + (on ? 'reactivate' : 'deactivate'));
+  }
+  var after = stf2610mPlan_(dir);
+  if (after.action !== 'skip' || after.bad.length) return { ok: false, error: label + '後驗證失敗（資料與目標不一致），請檢查 org 分頁後重跑' };
+  return { ok: true, data: data };
+}
+
+function handleOrgEnableMztMc202610_(token, payload) { return stf2610mRun_(token, payload, 'apply'); }
+function handleOrgEnableMztMcRollback202610_(token, payload) { return stf2610mRun_(token, payload, 'rollback'); }

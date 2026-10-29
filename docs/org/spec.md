@@ -275,3 +275,14 @@
 
 ## 18. 區域（督導負責區，2026-10-25 起草）
 另見 `docs/regions/spec.md`（新分頁 regions、通訊錄「我的區域」、審核與稽核限區、REGIONS_ON 開關）。
+
+## 19. 重新啟用墨竹亭台中美村（Eason 2026-10-29）
+
+墨竹亭台中美村要開始用管理系統。`mzt-mc`「台中美村」在第 2 節改版時停用（停用不刪），這次只把啟用那一格改回 TRUE，名稱、品牌、順序都不動。
+
+- 一次性 action `orgEnableMztMc202610`（`dryrun:true` 預覽，試跑模式放行）／`orgEnableMztMcRollback202610`，只有 role admin；同仁名單 `?orgtools=1` 下的「啟用墨竹亭台中美村（10/29）」「退回墨竹亭台中美村」。
+- apply：停用→啟用；已啟用→略過；沒有列→新增（order＝墨竹亭現有單位最大值＋1）；名稱／品牌／階梯不符→整批拒絕。
+- rollback：只有「沒有非停用同仁的 unit 或 p_unit 是 mzt-mc」才停用，否則只列 emp_no。
+- staff_log：`org_enable_mztmc_2610`／`org_enable_mztmc_2610_rollback`。
+- **不在這次範圍**（要用到才各自處理）：打卡（clock_stores 沒有這家店，考勤、同仁同步、LINE 重設密碼都接不上）、稽核門市清單（盤點抽查 → 門市管理）、區域劃分、人員管理系統帳號節點 `USR_VALID_NODES`、薪酬門市代碼、營運系統門市。
+- 種子 `STF_DEFAULT_ORG` 刻意維持 FALSE（第 2 節切換與既有測試依賴它）。
