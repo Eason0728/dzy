@@ -198,17 +198,21 @@ export function codeOf(res) {
   return res.code || (res.data && res.data.code) || '';
 }
 
+const ERROR_FIXED = {
+  perm_self: '這個改動會改到你自己的權限，請系統管理員處理',
+  perm_locked: '只有系統管理員能改這個功能的對象',
+  perm_admin_only: '人資主管要請系統管理員設定',
+  self_org_edit: '不能修改自己的單位、部門或職稱，請找人資或系統管理員',
+  not_inited: '權限設定還沒初始化，請系統管理員先按「初始化」',
+  no_perm: '沒有權限'
+};
+/** 2026-10-29：後端 permAcFail_(code, message) 的 message 經 api.js 落在 res.error（code 在 res.data.code）→ 有人話就優先顯示；
+ *  error 空、或只是代碼本身（跟 code 一樣／就是已知碼）才套固定句；兩邊都沒有給通用句。 */
 export function errorText(res) {
   const code = codeOf(res);
-  switch (code) {
-    case 'perm_self': return '這個改動會改到你自己的權限，請系統管理員處理';
-    case 'perm_locked': return '只有系統管理員能改這個功能的對象';
-    case 'perm_admin_only': return '人資主管要請系統管理員設定';
-    case 'self_org_edit': return '不能修改自己的單位、部門或職稱，請找人資或系統管理員';
-    case 'not_inited': return '權限設定還沒初始化，請系統管理員先按「初始化」';
-    case 'no_perm': return '沒有權限';
-    default: return (res && res.error) || '失敗了，請稍後再試';
-  }
+  const err = res && typeof res.error === 'string' ? res.error.trim() : '';
+  if (err && err !== code && !ERROR_FIXED[err]) return err;
+  return ERROR_FIXED[code] || ERROR_FIXED[err] || err || '失敗了，請稍後再試';
 }
 
 /** 異動原因類型 */

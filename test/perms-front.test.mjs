@@ -68,9 +68,12 @@ t('同一列的 chip 依階梯→部門排', () => {
 });
 t('沒有規則的功能 rules 為空', () => assert.deepEqual(L.featureRows(DATA).find((x) => x.perm === 'dorm.write').rules, []));
 
-t('錯誤碼 → 中文', () => {
-  assert.equal(L.errorText({ ok: false, error: 'x', code: 'perm_self' }), '這個改動會改到你自己的權限，請系統管理員處理');
-  assert.equal(L.errorText({ ok: false, error: 'x', data: { code: 'perm_locked' } }), '只有系統管理員能改這個功能的對象');
+t('錯誤碼 → 中文（2026-10-29：後端有 error 字串就優先顯示，沒有或只是代碼才套固定句）', () => {
+  assert.equal(L.errorText({ ok: false, error: 'perm_self', code: 'perm_self' }), '這個改動會改到你自己的權限，請系統管理員處理');
+  assert.equal(L.errorText({ ok: false, code: 'perm_self' }), '這個改動會改到你自己的權限，請系統管理員處理');
+  assert.equal(L.errorText({ ok: false, error: '不能對自己設定例外', data: { code: 'perm_self' } }), '不能對自己設定例外', '後端 permAcFail_ 的 message 經 api.js 落在 error → 優先顯示');
+  assert.equal(L.errorText({ ok: false, error: 'perm_locked', data: { code: 'perm_locked' } }), '只有系統管理員能改這個功能的對象');
+  assert.equal(L.errorText({ ok: false, error: '', data: { code: 'no_perm' } }), '沒有權限');
   assert.equal(L.errorText({ ok: false, error: '人資主管要請系統管理員設定', data: { code: 'perm_admin_only' } }), '人資主管要請系統管理員設定');
   assert.equal(L.errorText({ ok: false, error: '後端原文' }), '後端原文');
 });
