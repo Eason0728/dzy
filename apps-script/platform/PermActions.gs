@@ -413,7 +413,8 @@ function handlePermExSave_(token, payload) {
   if (!hit) return permAcFail_('no_staff', '找不到這位同仁');
   var actU = permActingUnit_(payload.perm);
   if (actU && permStr_(hit.values[STF_COL.status]) !== 'active') return permAcFail_('bad_target', '兼任店長只能設給在職、已開通的同仁');
-  if (actU && permStr_(hit.values[STF_COL.unit]) === actU) return permAcFail_('bad_target', '這位同仁本來就在這家店，不用設兼任店長');
+  // 2026-10-30 Eason 選 A：本人主要單位也能設（代理店長）；只有本來就是這家店店長／廠長的人不用設
+  if (actU && permStr_(hit.values[STF_COL.unit]) === actU && STF_STORE_HEAD_TITLES.indexOf(permStr_(hit.values[STF_COL.title])) !== -1) return permAcFail_('bad_target', '這位同仁本來就是這家店的店長，不用設兼任店長');
   var addU = permStaffAddUnit_(payload.perm);   // 2026-10-30 可新增同仁：只能設給在職、主要單位就是這家店的人（調店自動失效）
   if (addU && permStr_(hit.values[STF_COL.status]) !== 'active') return permAcFail_('bad_target', '可新增同仁只能設給在職、已開通的同仁');
   if (addU && permStr_(hit.values[STF_COL.unit]) !== addU) return permAcFail_('bad_target', '這位同仁的單位不是這家店；可新增同仁只能設在本人所屬的店');
