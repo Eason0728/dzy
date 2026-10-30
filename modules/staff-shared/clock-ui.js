@@ -260,7 +260,8 @@ export async function openAddFlow(env) {
       if (!o.unit) { ctx.ui.toast('請選單位', 'warn'); continue; }
     } else {
       val.title = body.querySelector('#ad-title').value;
-      payload = { name: val.name, title: val.title, hire_date: val.hire_date, phone: val.phone }; // 店長不送 unit（後端也會忽略）
+      payload = { name: val.name, title: val.title, hire_date: val.hire_date, phone: val.phone };
+      if (env.myUnit) payload.unit = env.myUnit;   // 兼任店長管多家：新增到目前切換的那家（後端只收自己管得到的門市）
     }
     const errs = addFormErrors({ name: val.name, title: payload.title, hire_date: val.hire_date, phone: val.phone }, today);
     if (errs.length) { ctx.ui.toast(errs[0], 'warn'); continue; }
@@ -618,19 +619,22 @@ export function mountTeam(el, env) {
   let unit = '';
   let isAll = false;     // 總部／admin：後端回全部單位（沒有單一所屬單位）
   let filterUnit = '';   // 全部單位時的單位篩選
+  let myUnits = [];      // 管兩家以上（兼任店長）時後端回 [{code,name}]，畫門市切換
+  let pickUnit = '';     // 目前切換到的門市（空＝後端預設第一家）
   let org = { brands: [], units: [], depts: [], titles: [] };
   let failed = [];
   el.innerHTML = '<div class="card"><p class="text-muted">讀取中…</p></div>';
 
   async function load() {
-    const [r, o, a] = await Promise.all([call(ctx, mod, 'staffUnitList', {}), call(ctx, mod, 'orgOptions', {}), call(ctx, mod, 'clockAlerts', {})]);
+    const [r, o, a] = await Promise.all([call(ctx, mod, 'staffUnitList', pickUnit ? { unit: pickUnit } : {}), call(ctx, mod, 'orgOptions', {}), call(ctx, mod, 'clockAlerts', {})]);
     if (!alive) return;
     if (!r || !r.ok) { el.innerHTML = `<div class="card"><p data-role="store-lead-only">${esc(storeLeadOnlyText(r) || (r && r.error) || '讀不到單位名單')}</p></div>`; return; }
     people = r.data.people || [];
     isAll = !r.data.unit;
     unit = r.data.unit || (people[0] && people[0].unit) || '';
-    unitName = (people[0] && people[0].unit_name) || (org.units.find((u) => u.code === unit) || {}).name || '';
+    myUnits = Array.isArray(r.data.units) ? r.data.units : [];
     if (o && o.ok) org = o.data;
+    unitName = r.data.unit_name || (people.find((p) => p.unit === unit) || {}).unit_name || (org.units.find((u) => u.code === unit) || {}).name || '';
     failed = a && a.ok && a.data ? (a.data.outbox_failed || []) : [];
     if (!unitName) unitName = (org.units.find((u) => u.code === unit) || {}).name || '你的單位';
     draw();
@@ -650,7 +654,10 @@ export function mountTeam(el, env) {
   }
 
   function unitFilterHtml() {
-    if (!isAll) return '';
+    if (!isAll) {
+      if (myUnits.length < 2) return '';
+      return `<select class="input" data-role="unit-switch" aria-label="切換門市">${myUnits.map((u) => `<option value="${esc(u.code)}"${u.code === unit ? ' selected' : ''}>${esc(u.name || u.code)}</option>`).join('')}</select>`;
+    }
     return `<select class="input" data-role="unit-filter" aria-label="單位篩選"><option value="">全部單位</option>${org.units.map((u) => `<option value="${esc(u.code)}"${u.code === filterUnit ? ' selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
   }
 
@@ -694,7 +701,14 @@ export function mountTeam(el, env) {
 
   function onChange(e) {
     const t = e.target;
-    if (!t || !t.getAttribute || t.getAttribute('data-role') !== 'unit-filter') return;
+    if (!t || !t.getAttribute) return;
+    if (t.getAttribute('data-role') === 'unit-switch') {
+      pickUnit = t.value || '';
+      el.innerHTML = '<div class="card"><p class="text-muted">讀取中…</p></div>';
+      load();
+      return;
+    }
+    if (t.getAttribute('data-role') !== 'unit-filter') return;
     filterUnit = t.value || '';
     draw();
   }
