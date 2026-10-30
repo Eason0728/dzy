@@ -626,7 +626,13 @@ console.log('逐人比對 ' + compared + ' 位在職同仁');
   const act = post(sb, 'permExSave', { emp_no: victim.emp, perm: 'store.sm@' + otherStore, mode: 'remove', note: 'x' }, H);
   ok(act.ok === false && act.code === 'bad_mode', '兼任店長只能多給（remove → bad_mode）', act);
   ok(post(sb, 'permExSave', { emp_no: victim.emp, perm: 'store.sm@ck', mode: 'add', note: 'x' }, A).code === 'bad_target', '兼任店長不能設央廚 → bad_target');
-  ok(post(sb, 'permExSave', { emp_no: victim.emp, perm: 'store.sm@' + victim.unit, mode: 'add', note: 'x' }, A).code === 'bad_target', '兼任自己本店 → bad_target');
+  // 2026-10-30 Eason 選 A（#67 代理店長，docs/att-hr-acting/spec.md §7）：兼任店長可以設在本人主要單位；只有本人已是該店店長／廠長（sm／fm）才擋 bad_target
+  const ownAct = post(sb, 'permExSave', { emp_no: victim.emp, perm: 'store.sm@' + victim.unit, mode: 'add', note: 'x' }, A);
+  if (['sm', 'fm'].includes(victim.title)) ok(ownAct.code === 'bad_target', '兼任自己本店：本人已是店長／廠長 → bad_target', ownAct);
+  else {
+    ok(ownAct.ok === true, '兼任自己本店（代理店長）→ ok（#67）', ownAct);
+    if (ownAct.ok) ok(post(sb, 'permExRevoke', { ex_id: ownAct.data.ex_id }, A).ok, '撤銷剛設的代理店長（還原世界）');
+  }
   ok(post(sb, 'permExSave', { emp_no: victim.emp, perm: 'dorm.read', mode: 'add', until: dayShift(-1), note: 'x' }, A).code === 'bad_until', '到期日早於今天 → bad_until');
   ok(post(sb, 'permExSave', { emp_no: victim.emp, perm: 'dorm.read', mode: 'add', until: '2026/1/1', note: 'x' }, A).code === 'bad_until', '到期日格式非 YYYY-MM-DD → bad_until');
   ok(post(sb, 'permExSave', { emp_no: victim.emp, perm: 'dorm.read', mode: 'add', note: '' }, A).code === 'bad_note', '原因空白 → bad_note');
