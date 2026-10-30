@@ -835,6 +835,24 @@ function storeStoreUnits_(org, pilot) {
   return storeUniqSorted_(out);
 }
 
+/**
+ * 總監排班（2026-10-30，docs/director-sched，契約 rules.sched_director；純函式）。me＝{status, unit, title}。
+ * units＝品牌辦公室總監 odir：本品牌（辦公室 parent）全部 active、store 階梯、非 ck 的門市（同 storeViewUnitOk_），只留試點內，排序去重；其他人＝[]。
+ *   不看 REGIONS_ON、不要求店裡有要核工時／有打卡的人（跟 attViewUnitsOf_ 的呼叫端不同）。
+ * hqShift＝在職且 title hm／odir（能改總部自填排班的班別清單）。兩欄都不影響考勤、units_managed、void_units。
+ * ident 的 sched_units／sched_hq_shift 與排班選單閘門 storeSchedGate_ 共用本函式。
+ */
+function storeSchedDirector_(me, org, pilot) {
+  var out = { units: [], hqShift: false };
+  if (!me || stfStr_(me.status) !== 'active') return out;
+  var title = stfStr_(me.title);
+  out.hqShift = title === 'hm' || title === 'odir';
+  if (title === 'odir') {
+    out.units = attViewUnitsOf_(me, org, null).filter(function (u) { return (pilot || []).indexOf(u) !== -1; });   // attViewUnitsOf_ 的 odir 分支不用區域索引
+  }
+  return out;
+}
+
 // ============================================================
 // 4. ident
 // ============================================================
@@ -901,6 +919,7 @@ function storeIdent_(sub) {
     viewUnits = attViewUnitsOf_(me, org, vIdx);
   }
   // 2026-10-26 依打卡帳號所在的店算（支援打卡交給打卡店主管；docs/att-support/spec.md）＋ 指定門市只看考勤（att.view@<單位>）
+  var dirSched = p ? storeSchedDirector_(p, org, pilot) : { units: [], hqShift: false };   // 總監排班（2026-10-30）
   var lists = storeAttLists_(me, flags, people, org, home, clkSheetsReady_() ? clkMaps_() : [], storeClockUnits_(), rctx, pilot, {
     viewUnits: viewUnits,
     exViewUnits: (p && !admin && !hrHead) ? storeAttViewExUnits_(perms, org) : []
@@ -919,7 +938,9 @@ function storeIdent_(sub) {
     units_managed: storeUniqSorted_(managed),
     void_units: storeUniqSorted_(voidUnits),
     att: { people: lists.people, req_people: lists.req_people, view_people: lists.view_people },   // people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）；view_people＝只看（督導／總監 REGIONS_ON='1'、原單位主管看支援帳號、att.view@<單位>；2026-10-25／26）
-    self: storeSelfClocks_(p, org)   // 總部排班身分（2026-10-25）：只列 clock＝hq，不受試點限制
+    self: storeSelfClocks_(p, org),   // 總部排班身分（2026-10-25）：只列 clock＝hq，不受試點限制
+    sched_units: dirSched.units,          // 總監排班（2026-10-30）：odir＝本品牌試點內門市，其他＝[]
+    sched_hq_shift: dirSched.hqShift      // hm／odir 在職＝true（改總部班別清單）
   };
 }
 
@@ -1024,6 +1045,7 @@ function storeAttGate_(values) {
 /**
  * 衍生權限 platform.sched（「排班管理」選單；不寫進 roles）。
  * 總開關（STORE_SSO_UNITS）空 → false。否則在職且（職稱 STORE_SCHED_GATE_TITLES：sm／fm／am、或人資主管、
+ * 或總監排班 storeSchedDirector_ 的 units 非空／hqShift（2026-10-30：odir、hm，不必有打卡對照），
  * 或所在單位階梯為 hq／office 的總部、品牌辦公室同仁，且本人有 confirmed、roster_active 不是 FALSE 的 hq 打卡對照）→ true。不含 att.extra。admin 是 '*'，不在這裡判斷。values＝staff 分頁一列。
  */
 function storeSchedGate_(values) {
@@ -1034,6 +1056,9 @@ function storeSchedGate_(values) {
   if (stfIsHrHead_(p)) return true;
   if (storeRowActingPilot_(values, storePilotUnits_()).length) return true;   // 兼任店長（Q1 A：可排兼任店的班）
   if (storeSchedViewGate_(values)) return true;   // 督導／總監「只看」名單非空＝唯讀看班表（2026-10-25 Eason）
+  // 總監排班（2026-10-30）：sched_units 非空或 sched_hq_shift＝true，不必有 hq 打卡對照（跟 ident 同一個函式）
+  var dir = storeSchedDirector_({ status: 'active', unit: stfStr_(values[STF_COL.unit]), title: p.title }, stfReadOrg_(), storePilotUnits_());
+  if (dir.units.length || dir.hqShift) return true;
   var u = stfReadOrg_().unit[stfStr_(values[STF_COL.unit])];   // 總部／品牌辦公室同仁（單位階梯 hq／office）
   if (!(u && u.active && STORE_SCHED_GATE_LADDERS.indexOf(u.ladder || 'store') !== -1)) return false;
   return storeHasSelfClock_(stfNormEmp_(values[STF_COL.emp_no]));   // 還要有 hq 打卡對照（跟 ident.self／storeSelfClocks_ 同一套判斷），沒有對照的人營運系統沒有入口

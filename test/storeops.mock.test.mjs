@@ -208,6 +208,13 @@ function world(cast, opts) {
   return app;
 }
 const has = (arr, x) => arr.indexOf(x) !== -1;
+/** 2026-10-30 起 ident 多 sched_units／sched_hq_shift（契約 rules.sched_director）；舊契約範例沒有這兩欄：
+ *  先驗兩欄是預設值 []／false，再拿掉兩欄跟舊範例逐欄比（不是總監的人兩欄必為預設值） */
+function noDirSched(id) {
+  if (!id || typeof id !== 'object') return id;
+  const { sched_units: su, sched_hq_shift: sh, ...rest } = id;
+  return eq(su, []) && sh === false ? rest : Object.assign({ __dirSchedNotDefault: [su, sh] }, rest);
+}
 
 // ============================================================
 // 1. 契約 fixture 逐欄比對
@@ -225,7 +232,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   app.sheets.staff_clock._data.push(['DZY031', 'mztgf', 'MZTGF07', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
   app.sheets.staff_clock._data.push(['DZY023', 'hq', 'H001', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);   // 總部排班身分（ident.self）
   const fx = FIX.responses.ident_active.data;
-  const got = app.ident('DZY023');
+  const got = noDirSched(app.ident('DZY023'));
   const { pilot_units: fxPilot, ...fxRest } = fx;
   const { pilot_units: gotPilot, ...gotRest } = got;
   ok(eq(gotRest, fxRest), '1 契約 ident_active：除了 pilot_units 外逐欄相同（含欄位順序、att.people、att.view_people＝[]）', { got: gotRest, want: fxRest });
@@ -249,7 +256,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   app2.sheets.regions._data.push(['r-mzt-a', 'A區', 'mzt', 'mzt-gf', 'DZY061', 'TRUE', '2026-10-25 09:00:00', 'tester']);
   app2.sb.regionCtxReset_();
   const fxO = FIX.responses.ident_osv_view.data;
-  const gotO = app2.ident('DZY061');
+  const gotO = noDirSched(app2.ident('DZY061'));
   ok(eq(gotO, fxO), '1 契約 ident_osv_view：整份逐欄相同（含 pilot_units、att.req_people、att.view_people）', { got: gotO, want: fxO });
   ok(eq(keysOf(gotO), keysOf(fxO)) && FIX.responses.ident_osv_view.ok === true, '1 契約 ident_osv_view：欄位名與順序逐字相同');
 
@@ -266,13 +273,13 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   app3.sheets.staff_clock._data.push(['DZY045', 'gf', 'GF45', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
   app3.sheets.staff_clock._data.push(['DZY045', 'mztgf', 'MZTGF09', 'support', 'confirmed', 'created', 'TRUE', '', '', '', '']);
   const fxS = FIX.responses.ident_support.data;
-  const gotS = app3.ident('DZY023');
+  const gotS = noDirSched(app3.ident('DZY023'));
   ok(eq(gotS, fxS), '1 契約 ident_support：整份逐欄相同（支援帳號多 support／home_unit／home_unit_name，其他筆形狀不變）', { got: gotS, want: fxS });
   ok(eq(keysOf(gotS), keysOf(fxS)) && FIX.responses.ident_support.ok === true && typeof FIX.rules.att_support === 'string', '1 契約 ident_support：欄位名與順序逐字相同；rules.att_support 有說明');
 
   // 1b. admin 沒有同仁編號：整份逐欄相同（試點 mala-gf，那邊沒有人 → att.people 空）
   app.props.STORE_SSO_UNITS = 'mala-gf';
-  const adm = app.ident('U:u_admin01');
+  const adm = noDirSched(app.ident('U:u_admin01'));
   ok(eq(adm, FIX.responses.ident_admin_no_emp.data), '1 契約 ident_admin_no_emp：整份逐欄相同', { got: adm, want: FIX.responses.ident_admin_no_emp.data });
 
   // 1c. inactive、roster、ticket、錯誤
@@ -664,7 +671,8 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(app.sb.storeSchedGate_(row('DZY211')) === false && app.sb.storeSchedGate_(row('DZY251')) === false, '3d 計時同仁、財務同仁 → 沒有');
   app.props.REGIONS_ON = '0';
   app.sb.regionCtxReset_();
-  ok(app.sb.storeSchedGate_(row('DZY201')) === false && app.sb.storeSchedGate_(row('DZY203')) === false, '3d 開關 0：督導、總監都沒有（只看名單也是空的）');
+  ok(app.sb.storeSchedGate_(row('DZY201')) === false && app.sb.storeSchedViewGate_(row('DZY203')) === false, '3d 開關 0：督導沒有；總監的只看名單也是空的');
+  ok(app.sb.storeSchedGate_(row('DZY203')) === true, '3d 開關 0：總監仍有排班管理（2026-10-30 總監排班 sched_units，不受 REGIONS_ON 影響）');
   app.props.REGIONS_ON = '1';
   app.sb.regionIndexLive_ = () => { throw new Error('boom'); };
   ok(app.sb.storeSchedGate_(row('DZY201')) === false && app.sb.storeSchedGate_(row('DZY203')) === true, '3d 區域索引壞掉：督導 false（不拖垮登入），總監照常');
@@ -1097,7 +1105,7 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   ok(eq(self('DZY001'), []), '7d 只有門市打卡、沒有 hq 對照 → []');
   ok(eq(self('DZY020'), [{ clock: 'hq', emp_id: 'H020', approval: false }, { clock: 'hq', emp_id: 'H020B', approval: false }]), '7d 人資主管（hm）approval false；多筆 hq 依 emp_id 排序、非 hq（gf）不列', self('DZY020'));
   ok(eq(self('U:u_admin01'), []), '7d admin 沒有同仁編號 → []');
-  ok(Array.isArray(app.ident('DZY023').self) && keysOf(app.ident('DZY023')).slice(-2).join() === 'att,self', '7d self 是 ident 最後一個欄位（att 之後）');
+  ok(Array.isArray(app.ident('DZY023').self) && keysOf(app.ident('DZY023')).slice(-4).join() === 'att,self,sched_units,sched_hq_shift', '7d self 在 att 之後；2026-10-30 起 sched_units／sched_hq_shift 接在 self 之後（同契約 ident_director 欄位順序）');
   // 沒有任何同仁用打卡資料時（打卡分頁沒建）不炸
   const sbNoClk = world(BIG, { pilot: 'mala-gf' });
   ok(Array.isArray(sbNoClk.ident('DZY023').self), '7d 沒有任何對照列 → self 仍是陣列');
@@ -1646,6 +1654,63 @@ const has = (arr, x) => arr.indexOf(x) !== -1;
   staffN.push(staffRow(['DZY050', '小辛辣督導', 'mala-hq', '', 'osv', 'active', '2026-01-01'], 50));
   const g2 = gapsOf(app.adminTok);
   ok(g2.ok && eq(g2.data.items, []), '13i 品牌有督導 → 不再列出', g2);
+})();
+
+// ============================================================
+// 7k. 總監排班 sched_units／sched_hq_shift（2026-10-30，契約 rules.sched_director；營運系統 docs/director-sched/requirements.md）
+// ============================================================
+(() => {
+  // 7k-1. 契約 ident_director 整份逐欄相同（試點 mzt-gf,mzt-hq,mzt-js；mzt-lzl 啟用但不在試點、mzt-wx 停用、ck 別品牌 → 都不在）
+  const app0 = world([['DZY062', '林總監', 'mzt-hq', '', 'odir', 'active', '2026-01-01']], { pilot: 'mzt-gf,mzt-hq,mzt-js' });
+  app0.sheets.staff_clock._data.length = 1;
+  app0.sheets.staff_clock._data.push(['DZY062', 'hq', 'HQ02', 'staff', 'confirmed', 'created', 'TRUE', '', '', '', '']);
+  const fx = FIX.responses.ident_director.data;
+  const got0 = app0.ident('DZY062');
+  ok(eq(got0, fx), '7k 契約 ident_director：整份逐欄相同（含欄位順序、sched_units、sched_hq_shift）', { got: got0, want: fx });
+  ok(eq(keysOf(got0), keysOf(fx)) && FIX.responses.ident_director.ok === true && typeof FIX.rules.sched_director === 'string', '7k 契約 ident_director：欄位名與順序逐字相同；rules.sched_director 有說明');
+  ok(Array.isArray(got0.sched_units) && typeof got0.sched_hq_shift === 'boolean', '7k 型別：sched_units 陣列、sched_hq_shift 布林');
+
+  // 7k-2. BIG：試點放進 mzt-lzl（沒有任何人打卡）、mzt-wx（停用）、ck
+  const app = world(BIG, { pilot: PERMS_ALL_PILOT + ',mzt-lzl,mzt-wx' });
+  const sd = (e) => { const id = app.ident(e); return [id.sched_units, id.sched_hq_shift]; };
+  ok(eq(sd('DZY010'), [['mzt-gf', 'mzt-js', 'mzt-lzl'], true]), '7k odir 墨竹亭：本品牌試點內啟用門市排序去重（含沒人打卡的 mzt-lzl），不含停用 mzt-wx、ck、別品牌 mala-gf', sd('DZY010'));
+  ok(eq(sd('DZY014'), [['mala-gf'], true]), '7k odir 小辛辣：只有 mala-gf（不含墨竹亭門市）', sd('DZY014'));
+  app.props.STORE_SSO_UNITS = PERMS_ALL_PILOT;
+  ok(eq(sd('DZY010')[0], ['mzt-gf', 'mzt-js']), '7k 試點外（mzt-lzl 拿掉）→ 不給');
+  app.props.REGIONS_ON = '1';
+  if (app.sb.regionCtxReset_) app.sb.regionCtxReset_();
+  ok(eq(sd('DZY010')[0], ['mzt-gf', 'mzt-js']), '7k REGIONS_ON=1 結果相同（不受區域開關影響）');
+  app.props.REGIONS_ON = '0';
+  if (app.sb.regionCtxReset_) app.sb.regionCtxReset_();
+  ok(eq(sd('DZY022'), [[], true]) && eq(sd('DZY020'), [[], true]), '7k hm（財務主管、人資主管）：sched_units＝[]、sched_hq_shift＝true');
+  ['DZY012', 'DZY013', 'DZY001', 'DZY006', 'DZY021', 'DZY003', 'DZY025'].forEach((e) => ok(eq(sd(e), [[], false]), '7k 非總監 ' + e + '（osv／ofs／sm／fm／hs／pt／ceo）→ []／false', sd(e)));
+  ok(eq(sd('U:a001'), [[], false]), '7k admin（沒有同仁編號）→ []／false');
+  const id10 = app.ident('DZY010');
+  ok(eq(id10.units_managed, []) && eq(id10.void_units, []), '7k odir 的 units_managed／void_units 不受影響（仍空）');
+  // 停用的 odir：ident inactive、純函式也不給
+  const org = app.sb.stfReadOrg_();
+  const pil = app.sb.storePilotUnits_();
+  ok(eq(app.sb.storeSchedDirector_({ status: 'disabled', unit: 'mzt-hq', title: 'odir' }, org, pil), { units: [], hqShift: false }), '7k 停用 odir（純函式）→ []／false');
+  ok(eq(app.sb.storeSchedDirector_({ status: 'active', unit: 'mzt-gf', title: 'odir' }, org, pil).units, []), '7k odir 掛在門市（職稱不合單位階梯）→ sched_units 空');
+  ok(eq(app.sb.storeSchedDirector_(null, org, pil), { units: [], hqShift: false }), '7k 空輸入 → []／false');
+  const deadDir = world([['DZY063', '離職總監', 'mzt-hq', '', 'odir', 'disabled', '2026-01-01']]);
+  ok(eq(deadDir.ident('DZY063'), { sub: 'DZY063', active: false }), '7k 停用 odir 的 ident → inactive（不給兩欄）');
+
+  // 7k-3. storeSchedGate_：拿掉 hq 打卡對照後，odir／hm 仍有排班管理；ofs、hs 沒有（對照組）
+  const scd = app.sheets.staff_clock._data;
+  for (let i = scd.length - 1; i > 0; i--) if (scd[i][1] === 'hq') scd.splice(i, 1);
+  const row = (e) => staffRow(BIG.find((c) => c[0] === e), 0);
+  ok(app.sb.storeSchedGate_(row('DZY010')) === true && app.sb.storeSchedGate_(row('DZY014')) === true, '7k 閘門：沒有 hq 打卡對照的 odir → true（REGIONS_ON=0）');
+  ok(app.sb.storeSchedGate_(row('DZY022')) === true, '7k 閘門：沒有 hq 打卡對照的 hm（非人資）→ true');
+  ok(app.sb.storeSchedGate_(row('DZY013')) === false && app.sb.storeSchedGate_(row('DZY023')) === false && app.sb.storeSchedGate_(row('DZY012')) === false, '7k 閘門對照組：沒有對照的 ofs／hs／osv → false');
+  const r10 = row('DZY010'); r10[3] = 'disabled';
+  ok(app.sb.storeSchedGate_(r10) === false, '7k 閘門：停用 odir → false');
+  app.props.STORE_SSO_UNITS = '';
+  ok(app.sb.storeSchedGate_(row('DZY010')) === false && app.sb.storeSchedGate_(row('DZY022')) === false, '7k 閘門：總開關空 → odir／hm 也 false');
+  app.props.STORE_SSO_UNITS = PERMS_ALL_PILOT;
+  // ident 與閘門共用一個函式（StoreOps.gs 原始碼各呼叫一次 storeSchedDirector_）
+  const so = SRC.find(([f]) => f === 'StoreOps.gs')[1];
+  ok((so.match(/storeSchedDirector_\(/g) || []).length === 3, '7k storeSchedDirector_ 定義一次、ident 與 storeSchedGate_ 各呼叫一次');
 })();
 
 // ============================================================

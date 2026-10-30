@@ -185,6 +185,45 @@
         ]
       }
     },
+    "ident_director": {
+      "ok": true,
+      "data": {
+        "sub": "DZY062",
+        "active": true,
+        "emp_no": "DZY062",
+        "name": "林總監",
+        "admin": false,
+        "hr_head": false,
+        "unit": "mzt-hq",
+        "title": "odir",
+        "epoch": "2026-01-01",
+        "token_after": 0,
+        "pilot_units": [
+          "mzt-gf",
+          "mzt-hq",
+          "mzt-js"
+        ],
+        "units_managed": [],
+        "void_units": [],
+        "att": {
+          "people": [],
+          "req_people": [],
+          "view_people": []
+        },
+        "self": [
+          {
+            "clock": "hq",
+            "emp_id": "HQ02",
+            "approval": false
+          }
+        ],
+        "sched_units": [
+          "mzt-gf",
+          "mzt-js"
+        ],
+        "sched_hq_shift": true
+      }
+    },
     "ident_support": {
       "ok": true,
       "data": {
@@ -329,7 +368,8 @@
     "self": "2026-10-25 起 ident 多 self:[{clock,emp_id,approval}]＝本人 staff_clock 中 state=confirmed、roster_active 不是 FALSE、clock（store_code）＝hq 的對照（不論 role、不受試點限制；依 emp_id 排序；沒有＝[]）。approval＝考勤有人核他工時（部門同仁、管理部同仁、品牌辦公室同仁＝true；總監、執行長以上＝false，營運系統送出即生效）。營運系統收到沒有 self 的舊 ident 時當 []",
     "att_req": "2026-10-21 起 att 分兩份：people＝核定工時（門市／中央工廠所有打卡的人由本單位店長 sm／廠長 fm 核，店長／廠長可核自己；區經理、研發總監不核工時）；req_people＝加班單／請假單／忘刷單（計時正職→本單位店長／廠長；店長→同店區經理或該品牌辦公室區督導；廠長→研發總監；區經理→該品牌辦公室區督導／總監；研發總監→執行長以上；品牌辦公室與總部同 people；任何人不能核自己的申請；人資主管與 admin 為全部要考勤的人、不含自己；att.extra 同單位）。營運系統收到沒有 req_people 的舊 ident 時，申請審核沿用 people",
     "att_view": "2026-10-25 起 att 多一份 view_people＝只能看、不能寫的名單（docs/att-view/spec.md）：只在 Script Property REGIONS_ON 恰好為 '1' 時有內容；區督導 osv＝自己負責區域門市裡要核定工時的人，總監 odir＝本品牌全部門市裡要核定工時的人；其他人、admin、人資主管為空陣列。營運系統只在標 view 的讀取動作放行這份名單，寫入一律不看它，考勤待辦也不算它。選填：舊版管理系統沒有＝營運系統當成空",
-    "att_support": "2026-10-26 起 att 三份名單的每一筆，若是「支援帳號」（打卡店的單位不含本人單位，docs/att-support/spec.md §1；總部打卡 hq、品牌辦公室同仁、推算／orphan 不算），在 name 後面多三個選填欄位：support=true、home_unit＝本人單位代碼、home_unit_name＝本人單位顯示名稱（品牌＋單位，例「麻的小辛辣 新竹光復」；央廚與名稱已含品牌的不加品牌；同 att.view@ 的名稱）。非支援帳號沒有這三欄（形狀不變）。營運系統只拿來在姓名旁標「支援（home_unit_name）」，不影響任何權限；舊版管理系統沒有＝不標，欄位欄位不合格＝名稱當空字串、仍標支援（不擋整份身分）"
+    "att_support": "2026-10-26 起 att 三份名單的每一筆，若是「支援帳號」（打卡店的單位不含本人單位，docs/att-support/spec.md §1；總部打卡 hq、品牌辦公室同仁、推算／orphan 不算），在 name 後面多三個選填欄位：support=true、home_unit＝本人單位代碼、home_unit_name＝本人單位顯示名稱（品牌＋單位，例「麻的小辛辣 新竹光復」；央廚與名稱已含品牌的不加品牌；同 att.view@ 的名稱）。非支援帳號沒有這三欄（形狀不變）。營運系統只拿來在姓名旁標「支援（home_unit_name）」，不影響任何權限；舊版管理系統沒有＝不標，欄位欄位不合格＝名稱當空字串、仍標支援（不擋整份身分）",
+    "sched_director": "2026-10-30 起 ident 多兩個選填欄位（docs/director-sched/requirements.md）：sched_units＝因為職稱是總監而能完整排班（等同店長）的門市單位，目前只有品牌辦公室總監 odir＝本品牌（辦公室 parent）全部啟用中的 store 階梯門市、不含中央工廠 ck、只留試點內，排序去重；其他人＝[]。sched_hq_shift＝能新增與修改總部（自填排班）班別清單：title 為 hm（總部部門總監）或 odir 且在職＝true，其他＝false（人資主管與 admin 本來就能，不靠這欄）。兩欄都不影響考勤、本店同仁權限、units_managed。營運系統收到沒有這兩欄的舊 ident＝[]／false；型別不合格＝整份身分不合格"
   },
   "postMessage": {
     "embed_origin": "https://dzy.mozhuting.com",
