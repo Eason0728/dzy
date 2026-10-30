@@ -268,7 +268,11 @@ for (const id of ['me', 'staff']) {
 const me = (await import('../modules/me/manifest.js')).default;
 const staff = (await import('../modules/staff/manifest.js')).default;
 ok(me.views.some((v) => v.id === 'team') && me.views.some((v) => v.id === 'clock'), 'me 多了「我的單位」「打卡對照」分頁');
-ok(me.views.find((v) => v.id === 'team').requires.join() === 'platform.review', '店長分頁只要 platform.review（一般同仁看不到）');
+for (const id of ['team', 'clock']) {
+  // 2026-10-30：店長（platform.review）或「可新增同仁」例外（platform.unitstaff）；一般同仁看不到
+  ok(me.views.find((v) => v.id === id).requires.join() === 'platform.review,platform.unitstaff', `${id} 分頁只要 platform.review 或 platform.unitstaff`);
+}
+ok(me.views.find((v) => v.id === 'review').requires.indexOf('platform.unitstaff') === -1, '待審核分頁不給 platform.unitstaff');
 ok(staff.views.some((v) => v.id === 'clockmap' && v.requires.join() === 'platform.staff'), 'staff 多了「打卡對照」分頁（總部）');
 for (const f of ['modules/staff-shared/clock-lib.js', 'modules/staff-shared/clock-ui.js', 'modules/staff-shared/viewer.js', 'modules/me/views/team.js', 'modules/me/views/clock.js', 'modules/staff/views/clockmap.js']) {
   const s = fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''); // 去掉註解再檢查
