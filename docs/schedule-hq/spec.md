@@ -148,3 +148,12 @@ CREATE TABLE sch_self_pending (
 - 甲 10 條、乙 14 條；兩邊都抓到的 7 組直接修，單邊 9 條經第三位 Fable 驗證全部成立、一併修；乙 11（LINE 文案在打卡系統）只記不改。
 - ~~央廚改成「廠長按啟用」才切換~~（2026-10-25 Eason 否決，選 B 上線自動切換，見 §4；保留：DELETE 範圍有上限、保留請假格、冪等，另加設班別即自動補上）：兩位都抓到，部署當下若廠長還沒設固定班別，已鎖定、已送 LINE 的 11 月央廚班表會被清空並重送空白。改法：遷移只設 CF `mode='fixed'`、`mode_from` 留空＝尚未啟用，未啟用前央廚完全照門市排班；央廚排班分頁先顯示「啟用固定排法」：全部在職同仁設好固定班別後，廠長選開始日期（最早明天）按啟用，才重產「開始日到下個月月底」（保留請假格）並重送 LINE。Eason 選的「現在就開始」＝上線後廠長設好班別隨時可以啟用。CF 帳號功能沒有自動排班時遷移自動補上。
 - 其他：20 號產生改成補產漏掉的月份；首頁總部提醒從門市狀態也能直達；督導／總監自動切到總部；國定假日假只能排在國定假日／補假；補假兩套一致；dayPlan 一般同仁只看自己與部屬；跨月週算前月待核准變更；人資主管的「未送出」算全部；整月必填只算在職日；央廚不在職的日子拒收；多個員編可切換；5 分鐘重驗清單補齊；`platform.sched` 的總部同仁限有總部打卡對照的人。
+
+## 13. 總監排班（2026-10-30，管理系統側）
+需求正本在營運系統 `docs/director-sched/requirements.md`；契約 `test/fixtures/dzy-store-contract-v2.json` 的 `rules.sched_director`、範例 `responses.ident_director`。
+- ident 多兩欄（接在 `self` 之後，**每份在職 ident 都有**；舊版管理系統沒有＝營運系統當 []／false）：
+  - `sched_units`：品牌辦公室總監 `odir`（在職、單位 ladder `office`）＝本品牌（辦公室 parent）全部啟用中的 store 階梯門市，不含 `ck`、只留試點（`STORE_SSO_UNITS`）內，排序去重；其他人＝[]。**不受 `REGIONS_ON` 影響、不要求店裡有要核工時或有打卡的人**（跟 `att.view_people` 不同）。
+  - `sched_hq_shift`：在職且 title `hm` 或 `odir`＝true，其他＝false。
+  - 兩欄都不影響考勤名單、`units_managed`、`void_units`。
+- 共用函式 `storeSchedDirector_(me, org, pilot)`（`apps-script/platform/StoreOps.gs`）：`storeIdent_` 與 `storeSchedGate_` 都呼叫它。`platform.sched` 閘門多一條：`sched_units` 非空或 `sched_hq_shift`＝true 的在職者，不必有 hq 打卡對照也過（總開關空仍一律 false）。
+- 測試：`test/storeops.mock.test.mjs` 第 7k 節；第 1 節舊契約範例（沒有這兩欄）改成先驗兩欄＝[]／false 再拿掉比對。
