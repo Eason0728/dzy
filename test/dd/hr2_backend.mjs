@@ -590,7 +590,10 @@ function oracle(W) {
       const vu = viewUnitsOf(p);
       if (vu.length) schedView = O.lists(p, {}, vu, []).V.size > 0;
     }
-    out.sched = GATE_SCHED.indexOf(p.title) !== -1 || hrHead || acting.length > 0 || schedView || (!!u && u.active && (u.ladder === 'hq' || u.ladder === 'office') && hasHq);
+    // 總監排班（#68，docs/schedule-hq/spec.md §13）：odir 的本品牌試點內門市非空、或 hm／odir 在職（sched_hq_shift）→ 不必有 hq 打卡對照也過
+    const dirUnits = p.title === 'odir' ? viewUnitsOf(p).filter((c) => W.pilot.indexOf(c) !== -1) : [];
+    const dirSched = dirUnits.length > 0 || p.title === 'hm' || p.title === 'odir';
+    out.sched = GATE_SCHED.indexOf(p.title) !== -1 || hrHead || acting.length > 0 || schedView || dirSched || (!!u && u.active && (u.ladder === 'hq' || u.ladder === 'office') && hasHq);
     out.storeops = NO_ATT.indexOf(p.title) !== -1 || (W.pilot.indexOf(p.unit) !== -1 && identityOk(W, p) && !!u && u.ladder === 'store') || acting.length > 0 || perms.indexOf('att.extra') !== -1;
     return out;
   };
@@ -757,7 +760,7 @@ function run() {
     ok(has('platform.storeops') === g.storeops, `${p.emp}（${p.unit}/${p.title}）platform.storeops`, { got: has('platform.storeops'), exp: g.storeops });
     // 排班閘門與 ident 一致：有 platform.sched 的總部同仁一定有 self 對照或是能排班的人
     const id = idents[p.emp];
-    if (has('platform.sched') && id && id.active && GATE_SCHED.indexOf(p.title) === -1 && !id.hr_head && !id.units_managed.length && !id.att.view_people.length) {
+    if (has('platform.sched') && id && id.active && GATE_SCHED.indexOf(p.title) === -1 && !id.hr_head && !id.units_managed.length && !id.att.view_people.length && !id.sched_hq_shift && !(id.sched_units || []).length) {   // #68 總監排班：sched_units／sched_hq_shift 也是入口
       ok(id.self.length > 0, `${p.emp} 有排班管理選單但 ident 沒有 self／units_managed／view_people（營運系統沒有入口）`, id);
     }
     // 財務部總監：不因職稱拿到考勤
