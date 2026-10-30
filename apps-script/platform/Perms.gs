@@ -34,6 +34,12 @@ var PERM_ATT_VIEW_RE = /^att\.view@([A-Za-z0-9_-]{1,40})$/;
 //   認領審核／人事異動直屬主管／績效評核（Staff.gs stfReviewScope_）、請購請款第一關（ApprovalRoute.gs）、稽核看店（permSessionCompute_）。
 var PERM_ACTING_PREFIX = 'store.sm@';
 var PERM_ACTING_RE = /^store\.sm@([A-Za-z0-9_-]{1,40})$/;
+// 2026-10-30 指定同仁可新增同仁（docs/staff-add-ex/requirements.md，Eason 1A 2B 3A 4A）：staff.add@<單位代碼>，例 staff.add@mala-gf。
+//   跟 store.sm@ 一樣只走個別例外、只能「多給」、不進 permCompute_ 的 perms；admin 與人資主管都能設（PermActions.gs permAcExAuth_）。
+//   單位要存在、啟用、store 階梯（含央廚 ck），而且要＝被設的人目前的主要單位；調店後自動失效（permStaffAddUnitOf_ 只認主要單位）。
+//   效果：StaffClock.gs clkActor_ 把他當成該店的單位主管（新增、離職登記、打卡連結、打卡對照、本店打卡提醒；職級照本人職稱）。
+var PERM_STAFF_ADD_PREFIX = 'staff.add@';
+var PERM_STAFF_ADD_RE = /^staff\.add@([A-Za-z0-9_-]{1,40})$/;
 // 2026-10-29 薪酬負責門市（docs/payroll-scope/spec.md §1）：payroll.store@<薪資店代碼>，例 payroll.store@CF。同 att.view@ 的做法：
 //   不在 PERM_GRANTABLE、規則一律不收、只走個別例外、只認 add；只有 admin 能設（permAcExAuth_：人資主管只能動 STORE_HR_GRANTABLE，不含它）。
 //   平台不驗證代碼是否存在於薪資門市表（平台讀不到）；代轉時 proxyWithOperator_ 把這些代碼整理成 scope 交給薪資後端裁切。
@@ -157,7 +163,7 @@ function permActingUnitOk_(unit, org) {
 var PERM_ACTING_CACHE_ = null;
 var PERM_ACTING_TTL_MS = 3000;   // 不經 dispatch_ 的全域函式（mini 排程）也不會一直拿舊值
 /** 每個請求開頭清（Code.gs dispatch_）；測試改了 perm_ex 也要清 */
-function permActingReset_() { PERM_ACTING_CACHE_ = null; }
+function permActingReset_() { PERM_ACTING_CACHE_ = null; PERM_STAFF_ADD_CACHE_ = null; }
 /**
  * 兼任店長對照（同一個請求內快取）：{同仁編號: [單位…]}（排序去重）。
  * 只採 perm_ex 中 active、mode add、碼合法、單位合法（permActingUnitOk_）、沒過期（到期日當天仍有效；壞日期＝不給）的列，
@@ -196,6 +202,49 @@ function permActingMap_() {
   } catch (e) { out = {}; }
   PERM_ACTING_CACHE_ = { at: Date.now(), map: out };
   return out;
+}
+/** staff.add@<單位> → 單位代碼；不是這種碼 → '' */
+function permStaffAddUnit_(perm) {
+  var m = PERM_STAFF_ADD_RE.exec(permStr_(perm));
+  return m ? m[1] : '';
+}
+/** 可新增同仁的單位合不合法：存在、啟用、store 階梯（含央廚 ck）；同 permAttViewUnitOk_ */
+function permStaffAddUnitOk_(unit, org) { return permAttViewUnitOk_(unit, org); }
+/**
+ * 某人「可新增同仁」生效的單位（''＝沒有）。values＝staff 一列。只看 perm_ex 中 active、mode add、沒過期、
+ * 碼＝staff.add@<本人目前主要單位> 的列；本人要在職、主要身分有效（permStaffIdentityOk_）、單位合法。不看 PERMS_ON。
+ * 表的讀取有請求內快取（permStaffAddRows_；dispatch_ 開頭與寫例外後都清），撤銷、調店下一個請求就收回；表沒建或讀失敗＝''。
+ */
+var PERM_STAFF_ADD_CACHE_ = null;   // {at, rows}：perm_ex 裡 staff.add@ 的列（同一個請求內只讀一次表；permActingReset_ 一起清、TTL 同兼任店長）
+function permStaffAddRows_() {
+  if (PERM_STAFF_ADD_CACHE_ && Date.now() - PERM_STAFF_ADD_CACHE_.at < PERM_ACTING_TTL_MS) return PERM_STAFF_ADD_CACHE_.rows;
+  var rows = [];
+  var t = permReadTable_(SpreadsheetApp.getActive(), PERM_SHEET_EX, PERM_EX_HEADERS);
+  if (!t.missing && !t.mismatch) rows = t.rows.filter(function (r) { return !!permStaffAddUnit_(r[2]); });
+  PERM_STAFF_ADD_CACHE_ = { at: Date.now(), rows: rows };
+  return rows;
+}
+function permStaffAddUnitOf_(values) {
+  try {
+    if (!values || permStr_(values[STF_COL.status]) !== 'active') return '';
+    var emp = permStr_(values[STF_COL.emp_no]).toUpperCase();
+    var home = permStr_(values[STF_COL.unit]);
+    if (!emp || !home) return '';
+    var rows = permStaffAddRows_();
+    if (!rows.length) return '';
+    var today = permTodayTaipei_();
+    var want = PERM_STAFF_ADD_PREFIX + home;
+    var hit = rows.some(function (r) {
+      if (permStr_(r[1]).toUpperCase() !== emp || permStr_(r[2]) !== want) return false;
+      if (!permIsActive_(r[6]) || permStr_(r[3]).toLowerCase() !== 'add') return false;
+      if (permStr_(r[4]) !== '') { var u = permNormDate_(r[4]); if (!u || u < today) return false; }
+      return true;
+    });
+    if (!hit) return '';
+    var org = permOrgIndex_();
+    if (!permStaffAddUnitOk_(home, org) || !permStaffIdentityOk_(org, values)) return '';
+    return home;
+  } catch (e) { return ''; }
 }
 /** 主要身分有效：單位存在且啟用、職稱存在且啟用且屬於該單位階梯（同 permCompute_ 開頭的一致性檢查；org＝permOrgIndex_ 形狀） */
 function permStaffIdentityOk_(org, values) {
@@ -509,13 +558,18 @@ function permValidateEx_(ex, today, org) {
   var avu = permAttViewUnit_(ex.perm);
   var acu = permActingUnit_(ex.perm);
   var psc = permPayrollStoreCode_(ex.perm);
-  if (!avu && !acu && !psc && !permIsGrantable_(ex.perm)) return permErr_('bad_perm', '這個功能不能設成例外');
+  var sau = permStaffAddUnit_(ex.perm);
+  if (!avu && !acu && !psc && !sau && !permIsGrantable_(ex.perm)) return permErr_('bad_perm', '這個功能不能設成例外');
   var mode = permStr_(ex.mode);
   if (mode !== 'add' && mode !== 'remove') return permErr_('bad_mode', '請選擇多給或拿掉');
   if (psc && mode !== 'add') return permErr_('bad_mode', '薪酬負責門市只能「多給」；要收回請撤銷那筆例外');
   if (avu) {
     if (mode !== 'add') return permErr_('bad_mode', '指定門市只看考勤只能「多給」；要收回請撤銷那筆例外');
     if (!permAttViewUnitOk_(avu, org)) return permErr_('bad_target', '這個門市不存在、已停用，或不是門市／央廚');
+  }
+  if (sau) {
+    if (mode !== 'add') return permErr_('bad_mode', '可新增同仁只能「多給」；要收回請撤銷那筆例外');
+    if (!permStaffAddUnitOk_(sau, org)) return permErr_('bad_target', '這個門市不存在、已停用，或不是門市／央廚');
   }
   if (acu) {
     if (mode !== 'add') return permErr_('bad_mode', '兼任店長只能「多給」；要收回請撤銷那筆例外');
@@ -618,7 +672,7 @@ var PERM_NAMES = {
   'audit.read.own': '稽核：我的門市', 'audit.read.brand': '稽核：自己品牌的店（區督導只看自己區）', 'audit.read': '稽核：全部店',
   'audit.write': '稽核：填單與門市管理', 'dorm.read': '宿舍：查看', 'dorm.write': '宿舍：建約與點交',
   'platform.staff': '同仁名單', 'platform.users': '人員管理', 'platform.permmap': '權限設定',
-  'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
+  'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核', 'platform.unitstaff': '我的單位',
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
   'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
   'payroll.write': '薪酬系統', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對',
@@ -639,6 +693,12 @@ function permName_(code) {
     var org2 = null;
     try { org2 = typeof stfReadOrg_ === 'function' ? stfReadOrg_() : null; } catch (e2) { org2 = null; }
     return '兼任店長（' + permAttViewLabel_(acu, org2) + '）';
+  }
+  var sau = permStaffAddUnit_(code);
+  if (sau) {
+    var org3 = null;
+    try { org3 = typeof stfReadOrg_ === 'function' ? stfReadOrg_() : null; } catch (e3) { org3 = null; }
+    return '可新增同仁（' + permAttViewLabel_(sau, org3) + '）';
   }
   var psc = permPayrollStoreCode_(code);
   if (psc) return '薪酬負責門市（' + psc + '）';

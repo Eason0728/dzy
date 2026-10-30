@@ -959,6 +959,10 @@ function authPermsWithGate_(role, gate) {
   if (canReview && perms.indexOf('platform.review') === -1 && perms.indexOf('*') === -1) {
     perms = perms.concat(['platform.review']);
   }
+  // 我的單位／打卡對照分頁（Staff.gs stfLoginGate_ unitstaff：可新增同仁例外）：衍生權限，不寫進 roles；後端每支 action 仍在 clkActor_ 重算
+  if (gate && gate.unitstaff && perms.indexOf('platform.unitstaff') === -1 && perms.indexOf('*') === -1) {
+    perms = perms.concat(['platform.unitstaff']);
+  }
   // 考勤管理選單（StoreOps.gs storeAttGate_）：衍生權限，不寫進 roles
   if (gate && gate.att && perms.indexOf('platform.att') === -1 && perms.indexOf('*') === -1) {
     perms = perms.concat(['platform.att']);

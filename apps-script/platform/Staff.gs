@@ -921,7 +921,9 @@ function stfLoginGate_(userId) {
   // storeops＝衍生權限 platform.storeops（StoreOps.gs storeOpsGate_；STORE_SSO_UNITS 空＝全關）
   var org = stfReadOrg_();
   var storeops = typeof storeOpsGate_ === 'function' ? storeOpsGate_(hit.values, org) : false;
-  return { review: !!stfReviewScope_(hit.values, org), att: att, sched: sched, storeops: storeops };
+  // unitstaff＝衍生權限 platform.unitstaff（2026-10-30 可新增同仁 staff.add@<主要單位>：只讓「我的單位」「打卡對照」分頁出現，不給待審核）
+  var unitstaff = typeof permStaffAddUnitOf_ === 'function' ? !!permStaffAddUnitOf_(hit.values) : false;
+  return { review: !!stfReviewScope_(hit.values, org), att: att, sched: sched, storeops: storeops, unitstaff: unitstaff };
 }
 
 /**

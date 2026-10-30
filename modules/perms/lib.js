@@ -35,7 +35,7 @@ export const FEATURE_NAMES = {
 
 /** 其他會出現在 myPerms／異動裡的碼 */
 const OTHER_NAMES = {
-  'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核',
+  'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核', 'platform.unitstaff': '我的單位',
   'platform.login': '登入', '*': '全部功能'
 };
 
@@ -50,6 +50,8 @@ export function featureName(code, units, payStores) {
   if (u) return `只看考勤（${attViewUnitName(u, units)}）`;
   const au = actingUnitOf(code);
   if (au) return `兼任店長（${attViewUnitName(au, units)}）`;
+  const su = staffAddUnitOf(code);
+  if (su) return `可新增同仁（${attViewUnitName(su, units)}）`;
   return FEATURE_NAMES[code] || OTHER_NAMES[code] || code;
 }
 
@@ -93,6 +95,22 @@ export function actingUnitOf(code) {
 export function actingCode(unit) {
   const c = ACTING_PREFIX + String(unit || '').trim();
   return actingUnitOf(c) ? c : '';
+}
+// ---- 可新增同仁（staff.add@<單位>，docs/staff-add-ex；admin 與人資主管都能設、只能多給、只能用個別例外、單位要是本人所屬的店） ----
+export const STAFF_ADD_PREFIX = 'staff.add@';
+/** 功能下拉裡「可新增同仁」那一項的值（送出時換成 staff.add@<門市>） */
+export const STAFF_ADD_CHOICE = '__staff_add__';
+export const STAFF_ADD_CHOICE_NAME = '可新增同仁（限本店）';
+const STAFF_ADD_RE = /^staff\.add@([A-Za-z0-9_-]{1,40})$/;
+/** staff.add@<單位> → 單位代碼；其他 → '' */
+export function staffAddUnitOf(code) {
+  const m = STAFF_ADD_RE.exec(String(code || ''));
+  return m ? m[1] : '';
+}
+/** 門市代碼 → 權限碼；代碼格式不對回 '' */
+export function staffAddCode(unit) {
+  const c = STAFF_ADD_PREFIX + String(unit || '').trim();
+  return staffAddUnitOf(c) ? c : '';
 }
 // ---- 薪酬負責門市（payroll.store@<薪資店代碼>，docs/payroll-scope/spec.md §5；只有 admin 能設、只能多給、只能用個別例外） ----
 export const PAYROLL_STORE_PREFIX = 'payroll.store@';
