@@ -227,8 +227,8 @@ function attApproverOf_(approver, target, org, mode, rctx) {
   if (mode === 'req' && storeIsDuty_(target) && need.unit && storeDutyHas_(approver, need.unit)) return false;
   var heads = mode === 'hours' ? STORE_HOURS_UNIT_HEAD_TITLES : STORE_REQ_UNIT_HEAD_TITLES;
   if (need.kind === 'unit') {
-    // 兼任店長（docs/att-hr-acting/spec.md §2.2）：當作該單位店長核別人；不核自己（自己照原身分走）
-    if (!sameMan && storeActingHas_(approver, need.unit)) return true;
+    // 兼任店長（docs/att-hr-acting/spec.md §2.2）：當作該單位店長核；2026-10-30 Eason 選 A：跟店長一樣可核自己的工時，申請照舊不能核自己
+    if (storeActingHas_(approver, need.unit) && (!sameMan || mode === 'hours')) return true;
     if (sameMan && mode !== 'hours') return false;
     return ao.ladder === 'store' && heads.indexOf(title) !== -1 && aUnit === need.unit;
   }
@@ -555,7 +555,8 @@ function storeAttListOut_(list) {
  *
  * 非支援帳號：完全照舊（人在 storeAttTargets_ 名單內、人所屬單位在試點 → 他所有非支援帳號；只看＝人所屬單位在 viewUnits）。
  * 支援帳號（storeAttIsSupport_）：試點看打卡店單位；核定＝storeSupportApprovers_ 那層、人資主管、admin、att.extra（打卡店單位＝我的單位）；
- *   任何人都不核自己的支援帳號；原本（以人為單位）能核這個人、但核不到這個帳號的人 → 只看；督導／總監只看看打卡店單位。
+ *   不核自己的支援帳號，唯一例外：兼任店長自己在兼任店的支援帳號，工時可以自己核（2026-10-30 Eason 選 A；申請照舊不行）；
+ *   原本（以人為單位）能核這個人、但核不到這個帳號的人 → 只看；督導／總監只看看打卡店單位。
  * 指定門市只看（exViewUnits）：打卡店單位在清單內、且在試點的全部帳號（帳號主人要核工時、非 orphan、非本人）。
  */
 function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pilot, opt) {
@@ -583,6 +584,8 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
       if (pOk && hrsT[t.emp]) storeAttListAdd_(L.hours, a);
       if (pOk && reqT[t.emp]) storeAttListAdd_(L.req, a);
       if (pOk && viewable && viewUnits.indexOf(stfStr_(t.unit)) !== -1) storeAttListAdd_(L.view, a);
+    } else if (self && storeAnyIn_(a.units, pilot) && needH && a.units.some(function (u) { return storeActingHas_(me, u); })) {
+      storeAttListAdd_(L.hours, a);   // 兼任店長核自己在兼任店的工時（2026-10-30 Eason 選 A）
     } else if (storeAnyIn_(a.units, pilot) && !self) {
       // 被核者本人兼任這家店：先把他剔出候選再找層（快取鍵帶他的編號）
       var selfEx = a.units.some(function (u) { return storeActingHas_(t, u); }) ? stfStr_(t.emp) : '';
