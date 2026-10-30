@@ -537,44 +537,69 @@ function clkEnqueue_(fields, d, used) {
  * 呼叫者身分：總部＝platform.staff；店長＝門市單位（org ladder＝store）、職級店長以上（rank≥3）、同單位——
  * 沿用 Staff.gs stfManagerScope_ 的判斷，再多擋一層「總部單位的總監不能走店長路徑」。
  */
-function clkActor_(token) {
+function clkActor_(token, payload) {
   var me = handleMe_(token);
   if (!me.ok) return me;
   var org = stfReadOrg_();
   var self = stfFindByUserId_(me.data.user.id);
   var isHq = hasPerm_(me.data.perms, 'platform.staff');
-  var scope = null, rank = 0;
+  // units＝這個人以「店長」身分管得到的門市（[{unit, unit_name, rank, via}]）；scope／rank＝這次操作選定的那一家（payload.unit 在清單內就用它，否則第一家）
+  var units = [];
+  var addUnitOf = function (code, rank, via) {
+    var u = org.unit[code];
+    if (!u || (u.ladder || 'store') !== 'store' || units.some(function (x) { return x.unit === code; })) return;
+    units.push({ unit: code, unit_name: u.name || '', rank: rank, via: via });
+  };
   if (self && hasPerm_(me.data.perms, 'platform.self')) {
+    var t = org.title[stfStr_(self.values[STF_COL.title])];
+    var ownRank = t ? t.rank : 0;
     var sc = stfManagerScope_(self.values, org);
     var unit = sc ? org.unit[sc.unit] : null;
     if (sc && (unit ? (unit.ladder || 'store') : 'store') === 'store') {
-      scope = sc;
-      var t = org.title[stfStr_(self.values[STF_COL.title])];
-      rank = t ? t.rank : 0;
+      units.push({ unit: sc.unit, unit_name: sc.unit_name || (unit ? unit.name : '') || '', rank: ownRank, via: 'own' });
     }
     // 2026-10-30 可新增同仁（staff.add@<主要單位>，docs/staff-add-ex）：本人不是單位主管時，當成本店的單位主管（Eason 2B：跟店長一樣），職級照本人職稱
-    if (!scope && typeof permStaffAddUnitOf_ === 'function') {
+    if (!units.length && typeof permStaffAddUnitOf_ === 'function') {
       var addUnit = permStaffAddUnitOf_(self.values);
-      var au = addUnit ? org.unit[addUnit] : null;
-      if (au && (au.ladder || 'store') === 'store') {
-        scope = { unit: addUnit, unit_name: au.name || '', dept: '', ladder: 'store', sameDept: false, viaStaffAdd: true };
-        var t2 = org.title[stfStr_(self.values[STF_COL.title])];
-        rank = t2 ? t2.rank : 0;
-      }
+      if (addUnit) addUnitOf(addUnit, ownRank, 'staff_add');
+    }
+    // 2026-10-31 兼任店長（Perms.gs store.sm@<單位>，docs/acting-unitstaff）：兼任的店比照店長，職級＝店長職級（本人更高就照本人，Eason 1A 2A）
+    if (typeof permActingUnitsOf_ === 'function') {
+      var smRank = org.title.sm ? org.title.sm.rank : 3;
+      permActingUnitsOf_(stfNormEmp_(self.values[STF_COL.emp_no])).forEach(function (c) {
+        var au = org.unit[c];
+        if (au && au.active && c !== 'ck') addUnitOf(c, Math.max(ownRank, smRank), 'acting');
+      });
     }
   }
-  return { ok: true, user: me.data.user, perms: me.data.perms, isHq: isHq, scope: scope, rank: rank, org: org,
+  var want = stfStr_(payload && payload.unit);
+  var pick = null;
+  units.forEach(function (x) { if (!pick && want && x.unit === want) pick = x; });
+  if (!pick) pick = units[0] || null;
+  var scope = pick ? { unit: pick.unit, unit_name: pick.unit_name, dept: '', ladder: 'store', sameDept: false, via: pick.via } : null;
+  return { ok: true, user: me.data.user, perms: me.data.perms, isHq: isHq, scope: scope, rank: pick ? pick.rank : 0, units: units, org: org,
     selfEmp: self ? stfNormEmp_(self.values[STF_COL.emp_no]) : '' };
 }
-function clkCanManageUnit_(a, unit) { return a.isHq || (!!a.scope && unit !== '' && a.scope.unit === unit); }
+function clkCanManageUnit_(a, unit) { return a.isHq || (unit !== '' && (a.units || []).some(function (x) { return x.unit === unit; })); }
+/** 對某單位的同仁，呼叫者以多高的職級操作（兼任的店＝店長職級）；管不到 → 0 */
+function clkRankFor_(a, unit) {
+  var hit = (a.units || []).filter(function (x) { return x.unit === unit; })[0];
+  return hit ? hit.rank : 0;
+}
+/** 呼叫者管得到的門市對應的打卡店代碼（多家＝兼任） */
+function clkMyStoreCodes_(a) {
+  var out = [];
+  (a.units || []).forEach(function (x) { var st = clkStoreOfUnit_(x.unit); if (st && out.indexOf(st.store_code) === -1) out.push(st.store_code); });
+  return out;
+}
 function clkActorLabel_(a) {
   if (a.selfEmp) return a.selfEmp;
   var u = findUsrRowById_(a.user.id);
   return u ? stfStr_(u.values[USR_COL.username]) : String(a.user.id);
 }
 /** 需要「總部或店長」；回 actor 或錯誤 */
-function clkNeedActor_(token) {
-  var a = clkActor_(token);
+function clkNeedActor_(token, payload) {
+  var a = clkActor_(token, payload);
   if (!a.ok) return a;
   if (!a.isHq && !a.scope) return clkErr_('no_perm', CLK_MSG.NO_PERM);
   return a;
@@ -636,7 +661,7 @@ function clkPayloadTooLong_(payload, fields, max) {
 /** 新增同仁共用的組織欄驗證；回 {error,code} 或 {unit,brand,dept,title} */
 function clkResolveOrg_(a, payload) {
   var org = a.org;
-  var unit = a.isHq ? stfStr_(payload.unit) : a.scope.unit;   // 店長：夾帶的 unit 一律忽略
+  var unit = a.isHq ? stfStr_(payload.unit) : a.scope.unit;   // 店長：只用自己管的門市（clkActor_ 依 payload.unit 從清單挑；管不到的照舊忽略、用第一家）
   if (!unit) return clkErr_('bad_input', CLK_MSG.UNIT_REQUIRED);
   var u = org.unit[unit];
   if (!u || !u.active) return clkErr_('bad_input', '請選擇單位');
@@ -676,7 +701,7 @@ function clkNewStaffRows_(empNo, name, o, hire, phone, nowText) {
 }
 
 function handleStaffCreateByUnit_(token, payload) {
-  var a = clkNeedActor_(token);
+  var a = clkNeedActor_(token, payload);
   if (!a.ok) return a;
   payload = payload || {};
   if (stfTooLong_(payload.name, CLK_NAME_MAX)) return clkErr_('bad_input', CLK_MSG.NAME_TOO_LONG);
@@ -743,7 +768,7 @@ function clkLeaveTarget_(token, payload) {
   // 2026-10-25 審查 A-02：店長只能對職級比自己低的人登記／撤銷離職（同級也擋，Eason 決定；離職會停帳號，比審核嚴）
   if (!a.isHq) {
     var tt = a.org.title[stfStr_(s.values[STF_COL.title])];
-    if ((tt ? tt.rank : 0) >= a.rank) return clkErr_('no_perm', CLK_MSG.LEAVE_RANK);
+    if ((tt ? tt.rank : 0) >= clkRankFor_(a, clkStaffUnit_(s))) return clkErr_('no_perm', CLK_MSG.LEAVE_RANK);
   }
   return { ok: true, a: a, s: s, d: new Date() };
 }
@@ -910,12 +935,12 @@ function handleClockMapList_(token) {
   if (!a.ok) return a;
   if (!clkSheetsReady_()) return { ok: true, data: { suggested: [], confirmed: [], needs_hq: [], candidates: [], confirmed_count: 0, built_at: '' } };
   var stores = clkStoreIndex_(), staff = clkStaffIndex_();
-  var myStoreL = a.scope ? clkStoreOfUnit_(a.scope.unit) : null;
+  var myStoresL = clkMyStoreCodes_(a);
   var maps = clkMaps_();
   var suggested = maps.filter(function (m) {
     if (m.state !== 'suggested' || !m.emp_no) return false;
     // 店長：對照列的 store_code 屬於他單位對應的店就看得到（包含單位還是空的未認領者）
-    return a.isHq || (!!myStoreL && m.store_code === myStoreL.store_code);
+    return a.isHq || myStoresL.indexOf(m.store_code) !== -1;
   }).map(function (m) { return clkMapRowView_(m, staff[m.emp_no], a.org, stores); });
   var data = { suggested: suggested, confirmed: [], needs_hq: [], candidates: [], confirmed_count: maps.filter(function (m) { return m.state === 'confirmed'; }).length, built_at: '' };
   if (a.isHq) {
@@ -968,8 +993,7 @@ function handleClockMapDecide_(token, payload) {
     // 店長：必須是自己單位、suggested、而且不能改指給別人
     if (!row || row.state !== 'suggested') return clkErr_('dead_state', CLK_MSG.DEAD_STATE);
     // 店長只能決定「自己店」那家打卡帳號的對照（不看 DZY 單位：未認領的人單位是空的）
-    var myStore = clkStoreOfUnit_(a.scope.unit);
-    if (!myStore || row.store_code !== myStore.store_code) return clkErr_('no_perm', CLK_MSG.NO_PERM);
+    if (clkMyStoreCodes_(a).indexOf(row.store_code) === -1) return clkErr_('no_perm', CLK_MSG.NO_PERM);
     if (payload.emp_no !== undefined && stfNormEmp_(payload.emp_no) !== row.emp_no) return clkErr_('no_perm', CLK_MSG.NO_PERM);
   } else if (payload.emp_no !== undefined && payload.emp_no !== '') {
     emp = stfNormEmp_(payload.emp_no);
@@ -2205,7 +2229,7 @@ function clkDecorateStaffList_(list, token) {
  * 輸出每人：emp_no,name,status,unit,unit_name,title,title_name,hire_date,last_day,can_cancel_leave,clocks[],clock_total,clock_stopped,clock_job,is_self,name_diff
  */
 function handleStaffUnitList_(token, payload) {
-  var a = clkNeedActor_(token);
+  var a = clkNeedActor_(token, payload);
   if (!a.ok) return a;
   if (!stfSheetsReady_()) return { ok: true, data: { people: [] } };
   var unit = a.isHq ? stfStr_(payload && payload.unit) : a.scope.unit;
@@ -2227,7 +2251,9 @@ function handleStaffUnitList_(token, payload) {
       clocks: c.clocks, clock_total: c.clock_total, clock_stopped: c.clock_stopped, clock_job: c.clock_job,
       is_self: !!a.selfEmp && s.emp === a.selfEmp, name_diff: !!nameDiff[s.emp], unit_empty: clkStaffUnit_(s) === '', no_home: !!noHome[s.emp] };
   });
-  return { ok: true, data: { people: people, unit: unit } };
+  // units：管兩家以上（兼任店長）時前端顯示門市切換
+  var units = a.isHq ? [] : (a.units || []).map(function (x) { return { code: x.unit, name: x.unit_name }; });
+  return { ok: true, data: { people: people, unit: unit, unit_name: a.isHq ? '' : a.scope.unit_name, units: units } };
 }
 
 /**
@@ -2246,7 +2272,7 @@ function handleClockAlerts_(token) {
   var mine = function (empNo) {
     if (a.isHq) return true;
     var s = staff[empNo];
-    return !!s && clkStaffUnit_(s) === a.scope.unit;
+    return !!s && clkCanManageUnit_(a, clkStaffUnit_(s));
   };
   var out = empty;
   out.outbox_failed = jobs.filter(function (j) {
@@ -2257,8 +2283,8 @@ function handleClockAlerts_(token) {
     var s = staff[m.emp_no];
     return s && clkStaffStatus_(s) === 'disabled' && m.state === 'confirmed' && m.roster_active === 'TRUE' && mine(m.emp_no);
   }).map(function (m) { return { emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id }; });
-  var myStoreA = a.scope ? clkStoreOfUnit_(a.scope.unit) : null;
-  var sug = maps.filter(function (m) { return m.state === 'suggested' && m.emp_no && (a.isHq || (!!myStoreA && m.store_code === myStoreA.store_code)); });
+  var myStoresA = clkMyStoreCodes_(a);
+  var sug = maps.filter(function (m) { return m.state === 'suggested' && m.emp_no && (a.isHq || myStoresA.indexOf(m.store_code) !== -1); });
   out.pending_confirm = { count: sug.length, items: sug.map(function (m) { return { emp_no: m.emp_no, store_code: m.store_code, emp_id: m.emp_id }; }) };
   var staffAll = clkStaffAll_();
   out.no_home_map = clkNoHomeMap_(staffAll, maps, jobs, today).filter(function (s) { return mine(s.emp); }).map(function (s) { return s.emp; });
