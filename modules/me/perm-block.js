@@ -8,7 +8,7 @@ const NAMES = {
   'audit.read.own': '看自己店稽核', 'audit.read.brand': '看自己品牌稽核', 'audit.read': '看全部店稽核',
   'audit.write': '填稽核單與門市管理', 'dorm.read': '看宿舍清單', 'dorm.write': '宿舍建約點交',
   'platform.staff': '同仁名單', 'platform.users': '人員管理', 'platform.permmap': '改權限對照表',
-  'platform.permex': '個別例外', 'platform.review': '待審核', 'platform.bulletin': '公告管理', '*': '全部功能'
+  'platform.permex': '個別例外', 'platform.review': '待審核', 'platform.unitstaff': '我的單位', 'platform.bulletin': '公告管理', '*': '全部功能'
 };
 /** 技術性的碼，不列給同仁看 */
 const HIDDEN = { 'platform.login': true, 'platform.self': true };

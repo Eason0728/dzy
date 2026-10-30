@@ -56,7 +56,7 @@ export default {
       out.push({ level: 'warn', text: `有 ${pend.data.people.length} 位同仁等你審核`, view: 'review' });
     }
     // 員工名單統一 D5：店長看自己單位的打卡提醒（總部的同類提醒由「同仁名單」模組負責，這裡不重複）
-    if (ctx.can('platform.review') && !ctx.can('platform.staff')) {
+    if ((ctx.can('platform.review') || ctx.can('platform.unitstaff')) && !ctx.can('platform.staff')) {
       try {
         const ca = await ctx.api.call('me', 'clockAlerts', {});
         if (ca && ca.ok) alertRows(ca.data, viewerOf(ctx)).forEach((r) => out.push({ level: r.level, text: r.text, view: r.view, params: r.params }));

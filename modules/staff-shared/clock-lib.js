@@ -247,7 +247,7 @@ export function isDryRunResult(r) {
 
 /** 後端回 no_perm 時的白話說明（總部單位的總監也有 platform.review，分頁看得到但後端只給門市店長） */
 export function storeLeadOnlyText(r) {
-  return r && r.code === 'no_perm' ? '這個分頁給門市店長用；總部同仁請到「同仁名單」處理。' : '';
+  return r && r.code === 'no_perm' ? '這個分頁給門市店長（或被開了「可新增同仁」的同仁）用；如果權限剛被收回或調了店，請重新登入。總部同仁請到「同仁名單」處理。' : '';
 }
 
 /**

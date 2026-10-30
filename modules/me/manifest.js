@@ -20,8 +20,9 @@ export default {
     // platform.staff（人資）也能審；兩者都沒有的人看不到這個分頁
     { id: 'review', name: '待審核', requires: ['platform.review', 'platform.staff'] },
     // 2026-10-13 員工名單統一：店長的「我的單位」（新增／離職／打卡連結）與「打卡對照」（對／不對）
-    { id: 'team', name: '我的單位', requires: ['platform.review'] },
-    { id: 'clock', name: '打卡對照', requires: ['platform.review'] }
+    // 2026-10-30 platform.unitstaff：個別例外「可新增同仁」（staff.add@<本店>）的衍生權限，跟店長一樣用這兩頁（不給待審核）
+    { id: 'team', name: '我的單位', requires: ['platform.review', 'platform.unitstaff'] },
+    { id: 'clock', name: '打卡對照', requires: ['platform.review', 'platform.unitstaff'] }
   ],
   entry: () => import('./index.js')
 };

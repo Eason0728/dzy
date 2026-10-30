@@ -553,6 +553,16 @@ function clkActor_(token) {
       var t = org.title[stfStr_(self.values[STF_COL.title])];
       rank = t ? t.rank : 0;
     }
+    // 2026-10-30 可新增同仁（staff.add@<主要單位>，docs/staff-add-ex）：本人不是單位主管時，當成本店的單位主管（Eason 2B：跟店長一樣），職級照本人職稱
+    if (!scope && typeof permStaffAddUnitOf_ === 'function') {
+      var addUnit = permStaffAddUnitOf_(self.values);
+      var au = addUnit ? org.unit[addUnit] : null;
+      if (au && (au.ladder || 'store') === 'store') {
+        scope = { unit: addUnit, unit_name: au.name || '', dept: '', ladder: 'store', sameDept: false, viaStaffAdd: true };
+        var t2 = org.title[stfStr_(self.values[STF_COL.title])];
+        rank = t2 ? t2.rank : 0;
+      }
+    }
   }
   return { ok: true, user: me.data.user, perms: me.data.perms, isHq: isHq, scope: scope, rank: rank, org: org,
     selfEmp: self ? stfNormEmp_(self.values[STF_COL.emp_no]) : '' };
