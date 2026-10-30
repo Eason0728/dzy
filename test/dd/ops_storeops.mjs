@@ -241,15 +241,25 @@ function expectIdent(p) {
     unit: p ? p.unit : '', title: p ? p.title : '', epoch: p ? p.hire : '', token_after: 0, pilot_units: pilot,
     units_managed: sortU(managed), void_units: sortU(voids),
     att: pilot.length ? { people: rows(targets(me, flags, 'hours')), req_people: rows(targets(me, flags, 'req')), view_people: [] } : { people: [], req_people: [], view_people: [] },
-    self
+    self,
+    // 總監排班（#68，docs/schedule-hq/spec.md §13）：odir＝本品牌試點內啟用門市（不含 ck）；hm／odir 在職＝sched_hq_shift
+    sched_units: schedUnitsOf(p),
+    sched_hq_shift: !!p && p.status === 'active' && ['hm', 'odir'].includes(p.title)
   };
+}
+function schedUnitsOf(p) {
+  if (!p || p.status !== 'active' || p.title !== 'odir' || !validOrg(p)) return [];
+  const office = UNITS[p.unit];
+  if (!office || office.ladder !== 'office') return [];
+  return sortU(STORE_UNITS.filter((u) => u !== 'ck' && UNITS[u].active !== false && UNITS[u].parent === office.parent && pilot.includes(u)));
 }
 function expectGates(p) {
   if (!pilot.length || p.status !== 'active') return { storeops: false, att: false, sched: false };
   const hr = isHrHead(p);
   const storeops = NO_ATT.includes(p.title) || (pilot.includes(p.unit) && validOrg(p) && UNITS[p.unit].ladder === 'store');
   const att = (['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo', 'gm', 'chair'].includes(p.title) && !(p.title === 'hm' && p.dept === 'fin')) || hr;
-  const sched = ['sm', 'fm', 'am'].includes(p.title) || hr || (['hq', 'office'].includes(UNITS[p.unit].ladder) && !!(p.clock && p.clock.active && p.clock.store === 'hq'));
+  const dirSched = schedUnitsOf(p).length > 0 || ['hm', 'odir'].includes(p.title);   // 總監排班（#68）：不必有 hq 打卡對照
+  const sched = ['sm', 'fm', 'am'].includes(p.title) || hr || dirSched || (['hq', 'office'].includes(UNITS[p.unit].ladder) && !!(p.clock && p.clock.active && p.clock.store === 'hq'));
   return { storeops, att, sched };
 }
 
