@@ -32,6 +32,7 @@ var PERM_ATT_VIEW_RE = /^att\.view@([A-Za-z0-9_-]{1,40})$/;
 //   跟 att.view@ 一樣只走個別例外、只能「多給」、不進 permCompute_ 的 perms；admin 與人資主管都能設（PermActions.gs permAcExAuth_）。
 //   單位要存在、啟用、store 階梯、不是央廚 ck（央廚是廠長制）。效果全部即時計算：permActingUnitsOf_ → 考勤（StoreOps.gs）、
 //   認領審核／人事異動直屬主管／績效評核（Staff.gs stfReviewScope_）、請購請款第一關（ApprovalRoute.gs）、稽核看店（permSessionCompute_）。
+//   2026-10-30 Eason 選 A：可設在本人主要單位（代理店長）；兼任店長可核自己在兼任店的工時（申請照舊不能核自己）。
 var PERM_ACTING_PREFIX = 'store.sm@';
 var PERM_ACTING_RE = /^store\.sm@([A-Za-z0-9_-]{1,40})$/;
 // 2026-10-30 指定同仁可新增同仁（docs/staff-add-ex/requirements.md，Eason 1A 2B 3A 4A）：staff.add@<單位代碼>，例 staff.add@mala-gf。
@@ -167,7 +168,8 @@ function permActingReset_() { PERM_ACTING_CACHE_ = null; PERM_STAFF_ADD_CACHE_ =
 /**
  * 兼任店長對照（同一個請求內快取）：{同仁編號: [單位…]}（排序去重）。
  * 只採 perm_ex 中 active、mode add、碼合法、單位合法（permActingUnitOk_）、沒過期（到期日當天仍有效；壞日期＝不給）的列，
- * 再過「有效兼任」：兼任者在職、主要身分有效（permStaffIdentityOk_）、兼任店不是本人主要單位、兼任店在試點（STORE_SSO_UNITS）。
+ * 再過「有效兼任」：兼任者在職、主要身分有效（permStaffIdentityOk_）、兼任店在試點（STORE_SSO_UNITS）。
+ * 2026-10-30 Eason 選 A：兼任店可以是本人主要單位（例：值班主管兼任自己那家店的店長＝代理店長）；本人已是該店店長／廠長時新增就擋（PermActions.gs）。
  * 所有消費端（考勤、認領、請購、績效、稽核）都只吃這份（2026-10-29 Codex 審查 1、5：不要各自過濾）。
  * 不看 PERMS_ON（同 att.view@ 的讀法）。表沒建或讀失敗＝{}。
  */
@@ -194,8 +196,7 @@ function permActingMap_() {
         var hit = typeof stfFindByEmp_ === 'function' ? stfFindByEmp_(k) : null;
         var v = hit ? hit.values : null;
         if (!v || permStr_(v[STF_COL.status]) !== 'active' || !permStaffIdentityOk_(org, v)) { delete out[k]; return; }
-        var home = permStr_(v[STF_COL.unit]);
-        var units = permUniqSorted_(out[k]).filter(function (u) { return u !== home && pilot.indexOf(u) !== -1; });
+        var units = permUniqSorted_(out[k]).filter(function (u) { return pilot.indexOf(u) !== -1; });
         if (units.length) out[k] = units; else delete out[k];
       });
     }
