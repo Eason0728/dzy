@@ -438,11 +438,11 @@ function setup() {
 (() => {
   const app = setup();
   const { sb, sheets } = app;
-  // 7-1 本人主要單位＝兼任店：存不進去；硬寫進表也不生效
-  ok(app.ex(app.tok.DZY220, 'DZY202', 'store.sm@mzt-lzl').code === 'bad_target', '7-1 ★本人就在這家店 → 不能設');
+  // 7-1 本人主要單位＝兼任店（2026-10-30 Eason 選 A 起可以設＝代理店長）；本來就是這家店店長的人才擋
+  { const r71 = app.ex(app.tok.DZY220, 'DZY232', 'store.sm@mzt-js'); ok(r71.code === 'bad_target' && /本來就是這家店的店長/.test(r71.message || r71.error_message || JSON.stringify(r71)), '7-1 ★本來就是這家店的店長 → 不用設', r71); }
   sheets.perm_ex._data.push(['X900', 'DZY202', 'store.sm@mzt-lzl', 'add', '', '硬寫', 'TRUE', '', 'tester', '', '']);
   sb.permActingReset_();
-  ok(eq(sb.permActingUnitsOf_('DZY202'), []) && !has(app.ident('DZY202').units_managed, 'mzt-lzl'), '7-1 ★硬寫進表也不生效');
+  ok(eq(sb.permActingUnitsOf_('DZY202'), ['mzt-lzl']), '7-1 ★本人主要單位的兼任列會生效');
   sheets.perm_ex._data.pop(); sb.permActingReset_();
   // 7-3 重複：第二筆擋；舊資料重複時撤銷一筆＝全部撤
   const a1 = app.ex(app.tok.DZY220, 'DZY201', 'store.sm@mzt-lzl');
@@ -514,7 +514,7 @@ function setup() {
   // 8-1 金山店長兼任六張犁、又到六張犁支援打卡；六張犁沒有別的店長 → 應往第 2 層（六張犁區經理）
   sheets.staff_clock._data.push(['DZY232', 'mztlzl', 'MZTLZL232', 'staff', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
   app.ex(app.tok.DZY220, 'DZY232', 'store.sm@mzt-lzl');
-  ok(!has(app.H('DZY232'), 'mztlzl:DZY232'), '8-1 兼任者不核自己的支援帳號');
+  ok(has(app.H('DZY232'), 'mztlzl:DZY232') && !has(app.R('DZY232'), 'mztlzl:DZY232'), '8-1 ★兼任者自己的支援帳號：工時可以自己核、申請不行（2026-10-30 Eason 選 A）');
   ok(has(app.H('DZY206'), 'mztlzl:DZY232') && has(app.R('DZY206'), 'mztlzl:DZY232'), '8-1 ★兼任者自己的支援帳號往下一層（區經理）核，不會沒人核', app.H('DZY206'));
   // 8-2 財務同仁是值班主管 → 不該出現在「找不到上層」提醒（人資主管本來就核）
   const clk = sheets.staff_clock._data.find((r) => r[0] === 'DZY222' && r[1] === 'hq');
@@ -537,3 +537,25 @@ function setup() {
   console.log('\n' + (failed ? '失敗' : '通過') + ' ' + passed + '／' + (passed + failed));
   if (failed) process.exit(1);
 })();
+
+// 9. 本店兼任店長（代理店長）可核自己的工時（2026-10-30 Eason 選 A）
+(() => {
+  const app = setup();
+  const { sb } = app;
+  const before = app.H('DZY202');
+  ok(!has(before, 'mztlzl:DZY202'), '9 前置：正職沒設兼任時不能核自己', before);
+  const r = app.ex(app.tok.DZY220, 'DZY202', 'store.sm@mzt-lzl');
+  ok(r.ok, '9 ★人資主管可以把本店正職設成本店兼任店長', r);
+  const H = app.H('DZY202'), R = app.R('DZY202');
+  ok(has(H, 'mztlzl:DZY202'), '9 ★本店兼任店長可核自己的工時', H);
+  ok(!has(R, 'mztlzl:DZY202'), '9 ★自己的申請照舊不能核', R);
+  ok(has(H, 'mztlzl:DZY203') && has(R, 'mztlzl:DZY203'), '9 ★也能核同店計時同仁的工時與申請（店長等級）', { H, R });
+  ok(has(app.ident('DZY202').units_managed, 'mzt-lzl'), '9 營運系統管理單位含本店');
+  // 請購：自己送的單不會落到自己身上；人事異動直屬主管不含對象本人；認領／績效本來就擋本人
+  const dir = sb.apvDirectory_();
+  const ctxSelf = Object.assign({}, dir, { exclude: ['DZY202'] });
+  ok(!sb.apvRoleMembers_('head', dir.byEmp.DZY202, ctxSelf, null).some((x) => x.emp === 'DZY202'), '9 ★自己送的請購第一關不會是自己');
+  ok(sb.apvRoleMembers_('head', dir.byEmp.DZY203, dir, null).some((x) => x.emp === 'DZY202'), '9 同店計時送的請購第一關可以是他');
+  ok(!sb.apvDirectMembers_(dir.byEmp.DZY202, dir).some((x) => x.emp === 'DZY202'), '9 ★人事異動直屬主管不含對象本人');
+})();
+
