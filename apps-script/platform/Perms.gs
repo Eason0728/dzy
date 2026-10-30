@@ -163,7 +163,7 @@ function permActingUnitOk_(unit, org) {
 var PERM_ACTING_CACHE_ = null;
 var PERM_ACTING_TTL_MS = 3000;   // 不經 dispatch_ 的全域函式（mini 排程）也不會一直拿舊值
 /** 每個請求開頭清（Code.gs dispatch_）；測試改了 perm_ex 也要清 */
-function permActingReset_() { PERM_ACTING_CACHE_ = null; }
+function permActingReset_() { PERM_ACTING_CACHE_ = null; PERM_STAFF_ADD_CACHE_ = null; }
 /**
  * 兼任店長對照（同一個請求內快取）：{同仁編號: [單位…]}（排序去重）。
  * 只採 perm_ex 中 active、mode add、碼合法、單位合法（permActingUnitOk_）、沒過期（到期日當天仍有效；壞日期＝不給）的列，
@@ -213,19 +213,28 @@ function permStaffAddUnitOk_(unit, org) { return permAttViewUnitOk_(unit, org); 
 /**
  * 某人「可新增同仁」生效的單位（''＝沒有）。values＝staff 一列。只看 perm_ex 中 active、mode add、沒過期、
  * 碼＝staff.add@<本人目前主要單位> 的列；本人要在職、主要身分有效（permStaffIdentityOk_）、單位合法。不看 PERMS_ON。
- * 每次即時讀表（撤銷、調店下一個請求就收回）；表沒建或讀失敗＝''。
+ * 表的讀取有請求內快取（permStaffAddRows_；dispatch_ 開頭與寫例外後都清），撤銷、調店下一個請求就收回；表沒建或讀失敗＝''。
  */
+var PERM_STAFF_ADD_CACHE_ = null;   // {at, rows}：perm_ex 裡 staff.add@ 的列（同一個請求內只讀一次表；permActingReset_ 一起清、TTL 同兼任店長）
+function permStaffAddRows_() {
+  if (PERM_STAFF_ADD_CACHE_ && Date.now() - PERM_STAFF_ADD_CACHE_.at < PERM_ACTING_TTL_MS) return PERM_STAFF_ADD_CACHE_.rows;
+  var rows = [];
+  var t = permReadTable_(SpreadsheetApp.getActive(), PERM_SHEET_EX, PERM_EX_HEADERS);
+  if (!t.missing && !t.mismatch) rows = t.rows.filter(function (r) { return !!permStaffAddUnit_(r[2]); });
+  PERM_STAFF_ADD_CACHE_ = { at: Date.now(), rows: rows };
+  return rows;
+}
 function permStaffAddUnitOf_(values) {
   try {
     if (!values || permStr_(values[STF_COL.status]) !== 'active') return '';
     var emp = permStr_(values[STF_COL.emp_no]).toUpperCase();
     var home = permStr_(values[STF_COL.unit]);
     if (!emp || !home) return '';
-    var t = permReadTable_(SpreadsheetApp.getActive(), PERM_SHEET_EX, PERM_EX_HEADERS);
-    if (t.missing || t.mismatch || !t.rows.length) return '';
+    var rows = permStaffAddRows_();
+    if (!rows.length) return '';
     var today = permTodayTaipei_();
     var want = PERM_STAFF_ADD_PREFIX + home;
-    var hit = t.rows.some(function (r) {
+    var hit = rows.some(function (r) {
       if (permStr_(r[1]).toUpperCase() !== emp || permStr_(r[2]) !== want) return false;
       if (!permIsActive_(r[6]) || permStr_(r[3]).toLowerCase() !== 'add') return false;
       if (permStr_(r[4]) !== '') { var u = permNormDate_(r[4]); if (!u || u < today) return false; }

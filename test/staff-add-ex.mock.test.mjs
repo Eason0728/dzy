@@ -290,6 +290,15 @@ function setup() {
     ok(!pend.ok || !(pend.data.people || []).length, '2 ★不能看待審核名單', pend);
     ok(post(sb, 'unitApprove', { emp_no: 'DZY307' }, t).ok !== true, '2 ★不能審核開通');
     ok(app.add(app.tok.DZY303, 'ft').ok, '2 店長照舊能新增');
+    // 審查補測：打卡對照、待辦單、首頁提醒都只到本店
+    const ml = post(sb, 'clockMapList', {}, t);
+    ok(ml.ok && JSON.stringify(ml.data).indexOf('DZY304') === -1, '2 打卡對照看不到別店的人', ml.ok ? undefined : ml);
+    ok(post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'MZTJS304', decision: 'confirm' }, t).ok !== true, '2 不能決定別店的打卡對照');
+    const other = post(sb, 'staffCreateByUnit', { name: '金山新人', unit: 'mzt-js', title: 'pt', hire_date: app.today, phone: '0912000888' }, app.adminTok);
+    ok(other.ok && other.data.job_id, '2 前置：admin 在金山新增一人（有待辦單）', other);
+    ok(post(sb, 'clockJobStatus', { job_id: other.data.job_id }, t).code === 'no_job', '2 看不到別店的待辦單');
+    const al = post(sb, 'clockAlerts', {}, t);
+    ok(al.ok && JSON.stringify(al.data).indexOf('金山新人') === -1, '2 首頁打卡提醒只有本店', al.ok ? undefined : al);
     // 央廚
     ok(app.ex(app.adminTok, 'DZY306', 'staff.add@ck').ok, '2 前置：央廚正職設例外');
     const ck = app.add(app.login('DZY306'), 'pt');

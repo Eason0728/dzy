@@ -236,7 +236,7 @@ ok(L.NAME_MAX === 20 && L.addFormErrors({ ...good, name: 'x'.repeat(20) }, '2026
     const ctx = { params: {}, api: { call: async () => ({ ok: false, code: 'no_perm', error: 'no_perm' }) }, ui: {} };
     const stop = fn(el, { ctx, mod: 'me', viewer: { isHq: false, isLead: true } });
     await new Promise((r) => setTimeout(r, 20));
-    ok(el.innerHTML.includes('這個分頁給門市店長用') && !el.innerHTML.includes('no_perm'), `#22 ${name}：收到 no_perm 顯示白話說明`, el.innerHTML);
+    ok(el.innerHTML.includes('這個分頁給門市店長') && !el.innerHTML.includes('no_perm'), `#22 ${name}：收到 no_perm 顯示白話說明`, el.innerHTML);
     if (typeof stop === 'function') stop();
   }
 }
