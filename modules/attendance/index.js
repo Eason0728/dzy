@@ -5,7 +5,7 @@
 'use strict';
 
 import { createEmbed } from './embed.js';
-import { unwrap, toAlerts, toBadge, toGapAlert } from './alerts.js';
+import { unwrap, toAlerts, toBadge, toGapAlert, toHoursGapAlert } from './alerts.js';
 
 const embed = createEmbed({
   title: '考勤管理',
@@ -22,15 +22,18 @@ async function fetchAlerts(ctx) {
 
 // 值班主管本人的申請找不到上層（2026-10-28，docs/req-upper）：平台後端 attUpperGaps，只有人資主管／管理員回得出內容；失敗當沒有
 async function fetchGaps(ctx) {
-  try { return toGapAlert(await ctx.api.call('platform', 'attUpperGaps')); } catch (e) { return null; }
+  try {
+    const r = await ctx.api.call('platform', 'attUpperGaps');
+    return [toGapAlert(r), toHoursGapAlert(r)].filter(Boolean);   // 申請找不到上層＋工時沒人核（2026-10-30）
+  } catch (e) { return []; }
 }
 
 export default {
   ...embed,
   async alerts(ctx) {
-    const [data, gap] = await Promise.all([fetchAlerts(ctx), fetchGaps(ctx)]);
+    const [data, gaps] = await Promise.all([fetchAlerts(ctx), fetchGaps(ctx)]);
     const out = toAlerts(data);
-    if (out && gap && !(data && data.pending === true)) out.push(gap);
+    if (out && gaps.length && !(data && data.pending === true)) gaps.forEach((g) => out.push(g));
     return out;
   },
   async badge(ctx) { return toBadge(await fetchAlerts(ctx)); }

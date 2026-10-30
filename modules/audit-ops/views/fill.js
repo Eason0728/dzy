@@ -170,7 +170,7 @@ export function mountFill(root, ctx, moduleState) {
   const statTotal = el('b', { text: '0' });
   const statPass = el('b', { id: 'ops-s-pass', text: '0' });
   const statFail = el('b', { id: 'ops-s-fail', text: '0' });
-  const statTrack = el('b', { text: '0' });
+  const statTrack = el('b', { id: 'ops-s-track', text: '0' });
   const statPending = el('b', { id: 'ops-s-pending', text: '0' });
   const statRate = el('b', { text: '0%' });
   const statsEl = el('div', { class: 'ops-stats card-row row-wrap' }, [
@@ -303,6 +303,7 @@ export function mountFill(root, ctx, moduleState) {
   function onTrackClick(id) {
     entries[id].track = !entries[id].track;
     saveDraftNow();
+    renderStats(); // 追蹤數也在頁頂統計裡（2026-10-29 資料帶入測試抓到沒更新）
     renderList();
   }
 
@@ -428,7 +429,11 @@ export function mountFill(root, ctx, moduleState) {
       submitting = false;
       submitBtn.disabled = false;
       submitBtn.textContent = '送出營運稽核';
-      if (res && res.ok) {
+      if (res && res.ok && res.data && res.data.dryRun) {
+        // 試跑模式（?dryrun=1）：寫入被 audit-shared/api.js 攔下。不當成功——草稿保留、不導頁（2026-10-29，同 audit-stock）。
+        hideMessage();
+        ctx.ui.toast('試跑模式：未實際寫入，草稿已保留', 'ok');
+      } else if (res && res.ok) {
         // submit() 成功時已經呼叫過 invalidate()（見 audit-shared/api.js），下一次進報告頁
         // 呼叫 getAll() 就會拿到剛送出的新資料，不必像舊版 app.reload() 那樣手動重抓一次。
         FillSubmit.clearDraft(draftOwner, record.record_key);
@@ -537,11 +542,10 @@ export function mountFill(root, ctx, moduleState) {
 
       // 月份優先序同 audit-stock/views/fill.js：params ＞ moduleState（任務①）＞ 當月／預設。
       const carriedMonth = params.month ? null : readModuleState(moduleState).month;
-      const now = new Date();
-      const realMonthStr = String(now.getFullYear()) + '-' + pad2(now.getMonth() + 1);
+      const realMonthStr = FillSubmit.currentMonth();   // 台北時間（2026-10-29，同 audit-stock）
       month = params.month
         || (carriedMonth && months.indexOf(carriedMonth) !== -1 ? carriedMonth : null)
-        || (String(now.getFullYear()) === YEAR ? realMonthStr : months[0]);
+        || (realMonthStr.slice(0, 4) === YEAR ? realMonthStr : months[0]);
       if (months.indexOf(month) === -1) month = months[0];
       monthSelect.value = month;
       writeModuleState(moduleState, { store, month });

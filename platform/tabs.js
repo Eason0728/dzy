@@ -11,7 +11,11 @@ export const TAB_ID_RE = /^[a-z][a-z0-9-]{0,30}$/;
 export const TABS_MAX = 20;
 const NAME_MAX = 12;
 
-/** list → [{id, name, badge, err}]；整個不合格回 null（殼就不更新）。重複 id 只留第一個。 */
+/** badge 只收數字（布林 true 不能變 1；2026-10-29）：非 number／NaN／負數→0，小數無條件捨去。
+ *  與 modules/<模組>/embed.js 的 badgeNum 逐字相同（模組不能 import 平台，各留一份；test/dynamic-tabs.test.mjs 比對本文）。 */
+export function badgeNum(v) { return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0; }
+
+/** list → [{id, name, badge, err}]；整個不合格回 null（殼就不更新）。重複 id 只留第一個。badge 上限 999。 */
 export function sanitizeTabs(list) {
   if (!Array.isArray(list) || list.length > TABS_MAX) return null;
   const out = [];
@@ -22,8 +26,7 @@ export function sanitizeTabs(list) {
     if (typeof id !== 'string' || !TAB_ID_RE.test(id) || seen.has(id)) continue;
     const name = typeof t.name === 'string' ? t.name.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX) : '';
     if (!name) continue;
-    const n = Number(t.badge);
-    const badge = Number.isInteger(n) && n > 0 ? Math.min(n, 999) : 0;
+    const badge = Math.min(badgeNum(t.badge), 999);
     seen.add(id);
     out.push({ id, name, badge, err: t.err === true });
   }
@@ -36,3 +39,19 @@ export function pickDynamicView(viewId, tabs, fallbackId) {
   if (Array.isArray(tabs) && tabs.length) return tabs[0].id;
   return fallbackId;
 }
+
+/**
+ * 首頁「待辦與異常」一列的目的分頁 id（2026-10-29 從 shell.js alertTarget 搬成純函式）。
+ * item.view 不是字串（模組只是提醒，例如「部分門市暫時讀不到」）→ null＝只顯示、不給連結樣式、不導頁。
+ * dynamicTabs 模組且 view 合格、進得了模組（views[0] 有權限）→ 直接該分頁。
+ * 其他：view 對到有權限的分頁就用它；對不到或沒權限 → 退回模組第一個有權限的分頁（沒有就 null）。
+ * permitted(view) 由殼提供（看 requires）。
+ */
+export function alertViewId(manifest, item, permitted) {
+  if (!item || typeof item.view !== 'string') return null;
+  const views = Array.isArray(manifest && manifest.views) ? manifest.views : [];
+  if (manifest.dynamicTabs && TAB_ID_RE.test(item.view) && views[0] && permitted(views[0])) return item.view;
+  const view = views.find((v) => v.id === item.view && permitted(v)) || views.find(permitted);
+  return view ? view.id : null;
+}
+

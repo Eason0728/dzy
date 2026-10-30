@@ -380,7 +380,7 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(post(sb, 'staffLeave', { emp_no: a.emp, last_day: '2026-13-01' }, tok).ok === false, 'B3 日期格式要對');
   ok(post(sb, 'staffLeave', { emp_no: a.emp, last_day: dayT(900) }, tok).ok === false, 'B3 太遠的未來不收');
   ok(post(sb, 'staffLeave', { emp_no: b.emp, last_day: dayT(3) }, mgrGF.token).code === 'no_perm', 'B3 ★店長不能動別單位的人');
-  ok(post(sb, 'staffLeave', { emp_no: b.emp, last_day: dayT(3) }, a.token).code === 'no_perm', 'B3 一般同仁不能登記');
+  ok(post(sb, 'staffLeave', { emp_no: a.emp, last_day: dayT(3) }, b.token).code === 'no_perm', 'B3 一般同仁不能登記（用 b 試：a 上面已登記過去的離職日，2026-10-30 起 token 當場失效）');
   ok(post(sb, 'staffLeave', { emp_no: b.emp, last_day: dayT(3) }, mgrJS.token).ok, 'B3 他店店長動自己店的人 OK');
   ok(post(sb, 'staffLeave', { emp_no: 'DZY999', last_day: dayT(3) }, tok).code === 'not_found', 'B3 找不到同仁');
   // 不能對自己登記離職

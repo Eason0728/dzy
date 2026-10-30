@@ -462,6 +462,8 @@ export function mountHandover(root, ctx) {
       itemStates[idx].returned = v;
       // 對齊舊版 handover.html 154-160 行：選「未歸還」時，若尚未明確點過「正常」，
       // 自動視為異常（沒歸還的東西無從點收為正常）。
+      // 2026-10-30 Eason 照推薦：維持「未歸還一律計價」（賠償以 Handover.gs calcCompensation 為準），
+      // 「正常＋未歸還」這種點法不另外處理——畫面在清單旁直接寫明未歸還就會照賠償單價計價（#dorm-handover-items-hint）。
       if (v === false && itemStates[idx].normal !== false) {
         itemStates[idx].normal = false;
       }
@@ -469,6 +471,7 @@ export function mountHandover(root, ctx) {
     }
 
     renderItemsList();
+    container.appendChild(el('p', { id: 'dorm-handover-items-hint', class: 'field-hint', text: '每項設備都要點「正常／異常」與「已歸還／未歸還」；點了「未歸還」就會照賠償單價計價（2026-10-30）。' }));
     container.appendChild(el('div', { class: 'table-wrap' }, [itemsList]));
 
     // ---- 清潔勾選 ----

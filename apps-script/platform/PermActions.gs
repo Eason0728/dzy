@@ -29,7 +29,7 @@ function permAcAdmin_(token) {
   return sess;
 }
 /**
- * 個別例外專用：admin 放行所有碼；人資主管（stfIsHrHead_）只能動 STORE_HR_GRANTABLE 三碼（store.void、att.extra、platform.bulletin）與兼任店長 store.sm@<單位>，
+ * 個別例外專用：admin 放行所有碼；人資主管（stfIsHrHead_，且要有 platform.permmap，2026-10-29）只能動 STORE_HR_GRANTABLE 三碼（store.void、att.extra、platform.bulletin）與兼任店長 store.sm@<單位>，
  * 且不能對自己設。其他碼、其他人一律 no_perm。perm＝這次要動的權限碼（列表時傳空字串＝只驗身分）。
  * 回 session（附 hrOnly:true 表示非 admin）或錯誤物件。
  */
@@ -40,6 +40,7 @@ function permAcExAuth_(token, perm, targetEmp) {
   if (String(sess.user.role) !== 'staff' || typeof stfIsHrHead_ !== 'function') return permAcNoPerm_();
   var hit = stfFindByUserId_(sess.user.id);
   if (!hit || !stfIsHrHead_({ status: permStr_(hit.values[STF_COL.status]), dept: permStr_(hit.values[STF_COL.dept]), title: permStr_(hit.values[STF_COL.title]) })) return permAcNoPerm_();
+  if (!hasPerm_(sess.perms, 'platform.permmap')) return permAcNoPerm_();   // 2026-10-29 與對照表（permAcMapAccess_）一致：人資主管也要有 platform.permmap 才能設個別例外
   if (perm !== '' && STORE_HR_GRANTABLE.indexOf(perm) === -1 && !permActingUnit_(perm) && !permStaffAddUnit_(perm)) return permAcNoPerm_();   // 2026-10-29 兼任店長 store.sm@<單位>、2026-10-30 可新增同仁 staff.add@<單位> 人資也能設
   if (targetEmp && permStr_(hit.values[STF_COL.emp_no]).toUpperCase() === permStr_(targetEmp).toUpperCase()) {
     return permAcFail_('perm_self', '不能對自己設定例外');
@@ -359,6 +360,8 @@ function handlePermExList_(token, payload) {
     });
   });
   var data = { inited: true, items: items };
+  // 2026-10-29：個別例外的功能下拉以這份為準（admin＝PERM_GRANTABLE 全部；人資主管＝STORE_HR_GRANTABLE），前端 modules/perms/lib.js 不再自己維護一份
+  data.grantable = sess.hrOnly ? STORE_HR_GRANTABLE.slice() : PERM_GRANTABLE.slice();
   // 2026-10-26「指定門市只看考勤」（att.view@<單位>，只有 admin 能設）：admin 才多回可選的門市（active、store 階梯含 ck），名稱同 permAttViewLabel_
   if (!sess.hrOnly) data.att_view_units = permAcAttViewUnits_();
   data.acting_units = permAcActingUnits_();   // 2026-10-29 兼任店長：admin 與人資主管都有

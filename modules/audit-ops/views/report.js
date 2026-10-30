@@ -29,6 +29,7 @@
 
 import * as sharedApi from '../../audit-shared/api.js';
 import { Format } from '../../audit-shared/umd-bridge.js';
+import { currentMonth } from './fill-submit.js';
 
 function pad2(n) {
   return (n < 10 ? '0' : '') + n;
@@ -279,10 +280,7 @@ export function mountReport(root, ctx, moduleState) {
 
       const stores = storeList();
       if (!store || !stores.some((s) => s.code === store)) store = (stores[0] && stores[0].code) || '';
-      if (!month) {
-        const now = new Date();
-        month = String(now.getFullYear()) + '-' + pad2(now.getMonth() + 1);
-      }
+      if (!month) month = currentMonth();   // 台北時間（2026-10-29）
       syncModuleState();
 
       renderAll();

@@ -6,7 +6,7 @@
 
 - **支援帳號**：同仁的某個打卡帳號（staff_clock，state=confirmed、roster_active≠FALSE）所在打卡店的單位清單（`clkUnitsOf_(store)`）**不含**這位同仁的單位 → 這個帳號算「支援」（1A：不看 role 是 home 還是 support）。
   - 例外：打卡店代碼 `hq`（總部打卡）一律**不算**支援，照原規則（總部沒有店長）。
-  - 推算／orphan 的同仁（storeEffectiveTarget_ inferred／orphan）照舊，不套本規則。
+  - orphan 的同仁（storeEffectiveTarget_ orphan）照舊，不套本規則。**推算者（inferred）2026-10-30 起套本規則**（見 §6）。
 - **支援帳號的核定人**（工時 hours 與申請 req 都一樣，2A；總部同仁到門市也一樣，5A）：打卡店單位 S 的主管，**依序取第一個有人的那層**（3A）：
   1. S 是 store 階梯：同單位在職的店長 `sm`；S 是央廚 `ck`：在職廠長 `fm`。
   2. 沒有 → store：同單位在職區經理 `am`；ck：在職廚藝總監 `rdd`（掛 ck）。
@@ -39,3 +39,11 @@ dzy 後端（Mac mini）先，dzy 前端（權限設定的門市下拉）後。�
 ## 5. 追加（2026-10-26 Eason）
 
 - 品牌辦公室同仁（區督導 osv、行政 ofs、區經理 oam）到門市打卡**不算支援**：照原規則由辦公室總監核，店長不核也不看（`storeAttIsSupport_` 第 4 參數 org）。
+
+## 6. 推算者到非主店打卡（2026-10-30 Eason 照推薦）
+
+- 沒填單位（或職稱）、靠主店打卡推算出主店的人（`storeEffectiveTarget_` inferred），到**非主店**的打卡帳號照 §1 的支援規則：由打卡店的店長→區經理→區督導→品牌總監核工時與申請；主店（推算出的單位）主管對那個帳號只看（進 view_people）。在主店打卡的帳號照舊由主店主管核。
+- orphan（推算不出主店）不變：只有人資主管／admin 看得到。
+- 實作：`storeAttIsSupport_` 不再排除 `t.inferred`（StoreOps.gs）；oracle 見 test/dd/hr2_backend.mjs isSupport。
+- 對抗驗證補強（2026-10-30）：推算者**只有打卡店在試點（STORE_SSO_UNITS）時**才走支援規則；非試點店的帳號維持改規則前的行為（不當支援，主店店長靠 pilotUnits 照舊核、人資主管／admin 看得到）。`storeAttAccounts_` 判斷。
+

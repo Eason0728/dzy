@@ -525,6 +525,26 @@ await at('年度總表：切到央廚，四月列應該顯示「輪休」', asyn
   unmount();
 });
 
+await at('★單月報告與年度總表永遠同一家店：單月切店→年度跟著；年度切店→單月跟著（2026-10-30 Eason 照推薦）', async () => {
+  resetAll();
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx({ params: { store: 'sxl-gf', month: '2026-01' } });
+  state.apiHandlers.getAll = () => okGetAll({ config: makeConfig(), records: reportRecords(), details: reportDetails() });
+  const unmount = mountReport(root, ctx);
+  await flush();
+  fireChange(byId(root, 'report-store-select'), 'ck');
+  await flush();
+  fireClick(byDataAttr(root, 'data-mode', 'annual'));
+  await flush();
+  assert.equal(byId(root, 'report-annual-store-select').value, 'ck', '單月切到央廚後按年度總表 → 年度也是央廚');
+  fireChange(byId(root, 'report-annual-store-select'), 'sxl-gf');
+  await flush();
+  fireClick(byDataAttr(root, 'data-mode', 'month'));
+  await flush();
+  assert.equal(byId(root, 'report-store-select').value, 'sxl-gf', '年度切回光復後按單月 → 單月也是光復');
+  unmount();
+});
+
 // ============================================================
 // C. 資料為空時不崩潰
 // ============================================================

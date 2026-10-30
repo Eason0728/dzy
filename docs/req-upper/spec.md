@@ -91,3 +91,11 @@
 - dzy：storeops.mock（跳過同店值班主管、查不到上層）、e2e 考勤。
 - 營運系統：申請審核頁標示。
 - 上線順序：打卡六店（先總部）→ mini（svc_roster duty_mgr）→ 管理系統後端 → 營運系統網站 → manager.html。每段上線都另外問；auto mode 擋的寫成腳本給 Eason 按 Run。
+
+## 11. 工時找不到核定人的提醒（2026-10-30 Eason 照推薦）
+
+- 讀取 action `attUpperGaps` 多回 `hours_items:[{emp, name, unit_name}]`（`StoreOps.gs storeHoursGaps_`）：在職、身分有效、要核工時（非人資核的部門）、有生效打卡帳號，而除人資主管／admin 外**沒有人能核工時**的同仁——非支援帳號看考勤表（店長核自己算有），支援帳號看打卡店四層（店長→區經理→區督導→品牌總監）。例：共用打卡店的另一單位沒店長、沒總監的辦公室。推算／orphan 的人不算（已有「沒有對照」那條）。
+- 考勤管理首頁（`modules/attendance/alerts.js toHoursGapAlert`）給人資主管／admin 多一條 warn「N 位同仁的工時沒人核，由人資主管核」，點了進「核定工時」分頁；舊後端沒回 hours_items 就不顯示。
+- 同一支讀取 action：`platform/dryrun.js READ_ACTIONS` 與 minikit `readActions` 都已有 `attUpperGaps`，**不用改**。
+- 對抗驗證補強（2026-10-30）：同單位的 att.extra（額外考勤核定，只走個別例外；`Perms.gs permAttExtraEmps_`）持有人（非本人、在職、身分有效）算核定人，支援帳號看打卡店單位——有人持有就不列「沒人核」。
+

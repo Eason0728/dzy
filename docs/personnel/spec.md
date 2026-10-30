@@ -293,3 +293,12 @@ dryrun 模式也真的送（登出不是資料寫入；`platform/dryrun.js` 白�
 
 ## 9. 不做（第一期）
 職稱→系統權限、表單簽核、通知推播、匯出、改打卡／佈告欄／薪資名單、跨店主管範圍、四碼編號。
+
+## 10. 離職當場停（2026-10-30 Eason 照推薦）
+
+- 登記離職 `staffLeave` 時 `last_day ≤ 台北今天` → **當場** `setTokenAfter_` 踢掉該同仁所有登入；之後登入／me／代轉一律由 `stfLoginGate_`（呼叫 StaffClock.gs `clkLeaveBlocks_`）擋下，訊息「已離職，帳號已停用；要復職請找人資」（在職但離職日已到＝視同停用，不等每晚 00:10 同步）。
+- 撤銷離職 `staffLeaveCancel`（離職日當天仍可撤）清掉 last_day → 可以重新登入（舊 token 已失效，要重登）。
+- `last_day` 在未來的照舊：可登入、token 有效，等那天由每晚同步停用；每晚同步的停用流程不變。店長只能對職級較低的人登記／撤銷（`clkLeaveTarget_`）不變。
+- 測試：test/dd/hr_calc.mjs F 段（當天登記→舊 token 失效、密碼登入被擋、撤銷後可登、未來日期不受影響）；test/staff-clock.mock.test.mjs B3。
+- 對抗驗證補強（2026-10-30）：`storeIdent_`（svcStoreWho／svcStoreRoster）staff 分支也認 `clkLeaveBlocks_` → 離職日已到回 `active:false`，營運系統重查身分時會刪 session（server/person.js：ident inactive 或 token_after 變大都刪）。預先登記、日子到了那天沒人呼叫過 setTokenAfter_ → `clkLeaveBlocks_` 第一次擋下時補寫一次 token_after（只在 token_after 早於台北今天 00:00 時寫），之後請求不再寫；撤銷不回退 token_after（本來就要重登）。營運系統不用改。
+

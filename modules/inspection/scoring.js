@@ -25,6 +25,9 @@ function computeCategory(form, cat, ans) {
   return { id: cat.id, name: cat.name, weight: cat.weight, sum, answered, max, ratio: answered ? sum / max : null };
 }
 
+/** 每張表加分總額上限（2026-10-30 Eason 照推薦）：加分題、自由填寫加分合計最多 +20；超過的不計，舊報告存的摘要不重算 */
+export const BONUS_CAP = 20;
+
 function computeBonus(form, ans) {
   let total = 0; const detail = [];
   form.categories.filter((c) => c.role === 'bonus').forEach((cat) => {
@@ -40,7 +43,9 @@ function computeBonus(form, ans) {
       }
     });
   });
-  return { total, detail };
+  const raw = total;
+  if (total > BONUS_CAP) total = BONUS_CAP;
+  return { total, raw, capped: raw > BONUS_CAP, detail };
 }
 
 function computePenalty(form, ans) {
@@ -120,7 +125,7 @@ export function summaryOf(forms, ans) {
   return {
     operationalScore: r.operationalScore, operationalGrade: r.operationalGrade,
     managementScore: r.managementScore, managementGrade: r.managementGrade, penaltyTotal: r.penaltyTotal,
-    forms: forms.map((f) => ({ id: f.id, name: f.name, score: r.byForm[f.id].scoreRounded })),
+    forms: forms.map((f) => ({ id: f.id, name: f.name, score: r.byForm[f.id].scoreRounded, bonus: r.byForm[f.id].bonus.total })),   // bonus＝實際算進分數的加分（封頂後；2026-10-30）
     defects: deficiencies(forms, ans).length
   };
 }

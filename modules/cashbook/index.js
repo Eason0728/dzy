@@ -47,16 +47,21 @@ export default {
     const stores = Array.isArray(st.data && st.data.stores) ? st.data.stores : [];
     const locksByStore = {};
     const liveByStore = {};
+    let unreadable = false;   // 某店鎖定或明細讀不到：不能斷言它「還沒月結」（2026-10-29 資料帶入測試），改列一行「暫時讀不到」
     await Promise.all(stores.map(async (s) => {
       const r = await ctx.api.call('cashbook', 'adminLocks', { store: s.code });
-      locksByStore[s.code] = r && r.ok && Array.isArray(r.data && r.data.locks) ? r.data.locks.filter(isLocked) : [];
+      if (!(r && r.ok && Array.isArray(r.data && r.data.locks))) { locksByStore[s.code] = null; unreadable = true; return; }
+      locksByStore[s.code] = r.data.locks.filter(isLocked);
       // 已被會計鎖的不必再查有沒有帳；其餘才讀上個月明細，確認真的有帳可月結
       const acct = locksByStore[s.code].some((x) => x.month === month && x.lockedVia === 'acct');
       if (acct) return;
       const l = await ctx.api.call('cashbook', 'adminList', { store: s.code, month });
       if (l && l.ok && Array.isArray(l.data && l.data.rows)) liveByStore[s.code] = l.data.rows.some((x) => x && x.status !== '作廢');
+      else { liveByStore[s.code] = null; unreadable = true; }
     }));
-    return storesToAlert(stores, locksByStore, month, liveByStore)
+    const out = storesToAlert(stores, locksByStore, month, liveByStore)
       .map((s) => ({ level: 'warn', text: `${s.name || s.code} ${monthNum(month)} 月還沒月結`, view: 'lock', params: { store: s.code, month } }));
+    if (unreadable) out.push({ level: 'info', text: '部分門市暫時讀不到，稍後再看' });   // level 要在殼的 ALERT_LEVELS（error/warn/info）裡；沒有 view → 殼不給連結
+    return out;
   }
 };

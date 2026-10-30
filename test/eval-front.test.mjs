@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import manifest from '../modules/eval/manifest.js';
 import { validateManifest } from '../platform/manifest-check.js';
 import { READ_ACTIONS } from '../platform/dryrun.js';
+import { errText } from '../modules/eval/lib.js';
 
 let n = 0;
 function t(name, fn) { fn(); n++; console.log('PASS: ' + name); }
@@ -36,5 +37,15 @@ t('畫面呼叫的讀取 action 都在試跑白名單', () => {
   const reads = ['evMe', 'evMyScores', 'evNewbieList', 'evUnitResults', 'evPersonDetail', 'evBankGet', 'evImportPreview'];
   for (const a of called) if (reads.includes(a)) assert.ok(READ_ACTIONS.platform.includes(a), a);
   assert.ok(called.size >= 15, '畫面至少用到 15 支 action：' + [...called].join(','));
+});
+t('★errText：平台 api.js 把 {error:code, message} 壓成 error＝code、message 落在 data → 要顯示人話（2026-10-29）', () => {
+  assert.equal(errText({ ok: false, error: 'window_closed', data: { message: '現在不是填寫期間（每季第一個月 1～5 號）' } }), '現在不是填寫期間（每季第一個月 1～5 號）');
+  assert.equal(errText({ ok: false, error: 'bad_request', data: { message: '同一位同仁重複出現' } }), '同一位同仁重複出現');
+  assert.equal(errText({ ok: false, error: 'window_closed' }), '現在不是填寫期間（每季第一個月 1～5 號）', '沒 message 的已知碼 → 中文表');
+  for (const c of ['bad_request', 'forbidden', 'duplicate', 'unauthorized', 'not_in_unit', 'not_inited', 'no_scope', 'finalized', 'busy']) assert.notEqual(errText({ ok: false, error: c }), c, '代碼要翻中文：' + c);
+  assert.equal(errText({ ok: false, error: '已經是中文的代轉訊息' }), '已經是中文的代轉訊息');
+  assert.equal(errText({ ok: false, message: '直接帶 message' }), '直接帶 message');
+  assert.equal(errText(null), '連不上伺服器，請稍後再試');
+  assert.equal(errText({ ok: false }), '發生錯誤');
 });
 console.log(`\n通過 ${n}／${n}`);

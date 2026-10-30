@@ -91,7 +91,7 @@ const baseHandler = (extra) => (action, payload) => {
   if (action === 'staffEdit') return { ok: true, data: { staff: P1 } };
   return { ok: false, error: '未知 ' + action };
 };
-async function mount(ctx) { const el = new FakeNode(); mountList(el, ctx); await flush(); return el; }
+async function mount(ctx) { const el = new FakeNode(); el.__unmount = mountList(el, ctx); await flush(); return el; }
 const rows = (el) => el.querySelector('[data-role="rows"]').innerHTML;
 
 // ── T5：名單標籤、兼任文字、篩選 ──
@@ -544,6 +544,53 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ok(['enable', 'reinstate'].every((a) => b3.some((b) => b.act === a && !b.sec)) && b3.some((b) => b.act === 'rename-clock' && b.sec), '18 已停用：啟用、復職露在卡片上，打卡改名收進更多');
   ok(PRIMARY_ACTS.indexOf('unclaim') === -1 && PRIMARY_ACTS.indexOf('disable') === -1 && PRIMARY_ACTS.indexOf('confirm') !== -1, '18 主要按鈕清單不含撤回認領、停用');
   ok(/\.stf-more \{ display: none; \}/.test(CARD_CSS.split('@media')[0]), '18 電腦版不顯示「更多」');
+}
+
+// ── 2026-10-29：手機「更多」展開後 Esc 要在 document 上收合（焦點不在清單內也要能收；展開時才監聽、收合時移除） ──
+{
+  setSearch(null);
+  const h = makeCtx(baseHandler((a) => (a === 'staffList' ? { ok: true, data: { staff: [P1] } } : null)), { perms: ['platform.staff'] });
+  const docLs = {};
+  globalThis.document.addEventListener = (t, fn) => { (docLs[t] = docLs[t] || []).push(fn); };
+  globalThis.document.removeEventListener = (t, fn) => { docLs[t] = (docLs[t] || []).filter((f) => f !== fn); };
+  const el = await mount(h);
+  const unmount = el.__unmount;
+  let open = false;
+  const tr = { classList: { toggle() { open = !open; return open; }, remove() { open = false; }, contains() { return open; } }, querySelector() { return btn; } };
+  const btn = { closest(sel) { return sel === '[data-more]' ? btn : (sel === 'tr' ? tr : null); }, setAttribute() {}, getAttribute() { return null; }, textContent: '' };
+  el.querySelectorAll = (sel) => (sel === 'tr.stf-open' ? (open ? [tr] : []) : []);
+  const rows = el.querySelector('[data-role="rows"]');
+  ok((docLs.keydown || []).length === 0, '20 還沒展開：document 上沒有 Esc 監聽');
+  rows.fire('click', { target: btn });
+  ok(open && (docLs.keydown || []).length === 1, '20 ★展開「更多」→ 在 document 掛一個 keydown 監聽');
+  docLs.keydown[0]({ key: 'Enter' });
+  ok(open, '20 其他鍵不收');
+  docLs.keydown[0]({ key: 'Escape' });
+  ok(!open && (docLs.keydown || []).length === 0, '20 ★Esc（焦點在清單外）→ 收合、監聽移除');
+  rows.fire('click', { target: btn });
+  rows.fire('click', { target: btn });
+  ok(!open && (docLs.keydown || []).length === 0, '20 再點一次「更多」收起 → 監聯也移除（不累積）');
+  rows.fire('click', { target: btn });
+  if (typeof unmount === 'function') unmount();
+  ok(typeof unmount !== 'function' || (docLs.keydown || []).length === 0, '20 卸載時移除 document 監聽');
+  // 對抗驗證 D：同一個 el 再掛一次 → 舊監聽換掉、不累積；對話框開著時 Esc 不收合「更多」
+  const el2 = el; el2.__unmount = mountList(el2, h); await flush();
+  const rows2 = el2.querySelector('[data-role="rows"]');
+  open = false;
+  rows2.fire('click', { target: btn });
+  ok(open && (docLs.keydown || []).length === 1, '20 ★重掛同一個 el 後展開 → document 仍只有 1 個監聽');
+  globalThis.document.querySelector = (sel) => (sel === '.dialog-overlay' ? {} : null);
+  docLs.keydown[0]({ key: 'Escape' });
+  ok(open && (docLs.keydown || []).length === 1, '20 ★對話框開著按 Esc → 不收合「更多」、監聽還在');
+  delete globalThis.document.querySelector;
+  docLs.keydown[0]({ key: 'Escape' });
+  ok(!open && (docLs.keydown || []).length === 0, '20 對話框關了再按 Esc → 收合');
+  rows2.fire('click', { target: btn });
+  const el3Unmount = mountList(el2, h); await flush();   // 第三次掛：前一次展開中的監聯要被換掉而不是留到卸載
+  ok((docLs.keydown || []).length <= 1, '20 ★展開中再重掛 → 舊 document 監聯被移除（不等卸載）');
+  el3Unmount(); if (typeof el2.__unmount === 'function') el2.__unmount();
+  ok((docLs.keydown || []).length === 0, '20 全部卸載後沒有殘留監聽');
+  delete globalThis.document.addEventListener; delete globalThis.document.removeEventListener;
 }
 
 // ── 檢查 ──

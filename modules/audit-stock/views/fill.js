@@ -618,7 +618,11 @@ export function mountFill(root, ctx, moduleState) {
       if (destroyed) return;
       submitBtn.disabled = false;
       submitBtn.textContent = '送出稽核';
-      if (res && res.ok) {
+      if (res && res.ok && res.data && res.data.dryRun) {
+        // 試跑模式（?dryrun=1）：audit-shared/api.js 攔下寫入、回 {dryRun:true}。
+        // 不能當成功——草稿保留、不導頁，否則會計以為送成了、內容卻沒進正式表（2026-10-29，同 stores.js）。
+        ctx.ui.toast('試跑模式：未實際寫入，草稿已保留', 'ok');
+      } else if (res && res.ok) {
         // submit() 成功時已經呼叫過 invalidate()（見 audit-shared/api.js），下一次
         // 進報告頁（T2-4）呼叫 getAll() 就會拿到剛送出的新資料，不必像舊版
         // app.reload() 那樣在這裡手動重抓一次。
@@ -733,13 +737,12 @@ export function mountFill(root, ctx, moduleState) {
       // 落在那份草稿的月份與模式上（同舊版 latestDraftForStore()：否則只回到店、月份卻是
       // 當月，看起來像內容不見了）。
       const resumeTarget = (params.month || useCarriedMonth) ? null : FillSubmit.latestDraftForStore(draftOwner, currentStore);
-      const now = new Date();
-      const realMonthStr = String(now.getFullYear()) + '-' + pad2(now.getMonth() + 1);
+      const realMonthStr = FillSubmit.currentMonth(); // 台北時間（2026-10-29，同 index.js badge）
       currentMonth = params.month
         ? params.month
         : (useCarriedMonth
             ? carriedMonth
-            : (resumeTarget ? resumeTarget.month : (String(now.getFullYear()) === YEAR ? realMonthStr : months[0])));
+            : (resumeTarget ? resumeTarget.month : (realMonthStr.slice(0, 4) === YEAR ? realMonthStr : months[0])));
       if (months.indexOf(currentMonth) === -1) currentMonth = months[0];
       monthSelect.value = currentMonth;
       mode = resumeTarget ? resumeTarget.mode : mode;

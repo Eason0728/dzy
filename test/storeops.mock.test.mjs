@@ -700,7 +700,8 @@ function noDirSched(id) {
   const adm = app.ident('U:a001');
   ok(eq(adm.units_managed, ['ck', 'mala-gf', 'mzt-gf', 'mzt-js']) && eq(adm.void_units, adm.units_managed), '4 admin：試點內全部 store 階梯單位（含 ck、不含辦公室與總部）', adm);
   ok(eq(app.ident('DZY010').units_managed, []) && eq(app.ident('DZY020').void_units, []), '4 總監／人資主管預設無管理單位、無作廢權');
-  // 人資主管給正職作廢權 → void_units
+  // 人資主管給正職作廢權 → void_units（2026-10-29 起設例外要有 platform.permmap＝對照表算出來的，正式環境 PERMS_ON 已開）
+  app.props.PERMS_ON = '1';
   const hrTok = app.login('DZY020');
   const sv = post(app.sb, 'permExSave', { emp_no: 'DZY002', perm: 'store.void', mode: 'add', until: '', note: '代班店長' }, hrTok);
   ok(sv.ok && eq(app.ident('DZY002').void_units, ['mzt-gf']), '4 store.void 例外 → void_units＝本人單位', sv);
@@ -769,6 +770,7 @@ function noDirSched(id) {
 (() => {
   const app = world(BIG);
   const { sb } = app;
+  app.props.PERMS_ON = '1';   // 2026-10-29 起人資主管設例外要有 platform.permmap（對照表 hq/hr/hm 規則算出來的；正式環境 PERMS_ON 已開）
   const hrTok = app.login('DZY020');
   const ex = (tok, emp, perm, mode, extra) => post(sb, 'permExSave', Object.assign({ emp_no: emp, perm, mode: mode || 'add', until: '', note: '測試原因' }, extra || {}), tok);
   const audits = () => app.sheets.perm_audit._rows().slice(1);
@@ -786,6 +788,16 @@ function noDirSched(id) {
   ok(au3[au3.length - 1][1] === 'u020' && au3[au3.length - 1][2] === 'DZY004' && au3[au3.length - 1][3] === 'platform.bulletin' && au3[au3.length - 1][5] === 'perm_ex', '6 platform.bulletin 例外寫 perm_audit', au3[au3.length - 1]);
   ok(ex(hrTok, 'DZY004', 'platform.bulletin', 'remove', { note: '暫停公告' }).ok, '6 人資主管能設 platform.bulletin 的 remove 例外');
   ok(ex(hrTok, 'DZY020', 'platform.bulletin').code === 'perm_self', '6 人資主管不能對自己設 platform.bulletin 例外');
+  const hlist = post(sb, 'permExList', {}, hrTok);
+  ok(hlist.ok && eq(hlist.data.grantable, sb.STORE_HR_GRANTABLE) && eq(post(sb, 'permExList', {}, app.adminTok).data.grantable, sb.PERM_GRANTABLE), '6 ★permExList 回 grantable：人資主管＝STORE_HR_GRANTABLE、admin＝PERM_GRANTABLE（2026-10-29）', hlist.data && hlist.data.grantable);
+  // 2026-10-29：人資主管設個別例外也要有 platform.permmap（與對照表 permAcMapAccess_ 一致）——把 hq/hr/hm → platform.permmap 那條規則停用後就 no_perm
+  const pmRow = app.sheets.perm_map._data.find((r, i) => i > 0 && r[1] === 'hq' && r[2] === 'hr' && r[3] === 'hm' && r[4] === 'platform.permmap');
+  ok(!!pmRow, '6 世界裡有 hq/hr/hm → platform.permmap 規則');
+  pmRow[5] = 'FALSE';
+  const noMap = ex(hrTok, 'DZY003', 'store.void');
+  ok(noMap.ok === false && noMap.code === 'no_perm' && post(sb, 'permExList', {}, hrTok).code === 'no_perm', '6 ★人資主管沒有 platform.permmap → 個別例外 no_perm（存與列都擋）', noMap);
+  pmRow[5] = 'TRUE';
+  ok(ex(hrTok, 'DZY003', 'store.void').ok === true, '6 規則恢復後人資主管又能設');
   ok(ex(app.login('DZY021'), 'DZY004', 'platform.bulletin').code === 'no_perm' && ex(app.login('DZY001'), 'DZY004', 'platform.bulletin').code === 'no_perm', '6 人資同仁／店長不能設 platform.bulletin 例外');
   ok(ex(hrTok, 'DZY003', 'audit.read').code === 'no_perm', '6 ★人資主管不能設 audit.read');
   ok(ex(hrTok, 'DZY003', 'audit.write').code === 'no_perm' && ex(hrTok, 'DZY003', 'platform.staff').code === 'no_perm' && ex(hrTok, 'DZY003', 'platform.users').code === 'no_perm', '6 ★人資主管不能設其他任何碼（audit.write、platform.staff、platform.users）');
@@ -1166,7 +1178,7 @@ function noDirSched(id) {
   ok(sb.storeAttIsSupport_(T('mala-gf'), 'mztgf', ['mzt-gf']) === true, '9a 打卡店單位不含本人單位 → 支援（不看 role）');
   ok(sb.storeAttIsSupport_(T('mzt-gf'), 'mztgf', ['mzt-gf']) === false, '9a 在自己單位的店打卡 → 不是支援');
   ok(sb.storeAttIsSupport_(T('dzy-hq'), 'hq', ['mzt-hq']) === false && sb.storeAttIsSupport_(T('mala-gf'), 'hq', ['dzy-hq', 'mzt-hq', 'mala-hq']) === false, '9a ★總部打卡 hq 一律不算支援（就算單位不在 hq 的清單裡）');
-  ok(sb.storeAttIsSupport_(T('mala-gf', { inferred: true }), 'mztgf', ['mzt-gf']) === false && sb.storeAttIsSupport_(T('', { orphan: true }), 'mztgf', ['mzt-gf']) === false, '9a 推算／orphan 的人不套支援規則');
+  ok(sb.storeAttIsSupport_(T('mala-gf', { inferred: true }), 'mztgf', ['mzt-gf']) === true && sb.storeAttIsSupport_(T('mzt-gf', { inferred: true }), 'mztgf', ['mzt-gf']) === false && sb.storeAttIsSupport_(T('', { orphan: true }), 'mztgf', ['mzt-gf']) === false, '9a 推算者到非主店打卡＝支援（2026-10-30 Eason 照推薦）、在主店不是；orphan 照舊不套');
   ok(sb.storeAttIsSupport_(T('mzt-js'), 'mztlzl', ['mzt-lzl', 'mzt-js']) === false && sb.storeAttIsSupport_(T('mzt-gf'), 'mztlzl', ['mzt-lzl', 'mzt-js']) === true, '9a 多單位的店：本人單位在清單任一個 → 不是支援；都不在 → 支援');
   ok(sb.storeAttIsSupport_(T('mzt-gf'), 'zz', []) === false, '9a 打卡店沒填單位（或不在 clock_stores）→ 照舊不算支援');
   ok(sb.storeAttIsSupport_(T('mzt-hq'), 'mztgf', ['mzt-gf'], org) === false && sb.storeAttIsSupport_(T('mzt-hq'), 'mztgf', ['mzt-gf']) === true,
@@ -1388,6 +1400,7 @@ function noDirSched(id) {
   ok(ms.ok === false && ms.code === 'bad_perm', '10 ★permMapSave 加 att.view@ 規則 → bad_perm', ms);
   ok(sb.STORE_HR_GRANTABLE.every((p) => p.indexOf('att.view') === -1), '10 不在 STORE_HR_GRANTABLE');
   // 誰能設
+  app.props.PERMS_ON = '1';   // 2026-10-29 起人資主管設／列個別例外要有 platform.permmap（對照表 hq/hr/hm 規則算出來的；正式環境 PERMS_ON 已開）
   const hrTok = app.login('DZY355');
   ok(exSave(hrTok, 'DZY354', 'att.view@mala-gf').code === 'no_perm', '10 ★人資主管不能設');
   ok(exSave(app.login('DZY351'), 'DZY354', 'att.view@mala-gf').code === 'no_perm', '10 店長不能設');
@@ -1407,9 +1420,7 @@ function noDirSched(id) {
   const id = app.ident('DZY356');
   ok(eq(id.att.view_people.map((x) => x.clock + ':' + x.emp_id), ['gf:GF351', 'gf:GF352', 'gf:GF353']) && eq(id.att.people, []) && eq(id.att.req_people, []), '10 ★ident：view_people＝辛光打卡帳號全部（含支援、不含責任制），只看不核', id.att);
   ok(has(perms('DZY356'), 'platform.att'), '10 ★持有者有考勤管理（platform.att）');
-  app.props.PERMS_ON = '1';
   const meR = post(sb, 'myPerms', {}, app.login('DZY356'));
-  delete app.props.PERMS_ON;
   ok(meR.ok && meR.data.items.some((i) => i.perm === 'att.view@mala-gf' && i.name_zh === '只看考勤（麻的小辛辣 新竹光復）'), '10 myPerms 中文名「只看考勤（麻的小辛辣 新竹光復）」', meR.data);
   ok(sb.permName_('att.view@ck') === '只看考勤（中央工廠（央廚））' && sb.permName_('att.view@nope') === '只看考勤（nope）', '10 permName_：央廚不加品牌、查不到顯示代碼');
   // 不看本人

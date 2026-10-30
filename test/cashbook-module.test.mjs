@@ -209,6 +209,9 @@ t('storesToAlert：沒被會計鎖的店要提醒；沒帳的店不提醒；查�
   assert.deepEqual(storesToAlert(stores, locks, '2026-09', live).map((s) => s.code), ['b', 'c']);
   assert.deepEqual(storesToAlert(stores, locks, '2026-09', {}).map((s) => s.code), ['b', 'c', 'd']);
   assert.deepEqual(storesToAlert([], {}, '2026-09', {}), []);
+  // 2026-10-29：讀取失敗（null）的店不能斷言「還沒月結」——明細讀不到或鎖定讀不到都不列
+  assert.deepEqual(storesToAlert(stores, locks, '2026-09', { a: true, b: null, c: true, d: true }).map((s) => s.code), ['c', 'd']);
+  assert.deepEqual(storesToAlert(stores, { a: locks.a, b: null, c: [], d: [] }, '2026-09', live).map((s) => s.code), ['c']);
 });
 
 // alerts()：用假 ctx 驗整條（含只在每月 1–10 日出提醒）
@@ -241,6 +244,19 @@ await t('alerts()：1–10 日列出上個月沒被會計鎖的店；文字「�
 
     const bad = fakeCtx(() => ({ ok: false, error: '沒有權限' }));
     assert.equal(await cashbook.alerts(bad), null, '讀不到店別＝算不出來（殼不顯示）');
+
+    // 2026-10-29：某店明細讀失敗 → 不列「還沒月結」，改列一行沒有 view 的「暫時讀不到」；其他店照常
+    const partial = fakeCtx((action, p) => {
+      if (action === 'adminStores') return ST;
+      if (action === 'adminLocks') return { ok: true, data: { locks: [] } };
+      return p.store === 'gf' ? { ok: false, error: 'timeout' } : { ok: true, data: { rows: [{ status: '正常' }] } };
+    });
+    assert.deepEqual(await cashbook.alerts(partial), [
+      { level: 'warn', text: '台中美村 9 月還沒月結', view: 'lock', params: { store: 'mc', month: '2026-09' } },
+      { level: 'info', text: '部分門市暫時讀不到，稍後再看' }
+    ], '某店讀失敗：不斷言還沒月結，列「暫時讀不到」');
+    const lockFail = fakeCtx((action, p) => action === 'adminStores' ? ST : action === 'adminLocks' ? (p.store === 'gf' ? { ok: false, error: 'x' } : { ok: true, data: { locks: [LOCK('2026-09', 'acct', '甲')] } }) : { ok: true, data: { rows: [{ status: '正常' }] } });
+    assert.deepEqual(await cashbook.alerts(lockFail), [{ level: 'info', text: '部分門市暫時讀不到，稍後再看' }], '鎖定讀失敗也不斷言（level 用殼認得的 info，不是 note）');
   } finally { globalThis.Date = RealDate; }
 });
 await t('alerts()：11 日起不出提醒、也不打任何後端', async () => {

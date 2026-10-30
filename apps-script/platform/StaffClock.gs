@@ -90,6 +90,7 @@ var CLK_MSG = {
   LAST_DAY_FAR: '最後上班日太遠，請再確認',
   NO_LEAVE: '這位同仁沒有登記離職',
   LEAVE_PASSED: '最後上班日已經過了，不能撤銷；要復職請找總部',
+  LEFT: '已離職，帳號已停用；要復職請找人資',   // 2026-10-30 離職當場停：last_day ≤ 台北今天的人登入／token 都擋
   NOT_DISABLED: '這位同仁沒有停用，不需要復職',
   BUSY: '系統忙碌中，請稍後再試',
   NO_JOB: '找不到這張待辦單',
@@ -785,7 +786,35 @@ function handleStaffLeave_(token, payload) {
   if (lastDay > clkAddDays_(today, CLK_LEAVE_FWD_DAYS)) return clkErr_('last_day_far', CLK_MSG.LAST_DAY_FAR);
   clkSetStaffExtra_(t.s.row, t.s.hire, lastDay);
   stfLog_(t.s.emp, 'leave_set', t.a.user.id, 'last_day');
+  // 2026-10-30 Eason 照推薦：離職日 ≤ 台北今天 → 當場踢掉他所有登入（之後登入／me／代轉由 clkLeaveBlocks_ 擋）；未來日期照舊等每晚同步停用
+  if (lastDay <= today) {
+    var ur = typeof findUsrRowById_ === 'function' ? findUsrRowById_(stfStr_(t.s.values[STF_COL.user_id])) : null;
+    if (ur && typeof setTokenAfter_ === 'function') setTokenAfter_(ur.row);
+  }
   return { ok: true, data: { emp_no: t.s.emp, last_day: lastDay, can_cancel: lastDay >= today } };
+}
+
+/**
+ * 登入／token 守門（Staff.gs stfLoginGate_ 呼叫，2026-10-30 Eason 照推薦「離職當場停」）：
+ * 在職但登記的離職日 ≤ 台北今天 → 回擋下訊息（視同停用）；撤銷離職（清掉 last_day）後就放行；未來日期放行。沒有名單分頁或找不到人 → null。
+ * 每晚 00:10 同步把這些人真的停用的流程不變，這裡只是把「當天到隔天 00:10」這段空窗補起來。
+ */
+function clkLeaveBlocks_(empNo) {
+  if (!clkSheetsReady_()) return null;
+  var s = clkStaffByEmp_(empNo);
+  if (!s || !s.last) return null;
+  var today = clkTodayOf_(new Date());
+  if (s.last > today) return null;
+  // 預先登記、日子到了（沒人呼叫過 setTokenAfter_）：第一次擋下時補寫 token_after，營運系統沿用 token_after 的 session 才會被刪（對抗驗證 2026-10-30）。
+  // 只在 token_after 早於台北今天 00:00 時寫一次，之後的請求不再寫；撤銷離職不回退 token_after（本來就要重登）。
+  try {
+    var ur = typeof findUsrRowById_ === 'function' ? findUsrRowById_(stfStr_(s.values[STF_COL.user_id])) : null;
+    if (ur && typeof setTokenAfter_ === 'function') {
+      var ta = Number(ur.values[AUTH_USERS_COL.token_after]) || 0;
+      if (ta < Date.parse(today + 'T00:00:00+08:00')) setTokenAfter_(ur.row);
+    }
+  } catch (e) { /* 踢人失敗不影響擋下 */ }
+  return CLK_MSG.LEFT;
 }
 
 function handleStaffLeaveCancel_(token, payload) {

@@ -66,3 +66,15 @@ export function toGapAlert(r) {
   if (total <= 0) return null;
   return { level: 'warn', text: `${total} 位值班主管的申請找不到上層，由人資主管審`, view: 'request' };
 }
+
+/**
+ * attUpperGaps.hours_items（2026-10-30 Eason 照推薦）→ 一列提醒或 null：工時找不到核定人（除人資主管／admin 外沒人能核）的同仁，點了進「核定工時」。
+ * 舊後端沒有 hours_items → null（不顯示）。只認 emp 字串的列。
+ */
+export function toHoursGapAlert(r) {
+  if (!r || r.ok !== true || !r.data || !Array.isArray(r.data.hours_items)) return null;
+  const n = r.data.hours_items.filter((it) => it && typeof it.emp === 'string' && it.emp !== '').length;
+  if (n <= 0) return null;
+  return { level: 'warn', text: `${n} 位同仁的工時沒人核，由人資主管核`, view: 'approve' };
+}
+

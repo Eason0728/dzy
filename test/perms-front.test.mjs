@@ -3,6 +3,8 @@
  * 跑法：node test/perms-front.test.mjs
  */
 import assert from 'node:assert/strict';
+import _fs from 'node:fs';
+import _vm from 'node:vm';
 import * as L from '../modules/perms/lib.js';
 import * as B from '../modules/me/perm-block.js';
 import permsManifest from '../modules/perms/manifest.js';
@@ -43,9 +45,9 @@ const RULES = [
 ];
 const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin'] }, ORG);
 
-t('對照表 18 列、順序固定（2026-10-26 加公告管理）（不跟後端 grantable 順序）', () => {
+t('對照表 29 列、順序固定（2026-10-30 作廢巡檢碼；2026-10-29 補績效評核四碼、營運巡檢五碼）（不跟後端 grantable 順序）', () => {
   const rows = L.featureRows(DATA);
-  assert.equal(rows.length, 19);
+  assert.equal(rows.length, 29);
   assert.equal(rows[18].perm, 'transfer.write');
   assert.equal(rows[18].name, '調撥管理');
   assert.equal(rows[13].perm, 'platform.bulletin');
@@ -66,11 +68,20 @@ t('同一列的 chip 依階梯→部門排', () => {
   const r = L.featureRows(DATA).find((x) => x.perm === 'audit.read');
   assert.deepEqual(r.rules.map((x) => x.text), ['總部・全部部門・執行長', '總部・營運部・全部職稱']);
 });
+t('★對照表列以後端 grantable 為準（FEATURE_ORDER 只管排序與中文名；後端沒給的碼不畫，多給的接在後面；沒回才退回全部，2026-10-29）', () => {
+  const sub = L.featureRows(Object.assign({}, DATA, { grantable: ['pnl.read', 'audit.read', 'x.new'] }));
+  assert.deepEqual(sub.map((r) => r.perm), ['audit.read', 'pnl.read', 'x.new']);
+  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: [] })).length, 29, '空陣列當沒回');
+  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: undefined })).length, 29);
+});
 t('沒有規則的功能 rules 為空', () => assert.deepEqual(L.featureRows(DATA).find((x) => x.perm === 'dorm.write').rules, []));
 
-t('錯誤碼 → 中文', () => {
-  assert.equal(L.errorText({ ok: false, error: 'x', code: 'perm_self' }), '這個改動會改到你自己的權限，請系統管理員處理');
-  assert.equal(L.errorText({ ok: false, error: 'x', data: { code: 'perm_locked' } }), '只有系統管理員能改這個功能的對象');
+t('錯誤碼 → 中文（2026-10-29：後端有 error 字串就優先顯示，沒有或只是代碼才套固定句）', () => {
+  assert.equal(L.errorText({ ok: false, error: 'perm_self', code: 'perm_self' }), '這個改動會改到你自己的權限，請系統管理員處理');
+  assert.equal(L.errorText({ ok: false, code: 'perm_self' }), '這個改動會改到你自己的權限，請系統管理員處理');
+  assert.equal(L.errorText({ ok: false, error: '不能對自己設定例外', data: { code: 'perm_self' } }), '不能對自己設定例外', '後端 permAcFail_ 的 message 經 api.js 落在 error → 優先顯示');
+  assert.equal(L.errorText({ ok: false, error: 'perm_locked', data: { code: 'perm_locked' } }), '只有系統管理員能改這個功能的對象');
+  assert.equal(L.errorText({ ok: false, error: '', data: { code: 'no_perm' } }), '沒有權限');
   assert.equal(L.errorText({ ok: false, error: '人資主管要請系統管理員設定', data: { code: 'perm_admin_only' } }), '人資主管要請系統管理員設定');
   assert.equal(L.errorText({ ok: false, error: '後端原文' }), '後端原文');
 });
@@ -277,6 +288,23 @@ t('搜尋結果的來源白話與「我能用的功能」一致', () => {
   const who = L.whoLines(Object.assign({ sources: items }, profile)).map((x) => [x.perm, x.name, x.texts]);
   assert.deepEqual(who, mine);
   for (const [s, perms] of [['all', []], ['none', []], [[], []], [['a'], []], [['a', 'b'], ['audit.read.brand']]]) assert.equal(L.scopeLabel(s, perms), B.scopeText(s, perms));
+});
+t('★前後端功能清單一致（2026-10-29）：FEATURE_ORDER＝Perms.gs PERM_GRANTABLE；HR_EX_FEATURES＝StoreOps.gs STORE_HR_GRANTABLE', () => {
+  const fs = _fs; const vm = _vm;
+  const gs = fs.readFileSync(new URL('../apps-script/platform/Perms.gs', import.meta.url), 'utf8');
+  const so = fs.readFileSync(new URL('../apps-script/platform/StoreOps.gs', import.meta.url), 'utf8');
+  const arr = (src, name) => { const m = new RegExp('var ' + name + ' = (\\[[\\s\\S]*?\\]);').exec(src); return vm.runInNewContext(m[1].replace(/\/\/[^\n]*/g, '')); };
+  assert.deepEqual(L.FEATURE_ORDER, Array.from(arr(gs, 'PERM_GRANTABLE')));
+  assert.deepEqual(L.HR_EX_FEATURES, Array.from(arr(so, 'STORE_HR_GRANTABLE')));
+  L.FEATURE_ORDER.forEach((p) => assert.ok(L.FEATURE_NAMES[p], '缺中文名：' + p));
+});
+t('★個別例外的功能下拉以後端 permExList 回的 grantable 為準；沒回才退回前端清單（2026-10-29）', () => {
+  assert.deepEqual(L.exFeatureList({ grantable: ['a.b', 'c.d'] }, true), ['a.b', 'c.d']);
+  assert.deepEqual(L.exFeatureList({ grantable: ['store.void'] }, false), ['store.void']);
+  assert.deepEqual(L.exFeatureList({ grantable: ['ok', 7, '', null] }, true), ['ok'], '只收非空字串');
+  assert.deepEqual(L.exFeatureList({}, true), L.FEATURE_ORDER);
+  assert.deepEqual(L.exFeatureList(null, false), L.HR_EX_FEATURES);
+  assert.deepEqual(L.exFeatureList({ grantable: [] }, true), L.FEATURE_ORDER, '空陣列當沒回');
 });
 t('人資主管在個別例外只能選的三碼（2026-10-26 加公告管理），都在可給清單裡', () => {
   assert.deepEqual(L.HR_EX_FEATURES, ['store.void', 'att.extra', 'platform.bulletin']);

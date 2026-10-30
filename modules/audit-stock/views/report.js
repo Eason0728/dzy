@@ -46,7 +46,7 @@
 
 import * as sharedApi from '../../audit-shared/api.js';
 import { Format } from '../../audit-shared/umd-bridge.js';
-import { loadLastStore } from './fill-submit.js';
+import { loadLastStore, currentMonth } from './fill-submit.js';
 
 // ============================================================
 // 小工具：DOM 建構（做法同 overview.js／fill.js，模組自己一份）
@@ -155,10 +155,8 @@ export function mountReport(root, ctx, moduleState) {
   // 預設月份：看的年份是今年 → 當月；是別的年份 → 該年一月（同舊版）
   function defaultMonth() {
     const year = getYear();
-    const now = new Date();
-    if (String(now.getFullYear()) === String(year)) {
-      return year + '-' + pad2(now.getMonth() + 1);
-    }
+    const m = currentMonth();   // 台北時間（2026-10-29）
+    if (m.slice(0, 4) === String(year)) return m;
     return year + '-01';
   }
 
@@ -251,6 +249,7 @@ export function mountReport(root, ctx, moduleState) {
     storeSelect.value = store;
     storeSelect.addEventListener('change', () => {
       store = storeSelect.value;
+      annualStore = store;   // 單月報告與年度總表永遠同一家店（2026-10-30 Eason 照推薦）
       syncModuleState();
       renderReport();
     });
@@ -280,6 +279,7 @@ export function mountReport(root, ctx, moduleState) {
     sel.value = annualStore;
     sel.addEventListener('change', () => {
       annualStore = sel.value;
+      store = annualStore;   // 單月報告跟著年度總表的店（2026-10-30 Eason 照推薦：兩邊永遠同一家店）
       // 年度總表沒有「月份」概念，只把店別同步回模組層狀態（同 buildMonthControls 的理由）。
       writeModuleState(moduleState, { store: annualStore });
       renderReport();

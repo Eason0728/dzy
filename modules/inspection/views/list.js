@@ -94,8 +94,10 @@ export function mountList(el, ctx) {
       const fr = calc.byForm[f.id];
       const stored = (sum.forms || []).find((s) => s.id === f.id);
       const score = stored ? stored.score : fr.scoreRounded;
+      // 加分文字要跟分數欄同一套：新報告用存檔摘要的 bonus（封頂後）；封頂前送出的舊報告沒存 bonus → 用現算 raw（當時沒封頂，分數就是含 raw）（2026-10-30 對抗驗證）
+      const bonusShown = stored && typeof stored.bonus === 'number' ? stored.bonus : (stored ? fr.bonus.raw : fr.bonus.total);
       const cats = fr.categories.map((c) => `${esc(c.name)} ${c.ratio === null ? '未評' : Math.round(c.ratio * 100) + '%'}`).join('、');
-      return `<tr><td>${esc(f.name)}</td><td class="num">${r1(score)}</td><td class="ip-note">${cats || '—'}${fr.bonus.total ? `；加分 ＋${fr.bonus.total}` : ''}${fr.penalty.total ? `；加重扣分 −${fr.penalty.total}` : ''}</td></tr>`;
+      return `<tr><td>${esc(f.name)}</td><td class="num">${r1(score)}</td><td class="ip-note">${cats || '—'}${bonusShown ? `；加分 ＋${bonusShown}` : ''}${fr.penalty.total ? `；加重扣分 −${fr.penalty.total}` : ''}</td></tr>`;
     }).join('');
     const bonuses = [];
     forms.forEach((f) => { calc.byForm[f.id].bonus.detail.forEach((b) => bonuses.push(`<li>${esc(f.name)}：${esc(b.text)}（＋${b.points}）</li>`)); });

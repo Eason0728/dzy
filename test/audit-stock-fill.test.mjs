@@ -651,6 +651,53 @@ await at('送出成功後：共用快取被 invalidate，下一次 getAll() 會�
   unmount();
 });
 
+// ============================================================
+// F2. 試跑模式（?dryrun=1）：submit() 回 {ok:true,data:{dryRun:true}} → 不能當成功（2026-10-29）
+// ============================================================
+
+await at('★試跑模式送出：toast 提示未寫入、草稿保留、不導頁、不呼叫後端 submitAudit', async () => {
+  resetAll();
+  globalThis.window = { location: { search: '?dryrun=1' } };
+  try {
+    const root = new FakeElement('div');
+    const { ctx, state } = makeFakeCtx();
+    const items = [{ store: 'sxl-gf', name: '牛肉片', unit: '公斤', active: true }];
+    state.apiHandlers.getAll = () => okGetAll({ config: makeConfig(), items, details: [], records: [] });
+    state.apiHandlers.submitAudit = () => ({ ok: true, data: { record_key: 'sxl-gf_2026-08' } });
+
+    const unmount = mountFill(root, ctx);
+    await flush();
+    fireClick(byId(root, 'audit-draw'));
+    await flush();
+    const row = allByClass(root, 'audit-item-row')[0];
+    fireInput(findDescendant(row, (n) => n.classList.contains('audit-book-qty')), '5');
+    fireInput(findDescendant(row, (n) => n.classList.contains('audit-recount-qty')), '5');
+    fireClick(findAllDescendants(row, (n) => n.classList.contains('audit-verdict-btn')).find((b) => b.getAttribute('data-value') === '正確'));
+    fireClick(allByDataAttr(root, 'data-group', 'change_fund').find((b) => b.getAttribute('data-value') === '正確'));
+    fireClick(allByDataAttr(root, 'data-group', 'petty_cash').find((b) => b.getAttribute('data-value') === '正確'));
+    fireInput(byId(root, 'audit-tip-amount'), '500');
+    fireClick(allByDataAttr(root, 'data-group', 'tip_match').find((b) => b.getAttribute('data-value') === '相符'));
+    await flush();
+    const month = currentMonthOf(root);
+    const hasDraft = () => !!FillSubmit.loadDraft(ctx.user.id, 'sxl-gf', month, 'regular');
+    assert.equal(hasDraft(), true, '送出前草稿存在');
+    const navBefore = state.navCalls.length;
+
+    fireClick(byId(root, 'audit-submit-btn'));
+    await flush();
+
+    assert.equal(state.apiCalls.filter((c) => c.action === 'submitAudit').length, 0, '試跑：後端 submitAudit 不該被呼叫');
+    assert.equal(state.navCalls.length, navBefore, '試跑：不該導頁');
+    assert.equal(hasDraft(), true, '試跑：草稿不該被清掉');
+    const okToasts = state.toasts.filter((x) => x.type === 'ok').map((x) => x.message);
+    assert.ok(okToasts.some((m) => m.includes('試跑') && m.includes('未')), '試跑：toast 要提示試跑／未寫入，實際：' + JSON.stringify(state.toasts));
+    assert.ok(!state.toasts.some((x) => x.message === '稽核已送出'), '試跑：不能說「稽核已送出」');
+    unmount();
+  } finally {
+    delete globalThis.window;
+  }
+});
+
 function currentMonthOf(root) {
   return byId(root, 'audit-month').value;
 }

@@ -39,7 +39,7 @@ Eason 2026-10-27 在確認頁回答（https://claude.ai/artifact/FrnJiNgcDTvDa5q
 | `platform.insp-bank` | 題目設定（有 insp-all＝三個品牌，否則只有自己品牌） | 營運部全部職稱、品牌總監 |
 
 - 可巡檢門市＝org 裡 ladder store、啟用、品牌是 mzt／mala／yiwu（不含中央工廠、停用店）。
-- 作廢（打錯店、測試資料）只有 `insp-all`（營運部）與 admin。
+- 作廢（打錯店、測試資料）：**2026-10-30 起改看獨立權限碼 `platform.insp-void`**（預設規則只給總部營運部全部職稱；不鎖碼，人資可在權限設定開給別人）與 admin。執行長以上有 `insp-all` 只看不作廢。作廢後該筆與照片只有 insp-void／admin 看得到。
 - 區督導目前看整個品牌（不依區域裁切）；要改成只看自己區，改 `inspScopeOf_` 用 `regionIndexLive_`。
 
 ## 3. 題庫
@@ -76,3 +76,23 @@ Eason 2026-10-27 在確認頁回答（https://claude.ai/artifact/FrnJiNgcDTvDa5q
    只套這幾個檔的差異（不要整包 sync-gas）；mini pull＋重啟 dzy-platform。
 3. 第二段推 registry＋模組＋圖示 → admin 開「營運巡檢」按「初始化營運巡檢」。
 4. 舊站 mala-inspection 換搬家頁；舊 Apps Script 通行碼換成隨機長碼（或停用部署）。
+
+## 7. 2026-10-30 Eason 照推薦（三題）
+
+- **加分題封頂**：每張表加分總額上限 **+20**（`modules/inspection/scoring.js` `BONUS_CAP`，`computeBonus` 回 `{total（封頂後）, raw, capped}`）。題目設定頁說明文字寫明上限，且一張表全部加分題可拿的總分 > 40（上限兩倍＝明顯超額）前端 `check()` 與後端 `inspCleanForms_`（`INSP_BONUS_MAX_POSSIBLE`）都擋 `bad_request`。舊報告存的 summary 不重算。
+- **作廢巡檢改獨立權限碼**：見下一節（本檔 §8，與 §2 表合併閱讀）。
+- **分數捨入**：維持舊站／scoring.js 的 `Math.round(x*10)/10`（各表不先四捨五入；68.95 在浮點裡是 689.4999…→ 68.9）。測試 oracle（test/dd/ops_inspection.mjs、test/e2e/dd_ops_inspection.py）原本用 `floor(x*10+0.5+1e-9)` 才會算成 69，已改成同一套。
+
+## 8. 作廢巡檢權限碼 `platform.insp-void`（2026-10-30 Eason 照推薦）
+
+- `Perms.gs PERM_GRANTABLE` 加第 29 碼 `platform.insp-void`（中文「營運巡檢：作廢巡檢」），**不鎖碼**。
+- `Inspect.gs INSP_PERM_DEFAULT_RULES` 加一條 `hq / ops / * → platform.insp-void`（與 insp-all 營運部那條同範圍）。
+- `inspScopeOf_().canVoid = admin 或 hasPerm(platform.insp-void)`；`inspVoid`、`inspGet`／`inspList include_void` 看作廢報告、`inspFileCanView_` 看作廢報告的照片，全部跟著 canVoid。
+- 前端 `modules/perms/lib.js FEATURE_ORDER／FEATURE_NAMES／FEATURE_DESC` 同步加碼；清單頁「作廢這筆」鈕照舊看 `inspMe.can_void`。
+- **上線後 admin 要再按一次「營運巡檢 → 初始化營運巡檢」（inspSetup）**：正式環境 perm_map 已初始化，新預設規則不會自動生效；inspSetup 只補 perm_map 裡還沒有的同一條（ladder／dept／title／perm 都相同就跳過）、不覆蓋、可重按（test/inspection.mock.test.mjs 3d「再按一次不重複補」）。
+- minikit：readActions 不用改（inspVoid 是寫入、本來就不在 readActions；沒有新 action）。只需同步 `Perms.gs`、`Inspect.gs` 到 gas/。
+
+### 8.1 對抗驗證補強（2026-10-30）
+- 作廢也受「看得到的店」限制：`handleInspVoid_` 找到那筆後 `!c.isAdmin && !c.scope.view[unit]` → `not_found`（美村店長就算拿到 insp-void 也不能作廢光復的；admin 全部）。
+- 加分文字：`summaryOf` 的 `forms[]` 多存 `bonus`（封頂後實際算進分數的加分；後端 `inspCleanSummary_` 原樣收 0～999 整數）。報告頁同一列的「加分 ＋N」用存檔 bonus；封頂前送出的舊報告沒存 bonus → 用現算 raw（當時沒封頂，分數就是含 raw），避免與分數欄矛盾。
+

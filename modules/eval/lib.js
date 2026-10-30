@@ -110,7 +110,28 @@ export function starGroup(esc, title, bank, initial, onChange, readOnly) {
   return { el, values: () => vals.slice(), complete: () => vals.every((v) => v !== null) };
 }
 
+/** 後端 evFail_(code, message) 的錯誤碼 → 人話（沒帶 message 時用；對照 apps-script/platform/Eval.gs） */
+const ERR_ZH = {
+  window_closed: '現在不是填寫期間（每季第一個月 1～5 號）',
+  bad_request: '資料格式不對，請檢查後再試',
+  forbidden: '沒有權限',
+  unauthorized: '登入已過期，請重新登入',
+  duplicate: '已經有一筆相同的資料',
+  not_in_unit: '這位同仁不在你的單位',
+  not_inited: '績效評核還沒初始化，請系統管理員先設定',
+  no_scope: '你目前沒有可評核的對象',
+  finalized: '這一季已經定稿，不能再改',
+  busy: '系統忙碌中，請稍後再試'
+};
+/**
+ * 錯誤回應 → 給人看的字。平台 api.js transformResponse_ 會把後端 {ok:false, error:code, message:文字} 壓成
+ * {error: code, data:{message}}（2026-10-29 資料帶入測試：畫面只剩「儲存失敗：window_closed」）→ 先讀 data.message，
+ * 再讀 message，再把已知碼翻中文，最後才原樣顯示 error。
+ */
 export function errText(r) {
   if (!r) return '連不上伺服器，請稍後再試';
-  return r.message || r.error || '發生錯誤';
+  const m = (r.data && typeof r.data.message === 'string' && r.data.message) || (typeof r.message === 'string' && r.message) || '';
+  if (m) return m;
+  const code = typeof r.error === 'string' ? r.error : '';
+  return ERR_ZH[code] || code || '發生錯誤';
 }

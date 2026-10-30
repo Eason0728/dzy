@@ -256,7 +256,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   const { sb, sheets, P, counters } = app;
   const A = sb.__admin;
   const g = post(sb, 'permMapGet', {}, A);
-  ok(g.ok && g.data.inited && g.data.rules.length === 36 && g.data.grantable.length === 28 && g.data.grantable[18] === 'transfer.write' && g.data.grantable[13] === 'platform.bulletin' && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write,pnl.admin', '3: permMapGet 回 36 條規則、28 個可給功能（2026-10-27 營運巡檢五碼）、6 個鎖碼（2026-10-27 收支管理改回不鎖）', g.data && Object.keys(g.data));
+  ok(g.ok && g.data.inited && g.data.rules.length === 36 && g.data.grantable.length === 29 && g.data.grantable[18] === 'transfer.write' && g.data.grantable[13] === 'platform.bulletin' && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write,pnl.admin', '3: permMapGet 回 36 條規則、29 個可給功能（2026-10-30 作廢巡檢 insp-void；2026-10-27 營運巡檢五碼）、6 個鎖碼（2026-10-27 收支管理改回不鎖）', g.data && Object.keys(g.data));
   ok(g.data.titles.some((t) => t.code === 'osv' && t.rank === 2 && t.ladder === 'office') && g.data.depts.some((d) => d.code === 'hr') && g.data.names['audit.read'], '3: permMapGet 的 titles／depts／names 有內容（osv 職級 2）');
   const sav = (tok, add, remove) => post(sb, 'permMapSave', { add: add || [], remove: remove || [] }, tok);
   const R = (ladder, dept, title, perm) => ({ ladder, dept, title, perm });
@@ -376,6 +376,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   const L = post(sb, 'permExList', {}, A);
   ok(L.ok && L.data.items.length === 3 && L.data.items[0].ex_id === 'X001' && L.data.items[0].name === '計時同仁' && L.data.items[0].status === 'active', '4: permExList 全部、含姓名與 status', L.data.items.map((i) => [i.ex_id, i.status]));
   ok(post(sb, 'permExList', { emp_no: P.fin.emp.toLowerCase() }, A).data.items.length === 1, '4: permExList 依 emp_no 篩（不分大小寫）');
+  ok(JSON.stringify(L.data.grantable) === JSON.stringify(sb.PERM_GRANTABLE), '4: ★permExList 回 grantable＝PERM_GRANTABLE（admin；個別例外下拉以此為準，2026-10-29）', L.data.grantable);
   sheets.perm_ex.appendRow(['X004', P.pt.emp, 'dorm.write', 'add', dayShift(sb, -1), '過期', 'TRUE', '', 'u001', '', '']);
   ok(post(sb, 'permExList', {}, A).data.items.find((i) => i.ex_id === 'X004').status === 'expired', '4: 到期的例外 status=expired');
 

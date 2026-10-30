@@ -716,6 +716,61 @@ await at('送出成功後：共用快取被 invalidate，下一次 getAll() 會�
 });
 
 // ============================================================
+// H2. 試跑模式（?dryrun=1）：submit() 回 {ok:true,data:{dryRun:true}} → 不能當成功（2026-10-29）
+// ============================================================
+
+await at('★試跑模式送出：toast 提示未寫入、草稿保留、不導頁、不呼叫後端 submitOpsAudit', async () => {
+  resetAll();
+  globalThis.window = { location: { search: '?dryrun=1' } };
+  try {
+    const root = new FakeElement('div');
+    const { ctx, state } = makeFakeCtx();
+    state.apiHandlers.getAll = () => okGetAll({ config: makeConfig(), ops_records: [], ops_details: [] });
+    state.apiHandlers.submitOpsAudit = () => ({ ok: true, record_key: 'sxl-gf_2026-08' });
+    const unmount = mountFill(root, ctx);
+    await flush();
+    fireInput(byId(root, 'ops-auditor'), '王會計');
+    allByDataAttr(root, 'data-verdict', '合格').forEach((btn) => fireClick(btn));
+    await flush();
+    const store = byId(root, 'ops-store').value, month = byId(root, 'ops-month').value;
+    const hasDraft = () => !!FillSubmit.loadDraft(ctx.user.id, store + "_" + month);
+    assert.equal(hasDraft(), true, '送出前草稿存在');
+    const navBefore = state.navCalls.length;
+
+    fireClick(byId(root, 'ops-submit'));
+    await flush();
+
+    assert.equal(state.apiCalls.filter((c) => c.action === 'submitOpsAudit').length, 0, '試跑：後端不該被呼叫');
+    assert.equal(state.navCalls.length, navBefore, '試跑：不該導頁');
+    assert.equal(hasDraft(), true, '試跑：草稿不該被清掉');
+    assert.ok(state.toasts.some((x) => x.type === 'ok' && x.message.includes('試跑') && x.message.includes('未')), '試跑：toast 要提示試跑／未寫入，實際：' + JSON.stringify(state.toasts));
+    assert.ok(!state.toasts.some((x) => x.message === '營運稽核已送出'), '試跑：不能說「已送出」');
+    unmount();
+  } finally {
+    delete globalThis.window;
+  }
+});
+
+await at('★點「追蹤」後頁頂統計的「追蹤 N」立刻更新（onTrackClick 要 renderStats，2026-10-29）', async () => {
+  resetAll();
+  const root = new FakeElement('div');
+  const { ctx, state } = makeFakeCtx();
+  state.apiHandlers.getAll = () => okGetAll({ config: makeConfig(), ops_records: [], ops_details: [] });
+  const unmount = mountFill(root, ctx);
+  await flush();
+  const statTrack = byId(root, 'ops-s-track');
+  assert.ok(statTrack, '統計列要有 #ops-s-track');
+  assert.equal(statTrack.textContent, '0');
+  fireClick(allByDataAttr(root, 'data-track', '1')[0]);
+  await flush();
+  assert.equal(statTrack.textContent, '1', '點一次追蹤 → 統計 1');
+  fireClick(allByDataAttr(root, 'data-track', '1')[0]);
+  await flush();
+  assert.equal(statTrack.textContent, '0', '再點一次取消 → 統計回 0');
+  unmount();
+});
+
+// ============================================================
 // I. 追蹤／再點一次取消（回未檢查）等互動細節
 // ============================================================
 

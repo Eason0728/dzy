@@ -521,3 +521,18 @@ modules/audit-shared/api.js
 > 提醒：新建的 Apps Script 需要 Eason 在編輯器**手動執行一次函式完成 OAuth 授權**，
 > 否則 web app 匿名存取會回 403「存取遭拒」——`clasp push`／`deploy` 都不會觸發同意畫面
 > （教訓來源：dispatch-rules.md 第 5 節稽核系統那列）。這是 Phase 0 唯一需要 Eason 動手的事。
+
+## 13. 2026-10-30 Eason「八條規則全部照推薦」（跨模組索引）
+
+資料帶入測試與對抗驗證（2026-10-29～30）留下八個要 Eason 決定的題目，2026-10-30 全部照推薦。各題正本寫在各模組 spec，這裡只做索引：
+
+| # | 題目 | 決定 | 正本 |
+|---|---|---|---|
+| 1 | 離職當天登記要不要當場踢掉 | 當場踢（last_day ≤ 台北今天＝視同停用；撤銷可重登；未來日期照舊等那天；每晚同步不變） | docs/personnel/spec.md §10 |
+| 2 | 宿舍點交「正常＋未歸還」 | 維持「未歸還一律計價」，只補畫面說明 `#dorm-handover-items-hint` 與程式註解（modules/dorm/views/handover.js） | 本節 |
+| 3 | 工時找不到核定人要不要提醒 | attUpperGaps 多回 `hours_items`，考勤首頁給人資主管／admin 多一條「N 位同仁的工時沒人核」 | docs/req-upper/spec.md §11 |
+| 4 | 推算者到非主店打卡 | 照支援規則由打卡店店長→區經理…核；主店主管只看 | docs/att-support/spec.md §6 |
+| 5 | 巡檢加分題封頂 | 每張表加分總額上限 +20（前端算分封頂、題目設定頁提示、後端擋明顯超額）；舊報告摘要不重算 | docs/inspection/spec.md §7 |
+| 6 | 誰能作廢巡檢 | 新權限碼 `platform.insp-void`（不鎖碼、預設只給營運部）；canVoid／作廢照片可見性都改看它；上線後 admin 要再按一次「初始化營運巡檢」補規則 | docs/inspection/spec.md §7 |
+| 7 | 巡檢分數捨入 | 維持舊站／scoring.js 的 `Math.round(x*10)/10`（68.95 在浮點裡→68.9）；只改測試 oracle | docs/inspection/spec.md §7 |
+| 8 | 盤點抽查報告店別 | 單月報告與年度總表永遠同一家店（任一邊切店另一邊跟著；modules/audit-stock/views/report.js） | 本節 |

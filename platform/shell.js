@@ -45,7 +45,7 @@ import { loadManifests } from './registry.js';
 import { DEPARTMENTS } from './config.js';
 import { reportManifest } from './manifest-check.js';
 import { render as renderLogin } from './views/login.js';
-import { sanitizeTabs, pickDynamicView, TAB_ID_RE } from './tabs.js';
+import { sanitizeTabs, pickDynamicView, alertViewId } from './tabs.js';
 
 /** spec §4.6：badge() 逾時上限 5 秒，逾時視同 null（不得讓首頁壞掉）。 */
 const BADGE_TIMEOUT_MS = 5000;
@@ -313,17 +313,18 @@ function alertRow(level, text, target) {
   }, [el('span', { class: 'tx', text }), target ? el('span', { class: 'go', 'aria-hidden': 'true', text: '›' }) : null]);
 }
 
-/** 把模組 alerts() 的一項轉成路由字串；分頁不存在或沒權限 → 退回模組第一個有權限的分頁。 */
+/** 把模組 alerts() 的一項轉成路由字串（規則在 platform/tabs.js alertViewId）。沒有 view 的提醒列 → null＝只顯示、不給連結（2026-10-29）。 */
 function alertTarget(manifest, item) {
-  // （2026-10-24，考勤管理首頁提醒，營運系統 spec §17.10）動態分頁模組：分頁 id 合格且進得了模組（views[0] 有權限）→ 直接導到該分頁
-  if (manifest.dynamicTabs && typeof item.view === 'string' && TAB_ID_RE.test(item.view) && manifest.views[0] && isViewPermitted(manifest.views[0])) {
-    const dparams = item.params && typeof item.params === 'object' ? item.params : null;
-    return `#/${manifest.id}/${item.view}${buildQueryString(dparams)}`;
-  }
-  const view = manifest.views.find((v) => v.id === item.view && isViewPermitted(v)) || manifest.views.find(isViewPermitted);
-  if (!view) return null;
+  const viewId = alertViewId(manifest, item, isViewPermitted);
+  if (!viewId) return null;
   const params = item.params && typeof item.params === 'object' ? item.params : null;
-  return `#/${manifest.id}/${view.id}${buildQueryString(params)}`;
+  return `#/${manifest.id}/${viewId}${buildQueryString(params)}`;
+}
+
+/** 殼自己加的列（件數、模組說明、「還有 N 項」）→ 模組第一個有權限的分頁 */
+function moduleHomeTarget(manifest) {
+  const view = manifest.views.find(isViewPermitted);
+  return view ? `#/${manifest.id}/${view.id}` : null;
 }
 
 function fillGroup(manifest, items, badgeValue, failed) {
@@ -337,11 +338,11 @@ function fillGroup(manifest, items, badgeValue, failed) {
   if (items === null) {
     // 模組沒實作 alerts()：有 badge 數字就顯示件數，沒有就放模組說明
     if (typeof badgeValue === 'number' && badgeValue > 0) {
-      body.appendChild(alertRow('warn', `${badgeValue} 件待處理`, alertTarget(manifest, {})));
+      body.appendChild(alertRow('warn', `${badgeValue} 件待處理`, moduleHomeTarget(manifest)));
     } else if (badgeValue === 0) {
       body.appendChild(el('div', { class: 'todo-empty', text: '沒有待辦' }));
     } else {
-      body.appendChild(alertRow('note', manifest.desc, alertTarget(manifest, {})));
+      body.appendChild(alertRow('note', manifest.desc, moduleHomeTarget(manifest)));
     }
     return;
   }
@@ -351,7 +352,7 @@ function fillGroup(manifest, items, badgeValue, failed) {
   }
   items.slice(0, ALERTS_MAX_ROWS).forEach((it) => body.appendChild(alertRow(it.level, it.text, alertTarget(manifest, it))));
   if (items.length > ALERTS_MAX_ROWS) {
-    body.appendChild(alertRow('note', `還有 ${items.length - ALERTS_MAX_ROWS} 項`, alertTarget(manifest, {})));
+    body.appendChild(alertRow('note', `還有 ${items.length - ALERTS_MAX_ROWS} 項`, moduleHomeTarget(manifest)));
   }
 }
 
@@ -1016,8 +1017,11 @@ function showLogin() {
  */
 async function doLogout(opts) {
   const expired = !!(opts && opts.expired);
+  const leavingUser = auth.getUser();   // 先記下是誰（teardown／logout 之後就拿不到了）
   await teardownCurrent({ destroy: true });
   await destroyAllParked();   // 保留中的嵌入頁一起卸載（營運系統等會收到登出）
+  // 主動登出與被踢登出（代轉 401）都先清本人的表單簽核草稿（spec approvals §14.7「登出時清掉」；稽核草稿刻意保留，見 auth.purgeLogoutDrafts；2026-10-29 對抗驗證 A）
+  try { auth.purgeLogoutDrafts(window.localStorage, leavingUser && leavingUser.id); } catch (e) { /* 共用電腦 storage 被鎖也不擋登出 */ }
   if (expired) {
     auth.expireLocal();
   } else {

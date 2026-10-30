@@ -3,8 +3,11 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { sanitizeTabs, pickDynamicView, TABS_MAX } from '../platform/tabs.js';
+import { sanitizeTabs, pickDynamicView, TABS_MAX, alertViewId } from '../platform/tabs.js';
 import { navTabs } from '../modules/storeops/embed.js';
+import * as A from '../modules/attendance/embed.js';
+import * as S from '../modules/schedule/embed.js';
+import * as P from '../modules/purchase/embed.js';
 import storeops from '../modules/storeops/manifest.js';
 import attendance from '../modules/attendance/manifest.js';
 import schedule from '../modules/schedule/manifest.js';
@@ -24,7 +27,7 @@ t('sanitizeTabs：壞的項目丟掉、重複 id 只留第一個、名稱截 12 
   assert.equal(r[0].name, '一');
   assert.equal(r[1].name.length, 12);
   assert.equal(r[2].badge, 0);
-  assert.equal(r[3].badge, 0);
+  assert.equal(r[3].badge, 2, '2026-10-29 對抗驗證 B：小數無條件捨去（同四個 embed 的 badgeNum），不再歸 0');
 });
 t('sanitizeTabs：不是陣列或太多 → null（殼不更新）', () => {
   assert.equal(sanitizeTabs('x'), null);
@@ -36,11 +39,39 @@ t('pickDynamicView：網址合格優先 → 第一個分頁 → 預設', () => {
   assert.equal(pickDynamicView('Bad!', [{ id: 'home' }], 'main'), 'home');
   assert.equal(pickDynamicView(null, [], 'main'), 'main');
 });
+t('alertViewId：提醒列沒有 view → null（不給連結）；有 view 對到就用、對不到退回第一個有權限的；動態分頁直達（2026-10-29）', () => {
+  const m = { id: 'cashbook', views: [{ id: 'main', requires: ['x'] }, { id: 'lock', requires: ['y'] }] };
+  const can = (v) => v.requires.some((p) => p === 'y');
+  assert.equal(alertViewId(m, { text: '部分門市暫時讀不到' }, can), null);
+  assert.equal(alertViewId(m, { view: null }, can), null);
+  assert.equal(alertViewId(m, { view: 'lock' }, can), 'lock');
+  assert.equal(alertViewId(m, { view: 'nope' }, can), 'lock');
+  assert.equal(alertViewId(m, { view: 'main' }, can), 'lock');
+  assert.equal(alertViewId(m, { view: 'lock' }, () => false), null);
+  const dyn = { id: 'attendance', dynamicTabs: true, views: [{ id: 'main', requires: ['a'] }] };
+  assert.equal(alertViewId(dyn, { view: 'duty-x' }, () => true), 'duty-x');
+  assert.equal(alertViewId(dyn, { view: 'Bad!' }, () => true), 'main');
+  assert.equal(alertViewId(dyn, {}, () => true), null);
+});
 t('navTabs：只認 dzy-store-nav v1；cur 要在清單裡', () => {
   const d = { type: 'dzy-store-nav', v: 1, items: [{ id: 'home', label: '首頁' }, { id: 'inventory', label: '庫存盤點', badge: 33 }, { id: 'X', label: 'bad' }], cur: 'inventory' };
   assert.deepEqual(navTabs(d), { tabs: [{ id: 'home', name: '首頁', badge: 0, err: false }, { id: 'inventory', name: '庫存盤點', badge: 33, err: false }], cur: 'inventory' });
   assert.equal(navTabs({ ...d, cur: 'admin' }).cur, '');
   for (const bad of [null, { ...d, type: 'x' }, { ...d, v: 2 }, { ...d, items: 'x' }]) assert.equal(navTabs(bad), null);
+});
+t('殼 sanitizeTabs 與四個 embed 的 badge 規則逐字相同（badgeNum 函式本文一致；模組不能 import 平台所以各留一份，2026-10-29）', () => {
+  const body = (src) => { const m = /function badgeNum\(v\) \{([^}]*)\}/.exec(src); assert.ok(m, 'badgeNum 不存在'); return m[1].replace(/\s+/g, ' ').trim(); };
+  const shell = body(fs.readFileSync(new URL('../platform/tabs.js', import.meta.url), 'utf8'));
+  for (const m of ['storeops', 'attendance', 'schedule', 'purchase']) assert.equal(body(fs.readFileSync(new URL(`../modules/${m}/embed.js`, import.meta.url), 'utf8')), shell, m);
+  assert.deepEqual(sanitizeTabs([{ id: 'a', name: 'A', badge: true }, { id: 'b', name: 'B', badge: '3' }, { id: 'c', name: 'C', badge: 3.9 }, { id: 'd', name: 'D', badge: 5000 }]).map((t) => t.badge), [0, 0, 3, 999]);
+});
+t('navTabs：badge 只收數字（true／"7"／NaN／負數都當 0；四個 embed 同款，2026-10-29）', () => {
+  const items = [{ id: 'a', label: 'A', badge: true }, { id: 'b', label: 'B', badge: '7' }, { id: 'c', label: 'C', badge: NaN }, { id: 'd', label: 'D', badge: -2 }, { id: 'e', label: 'E', badge: 4.7 }, { id: 'f', label: 'F', badge: 9 }];
+  const want = [0, 0, 0, 0, 4, 9];
+  assert.deepEqual(navTabs({ type: 'dzy-store-nav', v: 1, items }).tabs.map((t) => t.badge), want);
+  assert.deepEqual(A.navTabs({ type: 'dzy-store-nav', v: 1, items }).tabs.map((t) => t.badge), want);
+  assert.deepEqual(S.navTabs({ type: 'dzy-store-nav', v: 1, items }).tabs.map((t) => t.badge), want);
+  assert.deepEqual(P.navTabs({ type: 'dzy-purchase-nav', v: 1, items }).tabs.map((t) => t.badge), want);
 });
 t('manifest：門市營運、考勤管理、排班管理都 dynamicTabs（考勤管理＝出勤核定子分頁 2026-10-20；排班管理＝自動排班四個分頁 2026-10-24）；都合規', () => {
   assert.equal(storeops.dynamicTabs, true);

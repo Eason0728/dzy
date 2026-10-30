@@ -77,6 +77,9 @@ export function proxyUrl() {
  * @param {object} payload
  * @returns {object}
  */
+/** 代轉 ns 的 payload 頂層一律剝除的欄位（見 buildRequestBody_ 說明） */
+const PROXY_STRIP_FIELDS = ['operator', 'adminKey', 'admin_key', 'pin_master', 'key', 'level', 'scope', 'account'];
+
 function buildRequestBody_(backendId, action, payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
 
@@ -100,6 +103,9 @@ function buildRequestBody_(backendId, action, payload) {
   delete rest.code;
   delete rest.pass;
   delete rest.admin_key;   // 薪酬管理金鑰只在 mini 那邊帶（2026-10-19）
+  // 2026-10-29 第二道防線（資料帶入測試）：mini 代轉層會依登入身分自己補 operator／level／account 等影子欄位、各後端金鑰
+  // （adminKey／pin_master／key／scope）也只在 mini 帶。瀏覽器端沒有任何模組合法需要送這些頂層欄位（grep 過 modules/），一律剝除；巢狀同名欄位不動。
+  PROXY_STRIP_FIELDS.forEach((k) => { delete rest[k]; });
   return { token: getToken(), ns: backendId, action, payload: rest };
 }
 

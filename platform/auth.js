@@ -302,6 +302,25 @@ const LOGOUT_TIMEOUT_MS = 5000;
  * 呼叫端（shell.js doLogout）要 await 這支，等它回來才整頁重載。
  * @returns {Promise<void>}
  */
+/**
+ * 登出時清掉本人的首頁表單簽核草稿（docs/approvals/spec.md §14.7：`dzy.u.<id>.apv_draft_*`；2026-10-29 資料帶入測試抓到沒清）。
+ * 只動這個前綴——稽核草稿 `draft_*`／`ops_draft_*` 刻意跨登入保留（會計填一半換裝置／斷線也要在）。
+ * 純函式：storage 可以是 localStorage 或任何有 length／key／removeItem 的東西；回清掉的筆數，任何錯都吞掉回 0。
+ */
+export function purgeLogoutDrafts(storage, userId) {
+  const id = userId ? String(userId) : '';
+  if (!storage || !id) return 0;
+  const prefix = `dzy.u.${id}.apv_draft_`;
+  try {
+    const keys = [];
+    for (let i = 0; i < storage.length; i++) { const k = storage.key(i); if (typeof k === 'string' && k.startsWith(prefix)) keys.push(k); }
+    keys.forEach((k) => storage.removeItem(k));
+    return keys.length;
+  } catch (e) {
+    return 0;
+  }
+}
+
 export async function logout() {
   const token = getToken();
   if (token) {

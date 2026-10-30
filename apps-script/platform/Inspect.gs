@@ -33,6 +33,8 @@ var INSP_TYPES_BY_ROLE = { scored: ['score', 'critical', 'binary'], bonus: ['bon
 var INSP_BRANDS = ['mzt', 'mala', 'yiwu'];   // 有門市的三個品牌；中央工廠（ck）不巡
 var INSP_ID_RE = /^INS-[0-9A-Z]{6,16}-[0-9A-Z]{4,8}$/;
 var INSP_MAX_ANSWERS = 200000;
+var INSP_BONUS_CAP = 20;          // 每張表加分總額上限（前端 scoring.js BONUS_CAP 封頂；2026-10-30 Eason 照推薦）
+var INSP_BONUS_MAX_POSSIBLE = INSP_BONUS_CAP * 2;   // 題目設定：一張表全部加分題可拿的總分超過這個數＝明顯超額，擋下
 var INSP_MAX_ITEMS = 300;        // 一個品牌全部題目上限   // 作答 JSON 字元上限（全部四張表約 10KB）
 var INSP_MAX_FILES = 60;
 var INSP_LIST_MAX = 300;
@@ -44,6 +46,7 @@ var INSP_PERM_DEFAULT_RULES = (function () {
     titles.forEach(function (t) { perms.forEach(function (p) { out.push([ladder, dept, t, p]); }); });
   };
   add('hq', 'ops', ['*'], ['platform.insp-all', 'platform.insp-do']);        // 營運部：看全部、可巡
+  add('hq', 'ops', ['*'], ['platform.insp-void']);                           // 營運部：作廢巡檢（2026-10-30 獨立權限碼；正式環境 admin 要再按一次「初始化營運巡檢」補這條）
   add('hq', '', ['ceo', 'gm', 'chair'], ['platform.insp-all']);              // 執行長以上：看全部
   add('office', '', ['odir', 'osv'], ['platform.insp-brand', 'platform.insp-do']);   // 品牌總監、區督導：看自己品牌、可巡
   add('store', '', ['am'], ['platform.insp-own', 'platform.insp-do']);       // 區經理：只看自己店、可巡
@@ -112,7 +115,7 @@ function inspScopeOf_(c) {
     bankBrands: bankBrands,
     view: view,
     canDo: canDo,
-    canVoid: has('platform.insp-all'),
+    canVoid: has('platform.insp-void'),   // 2026-10-30 Eason 照推薦：作廢改看獨立權限碼 platform.insp-void（admin 照舊；作廢報告與其照片的可見性都跟著這個）
     stores: stores.filter(function (u) { return view[u]; }),
     doStores: canDo ? stores.filter(function (u) { return view[u]; }) : []
   };
@@ -137,9 +140,12 @@ function inspFileCanView_(c, inspId) {
   if (!inspReady_()) return false;
   var hit = null;
   inspRows_().forEach(function (o) { if (o.id === inspId) hit = o; });
-  if (!hit || inspStr_(hit.state) === 'void') return false;
+  if (!hit) return false;
   var s = inspScopeOf_(c);
-  return !!s.view[inspStr_(hit.unit)];
+  if (!s.view[inspStr_(hit.unit)]) return false;
+  // 作廢後：與 inspGet／inspList include_void 同一條件——能看作廢報告的人（canVoid）才看得到照片（2026-10-29）
+  if (inspStr_(hit.state) === 'void') return s.canVoid;
+  return true;
 }
 
 function inspSummaryOut_(o) {
@@ -232,7 +238,9 @@ function inspNum_(v) { return typeof v === 'number' && isFinite(v) ? Math.round(
 function inspCleanSummary_(s) {
   s = s && typeof s === 'object' ? s : {};
   var forms = Array.isArray(s.forms) ? s.forms.slice(0, 8).map(function (f) {
-    return { id: inspStr_(f && f.id).slice(0, 20), name: inspStr_(f && f.name).slice(0, 20), score: inspNum_(f && f.score) };
+    var o = { id: inspStr_(f && f.id).slice(0, 20), name: inspStr_(f && f.name).slice(0, 20), score: inspNum_(f && f.score) };
+    if (f && typeof f.bonus === 'number' && isFinite(f.bonus)) o.bonus = Math.max(0, Math.min(999, Math.floor(f.bonus)));   // 實際算進分數的加分（封頂後；2026-10-30，報告頁加分文字用）
+    return o;
   }) : [];
   return {
     operationalScore: inspNum_(s.operationalScore), operationalGrade: inspStr_(s.operationalGrade).slice(0, 4),
@@ -299,17 +307,18 @@ function handleInspSubmit_(token, payload) {
   });
 }
 
-/** 作廢（打錯店、測試資料）。只有看全部的人（營運部、admin）。payload {id} */
+/** 作廢（打錯店、測試資料）。要有 platform.insp-void 且那家店在自己看得到的範圍內（admin 全部）。payload {id} */
 function handleInspVoid_(token, payload) {
   var c = inspEnter_(token);
   if (!c.ok) return c;
   if (!inspReady_()) return inspNotInited_();
-  if (!c.scope.canVoid) return inspFail_('forbidden', '只有營運部可以作廢巡檢');
+  if (!c.scope.canVoid) return inspFail_('forbidden', '沒有作廢巡檢的權限（platform.insp-void）');
   var id = inspStr_(payload && payload.id);
   return inspWithLock_(function () {
     var hit = null;
     inspRows_().forEach(function (o) { if (o.id === id) hit = o; });
     if (!hit) return inspFail_('not_found', '找不到這筆巡檢');
+    if (!c.isAdmin && !c.scope.view[inspStr_(hit.unit)]) return inspFail_('not_found', '找不到這筆巡檢，或你沒有權限看');   // 2026-10-30 對抗驗證：作廢也受「看得到的店」限制（admin 照舊）
     if (inspStr_(hit.state) === 'void') return { ok: true, data: { id: id } };
     hit.state = 'void';
     hit.void_by = c.me ? c.me.emp : 'U:' + String(c.user.id);
@@ -378,7 +387,7 @@ function inspCleanForms_(forms) {
     if (!f || inspStr_(f.id) !== shell.id) return inspFail_('bad_request', '題目格式錯誤（表的順序不對）');
     var cats = Array.isArray(f.categories) ? f.categories : [];
     if (cats.length > 20) return inspFail_('bad_request', '「' + shell.name + '」分類太多');
-    var oc = [], wsum = 0, nScored = 0;
+    var oc = [], wsum = 0, nScored = 0, formBonusPossible = 0;
     for (var ci = 0; ci < cats.length; ci++) {
       var c = cats[ci] || {};
       var role = inspStr_(c.role);
@@ -396,6 +405,7 @@ function inspCleanForms_(forms) {
         wsum += cat.weight; nScored++;
       }
       var items = Array.isArray(c.items) ? c.items : [];
+      var bonusPossible = 0;
       for (var ii = 0; ii < items.length; ii++) {
         var it = items[ii] || {};
         var type = inspStr_(it.type);
@@ -411,12 +421,17 @@ function inspCleanForms_(forms) {
           o.max = inspIntIn_(it.max, 1, 10);
           if (o.max === null) return inspFail_('bad_request', '「' + text.slice(0, 12) + '」最多項數要在 1～10');
         }
+        if (type === 'bonus') bonusPossible += o.points;
+        if (type === 'bonus_free') bonusPossible += o.points * o.max;
         cat.items.push(o);
         total++;
       }
+      formBonusPossible += bonusPossible;
       oc.push(cat);
     }
     if (nScored && Math.abs(wsum - 1) > 0.011) return inspFail_('bad_request', '「' + shell.name + '」評分分類的權重加起來要 100%（目前 ' + Math.round(wsum * 100) + '%）');
+    // 2026-10-30 Eason 照推薦：每張表加分總額上限 +INSP_BONUS_CAP（前端算分封頂）；題目可拿的加分合計明顯超額（> 上限兩倍）就擋
+    if (formBonusPossible > INSP_BONUS_MAX_POSSIBLE) return inspFail_('bad_request', '「' + shell.name + '」加分題合計可拿 ' + formBonusPossible + ' 分，超過上限 ' + INSP_BONUS_CAP + ' 太多（最多 ' + INSP_BONUS_MAX_POSSIBLE + '）');
     var of = { id: shell.id, name: shell.name, inOperational: shell.inOperational, heading: inspStr_(f.heading).slice(0, 60), categories: oc };
     if (shell.standalone) of.standalone = true;
     out.push(of);

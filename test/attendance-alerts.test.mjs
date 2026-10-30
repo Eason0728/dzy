@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 class MemoryStorage { constructor() { this._m = new Map(); } getItem(k) { return this._m.has(k) ? this._m.get(k) : null; } setItem(k, v) { this._m.set(k, String(v)); } removeItem(k) { this._m.delete(k); } clear() { this._m.clear(); } }
 globalThis.localStorage = new MemoryStorage();
 
-const { toAlerts, toBadge, toGapAlert } = await import('../modules/attendance/alerts.js');
+const { toAlerts, toBadge, toGapAlert, toHoursGapAlert } = await import('../modules/attendance/alerts.js');
 const mod = (await import('../modules/attendance/index.js')).default;
 const manifest = (await import('../modules/attendance/manifest.js')).default;
 const { call } = await import('../platform/api.js');
@@ -84,6 +84,14 @@ await t('toGapAlert：有項目→一列 warn，view=request；空或形狀不�
   assert.equal(toGapAlert({ ok: true, data: { items: [] } }), null);
   assert.equal(toGapAlert({ ok: true, data: { items: [{ kind: 'approve', count: 3 }] } }), null);
   assert.equal(toGapAlert({ ok: false }), null); assert.equal(toGapAlert(null), null);
+});
+await t('★toHoursGapAlert：hours_items 有人 → 一列 warn「N 位同仁的工時沒人核，由人資主管核」view=approve；沒有／形狀不對 → null（2026-10-30 Eason 照推薦）', () => {
+  assert.deepEqual(toHoursGapAlert({ ok: true, data: { items: [], hours_items: [{ emp: 'DZY001', name: 'a', unit_name: 'X' }, { emp: 'DZY002', name: 'b', unit_name: 'Y' }] } }),
+    { level: 'warn', text: '2 位同仁的工時沒人核，由人資主管核', view: 'approve' });
+  assert.equal(toHoursGapAlert({ ok: true, data: { items: [{ emp: 'DZY001' }] } }), null, '沒有 hours_items（舊後端）→ null');
+  assert.equal(toHoursGapAlert({ ok: true, data: { hours_items: [] } }), null);
+  assert.equal(toHoursGapAlert({ ok: true, data: { hours_items: [{ kind: 'x' }] } }), null);
+  assert.equal(toHoursGapAlert(null), null);
 });
 await t('toGapAlert：items＋unmapped 合併計數（只有 unmapped 也提醒）', () => {
   assert.equal(toGapAlert({ ok: true, data: { items: [{ emp: 'DZY001' }], unmapped: [{ store_code: 'gf', emp_id: 'GF1', reason: 'unmapped' }] } }).text, '2 位值班主管的申請找不到上層，由人資主管審');

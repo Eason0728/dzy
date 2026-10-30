@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import { buildWorld } from './e2e/inspect_backend.mjs';
 import { defaultForms } from '../modules/inspection/questions.js';
-import { computeAll, summaryOf, deficiencies, itemKey } from '../modules/inspection/scoring.js';
+import { computeAll, BONUS_CAP, summaryOf, deficiencies, itemKey } from '../modules/inspection/scoring.js';
 import manifest from '../modules/inspection/manifest.js';
 import { validateManifest } from '../platform/manifest-check.js';
 import { READ_ACTIONS } from '../platform/dryrun.js';
@@ -32,6 +32,16 @@ function ok(cond, label, extra) {
   const bonus = JSON.parse(JSON.stringify(full));
   bonus.bonuses['management.bonus.1'] = true;
   ok(computeAll(forms, bonus).managementScore === 110, '1d 經營加分可超過 100（公益 +10）');
+  // 2026-10-30 Eason 照推薦：每張表加分總額上限 +20
+  const capForms = JSON.parse(JSON.stringify(forms));
+  const svc = capForms.find((f) => f.id === 'service');
+  svc.categories.push({ id: 'big', name: '大加分', role: 'bonus', items: [{ n: 1, type: 'bonus', points: 15, text: 'a' }, { n: 2, type: 'bonus', points: 15, text: 'b' }, { n: 3, type: 'bonus_free', points: 10, max: 3, text: 'c' }] });
+  const capAns = JSON.parse(JSON.stringify(full));
+  svc.categories.filter((c) => c.role === 'scored').forEach((c) => c.items.forEach((it) => { capAns.scores[`service.${c.id}.${it.n}`] = 5; }));
+  capAns.bonuses['service.big.1'] = true; capAns.bonuses['service.big.2'] = true; capAns.freeBonuses['service.big.3'] = ['x', 'y', 'z'];
+  const capped = computeAll(capForms, capAns).byForm.service;
+  ok(capped.bonus.total === BONUS_CAP && capped.bonus.raw === 60 && capped.bonus.capped === true && Math.round(capped.score) === 100 + BONUS_CAP, '1e2 ★加分總額封頂 +20（原始 60）', capped.bonus);
+  ok(BONUS_CAP === 20, '1f2 BONUS_CAP＝20');
   ok(computeAll(forms, {}).operationalGrade === '未評', '1e 一題都沒評＝未評');
   const half = { scores: { 'service.attitude.1': 3 } };
   ok(computeAll(forms, half).operationalScore === 60 && deficiencies(forms, half).length === 1, '1f 只評一題 3 分 → 60 分、1 項缺失');
@@ -61,7 +71,7 @@ const me = (k) => post('inspMe', {}, T(k));
 ok(post('inspList', {}, T('ops')).error === 'not_inited', '3a 沒初始化 → not_inited');
 ok(post('inspSetup', {}, T('ops')).error === 'forbidden', '3b 非 admin 不能初始化');
 const setup = post('inspSetup', {}, A);
-ok(setup.ok && setup.data.permAdded.length === 14, '3c admin 初始化：補 14 條預設規則（含題目設定 2 條）', setup);
+ok(setup.ok && setup.data.permAdded.length === 15, '3c admin 初始化：補 15 條預設規則（含題目設定 2 條、作廢 1 條）', setup);
 ok(post('inspSetup', {}, A).data.permAdded.length === 0, '3d 再按一次不重複補');
 
 const units = (k) => (me(k).data.stores || []).map((s) => s.unit).sort().join(',');
