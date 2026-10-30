@@ -301,6 +301,23 @@ function setup() {
   }
 
   // ============================================================
+  // 2b. 代理店長：兼任設在本人主要單位（dzy#67，Eason 2026-10-30 選 A）
+  // ============================================================
+  {
+    const app = setup();
+    const { sb } = app;
+    const t = app.tok.DZY301;
+    const ex = app.ex('DZY301', 'store.sm@mzt-gf');
+    ok(ex.ok, '2b 前置：光復正職兼任光復店長（代理店長）', ex);
+    const a = app.add(t, 'sm');
+    ok(a.ok && a.data.unit === 'mzt-gf', '2b ★代理店長在本店可新增店長（店長職級）', a);
+    ok(post(sb, 'staffLeave', { emp_no: 'DZY302', last_day: app.today }, t).ok, '2b 可對本店計時登記離職');
+    const ul = post(sb, 'staffUnitList', {}, t);
+    ok(ul.ok && ul.data.unit === 'mzt-gf' && ul.data.units.length === 1, '2b 只管一家 → 不需切換');
+    ok(app.ex('DZY303', 'store.sm@mzt-gf').ok !== true, '2b 本人已是該店店長 → 不能再設（PermActions 擋）');
+  }
+
+  // ============================================================
   // 3. 前端：我的單位門市切換（字串檢查，畫面另有真瀏覽器實測）
   // ============================================================
   {
