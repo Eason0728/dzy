@@ -483,6 +483,12 @@ function storeAttAccounts_(people, org, home, maps, storeUnits) {
       var a = { t: t, m: m, units: units, support: support,
                 ex: (STORE_NOT_SUPPORT_EX[stfStr_(t.emp)] || []).indexOf(stfStr_(m.store_code)) !== -1 };   // 個人例外（不算支援）
       if (a.support) { a.homeUnit = stfStr_(t.unit); a.homeName = storeUnitLabel_(a.homeUnit, org); }
+      // 個人例外的帳號：姓名旁標歸屬（總部同仁標「總部」），總部同仁另給 homeClock＝hq，營運系統在總部那組放捷徑卡（2026-11-01 Eason 選 A）
+      if (a.ex && !t.orphan && !t.inferred) {
+        var hqT = storeIsHqTarget_(t, org);
+        a.homeTag = hqT ? '總部' : storeUnitLabel_(stfStr_(t.unit), org);
+        if (hqT) a.homeClock = STORE_SELF_CLOCK;
+      }
       out.push(a);
     });
   });
@@ -535,6 +541,7 @@ function storeSupportApprovers_(units, people, org, rctx, excludeDuty, excludeEm
 /**
  * 打卡帳號 → 契約的一筆 {clock, emp_id, sub, name}；同一份名單以 clock|emp_id 去重，最後依 clock、emp_id 排序。
  * 支援帳號多三個選填欄位 support:true、home_unit（本人單位代碼）、home_unit_name（例「麻的小辛辣 新竹光復」），營運系統在名字旁標「支援（…）」；非支援帳號形狀不變。
+ * 個人例外（STORE_NOT_SUPPORT_EX）帳號多 home_tag（例「總部」）；總部同仁再多 home_clock＝'hq'（營運系統總部那組的捷徑卡用）。
  */
 function storeAttListAdd_(list, a) {
   var k = a.m.store_code + '|' + a.m.emp_id;
@@ -542,6 +549,7 @@ function storeAttListAdd_(list, a) {
   list.seen[k] = true;
   var row = { clock: a.m.store_code, emp_id: a.m.emp_id, sub: a.t.emp, name: a.t.name };
   if (a.support) { row.support = true; row.home_unit = a.homeUnit || ''; row.home_unit_name = a.homeName || ''; }
+  if (a.homeTag) { row.home_tag = a.homeTag; if (a.homeClock) row.home_clock = a.homeClock; }
   list.rows.push(row);
 }
 function storeAttListOut_(list) {

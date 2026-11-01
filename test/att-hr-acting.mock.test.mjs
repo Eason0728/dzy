@@ -483,6 +483,11 @@ function setup() {
   { const u = sb.clockUpperEmps_(); ok(u.home.mztgf.indexOf('MZTGF222') !== -1 && u.dept.mztgf.indexOf('MZTGF222') === -1, '7-2c ★個人例外改進 home 名單、不在 dept'); }
   ok(!has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222') && !has(app.V('DZY231'), 'mztgf:DZY222'), '7-2b ★例外：店長不核也不看');
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2b 例外：人資主管核工時與申請');
+  // 7-2g 例外帳號帶歸屬標示（2026-11-01 Eason 選 A）：home_tag「總部」、home_clock hq；其他帳號形狀不變
+  { const rows = ['people', 'req_people'].map((k) => app.ident('DZY220').att[k].filter((x) => x.clock === 'mztgf' && x.sub === 'DZY222')[0]);
+    ok(rows.every((r) => r && r.home_tag === '總部' && r.home_clock === 'hq' && r.support === undefined), '7-2g ★例外帳號帶 home_tag 總部＋home_clock hq', rows);
+    const others = app.ident('DZY220').att.people.filter((x) => x.sub !== 'DZY222');
+    ok(others.length > 0 && others.every((x) => x.home_tag === undefined && x.home_clock === undefined), '7-2g 其他帳號沒有 home_tag／home_clock'); }
   // 7-2e 試點沒含總部時：例外帳號的打卡店在試點，人資主管仍核得到（2026-10-29 審查低 3）
   app.props.STORE_SSO_UNITS = PILOT.split(',').filter((u) => u !== 'dzy-hq').join(','); sb.permActingReset_();
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222') && !has(app.H('DZY231'), 'mztgf:DZY222'), '7-2e ★試點沒含總部：例外帳號人資主管仍核得到、店長仍沒有');
