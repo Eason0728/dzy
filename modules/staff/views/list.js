@@ -141,7 +141,7 @@ export function mountList(el, ctx) {
     el.innerHTML = `<style>${CARD_CSS}</style>
       <div class="card stack">
         <div class="card-row"><div class="card-title">同仁名單（${staff.length} 位）</div>
-          <span>${orgTools ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-add-branddev-2610">新增品牌發展部（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-branddev-2610">退回品牌發展部</button> <button type="button" class="btn btn-secondary" data-role="org-enable-mztmc-2610">啟用墨竹亭台中美村（10/29）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-mztmc-2610">退回墨竹亭台中美村</button> <button type="button" class="btn btn-secondary" data-role="clock-add-mztmc-2610">美村加進打卡對照（10/29）</button> <button type="button" class="btn btn-danger" data-role="clock-rollback-mztmc-2610">退回美村打卡對照</button> <button type="button" class="btn btn-secondary" data-role="org-disable-ops-2610">停用營運部（10/29）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-ops-2610">退回停用營運部</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
+          <span>${orgTools ? '<button type="button" class="btn btn-secondary" data-role="org-upgrade">切換組織</button> <button type="button" class="btn btn-danger" data-role="org-rollback">退回組織</button> <button type="button" class="btn btn-secondary" data-role="org-upgrade-2610">職稱調整（10/20）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-2610">退回職稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-rename-2610n">名稱調整（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rename-rollback-2610n">退回名稱調整</button> <button type="button" class="btn btn-secondary" data-role="org-add-branddev-2610">新增品牌發展部（10/23）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-branddev-2610">退回品牌發展部</button> <button type="button" class="btn btn-secondary" data-role="org-enable-mztmc-2610">啟用墨竹亭台中美村（10/29）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-mztmc-2610">退回墨竹亭台中美村</button> <button type="button" class="btn btn-secondary" data-role="clock-add-mztmc-2610">美村加進打卡對照（10/29）</button> <button type="button" class="btn btn-danger" data-role="clock-rollback-mztmc-2610">退回美村打卡對照</button> <button type="button" class="btn btn-secondary" data-role="org-enable-mztrg-2611">啟用墨竹亭內湖瑞光（11/01）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-mztrg-2611">退回墨竹亭內湖瑞光</button> <button type="button" class="btn btn-secondary" data-role="clock-add-mztrg-2611">瑞光加進打卡對照（11/01）</button> <button type="button" class="btn btn-danger" data-role="clock-rollback-mztrg-2611">退回瑞光打卡對照</button> <button type="button" class="btn btn-secondary" data-role="org-disable-ops-2610">停用營運部（10/29）</button> <button type="button" class="btn btn-danger" data-role="org-rollback-ops-2610">退回停用營運部</button> ' : ''}<button type="button" class="btn btn-primary" data-role="add-staff">新增同仁</button></span></div>
         <div class="card-row"><span class="text-muted">未開通 ${counts.unclaimed || 0}・待確認 ${counts.pending || 0}・已開通 ${counts.active || 0}・已停用 ${counts.disabled || 0}</span></div>
         <div class="form-grid-2">
           <div class="field"><label class="field-label" for="stf-q">搜尋姓名或編號</label><input class="input" id="stf-q" type="search" value="${esc(state.q)}"></div>
@@ -201,6 +201,10 @@ export function mountList(el, ctx) {
       el.querySelector('[data-role="org-rollback-mztmc-2610"]').addEventListener('click', mztMcRollback2610Flow);
       el.querySelector('[data-role="clock-add-mztmc-2610"]').addEventListener('click', clockAddMztMc2610Flow);
       el.querySelector('[data-role="clock-rollback-mztmc-2610"]').addEventListener('click', clockMztMcRollback2610Flow);
+      el.querySelector('[data-role="org-enable-mztrg-2611"]').addEventListener('click', enableMztRg2611Flow);
+      el.querySelector('[data-role="org-rollback-mztrg-2611"]').addEventListener('click', mztRgRollback2611Flow);
+      el.querySelector('[data-role="clock-add-mztrg-2611"]').addEventListener('click', clockAddMztRg2611Flow);
+      el.querySelector('[data-role="clock-rollback-mztrg-2611"]').addEventListener('click', clockMztRgRollback2611Flow);
       el.querySelector('[data-role="org-disable-ops-2610"]').addEventListener('click', disableOps2610Flow);
       el.querySelector('[data-role="org-rollback-ops-2610"]').addEventListener('click', opsRollback2610Flow);
     }
@@ -572,6 +576,87 @@ export function mountList(el, ctx) {
     if (!r.ok) { if (r.data && r.data.bad) await clkMcRefuse(r); else ctx.ui.toast(r.error || '退回失敗', 'danger'); return; }
     if (r.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
     await ctx.ui.dialog({ title: '美村打卡對照已退回', body: domOf(clkMcHtml(r.data, true)), actions: OK_ONLY });
+    if (alive) load();
+  }
+
+  // 2026-11-01 重新啟用墨竹亭內湖瑞光：mzt-rg 只改啟用那一格，同仁就能選這家店
+  const MZTRG_ACT = { add: '新增一列', reactivate: '重新啟用', deactivate: '停用', skip: '不用改' };
+  function mztrgHtml(d, done) {
+    const u = d.unit || {};
+    return `<p data-role="rg2611-sum">${done ? '已處理' : '會處理'}：${esc(MZTRG_ACT[d.action] || d.action)}（門市 ${esc(u.code)}「墨竹亭${esc(u.name)}」，順序 ${esc(u.order)}）</p>`;
+  }
+  async function mztrgRefuseDialog(r) {
+    const dd = r.data || {};
+    const bad = (dd.bad || []).map((x) => `門市 ${x.code}：應為「${x.expected}」，目前是「${x.actual}」`);
+    const members = (dd.members || []).map((e) => `${e}`);
+    await ctx.ui.dialog({ title: '墨竹亭內湖瑞光被拒絕', body: domOf(`<p>${esc(r.error)}</p>${li(bad)}${members.length ? '<p><b>還在這家店的同仁編號</b></p>' + li(members) : ''}`), actions: OK_ONLY });
+  }
+  const mztrgRefused = (r) => !!(r.data && ((r.data.bad || []).length || (r.data.members || []).length));
+  async function enableMztRg2611Flow() {
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'orgEnableMztRg202611', { dryrun: true }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { if (mztrgRefused(r)) await mztrgRefuseDialog(r); else ctx.ui.toast(r.error || '預覽失敗', 'danger'); return; }
+    const go = await ctx.ui.dialog({ title: '啟用墨竹亭內湖瑞光：預覽（還沒寫入）', body: domOf(mztrgHtml(r.data, false)), actions: [CANCEL, { label: '確定啟用', value: 'go', variant: 'danger' }] });
+    if (go !== 'go') return;
+    ctx.ui.loading(true);
+    let w;
+    try { w = await ctx.api.call('staff', 'orgEnableMztRg202611', { dryrun: false }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!w.ok) { if (mztrgRefused(w)) await mztrgRefuseDialog(w); else ctx.ui.toast(w.error || '啟用失敗', 'danger'); return; }
+    if (w.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '墨竹亭內湖瑞光已啟用', body: domOf(mztrgHtml(w.data, true)), actions: OK_ONLY });
+    if (alive) load();
+  }
+  async function mztRgRollback2611Flow() {
+    if (!(await ctx.ui.confirm('退回墨竹亭內湖瑞光？門市會停用（不刪列）。若還有同仁的單位是內湖瑞光，系統會拒絕並列出同仁編號。'))) return;
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'orgEnableMztRgRollback202611', {}); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { if (mztrgRefused(r)) await mztrgRefuseDialog(r); else ctx.ui.toast(r.error || '退回失敗', 'danger'); return; }
+    if (r.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '墨竹亭內湖瑞光已退回', body: domOf(mztrgHtml(r.data, true)), actions: OK_ONLY });
+    if (alive) load();
+  }
+
+  // 2026-11-01 墨竹亭內湖瑞光加進打卡對照（clock_stores 補 mztrg 一列；第八家打卡店 MZTRG）
+  const CLKRG_ACT = { add: '新增一列', reactivate: '重新啟用', deactivate: '停用', skip: '不用改' };
+  function clkRgHtml(d, done) {
+    const s = d.store || {};
+    return `<p data-role="clkrg2611-sum">${done ? '已處理' : '會處理'}：${esc(CLKRG_ACT[d.action] || d.action)}（打卡店 ${esc(s.code)}「${esc(s.name)}」↔ 單位 ${esc(s.unit)}，薪酬 ${esc(s.payroll)}）</p>`;
+  }
+  async function clkRgRefuse(r) {
+    const bad = ((r.data || {}).bad || []).map((x) => `${x.code}：應為「${x.expected}」，目前是「${x.actual}」`);
+    await ctx.ui.dialog({ title: '瑞光打卡對照被拒絕', body: domOf(`<p>${esc(r.error)}</p>${li(bad)}`), actions: OK_ONLY });
+  }
+  async function clockAddMztRg2611Flow() {
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'clockAddMztRg202611', { dryrun: true }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { if (r.data) await clkRgRefuse(r); else ctx.ui.toast(r.error || '預覽失敗', 'danger'); return; }
+    const go = await ctx.ui.dialog({ title: '瑞光加進打卡對照：預覽（還沒寫入）', body: domOf(clkRgHtml(r.data, false)), actions: [CANCEL, { label: '確定加入', value: 'go', variant: 'danger' }] });
+    if (go !== 'go') return;
+    ctx.ui.loading(true);
+    let w;
+    try { w = await ctx.api.call('staff', 'clockAddMztRg202611', { dryrun: false }); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!w.ok) { if (w.data) await clkRgRefuse(w); else ctx.ui.toast(w.error || '加入失敗', 'danger'); return; }
+    if (w.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '瑞光已加進打卡對照', body: domOf(clkRgHtml(w.data, true)), actions: OK_ONLY });
+    if (alive) load();
+  }
+  async function clockMztRgRollback2611Flow() {
+    if (!(await ctx.ui.confirm('退回瑞光打卡對照？clock_stores 的 mztrg 會停用（不刪列）。已有同仁打卡對照在這家店時系統會拒絕。'))) return;
+    ctx.ui.loading(true);
+    let r;
+    try { r = await ctx.api.call('staff', 'clockAddMztRgRollback202611', {}); } finally { ctx.ui.loading(false); }
+    if (!alive) return;
+    if (!r.ok) { if (r.data && r.data.bad) await clkRgRefuse(r); else ctx.ui.toast(r.error || '退回失敗', 'danger'); return; }
+    if (r.dryrun === true) { ctx.ui.toast('試跑模式：未寫入', 'warn'); return; }
+    await ctx.ui.dialog({ title: '瑞光打卡對照已退回', body: domOf(clkRgHtml(r.data, true)), actions: OK_ONLY });
     if (alive) load();
   }
 
