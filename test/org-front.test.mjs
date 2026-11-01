@@ -479,6 +479,34 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   ok(isReadAction('platform', 'orgEnableMztMc202610', { dryrun: true }) && !isReadAction('platform', 'orgEnableMztMc202610', { dryrun: false }) && !isReadAction('platform', 'orgEnableMztMc202610', {}) && !isReadAction('platform', 'orgEnableMztMcRollback202610', { dryrun: true }), '19 dryrun.js：預覽放行、執行與退回攔下');
   ok(isReadAction('platform', 'orgDisableOps202610', { dryrun: true }) && !isReadAction('platform', 'orgDisableOps202610', { dryrun: false }) && !isReadAction('platform', 'orgDisableOpsRollback202610', { dryrun: true }), '20 dryrun.js：停用營運部預覽放行、執行與退回攔下');
 }
+// ── 第 21 節：重新啟用墨竹亭內湖瑞光（2026-11-01）前端 ──
+{
+  const el1 = await mount(makeCtx(baseHandler(), { perms: ['platform.staff'], role: 'hr' }));
+  ok(!el1.innerHTML.includes('data-role="org-enable-mztrg-2611"') && !el1.innerHTML.includes('data-role="org-rollback-mztrg-2611"'), '21 ★非 admin 看不到「啟用墨竹亭內湖瑞光」「退回墨竹亭內湖瑞光」');
+  const PV = { ok: true, data: { dryrun: true, action: 'reactivate', unit: { code: 'mzt-rg', name: '內湖瑞光', parent: 'mzt', order: 5 } } };
+  const ctx = makeCtx(baseHandler((a, p) => (a === 'orgEnableMztRg202611' ? (p.dryrun ? PV : { ok: true, data: Object.assign({}, PV.data, { dryrun: false }) }) : null)), { perms: ['platform.staff'], role: 'admin' });
+  const el = await mount(ctx);
+  ok(el.innerHTML.includes('啟用墨竹亭內湖瑞光（11/01）') && el.innerHTML.includes('退回墨竹亭內湖瑞光'), '21 admin 看得到兩顆按鈕');
+  ctx.answers.push(null);
+  el.querySelector('[data-role="org-enable-mztrg-2611"]').fire('click'); await flush();
+  const c1 = ctx.calls.filter((c) => c.action === 'orgEnableMztRg202611');
+  ok(c1.length === 1 && c1[0].payload.dryrun === true, '21 ★先 dryrun:true 預覽，取消就不寫');
+  ok(ctx.dialogs[0].body.innerHTML.includes('墨竹亭內湖瑞光') && ctx.dialogs[0].body.innerHTML.includes('重新啟用'), '21 預覽顯示門市與動作', ctx.dialogs[0].body.innerHTML);
+  ctx.calls.length = 0; ctx.dialogs.length = 0; ctx.answers.push('go', 'ok');
+  el.querySelector('[data-role="org-enable-mztrg-2611"]').fire('click'); await flush();
+  ok(JSON.stringify(ctx.calls.filter((c) => c.action === 'orgEnableMztRg202611').map((c) => c.payload.dryrun)) === '[true,false]' && /已啟用/.test(ctx.dialogs[1].title), '21 按「確定啟用」才 dryrun:false');
+  const ctx2 = makeCtx(baseHandler((a) => (a === 'orgEnableMztRgRollback202611' ? { ok: false, error: '退回墨竹亭內湖瑞光：還有同仁', data: { members: ['DZY007'] } } : null)), { role: 'admin' });
+  const el2 = await mount(ctx2);
+  ctx2.confirmAnswer = false;
+  el2.querySelector('[data-role="org-rollback-mztrg-2611"]').fire('click'); await flush();
+  ok(ctx2.confirms.length === 1 && !ctx2.calls.some((c) => c.action === 'orgEnableMztRgRollback202611'), '21 退回先確認，取消不呼叫');
+  ctx2.confirmAnswer = true; ctx2.answers.push('ok');
+  el2.querySelector('[data-role="org-rollback-mztrg-2611"]').fire('click'); await flush();
+  const rb = ctx2.dialogs[0] && ctx2.dialogs[0].body.innerHTML;
+  ok(rb && rb.includes('DZY007'), '21 退回被拒：列出還在店的同仁編號', rb);
+  const { isReadAction } = await import('../platform/dryrun.js');
+  ok(isReadAction('platform', 'orgEnableMztRg202611', { dryrun: true }) && !isReadAction('platform', 'orgEnableMztRg202611', { dryrun: false }) && !isReadAction('platform', 'orgEnableMztRg202611', {}) && !isReadAction('platform', 'orgEnableMztRgRollback202611', { dryrun: true }), '21 dryrun.js：預覽放行、執行與退回攔下');
+}
 { // 左側選單：品牌發展緊接在行銷部門之後
   const { DEPARTMENTS } = await import('../platform/config.js');
   const ids = DEPARTMENTS.map((d) => d.id);

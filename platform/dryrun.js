@@ -115,6 +115,12 @@ export function isReadAction(backendId, action, payload) {
   // 2026-10-29 墨竹亭台中美村加進打卡對照同一套：dryrun:true 預覽放行；dryrun:false 與 clockAddMztMcRollback202610 仍攔
   if (backendId === 'platform' && action === 'clockAddMztMc202610'
     && payload && payload.dryrun === true) return true;
+  // 2026-11-01 重新啟用墨竹亭內湖瑞光同一套：dryrun:true 預覽放行；dryrun:false 與 orgEnableMztRgRollback202611 仍攔
+  if (backendId === 'platform' && action === 'orgEnableMztRg202611'
+    && payload && payload.dryrun === true) return true;
+  // 2026-11-01 墨竹亭內湖瑞光加進打卡對照同一套：dryrun:true 預覽放行；dryrun:false 與 clockAddMztRgRollback202611 仍攔
+  if (backendId === 'platform' && action === 'clockAddMztRg202611'
+    && payload && payload.dryrun === true) return true;
   // 2026-10-29 停用營運部同一套：dryrun:true 預覽放行；dryrun:false 與 orgDisableOpsRollback202610 仍攔
   if (backendId === 'platform' && action === 'orgDisableOps202610'
     && payload && payload.dryrun === true) return true;
