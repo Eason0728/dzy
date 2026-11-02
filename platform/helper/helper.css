@@ -8,25 +8,29 @@
   right: 20px;
   bottom: 20px;
   z-index: 900;
-  min-height: 44px;
-  padding: 0 18px;
+  width: 60px;
+  height: 60px;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-pill, 999px);
-  background: var(--brand);
-  color: var(--ink-inverse);
-  font-size: var(--fs-md, 16px);
-  font-weight: var(--fw-bold, 700);
+  border-radius: 50%;
+  /* 小機器人圖示（Eason 2026-11-03 選 C）；文字「問小幫手」留給讀屏與滑鼠提示，畫面上藏起來 */
+  background: var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='34' r='24' fill='%23fff'/%3E%3Crect x='29' y='4' width='6' height='10' rx='3' fill='%23fff'/%3E%3Ccircle cx='32' cy='5' r='4' fill='%23f2c230'/%3E%3Crect x='16' y='24' width='32' height='18' rx='9' fill='%23c8402c'/%3E%3Ccircle cx='25' cy='33' r='3.2' fill='%23fff'/%3E%3Ccircle cx='39' cy='33' r='3.2' fill='%23fff'/%3E%3Cpath d='M26 48 Q32 53 38 48' stroke='%23c8402c' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") center / 40px 40px no-repeat;
+  color: transparent;
+  font-size: 0;
+  overflow: hidden;
   box-shadow: var(--shadow-lift, 0 4px 16px rgba(0, 0, 0, .15));
   cursor: pointer;
+  transition: transform .15s ease;
 }
-.aih-fab:hover { background: var(--brand-dark); }
+.aih-fab:hover { background-color: var(--brand-dark); transform: scale(1.06); }
+@media (prefers-reduced-motion: reduce) { .aih-fab { transition: none; } .aih-fab:hover { transform: none; } }
 .aih-fab:focus-visible, .aih-hbtn:focus-visible, .aih-send:focus-visible, .aih-go:focus-visible,
 .aih-fb-btn:focus-visible, .aih-input:focus-visible { outline: 3px solid var(--tab-line, var(--brand)); outline-offset: 2px; }
 
 .aih-panel {
   position: fixed;
   right: 20px;
-  bottom: 76px;
+  bottom: 92px;
   z-index: 901;
   width: 380px;
   max-width: calc(100vw - 40px);
@@ -145,7 +149,7 @@
 
 /* 手機：按鈕固定在右下（殼的下排選單在頁首，不在畫面底部，不會被壓到）；側欄全螢幕 */
 @media (max-width: 860px) {
-  .aih-fab { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .aih-fab { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: 54px; height: 54px; background-size: 36px 36px; }
   .aih-panel {
     inset: 0;
     width: 100%;
