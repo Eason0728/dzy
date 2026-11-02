@@ -64,3 +64,19 @@ Eason 給「門店支出」核決權限表圖：0–5,000 店長／5,001–10,00
 - 23:03 先推畫面 3d69c66（新畫面多送 step，舊後端忽略＝安全），minikit b72427b 待 mini pull＋重啟。
 - 10/20 mini 合併版（薪酬＋表單簽核）更新完成：health version b72427b、green、reasons 空（薪酬對話轉述）。暫存 worktree 與分支（apv-phase3*、apv-fix2、apv-jobs）已全部併入 main 後移除。
 - 剩：Eason 初始化＋小額請款實測、10/19 04:35 照片異機複查結果待回報。
+
+## 費用請款結案後自動推進損益（2026-11-02，分支 apv-pnl，尚未合併、尚未部署）
+契約：損益端新入口 `expensePush`（另一條線，~/mala-pnl-auto）；管理系統這側：
+- **後端 Approvals.gs**：新分頁 `apv_pnl`（setupApprovals 只補不覆蓋）；單位→損益門市、請款類別→「請款-」科目兩張對照常數（`APV_PNL_UNIT_STORE`／`APV_PNL_CATEGORY_ACC`，11 個單位代碼已對 Staff.gs org 種子核對）；jobs 專用全域函式（`_` 結尾、**不進 Code.gs 分派表**、Code.gs 與 platform/ 零改動）：`apvPnlClaim_`（只讀；type=expense、done、單位有對照、apv_pnl 沒 done／failed、next_at 到了）、`apvPnlMark_`（done／STORE_INACTIVE 明天台北 06:00／BAD_INPUT failed／其他碼指數退避 30 分起上限 6 小時）、`apvPnlSecret_`（讀 module_secrets pnl/write）、另加 `apvPnlStat_`（failed 或 tries≥6 的清單，給通知匣與 health；契約外的小增補）。
+- **mini apv.js**：開機一次＋每 15 分鐘 claim → 逐筆 POST `PROXY_URL_PNL` `{action:'expensePush', key, ...}` → mark；AUTH／網路／逾時當輪停下；failed 或失敗滿 6 次寫通知匣（key `apv-pnl-<單號>`）；health `apv_pnl_problem`。沒設 PROXY_URL_PNL 或沒有金鑰＝不送、log 一行。
+- 測試：dzy `test/apv-actions.mock.test.mjs` 第 15 節；minikit `test/apps/apv-pnl.test.js`。
+- 未做：匯出 CSV 的「損益入帳月」欄（選做）。
+- 已知：失敗（failed）的單要人工重推＝把 apv_pnl 該列 state 改回 pending、tries 改 0、next_at 清空。
+
+### 部署順序
+1. **損益端先上**（expensePush 與 Script Property `PNL_DZY_KEY`＝mini module_secrets pnl/write 同一把；科目範本 version 5 並在光復正式表按「同步科目範本」）。
+2. dzy 合併 main → 在 minikit 把 `gas/Approvals.gs`（只套這一檔的差異，別整包 sync-gas，見 dzy-admin skill）＋ `SOURCE.sha256` 同步 → minikit 合併。
+3. mini：`~/dzy-minikit/kit/bin/update-all.sh`（前面不要 git pull）→ 重啟平台。
+4. 管理者在管理系統執行一次 `apvSetup`（或編輯器 `setupApprovals`）建 `apv_pnl` 分頁；沒建之前 claim 回空、不會推。
+5. 確認 mini `.env` 的 `PROXY_URL_PNL` 已設、module_secrets `pnl/write` 已在（兩者損益代轉早已用到）；health 沒有 `apv_pnl_problem`，log 看到 `apv pnl 本輪 N 筆`。
+6. 損益設定頁把停用單位啟用（S10、S11、S20–S26、S30）；之前因 STORE_INACTIVE 延後的單會在隔天 06:00 後自動補推。

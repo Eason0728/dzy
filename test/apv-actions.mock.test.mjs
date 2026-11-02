@@ -264,7 +264,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const busy = post(app, 'DZY901', 'apvSubmit', { client_id: newCid(), type: 'expense', body: expenseBody(), files: [] });
   ok(busy.ok === false && !app.sheets.apv_forms._data[1], '寫入鎖逾時 → 失敗且沒寫任何列');
   app.locks.busy = false;
-  ['apvFileAuthorize_', 'apvFileRegister_', 'apvFileCanRead_', 'apvFileSweepList_', 'apvFileSweepDone_', 'apvBackupList_', 'apvDigest_', 'apvReconcile_'].forEach((a) => {
+  ['apvFileAuthorize_', 'apvFileRegister_', 'apvFileCanRead_', 'apvFileSweepList_', 'apvFileSweepDone_', 'apvBackupList_', 'apvDigest_', 'apvReconcile_', 'apvPnlClaim_', 'apvPnlMark_', 'apvPnlStat_', 'apvPnlSecret_'].forEach((a) => {
     ok(app.sb.CODE_ALLOWED_ACTIONS.indexOf(a) === -1 && post(app, 'admin', a, {}).ok === false, `jobs 專用函式不在分派表：${a}`);
     ok(typeof app.sb[a] === 'function', `jobs 專用全域函式存在：${a}`);
   });
@@ -1056,6 +1056,156 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   try { old.sb.setupApprovals(); } catch (e) { e4 = String(e.message); }
   ok(e4 === '' && old.sheets.apv_files._data[0].join('|').endsWith('|rev|deleting_at') && old.sheets.apv_files._data[1][8] === 'deleting', '（QA4）舊 11 欄表頭 → setupApprovals 補 deleting_at 欄、舊資料不動', e4);
   ok(old.sb.apvFileSweepList_().length === 1, '（QA4）舊表補欄後 sweep 能列出卡住的 deleting');
+}
+
+// ============================================================
+// 15. 費用請款推進損益：apv_pnl、apvPnlClaim_／apvPnlMark_／apvPnlStat_／apvPnlSecret_
+// ============================================================
+{
+  const PNL_H = ['form_id', 'state', 'store_id', 'month', 'acc_id', 'amount', 'row_id', 'tries', 'last_code', 'next_at', 'updated_at'];
+  const PNL = (app) => rowsOf(app, 'apv_pnl', PNL_H);
+  const P1 = (id) => PNL(app).filter((r) => r.form_id === id);
+  const MIN = 60 * 1000;
+  const NOW = Date.UTC(2026, 10, 2, 5, 0, 0);          // 台北 2026-11-02 13:00
+  const mkDone = (app, bodyOver, amount) => {
+    const f = upload(app, 'DZY901');
+    const r = post(app, 'DZY901', 'apvSubmit', { client_id: newCid(), type: 'expense', body: expenseBody(Object.assign({ amount: amount || 800 }, bodyOver || {})), files: [f] });
+    const id = r.data.id;
+    decide(app, 'DZY902', id, 'approve');
+    const h = post(app, 'DZY909', 'apvHandle', { id, rev: 1, step: null, result: 'done', note: '已匯款' });
+    if (h.data.status !== 'done') throw new Error('mkDone 失敗 ' + J(h));
+    return id;
+  };
+
+  const app = freshApp();
+  const sb = app.sb;
+  ok(app.sheets.apv_pnl._data[0].join('|') === PNL_H.join('|'), '建表：apv_pnl 表頭');
+  sb.setupApprovals();
+  ok(app.sheets.apv_pnl._data.length === 1, '重跑 setupApprovals 不重複建 apv_pnl');
+  ok(eq(sb.apvPnlClaim_(NOW, 20), []), '沒有任何單 → claim 空');
+
+  // 不該出現的單
+  const sent = sendExpense(app, 'DZY901', 800);
+  ok(eq(sb.apvPnlClaim_(NOW, 20), []), '未結案（簽核中）的請款單不出現');
+  decide(app, 'DZY902', sent.data.id, 'approve');
+  ok(eq(sb.apvPnlClaim_(NOW, 20), []), '承辦中（尚未按已處理）不出現');
+  const pf = upload(app, 'DZY901');
+  const pur = post(app, 'DZY901', 'apvSubmit', { client_id: newCid(), type: 'purchase', body: purchaseBody(), files: [pf] });
+  decide(app, 'DZY902', pur.data.id, 'approve');
+  post(app, 'DZY907', 'apvHandle', { id: pur.data.id, rev: 1, step: null, result: 'done' });
+  ok(formOf(app, pur.data.id).status === 'done' && eq(sb.apvPnlClaim_(NOW, 20), []), '已結案但不是 expense（請購）不出現');
+  const un = mkDone(app);
+  setCell(app, 'apv_forms', FORM_H, un, 'unit', 'mala-mc');
+  ok(eq(sb.apvPnlClaim_(NOW, 20), []), '單位沒對照（小辛辣美村等）的已結案請款不出現');
+  setCell(app, 'apv_forms', FORM_H, un, 'unit', 'mala-gf');
+
+  // 出現與欄位
+  const c1 = sb.apvPnlClaim_(NOW, 20);
+  ok(c1.length === 1 && eq(c1[0], { form_id: un, store_id: 'S01', spend_month: '2026-10', acc_id: 'A102', amount: 800, desc: '測試維修' }), '已結案 expense、單位已對照 → 出現，欄位正確（單位→S01、repair→A102）', c1);
+  const cats = { repair: 'A102', food: 'A103', misc: 'A104', transport: 'A105', supplies: 'A106', other: 'A107' };
+  Object.keys(cats).forEach((cat) => {
+    const id = mkDone(app, { category: cat, desc: 'x'.repeat(100) }, 123);
+    const it = sb.apvPnlClaim_(NOW, 50).find((x) => x.form_id === id);
+    ok(it && it.acc_id === cats[cat] && it.amount === 123 && it.desc.length === 60, `類別 ${cat} → ${cats[cat]}；desc 截 60 字`, it);
+    mark_done_cleanup(id);
+  });
+  function mark_done_cleanup(id) { sb.apvPnlMark_(id, { ok: true, month: '2026-10', row_id: 'R' }, NOW); }
+  const UNITS = { 'mala-gf': 'S01', 'dzy-hq': 'S10', ck: 'S11', 'mzt-hq': 'S20', 'mzt-js': 'S21', 'mzt-gf': 'S22', 'mzt-lzl': 'S23', 'mzt-mc': 'S24', 'mzt-wx': 'S25', 'mzt-rg': 'S26', 'mala-hq': 'S30' };
+  const orgUnits = Object.keys(sb.stfReadOrg_().unit);
+  ok(Object.keys(UNITS).every((u) => orgUnits.indexOf(u) !== -1), '對照表的 11 個單位代碼都真的存在於 org 種子', orgUnits);
+  Object.keys(UNITS).forEach((u) => {
+    const id = mkDone(app, {}, 50);
+    setCell(app, 'apv_forms', FORM_H, id, 'unit', u);
+    const it = sb.apvPnlClaim_(NOW, 50).find((x) => x.form_id === id);
+    ok(it && it.store_id === UNITS[u], `單位 ${u} → ${UNITS[u]}`, it);
+    mark_done_cleanup(id);
+  });
+  ok(eq(sb.apvPnlClaim_(NOW, 50).map((x) => x.form_id), [un]), '以上都標 done 後只剩一張待推');
+  ok(sb.apvPnlClaim_(NOW, 1).length === 1 && sb.apvPnlClaim_(NOW, 0).length === 1, 'limit 生效（至少 1）');
+
+  // 金額取目前版本 rev 的金額
+  setCell(app, 'apv_revisions', ['form_id', 'rev', 'at', 'body_json', 'amount', 'files_json', 'route_json', 'thr_ver', 'sha256'], un, 'amount', 900, 'form_id');
+  ok(sb.apvPnlClaim_(NOW, 20)[0].amount === 900, '金額取最後一版 rev 的金額');
+  setCell(app, 'apv_revisions', ['form_id', 'rev', 'at', 'body_json', 'amount', 'files_json', 'route_json', 'thr_ver', 'sha256'], un, 'amount', 800, 'form_id');
+
+  // 還沒建 apv_pnl（沒跑 setup）→ 空，不報錯
+  const keep = app.sheets.apv_pnl;
+  delete app.sheets.apv_pnl;
+  ok(eq(sb.apvPnlClaim_(NOW, 20), []) && sb.apvPnlMark_(un, { ok: true, month: '2026-10', row_id: 'R' }, NOW).error === 'not_inited', '沒有 apv_pnl 分頁：claim 空、mark 回 not_inited');
+  app.sheets.apv_pnl = keep;
+
+  // 搬鎖忙
+  app.locks.busy = true;
+  ok(sb.apvPnlMark_(un, { code: 'NETWORK' }, NOW).error === 'busy' && P1(un).length === 0, '全域鎖忙 → mark 回 busy、不寫列');
+  app.locks.busy = false;
+
+  // STORE_INACTIVE → 明天 06:00 台北，不算失敗
+  const m1 = sb.apvPnlMark_(un, { code: 'STORE_INACTIVE' }, NOW);
+  const tom6 = Date.UTC(2026, 10, 2, 22, 0, 0);       // 台北 2026-11-03 06:00
+  ok(m1.ok && m1.state === 'pending' && m1.tries === 0 && P1(un).length === 1 && Number(P1(un)[0].next_at) === tom6 && P1(un)[0].last_code === 'STORE_INACTIVE', 'STORE_INACTIVE → pending、tries 不加、next_at＝明天台北 06:00', P1(un));
+  ok(eq(sb.apvPnlClaim_(NOW + 60 * MIN, 20), []) && eq(sb.apvPnlClaim_(tom6 - 1, 20), []), '明天 06:00 之前 claim 不出現');
+  ok(sb.apvPnlClaim_(tom6, 20).length === 1, '到明天 06:00 又出現');
+  const early = Date.UTC(2026, 10, 1, 19, 30, 0);     // 台北 11-02 03:30 → 「明天」＝11-03 06:00
+  sb.apvPnlMark_(un, { code: 'STORE_INACTIVE' }, early);
+  ok(Number(P1(un)[0].next_at) === tom6 && P1(un).length === 1, '凌晨標記也是隔一個日曆日的 06:00；同一單仍只有一列');
+
+  // 退避：30 分、1h、2h、4h、6h、6h（上限）
+  const waits = [30, 60, 120, 240, 360, 360];
+  waits.forEach((w, i) => {
+    const m = sb.apvPnlMark_(un, { code: 'NETWORK' }, NOW);
+    ok(m.ok && m.state === 'pending' && m.tries === i + 1 && Number(P1(un)[0].next_at) === NOW + w * MIN, `網路錯第 ${i + 1} 次 → 退避 ${w} 分`, P1(un)[0]);
+  });
+  ok(eq(sb.apvPnlClaim_(NOW + 359 * MIN, 20), []) && sb.apvPnlClaim_(NOW + 360 * MIN, 20).length === 1, '退避期間不出現、到點才出現');
+  const st = sb.apvPnlStat_();
+  ok(st.count === 1 && st.problems[0].form_id === un && st.problems[0].state === 'pending' && st.problems[0].tries === 6 && st.problems[0].last_code === 'NETWORK', 'tries ≥ 6 的 pending 進 stat（通知匣／health 用）', st);
+  ['AUTH', 'BAD_RESPONSE', 'INTERNAL', 'LOCKED', 'BUSY'].forEach((code) => ok(sb.apvPnlMark_(un, { code }, NOW).state === 'pending', `${code} → pending（暫時性，重試）`));
+  ok(sb.apvPnlMark_(un, {}, NOW).last_code === 'INTERNAL' && sb.apvPnlMark_(un, { code: 'a b!c' }, NOW).last_code === 'abc', '沒給碼 → INTERNAL；碼只留英數底線');
+
+  // 成功（含損益回 dup 一樣的形狀）→ done，之後不再 claim、不再被改
+  const ok1 = sb.apvPnlMark_(un, { ok: true, month: '2026-11', row_id: 'ROW-1' }, NOW);
+  const r1 = P1(un)[0];
+  ok(ok1.state === 'done' && r1.state === 'done' && r1.month === '2026-11' && r1.row_id === 'ROW-1' && r1.store_id === 'S01' && r1.acc_id === 'A102' && Number(r1.amount) === 800 && r1.last_code === '' && Number(r1.next_at) === 0, '成功 → done，記損益回的月份與 row_id', r1);
+  ok(eq(sb.apvPnlClaim_(NOW + 7 * 24 * 60 * MIN, 20), []), 'done 之後不再 claim');
+  ok(sb.apvPnlMark_(un, { code: 'NETWORK' }, NOW).state === 'done' && P1(un)[0].state === 'done' && P1(un).length === 1, 'done 之後再標失敗也不改');
+  ok(sb.apvPnlStat_().count === 0, 'done 後 stat 乾淨');
+  ok(sb.apvPnlMark_(un, { ok: true, month: '壞', row_id: 'x' }, NOW).state === 'done', '（已 done 的不受影響）');
+  const bad = mkDone(app, {}, 77);
+  ok(sb.apvPnlMark_(bad, { ok: true, month: '壞的', row_id: 'x' }, NOW).state === 'pending' && PNL(app).find((r) => r.form_id === bad).last_code === 'BAD_RESPONSE', '回應月份格式不對 → 當作 BAD_RESPONSE 重試，不標 done');
+
+  // BAD_INPUT → failed（永久），不再 claim
+  const mb = sb.apvPnlMark_(bad, { code: 'BAD_INPUT' }, NOW);
+  ok(mb.ok && mb.state === 'failed' && !sb.apvPnlClaim_(NOW + 30 * 24 * 60 * MIN, 50).some((x) => x.form_id === bad), 'BAD_INPUT → failed，之後不再 claim');
+  ok(sb.apvPnlStat_().problems.some((x) => x.form_id === bad && x.state === 'failed'), 'failed 進 stat');
+  ok(sb.apvPnlMark_('APV-000000-999', { ok: true, month: '2026-10', row_id: 'x' }, NOW).error === 'not_found' && sb.apvPnlMark_(sent.data.id, { ok: true, month: '2026-10', row_id: 'x' }, NOW).error === 'not_found', '不存在的單、還沒結案的單 → mark 回 not_found，不寫列');
+
+  // 支出月防呆：早於台北當月往前 12 個月 → claim 直接標 failed(BAD_MONTH)，不出現在待推清單
+  ok(sb.apvPnlCutoffMonth_(NOW) === '2025-11' && sb.apvPnlCutoffMonth_(Date.UTC(2026, 0, 15)) === '2025-01', '12 個月前的月份算法（含跨年）');
+  const oldF = mkDone(app, { spend_date: '2025-10-31' }, 66);
+  const edgeF = mkDone(app, { spend_date: '2025-11-01' }, 67);
+  const cl = sb.apvPnlClaim_(NOW, 50).map((x) => x.form_id);
+  ok(!cl.includes(oldF) && cl.includes(edgeF), '超過 12 個月的不出現；剛好 12 個月內的出現', cl);
+  ok(P1(oldF).length === 1 && P1(oldF)[0].state === 'failed' && P1(oldF)[0].last_code === 'BAD_MONTH', 'claim 把它標 failed／BAD_MONTH', P1(oldF));
+  ok(sb.apvPnlStat_().problems.some((x) => x.form_id === oldF && x.state === 'failed' && x.last_code === 'BAD_MONTH'), 'BAD_MONTH 走既有 failed 清單（通知匣）');
+  ok(!sb.apvPnlClaim_(NOW + 60 * MIN, 50).some((x) => x.form_id === oldF), '標過 failed 後不再 claim');
+  mark_done_cleanup(edgeF);
+
+  // stat：結案超過 7 天還沒推進去（沒被標過、或 STORE_INACTIVE 一直延）也列為問題；pending 數給 mini 的 health 用
+  const agedF = mkDone(app, {}, 88);
+  const s0 = sb.apvPnlStat_();
+  ok(!s0.problems.some((x) => x.form_id === agedF) && s0.pending >= 1, '剛結案的 pending 不算問題，但計入 pending 數', s0);
+  const s8 = sb.apvPnlStat_(Date.now() + 8 * 24 * 60 * MIN);
+  ok(s8.problems.some((x) => x.form_id === agedF && x.state === 'pending' && x.aged === true && x.tries === 0), '結案超過 7 天仍 pending（從沒標過）→ 進 problems（aged）', s8);
+  sb.apvPnlMark_(agedF, { code: 'STORE_INACTIVE' }, NOW);
+  ok(sb.apvPnlStat_(Date.now() + 8 * 24 * 60 * MIN).problems.some((x) => x.form_id === agedF && x.aged && x.last_code === 'STORE_INACTIVE'), 'STORE_INACTIVE 一直沒啟用超過 7 天也進 problems');
+  ok(!sb.apvPnlStat_(Date.now() + 6 * 24 * 60 * MIN).problems.some((x) => x.form_id === agedF), '6 天內不列');
+  sb.apvPnlMark_(agedF, { ok: true, month: '2026-10', row_id: 'R' }, NOW);
+  ok(!sb.apvPnlStat_(Date.now() + 8 * 24 * 60 * MIN).problems.some((x) => x.form_id === agedF), '推進去後不列');
+
+  // 金鑰
+  ok(sb.apvPnlSecret_().key === '', '沒設 pnl/write → key 空字串');
+  app.sheets.module_secrets._data.push(['pnl', 'read', 'FAKE-READ'], ['pnl', 'write', '  FAKE-PNL-WRITE  ']);
+  ok(sb.apvPnlSecret_().key === 'FAKE-PNL-WRITE', '讀 module_secrets pnl/write（去空白）');
+  ok(post(app, 'admin', 'apvPnlSecret_', {}).ok === false && post(app, 'admin', 'apvPnlClaim_', {}).ok === false && post(app, 'admin', 'apvPnlMark_', {}).ok === false, '三支函式都不能經 doPost 呼叫');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -17,6 +17,7 @@ var APV_SHEET_FILES = 'apv_files';
 var APV_SHEET_THR = 'apv_thresholds';
 var APV_SHEET_THRLOG = 'apv_threshold_log';
 var APV_SHEET_REVS = 'apv_revisions';
+var APV_SHEET_PNL = 'apv_pnl';
 
 var APV_FORM_HEADERS = ['id', 'type', 'status', 'sender', 'unit', 'subject', 'amount', 'body_json', 'route_json', 'step', 'step_at',
   'handler_dept', 'created_at', 'updated_at', 'rev', 'client_id'];
@@ -24,6 +25,7 @@ var APV_EVENT_HEADERS = ['at', 'form_id', 'rev', 'actor', 'action', 'note', 'sha
 var APV_FILE_HEADERS = ['id', 'owner', 'form_id', 'path', 'bytes', 'sha256', 'created_at', 'kind', 'state', 'seq', 'rev', 'deleting_at'];
 var APV_THR_HEADERS = ['form_type', 'seq', 'max_amount', 'store_role', 'hq_role', 'ver'];
 var APV_THRLOG_HEADERS = ['at', 'actor', 'form_type', 'before_json', 'after_json'];
+var APV_PNL_HEADERS = ['form_id', 'state', 'store_id', 'month', 'acc_id', 'amount', 'row_id', 'tries', 'last_code', 'next_at', 'updated_at'];
 var APV_REV_HEADERS = ['form_id', 'rev', 'at', 'body_json', 'amount', 'files_json', 'route_json', 'thr_ver', 'sha256'];
 
 var APV_THR_DEFAULT = [
@@ -44,6 +46,21 @@ var APV_LIST_MAX = 200;
 var APV_DIGEST_MAX = 1000;
 var APV_NOTE_MAX = 200;
 var APV_ACTIVE_STATUSES = ['signing', 'handling', 'exception'];
+
+// 費用請款 → 損益系統（契約：結案 done 的 expense 由 mini 推進損益；單位代碼皆已在 Staff.gs org 種子核對存在）
+// dzy org unit code → 損益 store_id；不在表內（小辛辣美村／南昌、一悟各店）一律不推
+var APV_PNL_UNIT_STORE = {
+  'mala-gf': 'S01', 'dzy-hq': 'S10', 'ck': 'S11', 'mzt-hq': 'S20', 'mzt-js': 'S21', 'mzt-gf': 'S22',
+  'mzt-lzl': 'S23', 'mzt-mc': 'S24', 'mzt-wx': 'S25', 'mzt-rg': 'S26', 'mala-hq': 'S30'
+};
+// 請款類別 → 損益「請款-」科目（損益 seed/mala-template.json version 5）
+var APV_PNL_CATEGORY_ACC = { repair: 'A102', food: 'A103', misc: 'A104', transport: 'A105', supplies: 'A106', other: 'A107' };
+var APV_PNL_BACKOFF_FIRST_MS = 30 * 60 * 1000;
+var APV_PNL_BACKOFF_MAX_MS = 6 * 60 * 60 * 1000;
+var APV_PNL_ALERT_TRIES = 6;
+var APV_PNL_CLAIM_MAX = 50;
+var APV_PNL_MONTH_BACK = 12;                       // 支出月早於「台北當月往前 12 個月」不推（年份打錯會在損益生出孤兒月）
+var APV_PNL_AGED_MS = 7 * 24 * 60 * 60 * 1000;     // 結案後超過 7 天還沒推進去 → 進 stat 問題清單
 
 // ============================================================
 // 1. 小工具
@@ -457,6 +474,7 @@ function setupApprovals() {
   stfEnsureSheet_(ss, APV_SHEET_THR, APV_THR_HEADERS, APV_THR_DEFAULT);
   stfEnsureSheet_(ss, APV_SHEET_THRLOG, APV_THRLOG_HEADERS, []);
   stfEnsureSheet_(ss, APV_SHEET_REVS, APV_REV_HEADERS, []);
+  stfEnsureSheet_(ss, APV_SHEET_PNL, APV_PNL_HEADERS, []);
   return { ok: true };
 }
 
@@ -1354,4 +1372,154 @@ function apvReconcile_() {
     return { ok: true, skipped: skipped };
   });
   return r.ok ? { skipped: r.skipped } : { skipped: 0, error: r.error };
+}
+
+// ============================================================
+// 10. 費用請款推進損益（jobs 專用全域函式；mini apv.js 每 15 分鐘 claim → POST 損益 → mark）
+// ============================================================
+
+function apvPnlRows_() {
+  if (!stfSheet_(APV_SHEET_PNL)) return null;
+  return apvRows_(APV_SHEET_PNL, APV_PNL_HEADERS).filter(function (r) { return apvStr_(r.o.form_id) !== ''; });
+}
+
+/** 明天（台北）06:00 的毫秒時間 */
+function apvPnlTomorrow6_(ms) {
+  var dayMs = 24 * 60 * 60 * 1000, tz = 8 * 60 * 60 * 1000;
+  return Math.floor((ms + tz) / dayMs) * dayMs - tz + dayMs + 6 * 60 * 60 * 1000;
+}
+
+/** 台北當月往前 APV_PNL_MONTH_BACK 個月的月份字串（YYYY-MM）；早於它的支出月不推 */
+function apvPnlCutoffMonth_(ms) {
+  var t = apvTaipei_(ms);
+  var idx = t.y * 12 + (Number(t.m) - 1) - APV_PNL_MONTH_BACK;
+  var m = (idx % 12) + 1;
+  return Math.floor(idx / 12) + '-' + (m < 10 ? '0' : '') + m;
+}
+
+/** 這張單該推的內容；不是 expense、單位或類別沒對照、日期或金額壞 → null。金額取「目前這一版」的 rev 金額（沒有就用單上金額） */
+function apvPnlItemOf_(f, revAmount) {
+  if (f.type !== 'expense' || f.status !== 'done') return null;
+  var store = APV_PNL_UNIT_STORE.hasOwnProperty(f.unit) ? APV_PNL_UNIT_STORE[f.unit] : '';
+  var b = apvBodyOf_(f);
+  var acc = APV_PNL_CATEGORY_ACC.hasOwnProperty(b.category) ? APV_PNL_CATEGORY_ACC[b.category] : '';
+  if (!store || !acc || typeof b.spend_date !== 'string' || !apvDateOk_(b.spend_date)) return null;
+  var amount = revAmount !== undefined && revAmount !== null && revAmount !== '' ? Number(revAmount) : Number(f.amount);
+  if (!isFinite(amount) || amount < 1 || amount > 1000000000 || Math.floor(amount) !== amount) return null;
+  return { form_id: f.id, store_id: store, spend_month: b.spend_date.slice(0, 7), acc_id: acc, amount: amount, desc: String(b.desc === undefined || b.desc === null ? '' : b.desc).slice(0, 60) };
+}
+
+/**
+ * 找出該推的請款單（純讀取，不寫）：type=expense、status=done、單位在對照表內、apv_pnl 沒有 done／failed 列、next_at ≤ nowMs。
+ * 回 [{form_id, store_id, spend_month, acc_id, amount, desc}]（最舊的先，最多 limit 筆）。沒建 apv_pnl 分頁（還沒跑 setupApprovals）→ []。
+ */
+function apvPnlClaim_(nowMs, limit) {
+  var now = Number(nowMs) || apvNow_();
+  var max = Math.min(Math.max(parseInt(limit, 10) || 20, 1), APV_PNL_CLAIM_MAX);
+  if (!apvReady_()) return [];
+  var pr = apvPnlRows_();
+  if (pr === null) return [];
+  var pnl = {};
+  pr.forEach(function (r) { pnl[apvStr_(r.o.form_id)] = r.o; });
+  var revAmt = {};
+  apvRows_(APV_SHEET_REVS, APV_REV_HEADERS).forEach(function (r) { revAmt[apvStr_(r.o.form_id) + '#' + Number(r.o.rev)] = r.o.amount; });
+  var list = [], badMonth = [];
+  var cutoff = apvPnlCutoffMonth_(now);
+  apvReadForms_().forEach(function (fr) {
+    var f = fr.f;
+    if (f.type !== 'expense' || f.status !== 'done') return;
+    var p = pnl[f.id];
+    if (p && (apvStr_(p.state) === 'done' || apvStr_(p.state) === 'failed')) return;
+    var item = apvPnlItemOf_(f, revAmt[f.id + '#' + f.rev]);
+    if (!item) return;
+    if (item.spend_month < cutoff) { badMonth.push(f.id); return; }       // 不送損益，直接 failed（走 failed 通知）
+    if (p && (Number(p.next_at) || 0) > now) return;
+    list.push({ at: Number(f.updated_at) || 0, item: item });
+  });
+  badMonth.forEach(function (id) { apvPnlMark_(id, { code: 'BAD_MONTH' }, now); });
+  list.sort(function (a, b) { return a.at - b.at; });
+  return list.slice(0, max).map(function (x) { return x.item; });
+}
+
+/**
+ * 記錄一次推送結果（寫 apv_pnl，一單一列）。result：
+ *  {ok:true, month, row_id}（含損益回 dup）→ done；{code:'STORE_INACTIVE'} → pending、明天 06:00 再試（不算失敗次數）；
+ *  {code:'BAD_INPUT'}（或 claim 自己標的 BAD_MONTH）→ failed（永久）；其他碼（AUTH／BAD_RESPONSE／NETWORK／TIMEOUT／INTERNAL／LOCKED／BUSY…）→ pending、tries+1、指數退避（30 分起、上限 6 小時）。
+ * 已是 done／failed 的單不再改（回目前狀態）。第三參數 nowMs 只給測試。回 {ok:true, state, tries, last_code} 或 {ok:false, error}。
+ */
+function apvPnlMark_(formId, result, nowMs) {
+  var id = apvStr_(formId);
+  var res = result && typeof result === 'object' ? result : {};
+  return apvWithLock_(function () {
+    if (!apvReady_() || !stfSheet_(APV_SHEET_PNL)) return { ok: false, error: 'not_inited' };
+    var fr = apvFindForm_(id);
+    var item = null;
+    if (fr) {
+      var ra;
+      apvRows_(APV_SHEET_REVS, APV_REV_HEADERS).forEach(function (r) { if (apvStr_(r.o.form_id) === id && Number(r.o.rev) === fr.f.rev) ra = r.o.amount; });
+      item = apvPnlItemOf_(fr.f, ra);
+    }
+    if (!item) return { ok: false, error: 'not_found' };
+    var now = Number(nowMs) || apvNow_();
+    var cur = null;
+    (apvPnlRows_() || []).forEach(function (r) { if (apvStr_(r.o.form_id) === id) cur = r; });
+    var o = cur ? cur.o : { form_id: id, state: 'pending', store_id: item.store_id, month: item.spend_month, acc_id: item.acc_id, amount: item.amount, row_id: '', tries: 0, last_code: '', next_at: 0, updated_at: 0 };
+    if (cur && (apvStr_(o.state) === 'done' || apvStr_(o.state) === 'failed')) return { ok: true, state: apvStr_(o.state), tries: Number(o.tries) || 0, last_code: apvStr_(o.last_code) };
+    o.store_id = item.store_id; o.acc_id = item.acc_id; o.amount = item.amount;
+    if (!apvStr_(o.month)) o.month = item.spend_month;
+    var tries = Number(o.tries) || 0;
+    if (res.ok === true && /^\d{4}-(0[1-9]|1[0-2])$/.test(String(res.month || ''))) {
+      o.state = 'done'; o.month = String(res.month); o.row_id = apvStr_(res.row_id).slice(0, 60); o.last_code = ''; o.next_at = 0;
+    } else {
+      var code = res.ok === true ? 'BAD_RESPONSE' : String(res.code === undefined || res.code === null ? '' : res.code).replace(/[^A-Za-z0-9_]/g, '').slice(0, 30);
+      if (!code) code = 'INTERNAL';
+      o.last_code = code;
+      if (code === 'STORE_INACTIVE') {
+        o.state = 'pending'; o.next_at = apvPnlTomorrow6_(now);
+      } else if (code === 'BAD_INPUT' || code === 'BAD_MONTH') {
+        o.state = 'failed'; o.next_at = 0; tries += 1; o.tries = tries;
+      } else {
+        tries += 1; o.tries = tries; o.state = 'pending';
+        o.next_at = now + Math.min(APV_PNL_BACKOFF_FIRST_MS * Math.pow(2, tries - 1), APV_PNL_BACKOFF_MAX_MS);
+      }
+    }
+    o.tries = tries;
+    o.updated_at = now;
+    if (cur) apvPutRow_(APV_SHEET_PNL, APV_PNL_HEADERS, cur.row, o);
+    else apvAppendObj_(APV_SHEET_PNL, APV_PNL_HEADERS, o);
+    return { ok: true, state: o.state, tries: tries, last_code: apvStr_(o.last_code) };
+  });
+}
+
+/**
+ * 有問題的單給 mini 寫通知匣與 health：failed；pending 但 tries ≥ 6；pending 且結案（單的 updated_at）超過 7 天還沒推進去（含 STORE_INACTIVE 一直沒啟用、從沒被標過的）。
+ * 回 {count, pending, problems:[{form_id, state, tries, last_code, aged}]（最多 20 筆）}；pending＝可推但還沒推完的單數（mini 沒設網址或金鑰時用來亮 health）。
+ */
+function apvPnlStat_(nowMs) {
+  var now = Number(nowMs) || apvNow_();
+  var pr = apvReady_() ? apvPnlRows_() : null;
+  if (pr === null) return { count: 0, pending: 0, problems: [] };
+  var pnl = {};
+  pr.forEach(function (r) { pnl[apvStr_(r.o.form_id)] = r.o; });
+  var out = [], pending = 0;
+  apvReadForms_().forEach(function (fr) {
+    var f = fr.f;
+    if (f.type !== 'expense' || f.status !== 'done') return;
+    var p = pnl[f.id], st = p ? apvStr_(p.state) : 'pending';
+    if (st === 'done') return;
+    if (!apvPnlItemOf_(f, undefined)) return;
+    var tries = p ? Number(p.tries) || 0 : 0;
+    if (st === 'failed') { out.push({ form_id: f.id, state: 'failed', tries: tries, last_code: apvStr_(p.last_code), aged: false }); return; }
+    pending++;
+    var aged = now - (Number(f.updated_at) || now) > APV_PNL_AGED_MS;
+    if (tries >= APV_PNL_ALERT_TRIES || aged) out.push({ form_id: f.id, state: 'pending', tries: tries, last_code: p ? apvStr_(p.last_code) : '', aged: aged });
+  });
+  return { count: out.length, pending: pending, problems: out.slice(0, 20) };
+}
+
+/** 損益 pnl/write 金鑰（module_secrets）給 mini Node 用；沒設回 {key:''}。⚠ 呼叫端不得印出或寫進 log */
+function apvPnlSecret_() {
+  var by = readModuleSecrets_();
+  var v = by.pnl && by.pnl.write !== undefined && by.pnl.write !== null ? String(by.pnl.write).trim() : '';
+  return { key: v };
 }

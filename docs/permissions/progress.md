@@ -49,6 +49,6 @@
 - backlog：請求內快取（每個請求重讀 perm／org 表；mini 在記憶體，毫秒級，不急）；N5 usrActorIsAdmin_ 只認 role admin。
 
 ## 上線後（2026-10-18）
-- 同仁加入尚未開始：128 位只 1 位開通。推行順序：先店長／主管認領（Eason 或人資審），再一般同仁（店長審）。說明圖 ~/Desktop/Claude/同仁加入說明/。
+- 同仁加入尚未開始：128 位只 1 位開通。推行順序：先店長／主管認領（Eason 或人資審），再一般同仁（店長審）。說明圖 ~/Desktop/Claude/系統/集團管理系統/同仁加入說明/。
 - 交辦教訓：打開前檢查「status 不是 active」會把 unclaimed 算進去而誤擋；正確條件＝「status 為 pending／rejected／disabled 且能登入（有密碼、users.active）」。
 - backlog：請求內快取（每請求重讀 perm／org 表；mini 在記憶體，毫秒級）；usrActorIsAdmin_ 只認 role admin。
