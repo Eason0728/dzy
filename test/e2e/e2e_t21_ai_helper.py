@@ -477,6 +477,17 @@ def main():
             check(all(locked) and all(locked2) and locked2, '⑥ 試跑模式：暫停、匯入、擬答／自己寫／略過 全部鎖住：%s %s' % (locked, locked2))
             pg.context.close()
 
+            # ⑥b 試跑模式：小幫手不能用、擬答鈕鎖住、沒送 ask／feedback／draft
+            n0 = len(mock.aih_bodies)
+            pg = new_page(query='?dryrun=1')
+            login(pg, 'admin')
+            pg.wait_for_selector('[data-role="aih-fab"]', timeout=8000)
+            pg.click('[data-role="aih-fab"]')
+            check('試跑模式中，小幫手不能使用' in pg.locator('[data-role="aih-panel"]').inner_text() and pg.locator('[data-role="aih-input"]').is_hidden(), '⑥ 試跑模式：按鈕在、點開只寫「試跑模式中，小幫手不能使用」、沒有輸入框')
+            check(pg.evaluate("() => new URLSearchParams(location.search).get('dryrun')") == '1' and pg.locator('[data-role="aih-send"]').is_hidden(), '⑥ 試跑模式：送出鈕不可用')
+            check(all(b.get('op') == 'status' for b in mock.aih_bodies[n0:]), '⑥ 試跑模式：只打 status、沒有 ask／feedback／draft：%s' % [b.get('op') for b in mock.aih_bodies[n0:]])
+            pg.context.close()
+
             # ====== ⑦ 手機寬度 ======
             for width, height in ((375, 812), (320, 640)):
                 pg = new_page(width=width, height=height)

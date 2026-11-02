@@ -822,7 +822,7 @@ def main():
             actx, ad = login_as(browser, mock, 'admin')
             ad.clock.install()
             cm.scan(ad, 'admin 首頁')
-            check(ad.locator('[data-role="module-card"]').count() == 19, 'admin 首頁 19 組')
+            check(ad.locator('[data-role="module-card"]').count() == 20, 'admin 首頁 20 組')
             depts = ad.locator('[data-role="nav-desktop"] [data-dept]').evaluate_all('els => els.map(e => e.dataset.dept)')
             exp_depts = ad.evaluate("""async () => { const { MODULES } = await import('/platform/registry.js'); const { DEPARTMENTS } = await import('/platform/config.js');
                 const ms = []; for (const m of MODULES) ms.push((await m.load()).default); const s = new Set(ms.map(m => m.dept).filter(Boolean)); return DEPARTMENTS.map(d => d.id).filter(d => s.has(d)); }""")

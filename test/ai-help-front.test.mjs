@@ -160,7 +160,7 @@ function mkHelper(o) {
   const parent = new Node('div');
   const { f, c } = mkClient(opts.handler);
   const hashes = [];
-  const hp = W.createHelper({ doc, client: c, getRoute: () => ({ m: 'me', v: 'profile' }), canGo: opts.canGo, isMobile: () => !!opts.mobile, setHash: (h) => hashes.push(h) });
+  const hp = W.createHelper({ doc, client: c, getRoute: () => ({ m: 'me', v: 'profile' }), canGo: opts.canGo, isMobile: () => !!opts.mobile, isDryRun: () => !!opts.dryrun, setHash: (h) => hashes.push(h) });
   return { doc, parent, f, hp, hashes };
 }
 const statusOnly = (j) => (b) => (b.op === 'status' ? j : jsonRes({ ok: true, data: { id: 'aih_1', kind: 'answered', answer: 'ok', go: [], who: '' } }));
@@ -353,6 +353,18 @@ for (const [code, text] of [['ai_error', '小幫手暫時無法回答'], ['unaut
   await inp.fire('keydown', { key: 'Enter' });
   await flush();
   ok(hh.f.calls.filter((x) => x.body.op === 'ask').length === 1, 'Enter 送出');
+}
+// ⑨b 試跑模式：按鈕出現、點開只寫說明、不送 ask／feedback／draft
+{
+  const h = mkHelper({ dryrun: true });
+  ok(await h.hp.start(h.parent) === true && byRole(h.parent, 'aih-fab'), '試跑模式：按鈕照常出現');
+  await byRole(h.parent, 'aih-fab').fire('click');
+  const panel = byRole(h.parent, 'aih-panel');
+  ok(panel.textContent.includes('試跑模式中，小幫手不能使用') && byRole(h.parent, 'aih-input').hidden === true && byRole(h.parent, 'aih-send').hidden === true, '試跑模式：點開只顯示「試跑模式中，小幫手不能使用」、沒有輸入框');
+  await byRole(h.parent, 'aih-send').fire('click');
+  ok(h.f.calls.every((x) => x.body.op === 'status'), '試跑模式：只打過 status，沒有 ask／feedback／draft', h.f.calls.map((x) => x.body.op));
+  const dsrc = read('modules/ai-help/views/pending.js');
+  ok(/lockIfDryrun\(h\('button', \{ type: 'button', class: 'btn btn-secondary', 'data-act': 'draft'/.test(dsrc), '管理頁「AI 擬答」鈕在試跑模式 disabled（lockIfDryrun）');
 }
 // ⑩ 登出時還在等 status／ask：不能把按鈕補畫出來
 {

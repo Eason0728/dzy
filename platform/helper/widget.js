@@ -15,9 +15,11 @@
 'use strict';
 
 import { getClient, newConvId, errorMessage } from './client.js';
+import { isDryRun } from '../dryrun.js';
 
 export const MAX_Q = 300;
 export const NOTE_TEXT = '問題會送交外部 AI（Anthropic）處理，並在系統保存 90 天';
+export const DRYRUN_TEXT = '試跑模式中，小幫手不能使用';
 const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
 
 /** 帶我去的項目清洗：只收 {m,v} 字元白名單、label 純字串；最多 2 筆；沒權限的不收 */
@@ -45,6 +47,7 @@ export function createHelper(deps) {
   const isMobile = deps.isMobile || (() => false);
   const setHash = deps.setHash || ((h) => { /* 瀏覽器端由 mountHelper 注入 */ });
   const newConv = deps.newConv || (() => newConvId());
+  const dryRun = deps.isDryRun || (() => false);   // 試跑模式：不送 ask／feedback／draft
 
   let host = null, fab = null, panel = null, logEl = null, quotaEl = null, input = null, sendBtn = null, counter = null;
   let attachTo = null;
@@ -153,7 +156,7 @@ export function createHelper(deps) {
   }
 
   async function send() {
-    if (busy || capped) return;
+    if (busy || capped || dryRun()) return;
     const q = String(input.value || '').trim();
     if (!q) return;
     if (q.length > MAX_Q) { addNotice(errorMessage('bad_input'), 'aih-error'); return; }
@@ -202,6 +205,7 @@ export function createHelper(deps) {
   }
 
   function greet() {
+    if (dryRun()) { addNotice(DRYRUN_TEXT, 'aih-dryrun'); return; }
     if (capped) { addNotice(errorMessage('cap'), 'aih-cap'); return; }
     const b = h('div', { class: 'aih-msg aih-bot', 'data-role': 'aih-hello', 'data-from': 'bot' });
     b.appendChild(h('p', { class: 'aih-text' }, '有問題直接問我，例如：「我為什麼看不到某個功能？」「請假要去哪裡申請？」'));
@@ -290,7 +294,8 @@ export function createHelper(deps) {
       capped = reasonCap;
       if (typeof r.data.left_today === 'number') left = r.data.left_today;
       build();
-      if (capped) { while (logEl.firstChild) logEl.removeChild(logEl.firstChild); setCapped(); greet(); }
+      if (dryRun()) { while (logEl.firstChild) logEl.removeChild(logEl.firstChild); setCapped(); greet(); }
+      else if (capped) { while (logEl.firstChild) logEl.removeChild(logEl.firstChild); setCapped(); greet(); }
       updateQuota();
       attachTo.appendChild(host);
       return true;
@@ -343,6 +348,7 @@ export function mountHelper(shellEl, opts) {
     getRoute: o.getRoute,
     canGo: o.canGo,
     isMobile: () => !!(mq && mq.matches),
+    isDryRun,
     setHash: (hash) => { window.location.hash = hash; }
   });
   current = helper;
