@@ -37,7 +37,7 @@ var APV_THR_DEFAULT = [
 
 var APV_CATEGORIES = ['repair', 'food', 'misc', 'transport', 'supplies', 'other'];
 var APV_CATEGORY_NAME = { repair: '設備維修', food: '食材臨時採購', misc: '雜支', transport: '交通', supplies: '文具耗材', other: '其他' };
-var APV_TYPE_NAME = { purchase: '請購', expense: '請款', personnel: '人事異動' };
+var APV_TYPE_NAME = { purchase: '請購', expense: '費用請款', personnel: '人事異動' };
 var APV_FILE_LIMIT = { receipt: 180 * 1024, sign: 100 * 1024 };
 var APV_FILE_DAILY_QUOTA = 60;
 var APV_FILE_MAX_PER_FORM = 5;

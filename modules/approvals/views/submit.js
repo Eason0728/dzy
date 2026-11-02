@@ -22,7 +22,7 @@ export function mountSubmit(el, ctx) {
   const esc = ctx.fmt.esc;
   const userId = ctx.user && ctx.user.id;
   let alive = true;
-  let type = 'purchase';
+  let type = 'expense';
   let resub = null;       // {id, rev, step, files:[...]} 改完再送
   let clientId = newClientId();
   let picker = null;      // 照片挑選器
@@ -71,7 +71,6 @@ export function mountSubmit(el, ctx) {
         <div class="checkbox-row"><input type="radio" name="payee" id="f-payee-self" value="self" data-field="payee"${vendor ? '' : ' checked'}><label for="f-payee-self">我先代墊，請還給我</label></div>
         <div class="checkbox-row"><input type="radio" name="payee" id="f-payee-vendor" value="vendor" data-field="payee"${vendor ? ' checked' : ''}><label for="f-payee-vendor">直接付給廠商</label></div></div>
       <div class="field" data-role="vendor-name"${vendor ? '' : ' hidden'}><label class="field-label" for="f-vname">廠商名稱</label><input class="input" id="f-vname" data-field="vendor_name" maxlength="60" value="${esc(v.vendor_name || '')}"></div>
-      <div class="field"><label class="field-label" for="f-pid">對應請購單號（選填）</label><input class="input" id="f-pid" data-field="purchase_id" maxlength="20" placeholder="APV-261018-001" value="${esc(v.purchase_id || '')}"></div>
       <div class="field"><div class="field-label">收據照片（必填，1～5 張）</div><div data-role="photo-slot"></div></div>`;
   }
   function personnelHtml(v) {
@@ -232,10 +231,10 @@ export function mountSubmit(el, ctx) {
       if (!checkExpenseAmount(v.amount)) return warn('金額要是 1 以上的整數元');
       if (!v.desc.trim()) return warn('請填說明');
       if (v.payee === 'vendor' && !v.vendor_name.trim()) return warn('請填廠商名稱');
-      if (!files.length) return warn('請款至少要附一張收據照片');
+      if (!files.length) return warn('費用請款至少要附一張收據照片');
       const b = { spend_date: v.spend_date, category: v.category, amount: toNum(v.amount), desc: v.desc.trim(), payee: v.payee || 'self' };
       if (b.payee === 'vendor') b.vendor_name = v.vendor_name.trim();
-      if (v.purchase_id.trim()) b.purchase_id = v.purchase_id.trim();
+      if ((v.purchase_id || '').trim()) b.purchase_id = v.purchase_id.trim();   // 欄位已拿掉（請購停用），只剩舊單再送時帶回的值
       return { amount: b.amount, payload: { body: b, files }, previewExtra: { amount: b.amount } };
     }
     // personnel
@@ -395,7 +394,7 @@ export function mountSubmit(el, ctx) {
   // ── 開場 ────────────────────────────────────────────
   async function start() {
     const rid = ctx.params && ctx.params.resubmit;
-    if (!rid) { showType('purchase'); return; }
+    if (!rid) { showType('expense'); return; }
     el.innerHTML = '<div class="card"><p class="text-muted">讀取中…</p></div>';
     const r = await ctx.api.call('approvals', 'apvGet', { id: rid });
     if (!alive) return;

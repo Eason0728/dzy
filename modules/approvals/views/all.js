@@ -28,7 +28,7 @@ export function mountAll(el, ctx) {
   return mountCardList(el, ctx, {
     scope: 'all',
     title: '全部單據',
-    hint: '承辦部門看自己部門的單，人資／管理者看全部。匯出是依「已處理」日期所在月份的請購與請款明細。',
+    hint: '承辦部門看自己部門的單，人資／管理者看全部。匯出是依「已處理」日期所在月份的費用請款明細。',
     empty: '這個條件下沒有單',
     toolbar: () => `<div class="form-grid-2">
         <div class="field"><label class="field-label" for="apv-all-month">月份</label><input class="input" type="month" id="apv-all-month" value="${esc(q.month)}"></div>
