@@ -129,3 +129,32 @@ const STYLE = `
 export function addStyle(el) {
   el.appendChild(h('style', null, STYLE));
 }
+
+/**
+ * 重新載入清單時讓畫面停在原地（Eason 2026-11-03：按上架後不要跳回最上面）。
+ * 先記下「錨點那張卡片」（找不到就用它的下一張）在畫面上的位置；清單重畫後把同一張卡捲回同一個高度。
+ * 用法：const back = keepPlace(listEl, id); …重畫… back();
+ */
+export function keepPlace(listEl, id) {
+  const scroller = scrollParent(listEl);
+  const startTop = scroller.scrollTop;
+  const sel = (x) => listEl.querySelector('[data-id="' + String(x).replace(/["\\]/g, '') + '"]');
+  const cur = id ? sel(id) : null;
+  const next = cur && cur.nextElementSibling && cur.nextElementSibling.getAttribute('data-id');
+  const anchors = [id, next].filter(Boolean).map((x) => ({ id: x, top: sel(x) ? sel(x).getBoundingClientRect().top : null })).filter((a) => a.top !== null);
+  return function back() {
+    for (const a of anchors) {
+      const el = sel(a.id);
+      if (el) { scroller.scrollTop += el.getBoundingClientRect().top - a.top; return; }
+    }
+    scroller.scrollTop = startTop;
+  };
+}
+
+function scrollParent(el) {
+  for (let p = el && el.parentElement; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+  }
+  return document.scrollingElement || document.documentElement;
+}

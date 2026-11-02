@@ -4,7 +4,7 @@
  */
 'use strict';
 
-import { h, clear, errText, busyBtn, lockIfDryrun, loadPages, pageLabel, taipeiDay } from '../lib.js';
+import { h, clear, errText, busyBtn, lockIfDryrun, loadPages, pageLabel, taipeiDay, keepPlace } from '../lib.js';
 import { createEditor } from '../editor.js';
 
 const STATUS_ZH = { live: '上架中', draft: '草稿', off: '已下架' };
@@ -34,9 +34,10 @@ export function mountKb(el, ctx) {
   search.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { q = search.value.trim(); load(); }, 250); });
   sel.addEventListener('change', () => { status = sel.value; load(); });
 
-  async function load() {
-    clear(list);
-    list.appendChild(h('p', { class: 'aim-note' }, '載入中…'));
+  // stayId：重新載入後停在這張卡的位置（上架、下架、儲存後用），不先清空清單，畫面才不會縮回頂端
+  async function load(stayId) {
+    const back = stayId ? keepPlace(list, stayId) : null;
+    if (!back) { clear(list); list.appendChild(h('p', { class: 'aim-note' }, '載入中…')); }
     const payload = {};
     if (q) payload.q = q;
     if (status) payload.status = status;
@@ -51,6 +52,7 @@ export function mountKb(el, ctx) {
     list.appendChild(h('p', { class: 'aim-note', 'data-role': 'kb-count' }, '共 ' + items.length + ' 題'));
     if (!items.length) list.appendChild(h('div', { class: 'card' }, [h('p', null, q || status ? '沒有符合的題目。' : '知識庫還是空的。可以按上方「匯入初始知識庫」，或按「新增一題」。')]));
     items.forEach((it) => list.appendChild(card(it, pages)));
+    if (back) back();
   }
 
   function expireTag(it) {
@@ -92,7 +94,7 @@ export function mountKb(el, ctx) {
         if (!r || !r.ok) { msg.textContent = '儲存失敗：' + errText(r); return; }
         if (r.dryrun) { ctx.ui.toast('試跑模式：沒有真的儲存', 'info'); return; }
         ctx.ui.toast(r.data && r.data.changed === false ? '沒有任何變更' : '已儲存', 'ok');
-        load();
+        load(it.id);
       };
     }
 
@@ -121,7 +123,8 @@ export function mountKb(el, ctx) {
       if (!alive) return;
       if (!r || !r.ok) { done(true); msg.textContent = errText(r); return; }
       if (r.dryrun) { done(true); ctx.ui.toast('試跑模式：沒有真的更新', 'info'); return; }
-      load();
+      ctx.ui.toast(it.status === 'live' ? '已下架' : '已上架', 'ok');
+      load(it.id);
     });
     histBtn.addEventListener('click', async () => {
       if (histOpen) { clear(zoneHist); histOpen = false; return; }

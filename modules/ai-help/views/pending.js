@@ -5,7 +5,7 @@
  */
 'use strict';
 
-import { h, clear, errText, busyBtn, lockIfDryrun, loadPages, pageLabel } from '../lib.js';
+import { h, clear, errText, busyBtn, lockIfDryrun, loadPages, pageLabel, keepPlace } from '../lib.js';
 import { createEditor } from '../editor.js';
 import { getClient } from '../../../platform/helper/client.js';
 
@@ -17,9 +17,10 @@ export function mountPending(el, ctx, shared) {
   const body = h('div', { 'data-role': 'pending-body' });
   el.appendChild(body);
 
-  async function load() {
-    clear(body);
-    body.appendChild(h('p', { class: 'aim-note' }, '載入中…'));
+  // stayId：處理完一題後停在原地（那題消失，就停在它下一題的位置）
+  async function load(stayId) {
+    const back = stayId ? keepPlace(body, stayId) : null;
+    if (!back) { clear(body); body.appendChild(h('p', { class: 'aim-note' }, '載入中…')); }
     const [r, pages] = await Promise.all([ctx.api.call('platform', 'aihPendingList', { status: 'open' }), loadPages()]);
     if (!alive) return;
     clear(body);
@@ -31,6 +32,7 @@ export function mountPending(el, ctx, shared) {
     body.appendChild(h('p', { class: 'aim-note', 'data-role': 'pending-count' }, '待回答 ' + items.length + ' 題'));
     if (!items.length) { body.appendChild(h('div', { class: 'card' }, [h('p', null, '目前沒有待回答的題目。')])); return; }
     items.forEach((it) => body.appendChild(card(it, pages)));
+    if (back) back();
   }
 
   function card(it, pages) {
@@ -77,7 +79,7 @@ export function mountPending(el, ctx, shared) {
       if (!alive) return;
       if (!p || !p.ok) { done(true); msg.textContent = '已上架成題目 ' + s.data.id + '，但沒能把這筆待回答標成已處理：' + errText(p); return; }
       ctx.ui.toast('已上架', 'ok');
-      load();
+      load(it.id);
     }
 
     draftBtn.addEventListener('click', async () => {
@@ -98,7 +100,7 @@ export function mountPending(el, ctx, shared) {
       if (!alive) return;
       if (!r || !r.ok) { done(true); msg.textContent = errText(r); return; }
       if (r.dryrun) { done(true); ctx.ui.toast('試跑模式：沒有真的略過', 'info'); return; }
-      load();
+      load(it.id);
     });
     return box;
   }
