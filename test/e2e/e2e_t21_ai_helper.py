@@ -412,6 +412,22 @@ def main():
             pg.locator('[data-role="kb-item"][data-id="kb0001"] [data-act="off"]').click()
             pg.wait_for_function('() => document.querySelector(\'[data-role="kb-item"][data-id="kb0001"]\').getAttribute("data-status") === "off"', timeout=8000)
             check([k for k in mock.kb if k['id'] == 'kb0001'][0]['status'] == 'off', '⑤ 下架＝status off')
+            # ⑤b 上架後停在原地（Eason 2026-11-03）：題目多到要往下捲時，按上架不能跳回最上面
+            seed_kb = dict([k for k in mock.kb if k['id'] == 'kb0001'][0])
+            for i in range(30):
+                x = dict(seed_kb); x.update({'id': 'kb%04d' % (900 + i), 'question': '捲動測試第 %d 題' % i, 'status': 'draft'}); mock.kb.append(x)
+            pg.fill('[data-role="kb-search"]', '捲動測試')
+            pg.wait_for_function('() => document.querySelectorAll(\'[data-role="kb-item"]\').length === 30', timeout=5000)
+            pg.locator('[data-role="kb-item"][data-id="kb0920"]').scroll_into_view_if_needed()
+            pg.evaluate('() => document.querySelector(\'[data-role="kb-item"][data-id="kb0920"]\').scrollIntoView({block: "center"})')
+            before = pg.evaluate('() => document.querySelector(\'[data-role="kb-item"][data-id="kb0920"]\').getBoundingClientRect().top')
+            pg.locator('[data-role="kb-item"][data-id="kb0920"] [data-act="on"]').click()
+            pg.wait_for_function('() => { const e = document.querySelector(\'[data-role="kb-item"][data-id="kb0920"]\'); return e && e.getAttribute("data-status") === "live"; }', timeout=8000)
+            after = pg.evaluate('() => document.querySelector(\'[data-role="kb-item"][data-id="kb0920"]\').getBoundingClientRect().top')
+            check(before > 150 and abs(after - before) < 6, '⑤b 按上架後停在原地（上架前 %.0f、上架後 %.0f）' % (before, after))
+            mock.kb[:] = [k for k in mock.kb if not k['id'].startswith('kb09')]
+            pg.fill('[data-role="kb-search"]', '')
+            pg.wait_for_function('(n) => document.querySelectorAll(\'[data-role="kb-item"]\').length === n', arg=len(mock.kb), timeout=5000)
             # 新增一題
             pg.click('[data-act="kb-new"]')
             pg.wait_for_selector('[data-role="kb-new-host"] [data-role="ed-q"]')
