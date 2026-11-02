@@ -15,7 +15,7 @@ import { buildPages, renderSource, OUT_FILE } from '../tools/gen-aihelp-pages.mj
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(__dirname, '..', 'apps-script', 'platform');
-const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'Perms.gs', 'PermActions.gs', 'AiHelpPages.gs', 'AiHelp.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
+const SRC = ['Auth.gs', 'Users.gs', 'Staff.gs', 'Regions.gs', 'Perms.gs', 'PermActions.gs', 'AiHelpPages.gs', 'AiHelpSeed.gs', 'AiHelp.gs', 'Code.gs'].map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')]);
 const CODE_GS = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
 
 let passed = 0;
@@ -266,19 +266,19 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
 (() => {
   const app = scene();
   const { sb } = app;
-  const calls = [['aihKbList', {}], ['aihKbSave', { question: 'q', answer: 'a' }], ['aihKbHist', {}], ['aihPendingList', {}], ['aihPendingSet', { id: 'x', status: 'ignored' }], ['aihUsage', {}], ['aihPauseSet', { paused: true }]];
+  const calls = [['aihKbList', {}], ['aihKbSave', { question: 'q', answer: 'a' }], ['aihKbImport', {}], ['aihKbHist', {}], ['aihPendingList', {}], ['aihPendingSet', { id: 'x', status: 'ignored' }], ['aihUsage', {}], ['aihPauseSet', { paused: true }]];
   for (const [who, tok] of [['同仁', app.aTok], ['會計', app.accTok]]) {
-    ok(calls.every(([a, p]) => { const r = post(sb, a, p, tok); return r.ok === false && r.error === 'forbidden'; }), '權限 ' + who + ' 呼叫 7 支管理 action 全部 forbidden', calls.map(([a, p]) => post(sb, a, p, tok).error));
+    ok(calls.every(([a, p]) => { const r = post(sb, a, p, tok); return r.ok === false && r.error === 'forbidden'; }), '權限 ' + who + ' 呼叫 8 支管理 action 全部 forbidden', calls.map(([a, p]) => post(sb, a, p, tok).error));
   }
   ok(calls.every(([a, p]) => post(sb, a, p, '').ok === false), '權限 沒 token 全部拒絕');
   ok(post(sb, 'aihKbList', {}, app.admin).ok && post(sb, 'aihKbList', {}, app.helperTok).ok, '權限 admin（*）與持 platform.aihelp 的角色可用');
   ok(sb.PERM_GRANTABLE.indexOf('platform.aihelp') === sb.PERM_GRANTABLE.length - 1 && sb.PERM_LOCKED.indexOf('platform.aihelp') !== -1, '權限 platform.aihelp 進 PERM_GRANTABLE（最後一碼）與 PERM_LOCKED');
   ok(sb.permName_('platform.aihelp') === 'AI 小幫手管理', '權限 中文名「AI 小幫手管理」');
   ok(sb.usrRoleIsSuper_ && sb.usrRoleIsSuper_('helper') === true, '權限 含鎖碼的角色屬高權限（只有 admin 能指派）');
-  const names = ['aihSetup', 'aihKbList', 'aihKbSave', 'aihKbHist', 'aihPendingList', 'aihPendingSet', 'aihUsage', 'aihPauseSet'];
-  ok(names.every((n) => CODE_GS.indexOf("'" + n + "'") !== -1 && CODE_GS.indexOf("case '" + n + "':") !== -1), '權限 8 支管理 action 都在 Code.gs 白名單與分派');
+  const names = ['aihSetup', 'aihKbList', 'aihKbSave', 'aihKbImport', 'aihKbHist', 'aihPendingList', 'aihPendingSet', 'aihUsage', 'aihPauseSet'];
+  ok(names.every((n) => CODE_GS.indexOf("'" + n + "'") !== -1 && CODE_GS.indexOf("case '" + n + "':") !== -1), '權限 9 支管理 action 都在 Code.gs 白名單與分派');
   const rd = ['aihKbList', 'aihKbHist', 'aihPendingList', 'aihUsage'];
-  ok(rd.every((n) => READ_ACTIONS.platform.indexOf(n) !== -1) && ['aihSetup', 'aihKbSave', 'aihPendingSet', 'aihPauseSet'].every((n) => READ_ACTIONS.platform.indexOf(n) === -1), '權限 dryrun.js READ_ACTIONS：4 支讀取在、4 支寫入不在（試跑會攔）');
+  ok(rd.every((n) => READ_ACTIONS.platform.indexOf(n) !== -1) && ['aihSetup', 'aihKbSave', 'aihKbImport', 'aihPendingSet', 'aihPauseSet'].every((n) => READ_ACTIONS.platform.indexOf(n) === -1), '權限 dryrun.js READ_ACTIONS：4 支讀取在、5 支寫入不在（試跑會攔）');
 })();
 
 // ============================================================
@@ -337,6 +337,136 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   const raw = load(freshSeed(HASHER));
   raw.sb.setupStaff();
   ok(post(raw.sb, 'aihKbList', {}, adminToken(raw.sb)).error === 'not_inited', '1-1 沒按初始化 → not_inited');
+})();
+
+// ============================================================
+// aihKbImport：匯入初始題庫（AiHelpSeed.gs 的 AIH_SEED）
+// ============================================================
+(() => {
+  const app = scene();
+  const { sb } = app;
+  const adm = app.admin;
+  const SEED = JSON.parse(JSON.stringify(sb.AIH_SEED));
+  ok(Array.isArray(SEED) && SEED.length >= 50, 'IMP AIH_SEED 在 sandbox 載入、題數 ≥ 50', SEED.length);
+  // 權限
+  ok(post(sb, 'aihKbImport', {}, app.aTok).error === 'forbidden' && post(sb, 'aihKbImport', {}, app.accTok).error === 'forbidden', 'IMP 一般同仁、會計 → forbidden');
+  ok(post(sb, 'aihKbImport', {}, '').ok === false, 'IMP 沒 token → 拒絕');
+  ok(kbRows(app).length === 0 && histRows(app).length === 0, 'IMP 被拒絕時沒有寫任何資料');
+  // 沒初始化
+  const raw = load(freshSeed(HASHER));
+  raw.sb.setupStaff();
+  ok(post(raw.sb, 'aihKbImport', {}, adminToken(raw.sb)).error === 'not_inited', 'IMP 沒按初始化 → not_inited');
+  // admin 匯入
+  const r = post(sb, 'aihKbImport', {}, adm);
+  ok(r.ok && r.data.added === SEED.length && r.data.skipped === 0, 'IMP admin 匯入：added＝全部題數、skipped＝0', r);
+  const rows = kbRows(app);
+  ok(rows.length === SEED.length && rows.every((x, i) => x[0] === 'kb' + ('0000' + (i + 1)).slice(-4)), 'IMP 自動編號 kb0001…連號');
+  ok(rows.every((x) => x[8] === 'draft'), 'IMP 全部是 draft（業主逐題勾選才上架）');
+  ok(rows.every((x, i) => x[1] === SEED[i].m && x[2] === SEED[i].v && x[3] === SEED[i].question && x[4] === SEED[i].answer && x[5] === SEED[i].who && x[6] === SEED[i].go_m && x[7] === SEED[i].go_v && x[9] === SEED[i].source), 'IMP 欄位逐題與 AIH_SEED 相同（順序 id,m,v,question,answer,who,go_m,go_v,status,source）');
+  ok(rows.every((x) => /^\d{4}-\d\d-\d\d$/.test(x[10]) && x[11] === sb.aihAddDays_(x[10], 180) && x[13] === 'BOSS' && x[12]), 'IMP verified_at 今天、expires_at＋180 天、updated_by＝呼叫者');
+  const h = histRows(app);
+  ok(h.length === SEED.length && h.every((x, i) => x[1] === rows[i][0] && x[2] === 'create' && x[4] === 'BOSS' && JSON.parse(x[3]).question === SEED[i].question && JSON.parse(x[3]).status === 'draft'), 'IMP aih_kb_hist 每題一列 create（快照＋by＝呼叫者）');
+  ok(new Set(h.map((x) => x[0])).size === h.length && h[0][0] === 'kh0001', 'IMP hist 編號不重複');
+  // 冪等
+  const r2 = post(sb, 'aihKbImport', {}, adm);
+  ok(r2.ok && r2.data.added === 0 && r2.data.skipped === SEED.length && kbRows(app).length === SEED.length && histRows(app).length === SEED.length, '重複匯入 added＝0、skipped＝全部、不多寫資料也不多留 hist', r2);
+  // 持 platform.aihelp 的非 admin 也能匯入（等同 aihKbSave 權限）
+  const app2 = scene();
+  const r3 = post(app2.sb, 'aihKbImport', {}, app2.helperTok);
+  ok(r3.ok && r3.data.added === SEED.length && kbRows(app2)[0][13] === 'helper1', 'IMP 持 platform.aihelp 的角色可匯入，by 記他的帳號');
+  // 已存在（任何狀態、含去前後空白）的題目略過；題庫內重複只加一次
+  const app3 = scene();
+  const s3 = app3.sb;
+  s3.AIH_SEED = [
+    { m: '', v: '', question: '甲題', answer: 'a1', who: '人資', go_m: '', go_v: '', source: 's' },
+    { m: 'me', v: 'profile', question: '  乙題  ', answer: 'a2', who: '人資', go_m: 'me', go_v: 'profile', source: 's' },
+    { m: '', v: '', question: '甲題', answer: '重複的', who: '人資', go_m: '', go_v: '', source: 's' },
+    { m: '', v: '', question: '丙題', answer: 'a3', who: '人資', go_m: '', go_v: '', source: 's' }
+  ];
+  const pre = kbSave(s3, app3.admin, { question: '丙題', answer: '已存在的版本', status: 'live' });
+  ok(pre.ok, 'IMP 預先建一題 live 的「丙題」');
+  const r4 = post(s3, 'aihKbImport', {}, app3.admin);
+  ok(r4.ok && r4.data.added === 2 && r4.data.skipped === 2, 'IMP 已存在的「丙題」與題庫內重複的「甲題」略過 → added 2、skipped 2', r4);
+  const k3 = kbRows(app3);
+  ok(k3.length === 3 && k3[0][3] === '丙題' && k3[0][4] === '已存在的版本' && k3[0][8] === 'live', 'IMP 已存在的題目不被覆蓋（答案、狀態維持）');
+  ok(k3[1][3] === '甲題' && k3[1][4] === 'a1' && k3[2][3] === '乙題' && k3[2][0] === 'kb0003', 'IMP 新題接在後面編號、question 去前後空白');
+  s3.AIH_SEED = [{ m: '', v: '', question: '  甲題 ', answer: 'x', who: 'y', go_m: '', go_v: '', source: 's' }];
+  ok(post(s3, 'aihKbImport', {}, app3.admin).data.added === 0, 'IMP 前後空白不同的相同題目視為已存在');
+  // 壞題目 → 整批不寫
+  const app4 = scene();
+  const s4 = app4.sb;
+  const good = { m: '', v: '', question: '好題', answer: 'a', who: 'w', go_m: '', go_v: '', source: 's' };
+  const bads = [
+    ['頁面不在地圖', { m: 'nope', v: '', question: 'b', answer: 'a', who: 'w', go_m: '', go_v: '', source: 's' }],
+    ['有分頁沒模組', { m: '', v: 'profile', question: 'b', answer: 'a', who: 'w', go_m: '', go_v: '', source: 's' }],
+    ['帶我去只填一半', { m: '', v: '', question: 'b', answer: 'a', who: 'w', go_m: 'me', go_v: '', source: 's' }],
+    ['答案空白', { m: '', v: '', question: 'b', answer: '', who: 'w', go_m: '', go_v: '', source: 's' }],
+    ['答案太長', { m: '', v: '', question: 'b', answer: 'x'.repeat(1501), who: 'w', go_m: '', go_v: '', source: 's' }]
+  ];
+  for (const [label, bad] of bads) {
+    s4.AIH_SEED = [good, bad];
+    const rb = post(s4, 'aihKbImport', {}, app4.admin);
+    ok(rb.ok === false && rb.error === 'bad_request' && kbRows(app4).length === 0 && histRows(app4).length === 0, 'IMP 壞題目（' + label + '）→ bad_request、一題都不寫', rb);
+  }
+  s4.AIH_SEED = [];
+  ok(post(s4, 'aihKbImport', {}, app4.admin).data.added === 0, 'IMP 空題庫 → added 0');
+})();
+
+// ============================================================
+// AIH_SEED 品質（規則 1～4 為硬性檢查；業主上架前還要人工逐題讀過）
+// ============================================================
+(() => {
+  const { sb } = load(freshSeed(HASHER));
+  const SEED = JSON.parse(JSON.stringify(sb.AIH_SEED));
+  const PAGES = JSON.parse(JSON.stringify(sb.AIH_PAGES));
+  const exists = (m, v) => PAGES.some((p) => p.m === m && p.v === v);
+  const f = (o, k) => (typeof o[k] === 'string' ? o[k] : '');
+  const KEYS = 'm,v,question,answer,who,go_m,go_v,source';
+  ok(SEED.length >= 50 && SEED.length <= 90, 'SEED 題數 50～90（約 60 題）', SEED.length);
+  ok(SEED.every((o) => Object.keys(o).join() === KEYS && KEYS.split(',').every((k) => typeof o[k] === 'string')), 'SEED 每題欄位固定為 ' + KEYS + '（不含 id、status、時間），都是字串');
+  // 規則 1：m／v 組合
+  const bad1 = SEED.filter((o) => (o.m || o.v) && !(o.m && o.v && exists(o.m, o.v)));
+  ok(bad1.length === 0, 'SEED 規則1 m／v 組合存在於 AIH_PAGES（通用題兩者皆空）', bad1.map((o) => o.question));
+  const bad1g = SEED.filter((o) => (o.go_m || o.go_v) && !(o.go_m && o.go_v && exists(o.go_m, o.go_v)));
+  ok(bad1g.length === 0, 'SEED 規則1 go_m／go_v 若填也必須存在（兩者一起填）', bad1g.map((o) => o.question));
+  ok(SEED.some((o) => !o.m && !o.v) && SEED.some((o) => o.m && o.v), 'SEED 同時有通用題與分頁題');
+  // 規則 2
+  ok(new Set(SEED.map((o) => o.question.trim())).size === SEED.length, 'SEED 規則2 question 不重複');
+  ok(SEED.every((o) => o.question.trim() === o.question && o.question && o.question.length <= sb.AIH_MAX.question), 'SEED 規則2 question 非空、無前後空白、不超過上限');
+  const long = SEED.filter((o) => !o.answer || o.answer.length > 300);
+  ok(long.length === 0, 'SEED 規則2 answer 非空且 ≤ 300 字', long.map((o) => [o.question, o.answer.length]));
+  ok(SEED.every((o) => o.source.trim() && o.source.length <= sb.AIH_MAX.source), 'SEED 規則2 source 非空、≤ 上限');
+  ok(SEED.every((o) => o.who.trim() && o.who.length <= sb.AIH_MAX.who), 'SEED 規則2 who 非空、≤ 上限');
+  // 規則 3：個資、金鑰、內部主機名
+  const prose = (o) => [o.question, o.answer, o.who].join('\n');
+  const all = (o) => [o.question, o.answer, o.who, o.source].join('\n');
+  const noHost = (t) => t.replace(/dzy\.mozhuting\.com/g, '');
+  const bad3 = SEED.filter((o) => /(?:\+?886[-\s]?)?0?9\d{2}[-\s]?\d{3}[-\s]?\d{3}/.test(all(o)) || /\b[A-Z][12]\d{8}\b/.test(all(o)) || /DZY\s?\d{2,}/i.test(all(o)) || /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(all(o)) || /[\w.+-]+@[\w-]+\.[\w.]+/.test(all(o)));
+  ok(bad3.length === 0, 'SEED 規則3 沒有手機、身分證、員工編號（DZY＋數字）、IP、email', bad3.map((o) => o.question));
+  const bad3k = SEED.filter((o) => /[A-Za-z0-9_\-+/=]{24,}/.test(noHost(all(o)).replace(/[~/.\w-]*\/(SKILL\.md|[\w.-]+\.(js|gs|html|md))/g, '')) || /(api[_-]?key|secret|password=|sk-[A-Za-z0-9]|AKfy)/i.test(all(o)));
+  ok(bad3k.length === 0, 'SEED 規則3 沒有金鑰樣式的長字串', bad3k.map((o) => o.question));
+  const hostRe = /(?:mini|tailscale|funnel|localhost|github\.io|script\.google|googleusercontent|\.ts\.net|mozhuting)/i;
+  const bad3h = SEED.filter((o) => hostRe.test(noHost(prose(o))) || /https?:\/\/(?!dzy\.mozhuting\.com)/i.test(prose(o)));
+  ok(bad3h.length === 0, 'SEED 規則3 問答裡沒有網址以外的內部主機名（只准 dzy.mozhuting.com）', bad3h.map((o) => o.question));
+  const bad3n = SEED.filter((o) => /(先生|小姐|女士)/.test(prose(o)));
+  ok(bad3n.length === 0, 'SEED 規則3 沒有「○○先生／小姐」這類真實姓名稱呼（只用職稱／部門；姓名全面人工讀過）', bad3n.map((o) => o.question));
+  // 規則 4：程式代號。問答（question／answer／who）裡的英文字，只准系統畫面上本來就有的
+  const EN_OK = new Set(['LINE', 'PDF', 'Safari', 'Chrome', 'iPhone', 'Android', 'Wi', 'Fi', 'QR', 'Cmd', 'Shift', 'Ctrl', 'DZY', 'Excel', 'Word', 'App', 'AI', 'Windows', 'F5', 'Eason']);
+  const bad4 = [];
+  SEED.forEach((o) => {
+    const words = noHost(prose(o)).match(/[A-Za-z][A-Za-z0-9]*/g) || [];
+    const unknown = words.filter((w) => w.length > 1 && !EN_OK.has(w));
+    if (unknown.length) bad4.push([o.question, unknown]);
+  });
+  ok(bad4.length === 0, 'SEED 規則4 問答沒有程式代號／英文權限碼（只准 ' + Array.from(EN_OK).join('、') + '）', bad4);
+  const bad4p = SEED.filter((o) => /(platform\.|\.gs\b|\baction\b|\btoken\b|PERMS_ON|[a-z]+_[a-z_]+|[a-z]+[A-Z][a-z]+\()/.test(prose(o)));
+  ok(bad4p.length === 0, 'SEED 規則4 問答沒有 platform.／.gs／action／token／PERMS_ON 等字樣', bad4p.map((o) => o.question));
+  // 純文字：不得含 HTML 或 Markdown 標記（§12.4 畫面一律純文字）
+  const badT = SEED.filter((o) => /[<>]|\*\*|`|\]\(/.test(prose(o)));
+  ok(badT.length === 0, 'SEED 問答是純文字（無 HTML／Markdown 標記）', badT.map((o) => o.question));
+  // 待確認只出現在 source 最後一段
+  ok(SEED.every((o) => !/待確認/.test(prose(o)) && (o.source.indexOf('待確認') === -1 || /；待確認：[^；]+$/.test(o.source))), 'SEED 規則5 有疑問的題目在 source 最後加「；待確認：<一句話>」，且只有一句');
+  // go 的頁面不要跟題目沒關係：有 go 的題目，go 頁面本人看得到的條件不得比題目寬（避免帶人去沒權限的頁）— 只要求 go 存在，不強求同頁
 })();
 
 // ============================================================
@@ -633,7 +763,7 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   ok(NODE_FNS.length === 8 && NODE_FNS.every((n) => CODE_GS.indexOf(n) === -1), '5 Code.gs 全文不出現 node 專用 8 支函式的名字', NODE_FNS.filter((n) => CODE_GS.indexOf(n) !== -1));
   const { sb } = load(freshSeed(HASHER));
   ok(NODE_FNS.every((n) => typeof sb[n] === 'function'), '5 8 支都是 sandbox 全域函式（node 可直接呼叫）');
-  ok(!sb.CODE_ALLOWED_ACTIONS.some((a) => NODE_FNS.indexOf(a) !== -1) && sb.CODE_ALLOWED_ACTIONS.filter((a) => /^aih/.test(a)).length === 8, '5 白名單裡沒有 8 支；aih* 管理 action 剛好 8 支');
+  ok(!sb.CODE_ALLOWED_ACTIONS.some((a) => NODE_FNS.indexOf(a) !== -1) && sb.CODE_ALLOWED_ACTIONS.filter((a) => /^aih/.test(a)).length === 9, '5 白名單裡沒有 8 支；aih* 管理 action 剛好 9 支（含 aihKbImport）');
   // doPost 打得到 7 支名字也一定被拒
   const adm = (() => { const a = load(freshSeed(HASHER)); a.sb.setupStaff(); return [a, adminToken(a.sb)]; })();
   ok(NODE_FNS.every((n) => post(adm[0].sb, n, { token: adm[1] }, adm[1]).error === '不支援的操作'), '5 用 doPost 打這 8 個名字 → 不支援的操作');

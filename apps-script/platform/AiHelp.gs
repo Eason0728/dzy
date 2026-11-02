@@ -3,7 +3,7 @@
  * Phase 1：資料表、管理頁 action、給 Mac mini node 路由用的全域函式。AI 呼叫在 node（.gs 不能連外）。
  *
  * 一、管理頁 action（Code.gs 白名單＋分派；一律要 platform.aihelp＝鎖碼，第一個月只有 role admin；aihSetup 只限 role admin）
- *    aihSetup、aihKbList、aihKbSave、aihKbHist、aihPendingList、aihPendingSet、aihUsage、aihPauseSet
+ *    aihSetup、aihKbList、aihKbSave、aihKbImport、aihKbHist、aihPendingList、aihPendingSet、aihUsage、aihPauseSet
  *    回應形狀照 Eval.gs：成功 {ok:true,data}；失敗 {ok:false, error:'<代碼>', message:'<中文>'}（代碼：unauthorized／forbidden／bad_request／not_found／conflict／busy／not_inited）。
  * 二、node 專用全域函式（⚠ 8 支，不准進 Code.gs 的白名單與分派；測試比對 Code.gs 全文）：
  *    aiHelpAuthorize_(token)、aihKbVisible_(uid)、aihLogAppend_(row)、aihPendingAdd_(row)、aihFeedback_(uid, id, good)、aihPurge_(nowMs)、aihConvGet_(uid, conv)、aihDigest_(nowMs)
@@ -308,6 +308,67 @@ function handleAihKbSave_(token, payload) {
     if (cur) aihWriteAt_('kb', cur._row, next); else aihAppend_('kb', next);
     aihHistAppend_(next.id, action, next, c.by);
     return { ok: true, data: { id: next.id, updated_at: next.updated_at, changed: true } };
+  });
+}
+
+/**
+ * 匯入初始題庫（AiHelpSeed.gs 的 AIH_SEED）。權限同 aihKbSave（role admin 或 platform.aihelp）。
+ * 規則：question（去前後空白、完全相同字串）已存在於 aih_kb（任何狀態）→ 略過；其餘一律以 status 'draft' 新增、自動編號、
+ * verified_at 今天、expires_at＋180 天，並各寫一列 aih_kb_hist（action create、by＝呼叫者）。冪等：重複呼叫 added＝0。
+ * 全部題目先驗證（欄位長度、頁面在 AIH_PAGES），任何一題不合格就整批不寫（bad_request）。回 {added, skipped}。
+ */
+function handleAihKbImport_(token, payload) {
+  var c = aihEnter_(token, false);
+  if (!c.ok) return c;
+  if (!aihReady_()) return aihNotInited_();
+  if (typeof AIH_SEED === 'undefined' || !Array.isArray(AIH_SEED)) return aihFail_('bad_request', '找不到初始題庫');
+  return aihWithLock_(function () {
+    var rows = aihRows_('kb');
+    var have = {};
+    var max = 0;
+    rows.forEach(function (r) {
+      have[aihStr_(r.question)] = true;
+      var n = Number(String(r.id).replace(/^kb/, ''));
+      if (n > max) max = n;
+    });
+    var spec = [['question', '問題', AIH_MAX.question, true], ['answer', '答案', AIH_MAX.answer, true], ['who', '找誰', AIH_MAX.who, false],
+      ['source', '依據文件', AIH_MAX.source, false], ['m', '頁面（模組）', 40, false], ['v', '頁面（分頁）', 40, false], ['go_m', '帶我去（模組）', 40, false], ['go_v', '帶我去（分頁）', 40, false]];
+    var fresh = [];
+    var skipped = 0;
+    for (var i = 0; i < AIH_SEED.length; i++) {
+      var f = {};
+      for (var j = 0; j < spec.length; j++) {
+        var t = aihCleanText_(AIH_SEED[i][spec[j][0]], spec[j][1], spec[j][2], spec[j][3]);
+        if (t.error) return aihFail_('bad_request', '初始題庫第 ' + (i + 1) + ' 題：' + t.error);
+        f[spec[j][0]] = t.value;
+      }
+      if (f.v && !f.m) return aihFail_('bad_request', '初始題庫第 ' + (i + 1) + ' 題：有分頁就要有模組');
+      if (f.m && !aihPageExists_(f.m, f.v)) return aihFail_('bad_request', '初始題庫第 ' + (i + 1) + ' 題：頁面不在頁面地圖上');
+      if ((f.go_m || f.go_v) && !(f.go_m && f.go_v && aihPageExists_(f.go_m, f.go_v))) return aihFail_('bad_request', '初始題庫第 ' + (i + 1) + ' 題：「帶我去」的頁面不在頁面地圖上');
+      if (have[f.question]) { skipped++; continue; }
+      have[f.question] = true;   // 題庫自己有重複的題目，後面的也略過
+      fresh.push(f);
+    }
+    if (!fresh.length) return { ok: true, data: { added: 0, skipped: skipped } };
+    var nowIso = aihIso_();
+    var verified = aihTaipeiDay_(aihNow_());
+    var expires = aihAddDays_(verified, AIH_KB_VALID_DAYS);
+    var kbRows = [], histRows = [];
+    var hmax = 0;
+    aihRows_('hist').forEach(function (r) { var n = Number(String(r.hist_id).replace(/^kh/, '')); if (n > hmax) hmax = n; });
+    fresh.forEach(function (f, k) {
+      var id = 'kb' + ('0000' + (max + k + 1)).slice(-4);
+      if (max + k + 1 > 9999) id = 'kb' + (max + k + 1);
+      var o = { id: id, m: f.m, v: f.v, question: f.question, answer: f.answer, who: f.who, go_m: f.go_m, go_v: f.go_v, status: 'draft',
+        source: f.source, verified_at: verified, expires_at: expires, updated_at: nowIso, updated_by: c.by };
+      var hid = 'kh' + ('0000' + (hmax + k + 1)).slice(-4);
+      if (hmax + k + 1 > 9999) hid = 'kh' + (hmax + k + 1);
+      kbRows.push(aihToRow_('kb', o));
+      histRows.push(aihToRow_('hist', { hist_id: hid, kb_id: id, action: 'create', snapshot: JSON.stringify(o), by: c.by, at: nowIso }));
+    });
+    stfAppendBlock_(AIH_SH.kb, kbRows, AIH_H.kb.length, true);
+    stfAppendBlock_(AIH_SH.hist, histRows, AIH_H.hist.length, true);
+    return { ok: true, data: { added: fresh.length, skipped: skipped } };
   });
 }
 
