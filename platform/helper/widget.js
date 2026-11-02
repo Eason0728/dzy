@@ -295,7 +295,7 @@ export function createHelper(deps) {
   // ---------- 建 DOM ----------
   function build() {
     host = h('div', { class: 'aih-root', 'data-role': 'aih-root' });
-    fab = h('button', { type: 'button', class: 'aih-fab', 'data-role': 'aih-fab', 'aria-haspopup': 'dialog', 'aria-expanded': 'false' }, '問小幫手');
+    fab = h('button', { type: 'button', class: 'aih-fab', 'data-role': 'aih-fab', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-label': '問小幫手', title: '問小幫手' }, '問小幫手');
     fab.addEventListener('click', () => { if (isOpen) close(); else open(); });
 
     panel = h('section', { class: 'aih-panel', 'data-role': 'aih-panel', role: 'dialog', 'aria-label': 'AI 小幫手' });
