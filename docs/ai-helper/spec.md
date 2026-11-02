@@ -175,3 +175,11 @@ ask／feedback／draft 順序改為：Origin → body 大小 → **驗 token** �
 1. **沒教過的頁面不叫 AI**：本人可見的知識庫中，沒有任何一題的 m 等於目前頁面的 m、且問題也不是帳號狀況類 → 直接回 `kind:'unknown'`、`answer:'這頁還沒教過我，已經記下來了'`，記 pending，不扣費、不扣題數（仍扣每人每日的「問題數」上限 20，防刷）。帳號狀況類判斷：問題含「看不到／沒有／不能／權限／為什麼我」任一詞時視為帳號類，照常叫 AI。
 2. **知識有效期 180 天**：`expires_at = verified_at + 180 天`；到期前 14 天的題目列入每日彙整；到期當天 `aihPurge_` 一併把 status 改 off 並寫 aih_kb_hist（by='system'）。
 3. **「待我處理件數」第一期拿掉**：requirements §0 第 3 題範圍縮為帳號狀態、單位部門職稱、權限與來源、兼任等個別例外。
+
+### 12.11 Phase 1 實作與 Fable 審查後的對齊（2026-11-02，issue Eason0728/dzy#72；本節優先於前文）
+- `aiHelpAuthorize_` 輸出多一個頂層鍵 `can_manage`（boolean，有 platform.aihelp）；給 node 的 draft／usage 判斷。白名單＝ok、who、me、perms、can_manage。
+- node 專用全域函式共 **8 支**：aiHelpAuthorize_、aihKbVisible_、aihLogAppend_、aihPendingAdd_、aihFeedback_、aihPurge_、aihConvGet_、aihDigest_（每日彙整用）。`aihKbVisible_` 回 `{ok, paused, items}`。
+- 管理 action 共 **8 支**：讀 aihKbList、aihKbHist、aihPendingList、aihUsage；寫 aihSetup、aihKbSave、aihPendingSet、aihPauseSet。
+- `aihUsage` 不回金額（題數、答得出比例、👎 比例、每日題數）；**金額只有 node 帳本有**，管理頁另打 svc `op:'usage'`（需 can_manage）取 `{month, usd, cap_usd}`。
+- 頁面可見性＝模組層 requires 且分頁層 requires 都通過（與殼 isModulePermitted ∧ isViewPermitted 相同）。
+- `expires_at` 空白的 live 題視為過期（fail-closed）。

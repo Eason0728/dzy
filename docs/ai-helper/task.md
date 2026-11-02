@@ -9,7 +9,7 @@
 - **T1-2 待回答與用量**（AiHelp.gs 後半）
   `aihPendingList {status?}`、`aihPendingSet {id, status, kb_id?}`、`aihUsage {month}` → `{usd, count, answered_ratio, down_ratio, by_day[]}`。
   驗收：done 必須帶 kb_id；用量由 aih_log 加總，與手算一致。
-- **T1-3 node 專用全域函式**
+- **T1-3 node 專用全域函式**（實作為 8 支，見 spec §12.11）
   `aiHelpAuthorize_(token)`（spec §6 形狀，鍵白名單）、`aihKbLive_()`（只回 live）、`aihLogAppend_(row)`、`aihPendingAdd_(row)`、`aihFeedback_(uid, id, good)`（只能改自己的 log）、`aihPurge_(nowMs)`（刪 90 天前 log、結案 pending 的 q 清空）。
   驗收：Code.gs 全文不出現這六個名字（測試比對）；staff／系統帳／停用帳號各一例；鍵多一個就紅。
 - **T1-4 權限與分派**
