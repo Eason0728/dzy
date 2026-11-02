@@ -63,6 +63,8 @@ def install_routes(page, urls):
         return handle
     leaks = []
     def guard(route):
+        if route.request.url.split('?')[0].endswith('/svc/ai-help'):   # AI 小幫手（2026-11-02）：殼登入後會問 status；回「關」＝按鈕不出現，不算流出
+            return route.fulfill(status=200, headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'}, body='{"ok":true,"data":{"on":false,"reason":"off","left_today":0}}')
         if route.request.url.split('?')[0] in (real, proxy):
             return route.fallback()   # 交給下面的本機後端轉送
         leaks.append(route.request.url)

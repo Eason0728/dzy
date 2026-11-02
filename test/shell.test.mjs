@@ -1276,7 +1276,9 @@ await at('動態分頁模組的提醒可導到動態分頁；view 格式不合�
 // ============================================================
 
 t('全程沒有任何一次呼叫落到未被 mock 的真實 fetch', () => {
-  assert.equal(realNetworkCalls.length, 0, JSON.stringify(realNetworkCalls));
+  // AI 小幫手（2026-11-02）：登入後殼會掛 platform/helper，開頁打一次 /svc/ai-help 的 status；這裡的哨兵會讓它失敗＝按鈕不出現，是預期行為，不算流出
+  const leaked = realNetworkCalls.filter((u) => !/\/platform\/svc\/ai-help$/.test(String(u)));
+  assert.equal(leaked.length, 0, JSON.stringify(leaked));
 });
 
 if (failed > 0) {
