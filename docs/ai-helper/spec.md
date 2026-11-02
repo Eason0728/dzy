@@ -1,6 +1,7 @@
-# 管理系統 AI 小幫手｜規格（spec）v0.1 草稿
+# 管理系統 AI 小幫手｜規格（spec）v1.0
 
-> 依據 requirements.md v1.0（1A 2A 3A 4A 5B 6A 7C 8A 9A 10A）。等 Eason 確認第 9 節四題後改 v1.0。
+> 依據 requirements.md v1.0（1A 2A 3A 4A 5B 6A 7C 8A 9A 10A）。2026-11-02 Eason 確認第 9 節四題「照推薦」：1A 知識庫放管理頁、2A 09:20 併進通知匣 10:00 彙整、3A 先寫約 60 題勾選上架、4A 問答紀錄與待回答不進備份。
+> 確認頁：https://claude.ai/artifact/RUdUgfyWb6kYQUpPSsC1XW
 > 代號格式、回傳形狀照既有 spec §4 慣例；本檔是小幫手的契約正本。
 
 ## 1. 架構總覽
@@ -86,7 +87,7 @@ Mac mini dzy-platform
 | `aih_pending` 待回答 | id、log_id、ts、q、m、v、reason（unknown／thumbs_down）、status（open／done／ignored）、kb_id |
 
 - 每天 03:50 刪 90 天前的 `aih_log`（`aih_pending` 結案後一併刪 q 原文）。
-- 備份：`aih_kb` 照常備份；`aih_log`、`aih_pending` 是否排除備份見第 9 節第 4 題（推薦排除，比照 login_log：問題原文可能含同仁自己打的個資）。
+- 備份：`aih_kb` 照常備份；`aih_log`、`aih_pending` **排除備份**（minikit app.json backupExclude，比照 login_log；第 9 節第 4 題 A）。
 
 ## 8. 管理頁 `modules/ai-help`「小幫手管理」（資訊部門，requires `platform.aihelp`）
 - 分頁：待回答 pending／知識庫 kb／用量 usage。
@@ -97,7 +98,7 @@ Mac mini dzy-platform
 - 權限 `platform.aihelp`：新 PERM_GRANTABLE、**鎖碼**（只有 admin 能給）；Eason 是 admin 不用設。
 - 平台 action（Code.gs 分派表＋dryrun.js）：讀 `aihKbList`、`aihPendingList`、`aihUsage`；寫 `aihKbSave`、`aihPendingSet`、`aihSetup`、`aihKbImport`。
 
-## 9. 要 Eason 確認的四題
+## 9. Eason 確認的四題（2026-11-02 全部 A）
 1. 知識庫放哪裡改？**推薦：放管理頁（試算表分頁）**，你直接在系統裡上架；另一個做法是放程式碼檔，每次改要我推版。
 2. 每日彙整幾點進通知匣？**推薦：跟通知匣 10:00 那則一起**（09:20 送進去，10:00 一起彙整）。
 3. 初始知識庫怎麼來？**推薦：我照「一般同仁會碰到的頁面」先寫約 60 題（登入、改密碼、首頁、我的資料、公告、打卡、考勤申請、排班、各主管功能），你在管理頁一次看過、勾選上架**；沒勾的不上。
