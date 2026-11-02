@@ -626,7 +626,9 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
     }
     // 指定門市只看考勤（att.view@<單位>）：打卡店單位＝該單位（且在試點），支援與否都算
     if (viewable && exViewUnits.length && !L.hours.seen[a.m.store_code + '|' + a.m.emp_id]) {
-      var hitU = a.units.filter(function (u) { return exViewUnits.indexOf(u) !== -1 && pilot.indexOf(u) !== -1; });
+      // a.units 只留 store 階梯（支援判斷用）；總部打卡店的 dzy-hq 另外從 storeUnits 補回來（2026-11-03 總部也能設只看）
+      var hqU = ((storeUnits && storeUnits[a.m.store_code]) || []).filter(function (c) { var u = org.unit[c]; return !!(u && u.active && u.ladder === 'hq'); });
+      var hitU = a.units.concat(hqU).filter(function (u) { return exViewUnits.indexOf(u) !== -1 && pilot.indexOf(u) !== -1; });
       if (hitU.length) storeAttListAdd_(L.view, a);
     }
   });
@@ -748,14 +750,14 @@ function storeRowActingPilot_(values, pilot) {
   return storeActingPilot_(units, pilot);
 }
 
-/** perms 裡的 att.view@<單位> → 合法單位（org 存在、active、store 階梯含 ck）排序去重；Perms.gs 沒載入＝[] */
+/** perms 裡的 att.view@<單位> → 合法單位（org 存在、active、store 階梯含 ck，或 hq 總部〔2026-11-03〕）排序去重；Perms.gs 沒載入＝[] */
 function storeAttViewExUnits_(perms, org) {
   if (typeof permAttViewUnit_ !== 'function') return [];
   var out = [];
   (perms || []).forEach(function (c) {
     var u = permAttViewUnit_(c);
     var d = u ? org.unit[u] : null;
-    if (d && d.active && (d.ladder || 'store') === 'store') out.push(u);
+    if (d && d.active && ((d.ladder || 'store') === 'store' || d.ladder === 'hq')) out.push(u);
   });
   return storeUniqSorted_(out);
 }

@@ -148,10 +148,12 @@ function permAttViewUnit_(perm) {
   var m = PERM_ATT_VIEW_RE.exec(permStr_(perm));
   return m ? m[1] : '';
 }
-/** 只看考勤的單位合不合法：org＝permOrgIndex_ 形狀（units:{code:{ladder,parent,active}}）；存在、啟用、ladder 恰好 store（含 ck） */
+/** 只看考勤的單位合不合法：org＝permOrgIndex_ 形狀（units:{code:{ladder,parent,active}}）；存在、啟用、ladder store（含 ck）或 hq（鼎兆元總部）。
+ *  2026-11-03 Eason：總部也能設（會計月底看總部的申請單彙整）；總部打卡店是多單位共用，給 dzy-hq＝看在總部打卡的全部帳號。品牌辦公室（office）不開 */
 function permAttViewUnitOk_(unit, org) {
   var u = unit && org && org.units ? org.units[unit] : null;
-  return !!(u && u.active !== false && permStr_(u.ladder) === 'store');
+  var ladder = u ? permStr_(u.ladder) : '';
+  return !!(u && u.active !== false && (ladder === 'store' || ladder === 'hq'));
 }
 /** store.sm@<單位> → 單位代碼；不是這種碼 → '' */
 function permActingUnit_(perm) {
@@ -212,7 +214,10 @@ function permStaffAddUnit_(perm) {
   return m ? m[1] : '';
 }
 /** 可新增同仁的單位合不合法：存在、啟用、store 階梯（含央廚 ck）；同 permAttViewUnitOk_ */
-function permStaffAddUnitOk_(unit, org) { return permAttViewUnitOk_(unit, org); }
+function permStaffAddUnitOk_(unit, org) {   // 2026-11-03 只看考勤開放總部後拆開：可新增同仁仍只限門市／央廚
+  var u = unit && org && org.units ? org.units[unit] : null;
+  return !!(u && u.active !== false && permStr_(u.ladder) === 'store');
+}
 /**
  * 某人「可新增同仁」生效的單位（''＝沒有）。values＝staff 一列。只看 perm_ex 中 active、mode add、沒過期、
  * 碼＝staff.add@<本人目前主要單位> 的列；本人要在職、主要身分有效（permStaffIdentityOk_）、單位合法。不看 PERMS_ON。
@@ -592,7 +597,7 @@ function permValidateEx_(ex, today, org) {
   if (psc && mode !== 'add') return permErr_('bad_mode', '薪酬負責門市只能「多給」；要收回請撤銷那筆例外');
   if (avu) {
     if (mode !== 'add') return permErr_('bad_mode', '指定門市只看考勤只能「多給」；要收回請撤銷那筆例外');
-    if (!permAttViewUnitOk_(avu, org)) return permErr_('bad_target', '這個門市不存在、已停用，或不是門市／央廚');
+    if (!permAttViewUnitOk_(avu, org)) return permErr_('bad_target', '這個門市不存在、已停用，或不是門市／央廚／總部');
   }
   if (sau) {
     if (mode !== 'add') return permErr_('bad_mode', '可新增同仁只能「多給」；要收回請撤銷那筆例外');

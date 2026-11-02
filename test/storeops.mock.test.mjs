@@ -1390,7 +1390,9 @@ function noDirSched(id) {
   const ve = (perm, mode, o) => sb.permValidateEx_({ perm, mode: mode || 'add', until: '', note: '原因' }, '2026-10-26', o === undefined ? pidx : o);
   // 驗證
   ok(ve('att.view@mala-gf') === null && ve('att.view@ck') === null && ve('att.view@mzt-gf') === null, '10 合法：門市與央廚 ck');
-  ok(['att.view@mzt-wx', 'att.view@mala-hq', 'att.view@dzy-hq', 'att.view@no-such'].every((c) => (ve(c) || {}).error === 'bad_target'), '10 ★單位停用、品牌辦公室、總部、不存在 → bad_target');
+  ok(['att.view@mzt-wx', 'att.view@mala-hq', 'att.view@no-such'].every((c) => (ve(c) || {}).error === 'bad_target'), '10 ★單位停用、品牌辦公室、不存在 → bad_target');
+  ok(ve('att.view@dzy-hq') === null, '10 ★總部 dzy-hq 合法（2026-11-03 Eason 開放）');
+  ok(sb.permStaffAddUnitOk_('dzy-hq', pidx) === false && sb.permStaffAddUnitOk_('mala-gf', pidx) === true, '10 可新增同仁仍只限門市／央廚（不跟著開放總部）');
   ok((ve('att.view@mala-gf', 'remove') || {}).error === 'bad_mode', '10 只能「多給」（remove → bad_mode）');
   ok((ve('att.view@mala-gf', 'add', null) || {}).error === 'bad_target', '10 沒給 org → 不合法（fail closed）');
   ok(['att.view@', 'att.view@a b', 'att.view', 'att.view@x@y', 'att.view@' + 'a'.repeat(41)].every((c) => (ve(c) || {}).error === 'bad_perm'), '10 格式不對 → bad_perm');
@@ -1448,7 +1450,7 @@ function noDirSched(id) {
   post(sb, 'permExRevoke', { ex_id: lsPs.ex_id }, app.adminTok);
   const lsAd = post(sb, 'permExList', {}, app.adminTok);
   const codes = (lsAd.data.att_view_units || []).map((u) => u.code);
-  ok(has(codes, 'mala-gf') && has(codes, 'ck') && has(codes, 'mzt-gf') && !has(codes, 'mala-hq') && !has(codes, 'dzy-hq') && !has(codes, 'mzt-wx') && lsAd.data.att_view_units.find((u) => u.code === 'mzt-gf').name === '墨竹亭 新竹光復', '10 admin permExList.att_view_units：active 門市＋央廚（名稱含品牌）', lsAd.data.att_view_units);
+  ok(has(codes, 'mala-gf') && has(codes, 'ck') && has(codes, 'mzt-gf') && !has(codes, 'mala-hq') && has(codes, 'dzy-hq') && !has(codes, 'mzt-wx') && lsAd.data.att_view_units.find((u) => u.code === 'mzt-gf').name === '墨竹亭 新竹光復', '10 admin permExList.att_view_units：active 門市＋央廚＋總部（名稱含品牌）', lsAd.data.att_view_units);
   const hrEx = lsAd.data.items.find((i) => i.perm === 'att.view@mala-gf' && i.emp_no === 'DZY356');
   ok(post(sb, 'permExRevoke', { ex_id: hrEx.ex_id }, hrTok).code === 'no_perm', '10 人資主管不能撤銷');
   ok(post(sb, 'permExRevoke', { ex_id: hrEx.ex_id }, app.adminTok).ok && !has(perms('DZY356'), 'platform.att') && eq(app.ident('DZY356').att.view_people, []), '10 admin 撤銷後 → 沒有考勤管理、只看名單空');
@@ -1461,13 +1463,38 @@ function noDirSched(id) {
   // 鎖碼家族：非 admin 的調動若會改變有無 att.view@ → 擋；訊息有「只看考勤」
   ok(sb.permLockedMsg_(['att.view@mala-gf']).indexOf('只看考勤') !== -1, '10 鎖碼訊息：只看考勤');
   // 純函式：storeAttViewExUnits_ 過濾不合法單位
-  ok(eq(sb.storeAttViewExUnits_(['att.view@mala-gf', 'att.view@mala-gf', 'att.view@mala-hq', 'att.view@mzt-wx', 'att.view@ck', 'store.void'], sb.stfReadOrg_()), ['ck', 'mala-gf']), '10 storeAttViewExUnits_：只留存在、啟用、store 階梯的單位，排序去重');
+  ok(eq(sb.storeAttViewExUnits_(['att.view@mala-gf', 'att.view@mala-gf', 'att.view@mala-hq', 'att.view@mzt-wx', 'att.view@ck', 'att.view@dzy-hq', 'store.void'], sb.stfReadOrg_()), ['ck', 'dzy-hq', 'mala-gf']), '10 storeAttViewExUnits_：只留存在、啟用、store 階梯或總部的單位，排序去重');
   // permCompute_：只走例外、只認 add、單位要合法
   const base = { staff: { status: 'active', unit: 'dzy-hq', dept: 'fin', title: 'hs', emp_no: 'DZY356' }, org: pidx, rules: [{ rule_id: 'R1', ladder: 'hq', dept: '', title: '*', perm: 'att.view@mala-gf' }], today: '2026-10-26' };
   const pc = (exs) => sb.permCompute_(Object.assign({}, base, { exs })).perms;
   ok(eq(pc([]), []), '10 permCompute_：規則裡的 att.view@ 一律不採用');
   ok(eq(pc([{ emp_no: 'DZY356', perm: 'att.view@mala-gf', mode: 'add', until: '' }]), ['att.view@mala-gf']), '10 permCompute_：例外 add → perms 有');
   ok(eq(pc([{ emp_no: 'DZY356', perm: 'att.view@mala-gf', mode: 'remove', until: '' }, { emp_no: 'DZY356', perm: 'att.view@mala-hq', mode: 'add', until: '' }, { emp_no: 'DZY999', perm: 'att.view@ck', mode: 'add', until: '' }, { emp_no: 'DZY356', perm: 'att.view@ck', mode: 'add', until: '2020-01-01' }]), []), '10 permCompute_：remove、不合法單位、別人的、過期 → 都不給');
+})();
+
+// ============================================================
+// 10h. 總部也能設「指定門市只看考勤」att.view@dzy-hq（2026-11-03 Eason：會計月底看總部的申請單彙整）
+// ============================================================
+(() => {
+  const cast = [
+    ['DZY361', '總部會計', 'dzy-hq', 'fin', 'hs', 'active', '2026-01-01'],
+    ['DZY362', '總部人資專員', 'dzy-hq', 'hr', 'hs', 'active', '2026-01-01'],
+    ['DZY363', '辛辦專員', 'mala-hq', '', 'ofs', 'active', '2026-01-01'],
+    ['DZY364', '總部總監', 'dzy-hq', 'it', 'hm', 'active', '2026-01-01'],
+    ['DZY365', '辛光計時', 'mala-gf', '', 'pt', 'active', '2026-01-01']
+  ];
+  const app = world(cast);
+  const { sb } = app;
+  const perms = (u) => { const r = post(sb, 'login', { username: u, password: PW }); return r.ok ? r.data.perms : null; };
+  const sv = post(sb, 'permExSave', { emp_no: 'DZY361', perm: 'att.view@dzy-hq', mode: 'add', until: '', note: '月底對帳' }, app.adminTok);
+  ok(sv.ok, '10h admin 能設 att.view@dzy-hq', sv);
+  const id = app.ident('DZY361');
+  const subs = id.att.view_people.map((x) => x.clock + ':' + x.sub).sort();
+  ok(eq(subs, ['hq:DZY362', 'hq:DZY363']), '10h ★只看名單＝在總部打卡、要核工時的帳號（總部職員＋品牌辦公室專員）；不含本人、不含不用核工時的總監、不含門市', subs);
+  ok(eq(id.att.people, []) && eq(id.att.req_people, []), '10h 只看不核');
+  ok(has(perms('DZY361'), 'platform.att'), '10h 有考勤管理');
+  ok(post(sb, 'permExSave', { emp_no: 'DZY362', perm: 'att.view@dzy-hq', mode: 'add', until: '', note: 'x' }, app.login('DZY362')).code === 'no_perm', '10h 非 admin 不能設');
+  ok(post(sb, 'permExSave', { emp_no: 'DZY361', perm: 'att.view@mala-hq', mode: 'add', until: '', note: 'x' }, app.adminTok).code === 'bad_target', '10h 品牌辦公室仍不開放');
 })();
 
 // ============================================================
