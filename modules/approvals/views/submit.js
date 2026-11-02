@@ -277,7 +277,7 @@ export function mountSubmit(el, ctx) {
     const lines = steps.map((s, i) => {
       const names = (s.candidates || []).map((c) => c.name).filter(Boolean).join('、');
       const label = (s.override && s.override.to) ? `指派 ${s.override.to}` : (ROLE_LABEL[s.role] || s.role);
-      return `<li>第 ${i + 1} 關：${esc(label)}${names ? `（${esc(names)}）` : s.status === 'skipped' ? '（目前沒人可簽，會自動往上）' : ''}</li>`;
+      return `<li>第 ${i + 1} 關：${esc(label)}${s.self ? '（你本人，在核決權限內，送出即核准）' : names ? `（${esc(names)}）` : s.status === 'skipped' ? '（目前沒人可簽，會自動往上）' : ''}</li>`;
     });
     const h = DEPT_LABEL[data && data.handler] || (data && data.handler) || '';
     return `<ol>${lines.join('')}</ol>${h ? `<p>簽完交 ${esc(h)} 承辦。</p>` : ''}`;

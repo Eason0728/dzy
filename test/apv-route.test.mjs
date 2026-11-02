@@ -135,7 +135,17 @@ function pers(kind, senderEmp, subjectEmp, people, extra) {
   const ck2 = spend('DZY909', 800, null);
   ok(eq(who(ck2.eff.candidates), ['DZY910']), 'ck 800 → ck 廠長（head）');
   const sm = spend('DZY902', 3000, null);
-  ok(sm.eff.status === 'signing' && eq(who(sm.eff.candidates), ['DZY903']) && sm.eff.skips[0].role === 'head', '店長送 3,000：權限人是自己 → 往上到品牌總監', sm.eff);
+  ok(sm.eff.status === 'handling' && sm.eff.candidates.length === 0 && sm.eff.skips.length === 0 && sm.eff.route.steps[0].status === 'done' && sm.eff.route.steps[0].self === true && sm.eff.route.steps[0].by === 'DZY902' && sm.eff.route.steps[0].role === 'head', '店長送 3,000（店長級）：自核 → handling、steps[0].self、by＝送件人', sm.eff);
+  const od = spend('DZY903', 3000, null);
+  ok(od.eff.status === 'handling' && od.eff.route.steps[0].self === true && od.eff.route.steps[0].by === 'DZY903' && od.eff.route.steps[0].role === 'head', '品牌總監送 3,000（店長級）：更高一級也自核', od.eff);
+  const od2 = spend('DZY903', 8600, null);
+  ok(od2.eff.status === 'handling' && od2.eff.route.steps[0].role === 'brand_dir' && od2.eff.route.steps[0].self === true, '品牌總監送 8,600（品牌總監級）：自核', od2.eff);
+  const ft = spend('DZY901', 3000, null);
+  ok(ft.eff.status === 'signing' && !ft.eff.route.steps[0].self && eq(who(ft.eff.candidates), ['DZY902']), '店員送 3,000：不自核，給店長簽', ft.eff);
+  const ftHi = spend('DZY901', 8600, null);
+  ok(ftHi.eff.status === 'signing' && !ftHi.eff.route.steps[0].self, '店員送 8,600：不自核');
+  const smUp = spend('DZY902', 8600, null);
+  ok(smUp.eff.status === 'signing' && !smUp.eff.route.steps[0].self && eq(who(smUp.eff.candidates), ['DZY903']), '店長送 8,600（品牌總監級）：店長不夠高，不自核，給品牌總監', smUp.eff);
   const noDir = BASE.filter((p) => p.emp !== 'DZY903');
   const vac = spend('DZY901', 8600, noDir);
   ok(eq(who(vac.eff.candidates), ['DZY905']) && vac.eff.skips[0].role === 'brand_dir', '品牌總監空缺 → 執行長', vac.eff);
@@ -146,20 +156,30 @@ function pers(kind, senderEmp, subjectEmp, people, extra) {
   ok(none.eff.status === 'exception' && none.eff.candidates.length === 0 && none.eff.route.steps.map((s) => s.role).join() === 'head,brand_dir,ceo,gm,chair' && none.eff.route.steps.every((s) => s.status === 'skipped'), '全空 → exception（逐級 skip 到董事長），不是自動給人資', none.eff);
   ok(none.eff.index === 4 && none.eff.skips.length === 5, 'exception 指標停在最後一格，skip 事件 5 筆');
   const ch = spend('DZY906', 800, null);
-  ok(ch.eff.status === 'exception', '董事長自己送支出單 → exception（沒有更高的人）', ch.eff);
+  ok(ch.eff.status === 'handling' && ch.eff.route.steps[0].self === true && ch.eff.route.steps[0].by === 'DZY906', '董事長自己送支出單 → 自核（送出即核准）', ch.eff);
+  const ch2 = spend('DZY906', 999999, null);
+  ok(ch2.eff.status === 'handling' && ch2.eff.route.steps[0].role === 'chair' && ch2.eff.route.steps[0].self === true, '董事長送任何金額 → 自核', ch2.eff);
   const gm = spend('DZY904', 25000, null);
-  ok(gm.eff.status === 'signing' && eq(who(gm.eff.candidates), ['DZY906']), '總經理送 25,000（權限人是總經理自己）→ 董事長');
+  ok(gm.eff.status === 'handling' && gm.eff.route.steps[0].self === true && gm.eff.route.steps[0].by === 'DZY904', '總經理送 25,000（總經理級）→ 自核', gm.eff);
+  const gm2 = spend('DZY904', 42000, null);
+  ok(gm2.eff.status === 'signing' && !gm2.eff.route.steps[0].self && eq(who(gm2.eff.candidates), ['DZY906']), '總經理送 42,000（董事長級）→ 不自核，給董事長', gm2.eff);
+  const ceoS = spend('DZY905', 25000, null);
+  ok(ceoS.eff.status === 'signing' && !ceoS.eff.route.steps[0].self && eq(who(ceoS.eff.candidates), ['DZY904']), '執行長送 25,000：核決權限順序是 head,brand_dir,ceo,gm,chair，執行長不涵蓋總經理級 → 不自核，給總經理', ceoS.eff);
   const dup = BASE.concat([mk('DZY918', '測試未', { unit: 'mala-gf', title: 'sm' })]);
   const d = spend('DZY901', 800, dup);
   ok(eq(who(d.eff.candidates), ['DZY902', 'DZY918']), '同一個權限人有多人 → 全部都是候選（任一人核准就過）', d.eff);
   const peer = spend('DZY902', 800, dup);
-  ok(!who(peer.eff.candidates).includes('DZY918') && peer.eff.skips[0].role === 'head', '店長送單：同單位另一位店長是同級，不能簽（往上）', peer.eff);
+  ok(peer.eff.status === 'handling' && peer.eff.route.steps[0].self === true && peer.eff.route.steps[0].by === 'DZY902', '店長送單（同單位有另一位店長）：自己的單照樣自核', peer.eff);
+  const peerHi = spend('DZY902', 8600, dup);
+  ok(!who(peerHi.eff.candidates).includes('DZY918') && eq(who(peerHi.eff.candidates), ['DZY903']), '同單位另一位店長不能替店長簽（8,600 給品牌總監）', peerHi.eff);
+  const peerOther = spend('DZY918', 800, dup);
+  ok(peerOther.eff.status === 'handling' && peerOther.eff.route.steps[0].by === 'DZY918', '另一位店長送自己的單也是自核，不會變成由 DZY902 簽', peerOther.eff);
   const unopened = BASE.map((p) => p.emp === 'DZY902' ? mk('DZY902', '測試乙', { status: 'pending', unit: 'mala-gf', title: 'sm' }) : p);
   ok(spend('DZY901', 800, unopened).eff.skips[0].role === 'head', '店長還沒開通（pending）→ 當空缺往上');
   const mzt = spend('DZY913', 8000, null);
   ok(eq(who(mzt.eff.candidates), ['DZY914']), '墨竹亭店長 8,000 → 墨竹亭辦公室總監（依品牌找人，不會找到小辛辣總監）', mzt.eff);
   const oamS = spend('DZY916', 800, null);
-  ok(oamS.eff.status === 'signing' && eq(who(oamS.eff.candidates), ['DZY903']), '品牌辦公室區督導 800：head 同級不算 → 總監', oamS.eff);
+  ok(oamS.eff.status === 'handling' && oamS.eff.route.steps[0].self === true && oamS.eff.route.steps[0].by === 'DZY916', '品牌辦公室區督導 800：本人屬 head 級權限人（noRank）→ 自核', oamS.eff);
 }
 
 // ===== 2026-10-20 職稱調整（docs/org/spec.md 第 15 節）：中央工廠廠長→研發總監、門市區經理 =====
@@ -176,9 +196,9 @@ function pers(kind, senderEmp, subjectEmp, people, extra) {
   const ck3 = spend('DZY909', 25000, X);
   ok(eq(who(ck3.eff.candidates), ['DZY904']), '15 ck 同仁 25,000 → 總經理（照門檻）', ck3.eff);
   const fm1 = spend('DZY910', 3000, X);
-  ok(fm1.eff.skips[0].role === 'head' && eq(who(fm1.eff.candidates), ['DZY921']), '15 廠長送 3,000：head 是自己 → 研發總監', fm1.eff);
+  ok(fm1.eff.status === 'handling' && fm1.eff.route.steps[0].self === true && fm1.eff.route.steps[0].by === 'DZY910', '15 廠長送 3,000：廠長就是 head 權限人 → 自核', fm1.eff);
   const rd1 = spend('DZY921', 3000, X);
-  ok(rd1.eff.route.steps.map((s) => s.role + ':' + s.status).join() === 'head:skipped,brand_dir:skipped,ceo:pending' && eq(who(rd1.eff.candidates), ['DZY905']), '15 研發總監送 3,000：廠長職級較低、自己不能簽 → 執行長', rd1.eff);
+  ok(rd1.eff.status === 'handling' && rd1.eff.route.steps[0].self === true && rd1.eff.route.steps[0].by === 'DZY921', '15 研發總監送 3,000：本人屬 head 級以上權限人 → 自核', rd1.eff);
   const st1 = spend('DZY901', 800, X);
   ok(eq(who(st1.eff.candidates), ['DZY902']), '15 門市同仁 800 → 只有店長（區經理不進請購請款）', st1.eff);
   const st2 = spend('DZY901', 8600, X);
@@ -267,9 +287,11 @@ function pers(kind, senderEmp, subjectEmp, people, extra) {
   const members = sb.apvReassignMembers_(r.eff.route, 0, 'signing', r.ctx);
   ok(who(members).join() === 'DZY902,DZY903,DZY905,DZY904,DZY906', '改派：該關 role 或更高的合格人選', who(members));
   ok(!who(members).includes('DZY901') && !who(members).includes('DZY907'), '改派名單不含送件人、不含不相干的人');
-  const exr = spend('DZY906', 800, null);
+  const exLonely = BASE.filter((p) => p.emp === 'DZY901' || p.emp === 'DZY904');
+  const exr = spend('DZY901', 42000, exLonely.concat([mk('DZY906', '測試己', { status: 'disabled', unit: 'dzy-hq', dept: 'mgmt', title: 'chair' })]));
+  ok(exr.eff.status === 'exception', '改派前提：沒有任何合格權限人 → exception', exr.eff);
   const mem2 = sb.apvReassignMembers_(exr.eff.route, exr.eff.index, 'exception', exr.ctx);
-  ok(who(mem2).join() === 'DZY904', '董事長自己送單的 exception：可改派給總經理（不含董事長自己）', who(mem2));
+  ok(who(mem2).join() === 'DZY904', 'exception（董事長級、董事長停用、只剩總經理）：可改派給總經理，不含送件人', who(mem2));
   const ss = pers('leave', 'DZY902', 'DZY901');
   ok(sb.apvReassignMembers_(ss.eff.route, 0, 'signing', ss.ctx).length === 0, '本人簽名關不能改派');
 }

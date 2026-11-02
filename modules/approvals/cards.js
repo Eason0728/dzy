@@ -89,7 +89,7 @@ export function detailHtml(data, esc, fmt) {
   const steps = ((form.route && form.route.steps) || []).map((s, i) => {
     const mark = s.status === 'done' ? '✓' : s.status === 'skipped' ? '跳過' : (i === form.step && form.status === 'signing' ? '▶' : '○');
     const names = (s.candidates || []).map((c) => c.name).join('、');
-    return `<li>${esc(mark)} ${esc(ROLE_LABEL[s.role] || s.role)}${names ? `（${esc(names)}）` : ''}</li>`;
+    return `<li>${esc(mark)} ${esc(ROLE_LABEL[s.role] || s.role)}${s.self ? '（送件人本人核准）' : names ? `（${esc(names)}）` : ''}</li>`;
   }).join('');
   return `<div class="stack" data-role="detail-body">
     ${bodyHtml(form, esc)}
