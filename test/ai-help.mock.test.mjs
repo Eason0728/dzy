@@ -111,7 +111,7 @@ function load(seed, extraSrc) {
   };
   vm.createContext(sandbox);
   SRC.forEach(([f, code]) => vm.runInContext(code, sandbox, { filename: f }));
-  sandbox.__nowMs = null;   // 測試要固定時間時設；aihNow_ 覆寫在下面
+  sandbox.__nowMs = Date.UTC(2026, 10, 2, 6, 0, 0);   // 預設固定在 2026-11-02 14:00 台北（題目到期日寫死 11/2、11/3，2026-11-03 起不固定就紅）；個別測試可再改，設 null＝真時鐘
   vm.runInContext('var __realAihNow = aihNow_; aihNow_ = function () { return (typeof __nowMs === "number" && __nowMs) ? __nowMs : __realAihNow(); };', sandbox);
   return { sb: sandbox, sheets, cache, props };
 }
