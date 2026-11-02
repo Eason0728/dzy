@@ -12,7 +12,6 @@
 |---|---|---|---|---|---|
 | 2026-11-02 | ③→④ 設計審 | 四份文件 | GPT 19 條（高 13 中 6）；採納寫進 spec §12，3 題問 Eason；無須 Fable 複核 | 1 | docs/ai-helper/design-review-gpt-raw.md |
 | 2026-11-02 | ④ 階段關 Phase 1 | 平台後端 .gs | 第 1 輪應修 3 建議 5 → 修；第 2 輪阻斷 0 應修 0 建議 3（#9 #10 已修、#11 併 Phase 2） | 2 | Eason0728/dzy#72；aa8deb9 |
-
 | 2026-11-02 | ④ 整套關（睡前全面審） | Phase 2–5 全部 | Codex 16 條＋Fable 15 條互盲；兩邊都抓到 8 條直接修；單邊交叉驗證成立／部分成立共 11 條修；不成立 2 條；高風險修正 Fable 複驗通過 | 1 | scratchpad aih-codex-result.md、aih-fable-result.md；dzy 9775ecd、minikit 79956ad |
 
 ## 落地清單
