@@ -1,5 +1,5 @@
 /**
- * modules/pnl/index.js — 損益系統：把損益網頁整頁嵌進內容區（iframe），呼叫一律由本模組代轉（見 bridge.js）。
+ * modules/pnl/index.js — 損益試算：把損益網頁整頁嵌進內容區（iframe），呼叫一律由本模組代轉（見 bridge.js）。
  * 只理會「這個 iframe 本身」且 origin 正確的訊息；回覆時 targetOrigin 寫死損益網頁網址。
  */
 'use strict';
@@ -28,7 +28,7 @@ function showDown() {
   const n = document.createElement('div');
   n.className = 'card';
   n.setAttribute('data-role', 'pnl-down');
-  n.textContent = '損益系統暫時連不上，請稍後重新整理。';
+  n.textContent = '損益試算暫時連不上，請稍後重新整理。';
   state.el.insertBefore(n, state.frame);
   state.down = n;
 }
@@ -68,9 +68,9 @@ export default {
     const target = pnlTarget(location.hostname);
     const bar = document.createElement('div');
     bar.className = 'bulletin-bar';
-    bar.textContent = '損益數字只有財務部門與被開通「損益系統」權限的人看得到；所有修改都會記錄是誰做的。';
+    bar.textContent = '損益數字只有財務部門與被開通「損益試算」權限的人看得到；所有修改都會記錄是誰做的。';
     const frame = document.createElement('iframe');
-    frame.title = '損益系統';
+    frame.title = '損益試算';
     frame.className = 'bulletin-frame';
     frame.setAttribute('data-role', 'pnl-frame');
     frame.addEventListener('error', () => showDown());

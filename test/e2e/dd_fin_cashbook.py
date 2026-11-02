@@ -437,7 +437,7 @@ def main():
             ad = new_page(ds['day_b'])
             do_login(ad, 'admin')
             navs = ad.locator('[data-role="nav-desktop"] .nav-dept[data-dept="fin"] [data-nav]').evaluate_all('els => els.map(e => e.getAttribute("data-nav"))')
-            check(navs == ['purchase', 'cashbook', 'transfer-fin', 'pnl'], 'admin 財務部門選單順序＝貨單核對→收支管理→調撥管理→損益系統：%s' % navs)
+            check(navs == ['purchase', 'cashbook', 'transfer-fin', 'pnl'], 'admin 財務部門選單順序＝貨單核對→收支管理→調撥管理→損益試算：%s' % navs)
             ad.click('[data-role="nav-desktop"] [data-nav="cashbook"]')
             ad.wait_for_selector(KEEP + ' [data-role="cb-table"], ' + KEEP + ' [data-role="cb-notice"]', timeout=10000)
             check(ad.locator(KEEP + ' [data-role="cb-store"] option').count() == len(ds['stores']), 'admin（*）也能進收支管理並看到 %d 家店' % len(ds['stores']))

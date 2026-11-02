@@ -324,7 +324,7 @@ function pickSecrets_(perms) {
     if (backendId === 'payroll') return;
     // 收支管理金鑰（2026-10-24）同理：會計級通道，絕不下發到瀏覽器
     if (backendId === 'cashbook') return;
-    if (backendId === 'pnl') return;   // 損益系統（2026-10-24）：只在代轉時給
+    if (backendId === 'pnl') return;   // 損益試算（2026-10-24）：只在代轉時給
     // 調撥管理金鑰（會計密碼，2026-10-24）同理：絕不下發到瀏覽器
     if (backendId === 'transfer') return;
     // 考勤／排班（2026-10-24）：只走代轉的首頁待辦，金鑰同樣絕不下發到瀏覽器（日後補 write 列也一樣）
@@ -357,7 +357,7 @@ var PROXY_READ_ACTIONS = {
   cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet'],
   // 排班管理首頁待辦（2026-10-24，營運系統 docs/autoschedule/hr-move-spec.md §5）：與 platform/dryrun.js READ_ACTIONS.schedule 一致
   schedule: ['schedAlerts'],
-  // 損益系統（2026-10-24，損益 Apps Script 的 dzyProxy 入口；損益後端 gas/dzyProxy.js DZY_PROXY_ACTIONS_ 另有一份第二道白名單）
+  // 損益試算（2026-10-24，損益 Apps Script 的 dzyProxy 入口；損益後端 gas/dzyProxy.js DZY_PROXY_ACTIONS_ 另有一份第二道白名單）
   pnl: ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment'],
   // 調撥管理（2026-10-24）：只有 transfer.write，讀寫都要它；分讀寫只為了試跑模式能照常讀。與 platform/dryrun.js READ_ACTIONS.transfer 一致
   transfer: ['bootstrap', 'adminData', 'adminOverview', 'getDoc']
@@ -376,7 +376,7 @@ var PROXY_WRITE_ACTIONS = {
     'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
   // 收支管理：不含改通行碼（adminSave 帶 newStorePass／newAdminPass 由 mini 現金帳伺服器拒絕）
   cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock'],
-  // 損益系統：「管」級動作另由 PROXY_PNL_ADMIN_ACTIONS 要求 pnl.admin，損益後端也依角色擋
+  // 損益試算：「管」級動作另由 PROXY_PNL_ADMIN_ACTIONS 要求 pnl.admin，損益後端也依角色擋
   pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
     'refreshConnectors', 'refreshFixed', 'loadGroupUnits'],
   // 調撥管理：adminUpdate 只准 op＝memoryEdit／memoryDelete，由 mini 的 proxy-hook 再限（其餘 op 一律 OP_FORBIDDEN）
@@ -483,7 +483,7 @@ function proxyWithOperator_(res, ns, user, perms) {
   var name = String((user && user.name) || '').trim();
   var uname = String((user && user.username) || '').trim();
   res.operator = (name || uname || '未知') + (uname ? '（' + uname + '）' : '') + '（管理系統）';
-  // 損益系統（2026-10-24）：level 決定損益影子帳號的角色；影子帳號鍵用 account（登入帳號本身），不從 operator 反解（Fable 審查必修 1）
+  // 損益試算（2026-10-24）：level 決定損益影子帳號的角色；影子帳號鍵用 account（登入帳號本身），不從 operator 反解（Fable 審查必修 1）
   if (ns === 'pnl') { res.level = proxyPnlLevel_(perms); res.account = uname; }
   // 薪酬系統（2026-10-29，docs/payroll-scope/spec.md §2）：scope 決定薪資後端能碰哪些門市。role admin（或 perms 含 *）→ '*'；
   // 其他 → payroll.store@X 的 X 組成的陣列（排序去重，可為空陣列）。mini 的 proxy-hook 強制覆寫上游 body.scope。
@@ -491,17 +491,17 @@ function proxyWithOperator_(res, ns, user, perms) {
   return res;
 }
 
-/** 損益系統「管」級動作（定稿、解除定稿、設定、建草稿、重拉連接器、重帶固定值、載入集團單位） */
+/** 損益試算「管」級動作（定稿、解除定稿、設定、建草稿、重拉連接器、重帶固定值、載入集團單位） */
 var PROXY_PNL_ADMIN_ACTIONS = ['finalize', 'unlock', 'saveSettings', 'createDraft', 'refreshConnectors', 'refreshFixed', 'loadGroupUnits'];
 
-/** 損益系統：pnl.admin 隱含 pnl.write（讀寫閘門與挑金鑰沿用 <ns>.write／<ns>.read 的既有規則） */
+/** 損益試算：pnl.admin 隱含 pnl.write（讀寫閘門與挑金鑰沿用 <ns>.write／<ns>.read 的既有規則） */
 function proxyPnlPerms_(perms) {
   var p = Array.isArray(perms) ? perms.slice() : [];
   if (hasPerm_(p, 'pnl.admin') && !hasPerm_(p, 'pnl.write')) p.push('pnl.write');
   return p;
 }
 
-/** 損益系統等級＝三碼中最高者；都沒有回 '' */
+/** 損益試算等級＝三碼中最高者；都沒有回 '' */
 function proxyPnlLevel_(perms) {
   if (hasPerm_(perms, 'pnl.admin')) return 'admin';
   if (hasPerm_(perms, 'pnl.write')) return 'write';

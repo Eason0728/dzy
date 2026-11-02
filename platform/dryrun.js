@@ -53,7 +53,7 @@ export const READ_ACTIONS = {
   cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet'],
   // 排班管理首頁待辦（2026-10-24，hr-move-spec §5）：必須與 Auth.gs PROXY_READ_ACTIONS.schedule 一致；只回店名與期別的純讀取
   schedule: ['schedAlerts'],
-  // 損益系統（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.pnl 一致
+  // 損益試算（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.pnl 一致
   pnl: ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment'],
   // 調撥管理（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.transfer 一致（test/proxy-authorize.test.mjs 比對）
   transfer: ['bootstrap', 'adminData', 'adminOverview', 'getDoc']
