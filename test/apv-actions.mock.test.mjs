@@ -1178,6 +1178,29 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(sb.apvPnlStat_().problems.some((x) => x.form_id === bad && x.state === 'failed'), 'failed 進 stat');
   ok(sb.apvPnlMark_('APV-000000-999', { ok: true, month: '2026-10', row_id: 'x' }, NOW).error === 'not_found' && sb.apvPnlMark_(sent.data.id, { ok: true, month: '2026-10', row_id: 'x' }, NOW).error === 'not_found', '不存在的單、還沒結案的單 → mark 回 not_found，不寫列');
 
+  // 支出月防呆：早於台北當月往前 12 個月 → claim 直接標 failed(BAD_MONTH)，不出現在待推清單
+  ok(sb.apvPnlCutoffMonth_(NOW) === '2025-11' && sb.apvPnlCutoffMonth_(Date.UTC(2026, 0, 15)) === '2025-01', '12 個月前的月份算法（含跨年）');
+  const oldF = mkDone(app, { spend_date: '2025-10-31' }, 66);
+  const edgeF = mkDone(app, { spend_date: '2025-11-01' }, 67);
+  const cl = sb.apvPnlClaim_(NOW, 50).map((x) => x.form_id);
+  ok(!cl.includes(oldF) && cl.includes(edgeF), '超過 12 個月的不出現；剛好 12 個月內的出現', cl);
+  ok(P1(oldF).length === 1 && P1(oldF)[0].state === 'failed' && P1(oldF)[0].last_code === 'BAD_MONTH', 'claim 把它標 failed／BAD_MONTH', P1(oldF));
+  ok(sb.apvPnlStat_().problems.some((x) => x.form_id === oldF && x.state === 'failed' && x.last_code === 'BAD_MONTH'), 'BAD_MONTH 走既有 failed 清單（通知匣）');
+  ok(!sb.apvPnlClaim_(NOW + 60 * MIN, 50).some((x) => x.form_id === oldF), '標過 failed 後不再 claim');
+  mark_done_cleanup(edgeF);
+
+  // stat：結案超過 7 天還沒推進去（沒被標過、或 STORE_INACTIVE 一直延）也列為問題；pending 數給 mini 的 health 用
+  const agedF = mkDone(app, {}, 88);
+  const s0 = sb.apvPnlStat_();
+  ok(!s0.problems.some((x) => x.form_id === agedF) && s0.pending >= 1, '剛結案的 pending 不算問題，但計入 pending 數', s0);
+  const s8 = sb.apvPnlStat_(Date.now() + 8 * 24 * 60 * MIN);
+  ok(s8.problems.some((x) => x.form_id === agedF && x.state === 'pending' && x.aged === true && x.tries === 0), '結案超過 7 天仍 pending（從沒標過）→ 進 problems（aged）', s8);
+  sb.apvPnlMark_(agedF, { code: 'STORE_INACTIVE' }, NOW);
+  ok(sb.apvPnlStat_(Date.now() + 8 * 24 * 60 * MIN).problems.some((x) => x.form_id === agedF && x.aged && x.last_code === 'STORE_INACTIVE'), 'STORE_INACTIVE 一直沒啟用超過 7 天也進 problems');
+  ok(!sb.apvPnlStat_(Date.now() + 6 * 24 * 60 * MIN).problems.some((x) => x.form_id === agedF), '6 天內不列');
+  sb.apvPnlMark_(agedF, { ok: true, month: '2026-10', row_id: 'R' }, NOW);
+  ok(!sb.apvPnlStat_(Date.now() + 8 * 24 * 60 * MIN).problems.some((x) => x.form_id === agedF), '推進去後不列');
+
   // 金鑰
   ok(sb.apvPnlSecret_().key === '', '沒設 pnl/write → key 空字串');
   app.sheets.module_secrets._data.push(['pnl', 'read', 'FAKE-READ'], ['pnl', 'write', '  FAKE-PNL-WRITE  ']);
