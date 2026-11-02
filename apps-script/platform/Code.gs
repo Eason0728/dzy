@@ -66,7 +66,10 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'evSetup', 'evMe', 'evPeerSubmit', 'evSelfSubmit', 'evMyScores', 'evNewbieList', 'evNewbieSubmit', 'evUnitResults', 'evPersonDetail',
   'evSupSave', 'evBankGet', 'evBankSave', 'evTplSave', 'evWageSave', 'evGradeSave', 'evFinalize', 'evUnfinalize', 'evImportPreview', 'evImportCommit',
   // 2026-10-27：營運巡檢（Inspect.gs；docs/inspection/spec.md）。inspMe／inspList／inspGet 讀取；inspSetup／inspSubmit／inspVoid 寫入（inspWithLock_ 自己上鎖）
-  'inspSetup', 'inspMe', 'inspList', 'inspGet', 'inspSubmit', 'inspVoid', 'inspBankGet', 'inspBankSave'];
+  'inspSetup', 'inspMe', 'inspList', 'inspGet', 'inspSubmit', 'inspVoid', 'inspBankGet', 'inspBankSave',
+  // 2026-11-02：AI 小幫手管理（AiHelp.gs；docs/ai-helper/spec.md §8）。寫入由 AiHelp.gs aihWithLock_ 自己上鎖，不列 MUTATING_ACTIONS。
+  // ⚠ 給 Mac mini node 路由用的全域函式（AiHelp.gs 內結尾底線那 8 支）刻意不在這裡，也不可加進來（test/ai-help.mock.test.mjs 會比對 Code.gs 全文）
+  'aihSetup', 'aihKbList', 'aihKbSave', 'aihKbHist', 'aihPendingList', 'aihPendingSet', 'aihUsage', 'aihPauseSet'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -308,6 +311,15 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'inspVoid': return handleInspVoid_(token, payload);
     case 'inspBankGet': return handleInspBankGet_(token, payload);
     case 'inspBankSave': return handleInspBankSave_(token, payload);
+    // 2026-11-02：AI 小幫手管理（AiHelp.gs）。寫入自己上鎖
+    case 'aihSetup': return handleAihSetup_(token);
+    case 'aihKbList': return handleAihKbList_(token, payload);
+    case 'aihKbSave': return handleAihKbSave_(token, payload);
+    case 'aihKbHist': return handleAihKbHist_(token, payload);
+    case 'aihPendingList': return handleAihPendingList_(token, payload);
+    case 'aihPendingSet': return handleAihPendingSet_(token, payload);
+    case 'aihUsage': return handleAihUsage_(token, payload);
+    case 'aihPauseSet': return handleAihPauseSet_(token, payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };
