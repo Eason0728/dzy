@@ -75,13 +75,13 @@ var AIH_PAGES = [
   {"m":"transfer-fin","v":"report","name":"調撥管理","view_name":"月報","dept":"fin","requires_module":["transfer.write"],"requires":["transfer.write"]},
   {"m":"transfer-fin","v":"memory","name":"調撥管理","view_name":"品項記憶","dept":"fin","requires_module":["transfer.write"],"requires":["transfer.write"]},
   {"m":"transfer-fin","v":"overview","name":"調撥管理","view_name":"卡關總覽","dept":"fin","requires_module":["transfer.write"],"requires":["transfer.write"]},
-  {"m":"pnl","v":"dashboard","name":"損益系統","view_name":"儀表板","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.read","pnl.write","pnl.admin"]},
-  {"m":"pnl","v":"pending","name":"損益系統","view_name":"待補","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
-  {"m":"pnl","v":"food","name":"損益系統","view_name":"食材","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
-  {"m":"pnl","v":"labor","name":"損益系統","view_name":"人事","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
-  {"m":"pnl","v":"controllable","name":"損益系統","view_name":"可控","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
-  {"m":"pnl","v":"uncontrollable","name":"損益系統","view_name":"不可控","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
-  {"m":"pnl","v":"revenue","name":"損益系統","view_name":"營業收入","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
-  {"m":"pnl","v":"import","name":"損益系統","view_name":"匯入","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
-  {"m":"pnl","v":"settings","name":"損益系統","view_name":"設定","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.admin"]}
+  {"m":"pnl","v":"dashboard","name":"損益試算","view_name":"儀表板","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.read","pnl.write","pnl.admin"]},
+  {"m":"pnl","v":"pending","name":"損益試算","view_name":"待補","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
+  {"m":"pnl","v":"food","name":"損益試算","view_name":"食材","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
+  {"m":"pnl","v":"labor","name":"損益試算","view_name":"人事","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
+  {"m":"pnl","v":"controllable","name":"損益試算","view_name":"可控","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
+  {"m":"pnl","v":"uncontrollable","name":"損益試算","view_name":"不可控","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
+  {"m":"pnl","v":"revenue","name":"損益試算","view_name":"營業收入","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
+  {"m":"pnl","v":"import","name":"損益試算","view_name":"匯入","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
+  {"m":"pnl","v":"settings","name":"損益試算","view_name":"設定","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.admin"]}
 ];

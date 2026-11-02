@@ -796,7 +796,7 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
 }
 
 // ============================================================
-// 18. 損益系統（2026-10-24）：pnl.read／pnl.write／pnl.admin、等級由平台算、金鑰只在代轉時給
+// 18. 損益試算（2026-10-24）：pnl.read／pnl.write／pnl.admin、等級由平台算、金鑰只在代轉時給
 // ============================================================
 {
   const PNLK = 'FAKE-PNL-DZY-KEY-77';

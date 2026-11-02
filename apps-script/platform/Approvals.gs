@@ -47,7 +47,7 @@ var APV_DIGEST_MAX = 1000;
 var APV_NOTE_MAX = 200;
 var APV_ACTIVE_STATUSES = ['signing', 'handling', 'exception'];
 
-// 費用請款 → 損益系統（契約：結案 done 的 expense 由 mini 推進損益；單位代碼皆已在 Staff.gs org 種子核對存在）
+// 費用請款 → 損益試算（契約：結案 done 的 expense 由 mini 推進損益；單位代碼皆已在 Staff.gs org 種子核對存在）
 // dzy org unit code → 損益 store_id；不在表內（小辛辣美村／南昌、一悟各店）一律不推
 var APV_PNL_UNIT_STORE = {
   'mala-gf': 'S01', 'dzy-hq': 'S10', 'ck': 'S11', 'mzt-hq': 'S20', 'mzt-js': 'S21', 'mzt-gf': 'S22',

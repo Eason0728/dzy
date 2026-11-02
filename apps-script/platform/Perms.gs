@@ -15,7 +15,7 @@ var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit
   'cashbook.write',             // 2026-10-24 收支管理（會計跨店查帳、作廢、月結鎖定、改科目）；2026-10-25 曾改鎖碼（審查 B-01），2026-10-27 Eason 改回不鎖碼：「將四項改成人資都能開」
   'platform.bulletin',         // 2026-10-26 公告管理（電子佈告欄的公告管理／新增公告；原本同仁名單逐人勾 BULLETIN_ADMINS，Eason：搬進權限設定、不鎖碼、人資可設）
   'platform.purchase',           // 2026-10-24 貨單核對（財務部門；不鎖碼，Eason：財務部門自動有、他可再用個別例外加人；docs/purchase-fin）
-  'pnl.read', 'pnl.write', 'pnl.admin',   // 2026-10-24 損益系統：看／填（財務部門預設）／管（定稿與設定，鎖碼）
+  'pnl.read', 'pnl.write', 'pnl.admin',   // 2026-10-24 損益試算：看／填（財務部門預設）／管（定稿與設定，鎖碼）
   'transfer.write',            // 2026-10-24 調撥管理（財務部門看調撥月報、品項記憶、卡關總覽；不鎖碼，Eason Q1 B：人資可在權限設定打開）
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
   'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank',
@@ -87,7 +87,7 @@ var PERM_DEFAULT_RULES = (function () {
   ['ceo', 'gm', 'chair'].forEach(function (t) { add('hq', '', t, ['platform.bulletin']); });
   // 2026-10-24（docs/purchase-fin，第 34 條）：財務部門預設可進貨單核對。正式環境 perm_map 早已初始化，由 Eason 在「權限設定 → 財務部門」打開同一個開關
   add('hq', 'fin', '*', ['platform.purchase']);
-  // 2026-10-24（docs/pnl-fin）：財務部門預設損益系統「填」級；正式環境由 Eason 在權限設定打開
+  // 2026-10-24（docs/pnl-fin）：財務部門預設損益試算「填」級；正式環境由 Eason 在權限設定打開
   add('hq', 'fin', '*', ['pnl.write']);
   add('hq', 'fin', '*', ['transfer.write']);   // 2026-10-24 調撥管理（第 36 條；正式環境 perm_map 已初始化不會自動補，由 Eason 在權限設定打開）
   return out;
@@ -703,7 +703,7 @@ var PERM_NAMES = {
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
   'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
   'payroll.write': '薪酬系統', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對',
-  'pnl.read': '損益系統：看', 'pnl.write': '損益系統：填', 'pnl.admin': '損益系統：管', 'transfer.write': '調撥管理',
+  'pnl.read': '損益試算：看', 'pnl.write': '損益試算：填', 'pnl.admin': '損益試算：管', 'transfer.write': '調撥管理',
   'platform.eval-manage': '績效評核：替所屬同仁打分', 'platform.eval-brand': '績效評核：看自己品牌各店', 'platform.eval-all': '績效評核：看全集團', 'platform.eval-admin': '績效評核：題目設定與定稿',
   'platform.insp-do': '營運巡檢：到店巡檢', 'platform.insp-own': '營運巡檢：看自己店', 'platform.insp-brand': '營運巡檢：看自己品牌各店', 'platform.insp-all': '營運巡檢：看全集團', 'platform.insp-bank': '營運巡檢：題目設定', 'platform.insp-void': '營運巡檢：作廢巡檢',
   'platform.aihelp': 'AI 小幫手管理'
@@ -846,7 +846,7 @@ function permSessionCompute_(base, staffValues) {
 
 var PERM_MSG_ADMIN_ONLY = '人資主管要請系統管理員設定';
 // 非 admin 的調動改變了對方的鎖碼：依實際變動的碼組出中文訊息（含 platform.permmap 沿用原句）
-var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理', 'payroll.write': '薪酬系統', 'pnl.admin': '損益系統定稿與設定', 'platform.aihelp': 'AI 小幫手管理' };
+var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理', 'payroll.write': '薪酬系統', 'pnl.admin': '損益試算定稿與設定', 'platform.aihelp': 'AI 小幫手管理' };
 function permLockedMsg_(changedCodes) {
   if (changedCodes.indexOf('platform.permmap') !== -1) return PERM_MSG_ADMIN_ONLY;
   var ph = [];

@@ -74,5 +74,5 @@ var AIH_SEED = [
   {"m":"dorm","v":"list","question":"「宿舍合約」是做什麼的？","answer":"人資部門→宿舍合約：「合約清單」查合約，「建立合約」開新合約並產生給住宿同仁線上簽的連結，「退宿點交」做退宿點交單，可下載 PDF 給同仁。能查看和能建立的權限分開，沒有權限的人看不到對應分頁。","who":"人資","go_m":"dorm","go_v":"list","source":"modules/dorm/manifest.js；系統規則（管理系統：宿舍點交下載 PDF）"},
   {"m":"cashbook","v":"rows","question":"「收支管理」是做什麼的？","answer":"財務部門→收支管理，給會計用：「收支明細」跨店查各店現金收支和作廢，「月結鎖定」鎖定已結的月份，「匯出 Excel」匯出報表，「會計科目」維護科目。店內日常登記收支不在這裡。","who":"人資","go_m":"cashbook","go_v":"rows","source":"modules/cashbook/manifest.js；系統規則（管理系統：收支管理）"},
   {"m":"purchase","v":"main","question":"「貨單核對」是做什麼的？","answer":"財務部門→貨單核對，給會計用：門市拍的廠商貨單經 AI 辨識後，會計在這裡核對內容並入帳，也能看食材成本和單價報表。辨識錯誤或品名對不上，由會計在這裡更正。","who":"人資","go_m":"purchase","go_v":"main","source":"modules/purchase/manifest.js；系統規則（管理系統：貨單核對）"},
-  {"m":"pnl","v":"dashboard","question":"「損益系統」是做什麼的？","answer":"財務部門→損益系統：看各店每月損益。「儀表板」看總覽；有填寫權限的人在「待補、食材、人事、可控、不可控、營業收入」補數字，「匯入」匯入資料；定稿與「設定」只有系統管理者能做。","who":"人資；定稿與設定找 Eason（資訊部）","go_m":"pnl","go_v":"dashboard","source":"modules/pnl/manifest.js；系統規則（管理系統：損益系統）"}
+  {"m":"pnl","v":"dashboard","question":"「損益試算」是做什麼的？","answer":"財務部門→損益試算：看各店每月損益。「儀表板」看總覽；有填寫權限的人在「待補、食材、人事、可控、不可控、營業收入」補數字，「匯入」匯入資料；定稿與「設定」只有系統管理者能做。","who":"人資；定稿與設定找 Eason（資訊部）","go_m":"pnl","go_v":"dashboard","source":"modules/pnl/manifest.js；系統規則（管理系統：損益試算）"}
 ];

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""資料帶入測試（財務部門）：三個 iframe 型模組——貨單核對 modules/purchase、調撥管理 modules/transfer-fin、損益系統 modules/pnl。
+"""資料帶入測試（財務部門）：三個 iframe 型模組——貨單核對 modules/purchase、調撥管理 modules/transfer-fin、損益試算 modules/pnl。
 
 被嵌的三個網頁本體在別的 repo（mala-purchase／mala-transfer／mala-pnl-auto），這裡用「假子頁」取代：
 用正式網址當別名（dzy.mozhuting.com、dzy-bulletin.github.io、eason0728.github.io、mala-pnl.github.io 都由 Playwright route 餵本機內容），
@@ -412,7 +412,7 @@ def main():
             tfr2 = frame_of(pg, TRANSFER_ORIGIN)
             check(tfr2.evaluate('window.__mark') == 'kept' and pg.locator('[data-keep="transfer-fin"] iframe').count() == 1, '切走再回來：調撥 iframe 沒重載（keepAlive）、只有一個 iframe')
 
-            # ====== ⑤ 損益系統（填級）：八分頁、call、at 同步、管級動作被平台擋 ======
+            # ====== ⑤ 損益試算（填級）：八分頁、call、at 同步、管級動作被平台擋 ======
             pg.click('[data-role="nav-desktop"] [data-nav="pnl"]')
             pg.wait_for_selector('[data-keep="pnl"] iframe[data-role="pnl-frame"]', timeout=10000)
             pfr = frame_of(pg, PNL_ORIGIN + '/')
@@ -462,7 +462,7 @@ def main():
             rd = new_page()
             do_login(rd, 'pnlread')
             ids = [c.get_attribute('data-module') for c in rd.locator('[data-role="module-card"]').all()]
-            check({'purchase', 'cashbook', 'transfer-fin', 'pnl'} & set(ids) == {'pnl'}, '只有 pnl.read：財務四模組只看得到損益系統：%s' % ids)
+            check({'purchase', 'cashbook', 'transfer-fin', 'pnl'} & set(ids) == {'pnl'}, '只有 pnl.read：財務四模組只看得到損益試算：%s' % ids)
             wait_home_loaded(rd, 'pnl')
             check('沒有待辦' in rd.locator('[data-role="alert-list"][data-module="pnl"]').inner_text() and not [c for c in mock.ns_calls if c[3] == 'pnlread'], '看級：首頁提醒不算待補（沒打 getMonth）')
             rd.click('[data-role="nav-desktop"] [data-nav="pnl"]')

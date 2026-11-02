@@ -32,7 +32,7 @@ export const MODULES = [
   { load: () => import('../modules/ai-help/manifest.js') },   // 資訊部門：小幫手管理（2026-11-02；排在收支管理之前）
   { load: () => import('../modules/cashbook/manifest.js') },
   { load: () => import('../modules/transfer-fin/manifest.js') },
-  { load: () => import('../modules/pnl/manifest.js') },   // 財務部門：損益系統（排在貨單核對、收支管理、調撥管理之後）
+  { load: () => import('../modules/pnl/manifest.js') },   // 財務部門：損益試算（排在貨單核對、收支管理、調撥管理之後）
 ];
 
 /**

@@ -1,5 +1,5 @@
 /**
- * 損益系統模組（2026-10-24）：轉接只收白名單 action、絕不轉送金鑰／身分欄位、回傳還原成損益網頁的 {ok,data} 形狀；
+ * 損益試算模組（2026-10-24）：轉接只收白名單 action、絕不轉送金鑰／身分欄位、回傳還原成損益網頁的 {ok,data} 形狀；
  * manifest 合規、分頁與 bridge 一致、白名單與 dryrun／Auth.gs 一致、首頁提醒文字。
  */
 import assert from 'node:assert/strict';
@@ -52,7 +52,7 @@ t('manifest：財務部門、backend＝ns、keepAlive 30 分鐘、驗證通過',
   assert.equal(manifest.dept, 'fin');
   assert.equal(manifest.ns, 'pnl');
   assert.equal(manifest.backend, 'pnl');
-  assert.equal(manifest.name, '損益系統');
+  assert.equal(manifest.name, '損益試算');
   assert.equal(manifest.keepAlive, 30 * 60 * 1000);
   assert.deepEqual(manifest.requires, ['pnl.read', 'pnl.write', 'pnl.admin']);
 });
