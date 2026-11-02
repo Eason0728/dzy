@@ -64,7 +64,7 @@ export function errText(res) {
   const msg = res && res.data && res.data.message;
   switch (code) {
     case 'conflict': return '這張單剛被別人處理過，請重新整理';
-    case 'forbidden': return '你沒有權限做這件事';
+    case 'forbidden': return msg || '你沒有權限做這件事';
     case 'unauthorized': return '登入已過期，請重新登入';
     case 'not_found': return '找不到這張單';
     case 'no_files': return '費用請款至少要附一張收據照片';
