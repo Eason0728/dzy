@@ -261,27 +261,35 @@ function setup() {
 }
 
 // ============================================================
-// 1. 財務部同仁改由人資主管核
+// 1. 財務部同仁：同部門總監核（2026-11-02 Eason 改回）＋人資主管照舊；hr_only 機制本身仍在（清單放部門就生效）
 // ============================================================
 (() => {
   const app = setup();
   const { sb } = app;
-  ok(eq(app.H('DZY221'), []) && eq(app.R('DZY221'), []), '1 ★財務總監核定工時、申請名單都空');
-  ok(has(app.H('DZY220'), 'hq:DZY222') && has(app.R('DZY220'), 'hq:DZY222'), '1 人資主管核財務同仁（工時＋申請）');
-  ok(has(app.H('U:a001'), 'hq:DZY222'), '1 admin 照舊可核');
-  ok(eq(app.H('DZY223'), ['hq:DZY224']) && eq(app.R('DZY223'), ['hq:DZY224']), '1 其他部門照舊：資訊總監核資訊同仁、不含財務');
   const org = sb.stfReadOrg_();
-  ok(sb.attNeedOf_({ unit: 'dzy-hq', dept: 'fin', title: 'hs' }, org, 'req').kind === 'hr_only', '1 attNeedOf_ 財務部 → hr_only（申請）');
-  ok(sb.attApproverOf_({ emp: 'DZY221', status: 'active', unit: 'dzy-hq', dept: 'fin', title: 'hm' }, { emp: 'DZY222', status: 'active', unit: 'dzy-hq', dept: 'fin', title: 'hs' }, org, 'hours') === false, '1 attApproverOf_ 財務總監 → false');
-  // att.extra（同單位 dzy-hq）照舊可核
-  ok(app.ex(app.adminTok, 'DZY224', 'att.extra').ok, '1 前置：資訊同仁設 att.extra');
-  ok(has(app.H('DZY224'), 'hq:DZY222'), '1 att.extra 例外仍可核財務同仁');
-  // 選單：財務總監拿掉、其他部門總監照舊、財務總監有其他來源照舊有
-  ok(!has(app.perms('DZY221'), 'platform.att'), '1 ★財務總監沒有考勤管理選單');
-  ok(has(app.perms('DZY223'), 'platform.att') && has(app.perms('DZY220'), 'platform.att'), '1 資訊總監、人資主管照舊有');
+  // 1a 預設（STORE_ATT_HR_ONLY_DEPTS 空）：財務總監核財務同仁
+  ok(eq(sb.STORE_ATT_HR_ONLY_DEPTS, []), '1a 前置：人資核部門清單是空的');
+  ok(eq(app.H('DZY221'), ['hq:DZY222']) && eq(app.R('DZY221'), ['hq:DZY222']), '1a ★財務總監核財務同仁（工時＋申請）');
+  ok(has(app.H('DZY220'), 'hq:DZY222') && has(app.R('DZY220'), 'hq:DZY222'), '1a 人資主管照舊核財務同仁（工時＋申請）');
+  ok(has(app.H('U:a001'), 'hq:DZY222'), '1a admin 照舊可核');
+  ok(eq(app.H('DZY223'), ['hq:DZY224']) && eq(app.R('DZY223'), ['hq:DZY224']), '1a 其他部門照舊：資訊總監核資訊同仁、不含財務');
+  ok(sb.attNeedOf_({ unit: 'dzy-hq', dept: 'fin', title: 'hs' }, org, 'req').kind === 'dept', '1a attNeedOf_ 財務部 → dept');
+  ok(sb.attApproverOf_({ emp: 'DZY221', status: 'active', unit: 'dzy-hq', dept: 'fin', title: 'hm' }, { emp: 'DZY222', status: 'active', unit: 'dzy-hq', dept: 'fin', title: 'hs' }, org, 'hours') === true, '1a attApproverOf_ 財務總監 → true');
+  ok(sb.attApproverOf_({ emp: 'DZY223', status: 'active', unit: 'dzy-hq', dept: 'it', title: 'hm' }, { emp: 'DZY222', status: 'active', unit: 'dzy-hq', dept: 'fin', title: 'hs' }, org, 'hours') === false, '1a 資訊總監不核財務同仁');
+  ok(has(app.perms('DZY221'), 'platform.att'), '1a ★財務總監有考勤管理選單');
+  ok(has(app.perms('DZY223'), 'platform.att') && has(app.perms('DZY220'), 'platform.att'), '1a 資訊總監、人資主管照舊有');
+  // 1b 機制保留：清單放回 fin → 回到 10-29 行為（財務總監不核、沒選單；人資主管、att.extra 照舊）
+  sb.STORE_ATT_HR_ONLY_DEPTS.push('fin');
+  ok(eq(app.H('DZY221'), []) && eq(app.R('DZY221'), []), '1b 清單含 fin：財務總監核定工時、申請名單都空');
+  ok(has(app.H('DZY220'), 'hq:DZY222') && has(app.R('DZY220'), 'hq:DZY222'), '1b 清單含 fin：人資主管核財務同仁');
+  ok(sb.attNeedOf_({ unit: 'dzy-hq', dept: 'fin', title: 'hs' }, org, 'req').kind === 'hr_only', '1b attNeedOf_ 財務部 → hr_only');
+  ok(!has(app.perms('DZY221'), 'platform.att'), '1b 清單含 fin：財務總監沒有考勤管理選單');
+  ok(app.ex(app.adminTok, 'DZY224', 'att.extra').ok, '1b 前置：資訊同仁設 att.extra');
+  ok(has(app.H('DZY224'), 'hq:DZY222'), '1b att.extra 例外仍可核財務同仁');
   const before = app.perms('DZY221').filter((p) => p !== 'platform.att');
-  ok(app.ex(app.adminTok, 'DZY221', 'att.extra').ok && has(app.perms('DZY221'), 'platform.att'), '1 財務總監有 att.extra 時照舊有選單（其他來源不受影響）');
-  ok(before.every((p) => has(app.perms('DZY221'), p)), '1 財務總監其他權限沒被拿掉');
+  ok(app.ex(app.adminTok, 'DZY221', 'att.extra').ok && has(app.perms('DZY221'), 'platform.att'), '1b 財務總監有 att.extra 時照舊有選單（其他來源不受影響）');
+  ok(before.every((p) => has(app.perms('DZY221'), p)), '1b 財務總監其他權限沒被拿掉');
+  sb.STORE_ATT_HR_ONLY_DEPTS.length = 0;
 })();
 
 // ============================================================
@@ -471,11 +479,11 @@ function setup() {
   const d3 = sb.apvDirectory_();
   ok(!sb.apvRoleMembers_('head', d3.byEmp.DZY202, d3, null).some((p) => p.emp === 'DZY201') && eq(sb.permActingUnitsOf_('DZY201'), []), '7-9 ★兼任者主要單位停用 → 請購第一關也收回');
   orgRow[7] = 'TRUE'; sb.permActingReset_();
-  // 7-2 財務同仁到門市打卡＝支援（2026-10-29 Eason 改）：工時店長核，申請照原身分給人資主管
+  // 7-2 財務同仁到門市打卡＝支援（2026-10-29 Eason 改）：工時店長核，申請照原身分（財務總監＋人資主管）
   sheets.staff_clock._data.push(['DZY222', 'mztgf', 'MZTGF222', 'staff', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
   ok(has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222'), '7-2 ★財務同仁在門市打卡：店長核工時、不簽申請');
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2 人資主管核財務同仁的門市帳號（工時與申請）');
-  ok(eq(app.H('DZY221'), []), '7-2 財務總監仍空');
+  ok(has(app.R('DZY221'), 'mztgf:DZY222') && !has(app.H('DZY221'), 'mztgf:DZY222'), '7-2 財務總監核財務同仁門市帳號的申請、工時歸店長（2026-11-02）');
   // 7-2b 個人例外（STORE_NOT_SUPPORT_EX，2026-10-29 Eason）：在指定打卡店不算支援 → 店長不核不看，人資主管核工時與申請
   // 7-2c 打卡端保護名單（clockUpperEmps_ 的 dept／home，2026-10-29）：財務同仁在門市＝dept
   { const u = sb.clockUpperEmps_(); ok(u.dept && u.dept.mztgf.indexOf('MZTGF222') !== -1 && u.home.mztgf.indexOf('MZTGF222') === -1 && Array.isArray(u.dept.cf) && Array.isArray(u.home.hq), '7-2c ★總部同仁門市帳號進 dept 名單、每店都有 key'); }
@@ -483,6 +491,7 @@ function setup() {
   { const u = sb.clockUpperEmps_(); ok(u.home.mztgf.indexOf('MZTGF222') !== -1 && u.dept.mztgf.indexOf('MZTGF222') === -1, '7-2c ★個人例外改進 home 名單、不在 dept'); }
   ok(!has(app.H('DZY231'), 'mztgf:DZY222') && !has(app.R('DZY231'), 'mztgf:DZY222') && !has(app.V('DZY231'), 'mztgf:DZY222'), '7-2b ★例外：店長不核也不看');
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222'), '7-2b 例外：人資主管核工時與申請');
+  ok(has(app.H('DZY221'), 'mztgf:DZY222') && has(app.R('DZY221'), 'mztgf:DZY222'), '7-2b ★例外（吳佳宜這種）：財務總監也核工時與申請（2026-11-02）');
   // 7-2g 例外帳號帶歸屬標示（2026-11-01 Eason 選 A）：home_tag「總部」、home_clock hq；其他帳號形狀不變
   { const rows = ['people', 'req_people'].map((k) => app.ident('DZY220').att[k].filter((x) => x.clock === 'mztgf' && x.sub === 'DZY222')[0]);
     ok(rows.every((r) => r && r.home_tag === '總部' && r.home_clock === 'hq' && r.support === undefined), '7-2g ★例外帳號帶 home_tag 總部＋home_clock hq', rows);

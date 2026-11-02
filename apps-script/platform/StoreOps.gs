@@ -50,9 +50,10 @@ var STORE_REQ_AM_OFFICE_TITLES = ['osv', 'odir'];
 var STORE_REQ_RDD_HQ_TITLES = ['ceo', 'gm', 'chair'];
 // 管理部同仁 → 執行長以上（兩張表相同）
 var STORE_EXEC_TITLES = ['ceo', 'gm', 'chair'];
-// 總部這些主要部門的同仁（hs）改由人資主管核（兩張表相同；2026-10-29 Eason：財務部同仁由人資主管核，財務總監不核）。
-//   這些部門的總監（hm）也不再因職稱拿到考勤管理選單（Q4 B）；人資主管、admin、att.extra 例外照舊可核。要加部門只改這裡。
-var STORE_ATT_HR_ONLY_DEPTS = ['fin'];
+// 總部這些主要部門的同仁（hs）改由人資主管核（兩張表相同）；這些部門的總監（hm）也不因職稱拿到考勤管理選單（Q4 B）。
+//   人資主管、admin、att.extra 例外照舊可核。要加部門只改這裡。
+//   2026-10-29 曾放 'fin'（財務總監不核）；2026-11-02 Eason：財務總監也要核 → 清空，財務部回到「同部門總監核」，人資主管照舊可核。
+var STORE_ATT_HR_ONLY_DEPTS = [];
 // 考勤管理選單（platform.att）：會核人的職稱＋責任制職稱（區督導 2026-10-21 起核品牌內店長的申請）
 var STORE_ATT_GATE_TITLES = ['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo', 'gm', 'chair'];
 // 排班管理選單（platform.sched，2026-10-24 Eason）：只給「能排班」的人＝店長同等職（店長、廠長、區經理）；人資主管另算，admin 是 '*'。

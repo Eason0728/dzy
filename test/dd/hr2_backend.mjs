@@ -112,7 +112,7 @@ const SURNAMES = ['測', '試', '假', '虛', '擬', '樣', '範', '例', '仿',
 const GIVEN = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
 const NO_ATT = ['odir', 'hm', 'ceo', 'gm', 'chair'];
 const EXEC = ['ceo', 'gm', 'chair'];
-const HR_ONLY_DEPTS = ['fin'];
+const HR_ONLY_DEPTS = [];   // 2026-11-02 Eason：財務部改回同部門總監核（StoreOps.gs STORE_ATT_HR_ONLY_DEPTS 同步清空）
 const GATE_ATT = ['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo', 'gm', 'chair'];
 const GATE_SCHED = ['sm', 'fm', 'am'];
 const TODAY = (() => { const d = new Date(Date.now() + 8 * 3600e3); return d.toISOString().slice(0, 10); })();

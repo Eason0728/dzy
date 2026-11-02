@@ -22,7 +22,7 @@ const CAST2 = [
   ['DZY013', '墨竹亭行政', 'mzt-hq', '', 'ofs', 'active', '2026-01-12'],
   ['DZY020', '人資主管', 'dzy-hq', 'hr', 'hm', 'active', '2026-01-15'],
   ['DZY021', '人資同仁', 'dzy-hq', 'hr', 'hs', 'active', '2026-01-16'],
-  ['DZY023', '財務同仁', 'dzy-hq', 'fin', 'hs', 'active', '2026-01-18'],   // hr_only：不列
+  ['DZY023', '財務同仁', 'dzy-hq', 'fin', 'hs', 'active', '2026-01-18'],   // 本劇本沒有財務總監 → 應列（2026-11-02 財務部改回同部門總監核）
   ['DZY024', '管理部同仁', 'dzy-hq', 'mgmt', 'hs', 'active', '2026-01-19'],   // 要執行長以上核；本劇本沒有 → 應列
   ['DZY040', '額外核定人', 'mala-gf', '', 'ft', 'active', '2026-03-01'],   // 待會給 att.extra
   ['DZY041', '小辛辣計時', 'mala-gf', '', 'pt', 'active', '2026-03-02']    // mala-gf 沒有店長
@@ -36,9 +36,9 @@ const CAST2 = [
   const hrTok = app.login('DZY020');
   const gH = gaps(app, hrTok), gA = gaps(app, app.adminTok);
   ok(gH.ok && Array.isArray(gH.data.hours_items) && JSON.stringify(hoursEmps(gH)) === JSON.stringify(hoursEmps(gA)), '2b 人資主管看到的 hours_items 同 admin', { hr: hoursEmps(gH), admin: hoursEmps(gA) });
-  // 名單基線：mzt-js 沒店長→DZY005；mala-gf 沒店長→DZY040、DZY041；管理部同仁沒執行長→DZY024；財務 hr_only 不列；mzt-hq 行政有總監→不列；人資同仁有人資主管→不列
-  ok(JSON.stringify(hoursEmps(gA)) === JSON.stringify(['DZY005', 'DZY024', 'DZY040', 'DZY041']), '2c 基線名單', hoursEmps(gA));
-  ok(hoursEmps(gA).indexOf('DZY023') === -1, '2d 財務部（hr_only）不列');
+  // 名單基線：mzt-js 沒店長→DZY005；mala-gf 沒店長→DZY040、DZY041；管理部同仁沒執行長→DZY024；財務沒總監→DZY023；mzt-hq 行政有總監→不列；人資同仁有人資主管→不列
+  ok(JSON.stringify(hoursEmps(gA)) === JSON.stringify(['DZY005', 'DZY023', 'DZY024', 'DZY040', 'DZY041']), '2c 基線名單', hoursEmps(gA));
+  ok(hoursEmps(gA).indexOf('DZY023') !== -1, '2d 財務部沒有總監 → 列（2026-11-02 起同一般部門）');
   // att.extra：DZY040 拿 att.extra → 他能核同單位 DZY041 的工時（storeAttTargets_ 的例外路徑）→ DZY041 不該再列；DZY040 自己仍沒人核（例外不能核自己）→ 仍列
   ok(ex(app, 'DZY040', 'att.extra').ok, '2e admin 給 DZY040 att.extra');
   ok(app.subs('DZY040').indexOf('DZY041') !== -1, '2f att.extra 持有人的核定名單確實含 DZY041（表上核得到）');
