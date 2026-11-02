@@ -867,7 +867,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ageStep(app, s.data.id, 73 * HOUR);
   const d = app.sb.apvDigest_();
   ok(d.count === 1 && d.title === '表單簽核：1 張卡關' && d.text.split('\n').length === 1, '超過 72 小時：1 張', d);
-  ok(new RegExp('^' + s.data.id + '｜請款｜單位主管（測試乙）｜3天$').test(d.text), '一行：單號｜種類｜卡在誰｜幾天', d.text);
+  ok(new RegExp('^' + s.data.id + '｜費用請款｜單位主管（測試乙）｜3天$').test(d.text), '一行：單號｜種類｜卡在誰｜幾天', d.text);
   // handling 超過 72 小時
   const h = sendExpense(app, 'DZY901', 800);
   decide(app, 'DZY902', h.data.id, 'approve');
@@ -877,7 +877,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   // exception 當天即列
   const e = sendExpense(app, 'DZY906', 800);
   const d3 = app.sb.apvDigest_();
-  ok(d3.count === 3 && d3.text.includes(e.data.id + '｜請款｜無合格簽核人｜0天'), 'exception 不等 72 小時，當天就列', d3.text);
+  ok(d3.count === 3 && d3.text.includes(e.data.id + '｜費用請款｜無合格簽核人｜0天'), 'exception 不等 72 小時，當天就列', d3.text);
   // 已結案／撤回不列
   post(app, 'DZY909', 'apvHandle', { id: h.data.id, rev: 1, step: null, result: 'done' });
   ok(app.sb.apvDigest_().count === 2, '結案後不列');
@@ -892,7 +892,7 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const lines = bd.text.split('\n');
   const m = /^…另 (\d+) 張$/.exec(lines[lines.length - 1]);
   ok(m && Number(m[1]) + lines.length - 1 === 60 && Number(m[1]) > 0, '超過截斷，結尾寫「…另 N 張」且 N＋已列行數＝總數', lines[lines.length - 1]);
-  ok(lines.slice(0, -1).every((l) => /^APV-\d{6}-\d{3}｜請款｜/.test(l)), '被截斷後留下的每行都是完整一行');
+  ok(lines.slice(0, -1).every((l) => /^APV-\d{6}-\d{3}｜費用請款｜/.test(l)), '被截斷後留下的每行都是完整一行');
   ok(bd.title === '表單簽核：60 張卡關', '標題有總張數');
   // 剛好不超過：不加尾巴
   const few = freshApp();

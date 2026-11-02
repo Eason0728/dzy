@@ -40,7 +40,7 @@ export function mountMine(el, ctx) {
   const un = mountCardList(el, ctx, {
     scope: 'mine',
     title: '我的單',
-    hint: '你送出的請購、請款、人事異動。被退回的單可以改完再送；還沒有人核准前可以撤回。',
+    hint: '你送出的費用請款、人事異動。被退回的單可以改完再送；還沒有人核准前可以撤回。',
     empty: '你還沒有送過單',
     toolbar: () => `<div class="field"><label class="field-label" for="apv-mine-status">狀態</label><select class="input" id="apv-mine-status">${opts}</select></div>`,
     bindToolbar: (root, reload) => {

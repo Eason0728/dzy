@@ -33,7 +33,7 @@ export function mountThr(el, ctx) {
   function draw(msg) {
     const last = rows.length - 1;
     el.innerHTML = `
-      <div class="card stack"><div class="card-title">核決權限（請購、請款共用）</div>
+      <div class="card stack"><div class="card-title">核決權限（費用請款）</div>
         <p class="text-muted">金額落在哪一級，就只有那一級的權限人簽一關。門市（含中央工廠、品牌辦公室）與總部各選一個權限人。目前版本 ${esc(ver)}。</p></div>
       ${rows.map((r, i) => `
         <div class="card stack" data-role="thr-row" data-i="${i}">

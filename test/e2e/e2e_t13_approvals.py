@@ -203,23 +203,24 @@ def main():
             ls = ad.evaluate("Object.keys(localStorage).filter(k => k.indexOf('apv_draft') !== -1)")
             check(not any(k.endswith('personnel') for k in ls), '★人事單沒有存草稿：%s' % ls)
 
-            # 請購草稿：打字 → 重新整理 → 還原
+            # 2026-11-02 請購停用：送單只剩「費用請款」與「人事異動」，預設停在費用請款
             ad.evaluate("location.hash = '#/approvals/submit'")
-            ad.wait_for_selector('[data-type="purchase"]')
-            ad.fill('[data-f="name"]', '乾辣椒')
-            ad.fill('[data-f="qty"]', '1.5')
-            ad.fill('[data-f="unit"]', '包')
-            ad.fill('[data-f="price"]', '333')
-            ad.fill('#f-purpose', '補備料')
-            check('NT$ 500' in ad.inner_text('[data-role="total"]'), '★請購金額 1.5×333 → NT$ 500（四捨五入）：%s' % ad.inner_text('[data-role="total"]'))
+            ad.wait_for_selector('[data-type="expense"]')
+            types = [t.strip() for t in ad.locator('[data-role="type-tabs"] [data-type]').all_inner_texts()]
+            check(types == ['費用請款', '人事異動'], '★送單種類只剩費用請款、人事異動：%s' % types)
+            ad.click('[data-type="expense"]')   # 同一次登入會記得上次選的種類（剛送完人事單），先切回費用請款
+            check(ad.locator('#f-pid').count() == 0, '★「對應請購單號」欄位已拿掉')
+            # 費用請款草稿：打字 → 重新整理 → 還原
+            ad.fill('#f-desc', '補備料計程車')
+            ad.fill('#f-amount', '320')
             ad.wait_for_timeout(700)
             keys = ad.evaluate("Object.keys(localStorage).filter(k => k.indexOf('apv_draft') !== -1)")
-            check(keys == ['dzy.u.u-admin.apv_draft_purchase'], '★草稿 key：%s' % keys)
+            check(keys == ['dzy.u.u-admin.apv_draft_expense'], '★草稿 key：%s' % keys)
             ad.reload()
             ad.wait_for_selector('[data-role="view-nav"] .nav-item')
-            ad.wait_for_selector('#f-purpose')
-            check(ad.input_value('#f-purpose') == '補備料' and ad.input_value('[data-f="name"]') == '乾辣椒', '★重新整理後草稿還原')
-            shot(ad, 'submit-purchase-1280')
+            ad.wait_for_selector('#f-desc')
+            check(ad.input_value('#f-desc') == '補備料計程車' and ad.input_value('#f-amount') == '320', '★重新整理後草稿還原')
+            shot(ad, 'submit-expense-1280')
             ad.close()
 
             # ── ② 店長 375 ──────────────────────────────────
@@ -237,11 +238,9 @@ def main():
             ld.wait_for_timeout(600)
             check(ld.locator('[data-role="thr-row"]').count() == 0 and ld.evaluate('location.hash') in ('#/home', ''), '直打 #/approvals/thr 被導回首頁')
             ld.evaluate("location.hash = '#/approvals/submit'")
-            ld.wait_for_selector('[data-type="purchase"]')
-            check(overflow(ld) <= 375, '送單（請購）375 寬沒有橫向捲軸：%d' % overflow(ld))
-            shot(ld, 'submit-purchase-375')
-            ld.click('[data-type="expense"]')
-            check(overflow(ld) <= 375, '送單（請款）375：%d' % overflow(ld))
+            ld.wait_for_selector('[data-type="expense"]')
+            check(overflow(ld) <= 375, '送單（費用請款）375 寬沒有橫向捲軸：%d' % overflow(ld))
+            check(ld.locator('[data-type="expense"][aria-pressed="true"]').count() == 1, '★新登入打開送單，預設選費用請款')
             shot(ld, 'submit-expense-375')
             ld.click('[data-type="personnel"]')
             check(overflow(ld) <= 375, '送單（人事）375：%d' % overflow(ld))
