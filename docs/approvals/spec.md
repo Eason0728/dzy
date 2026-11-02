@@ -278,3 +278,8 @@ purchase → **`purchase`**（org 正本 `Staff.gs:1450`），expense → `fin`�
 - **§14.5 修訂**：apvTodo／apvGet 讀取時只在記憶體重解（畫面與待辦即時正確），**不寫入**；寫入 skip 只在改單 action 前（apvOpenForWrite_，已在寫入鎖內）與每天 09:40 apvReconcile_。理由：讀取 action 不在寫入鎖內，讀時寫入會有併發覆寫風險。
 - **§14.11 修訂**：通知匣回 `ok:true` 且 `added:false`（同一個 key 已在通知匣，多半是前一次其實送到、回應遺失）＝視為已送達，當天不再送；避免重複通知 Eason。
 - **照片被人在 mini 上手動刪除後仍能綁單**：不改綁定流程（.gs 端讀不到磁碟）；改靠每天 04:00 備份時發現缺檔 → health `apv_backup_problem`。
+
+## 15. 本人核准（2026-11-02 Eason 拍板；優先於前文）
+- 請購／費用請款送出時，送件人本人就是金額那一級、或更高一級的權限人（APV_ROLES 由低到高 head→brand_dir→ceo→gm→chair；`apvSenderCovers_`，用送件人自己的組織脈絡、不比職級）→ 該關 `status:'done'`、`self:true`、`by`／`at`＝送件人／送出時間，同時寫一筆 `approve` 事件（note「本人核准（金額在自己的核決權限內）」，sha256 同 submit），直接 handling 交承辦。再送（resubmit）同樣判斷。人事異動不受影響。
+- Eason 確認的範圍：品牌辦公室區督導（office 階梯 rank 2）＝單位主管，可自核店長級；兼任店長／兼任總監比照本職，可自核；承辦部門的人（例：財務部總監）自己送的費用請款可自核、也可自己承辦結案，**不擋**。
+- 不自核：一般同仁、門市區經理 am（不是任何一級的權限人）、執行長送總經理級（總經理在執行長之上）、金額超過自己那一級。
