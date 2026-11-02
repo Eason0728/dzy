@@ -210,6 +210,7 @@ def main():
             check(types == ['費用請款', '人事異動'], '★送單種類只剩費用請款、人事異動：%s' % types)
             ad.click('[data-type="expense"]')   # 同一次登入會記得上次選的種類（剛送完人事單），先切回費用請款
             check(ad.locator('#f-pid').count() == 0, '★「對應請購單號」欄位已拿掉')
+            check(ad.locator('[data-role="sys-acct-note"]').count() == 1, '★系統管理者帳號（非同仁）送單頁有說明：要用同仁帳號才能送單、傳收據')
             # 費用請款草稿：打字 → 重新整理 → 還原
             ad.fill('#f-desc', '補備料計程車')
             ad.fill('#f-amount', '320')

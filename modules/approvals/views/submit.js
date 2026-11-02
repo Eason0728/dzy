@@ -23,6 +23,8 @@ export function mountSubmit(el, ctx) {
   const userId = ctx.user && ctx.user.id;
   let alive = true;
   let type = 'expense';
+  // 送單、上傳收據都要同仁帳號（後端 c.me.opened）；系統帳號（admin 等）先講清楚，免得收據上傳被當成登入過期（2026-11-02）
+  const sysAcct = !!(ctx.user && ctx.user.role && ctx.user.role !== 'staff');
   let resub = null;       // {id, rev, step, files:[...]} 改完再送
   let clientId = newClientId();
   let picker = null;      // 照片挑選器
@@ -183,7 +185,8 @@ export function mountSubmit(el, ctx) {
     el.innerHTML = `
       <div class="card stack"><div class="card-title">${resub ? `改完再送　${esc(resub.id)}` : '送單'}</div>
         ${locked ? '<p class="text-muted">這張單被退回了，改好內容後再送出，會從第一關重新簽。</p>' : `<div class="btn-row" data-role="type-tabs">${TYPES.map((t) => `<button type="button" class="btn ${t.id === type ? 'btn-primary' : 'btn-secondary'}" data-type="${t.id}" aria-pressed="${t.id === type}">${esc(t.name)}</button>`).join('')}</div>`}
-        <p class="field-hint" data-role="draft-note"></p></div>
+        <p class="field-hint" data-role="draft-note"></p>
+        ${sysAcct ? '<p class="text-muted" data-role="sys-acct-note">你現在用的是系統帳號，不是同仁帳號：不能送單，也不能上傳收據。要送單請改用 DZY 開頭的同仁帳號登入。</p>' : ''}</div>
       <div class="card stack" data-role="form"></div>
       <div class="card stack"><div class="btn-row">
         <button type="button" class="btn btn-secondary" data-act="preview">預覽簽核路線</button>

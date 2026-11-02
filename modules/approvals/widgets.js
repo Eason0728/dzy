@@ -76,7 +76,7 @@ export function createPhotoPicker(ctx, { max = MAX_PHOTOS, initial = [], onChang
     for (const f of files.slice(0, room)) {
       let r;
       try { r = await pickAndUpload(f, { fetchFn }); } catch (e) { r = { ok: false, error: 'file_invalid' }; }
-      if (!r.ok) { ctx.ui.toast(errText({ error: r.error }), 'danger'); continue; }
+      if (!r.ok) { ctx.ui.toast(r.error === 'forbidden' ? '這個帳號不能上傳收據：要用 DZY 開頭的同仁帳號登入' : errText({ error: r.error }), 'danger'); continue; }
       items.push({ id: r.id, previewUrl: r.previewUrl });
       draw();
     }
