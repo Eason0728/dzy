@@ -183,3 +183,12 @@ ask／feedback／draft 順序改為：Origin → body 大小 → **驗 token** �
 - `aihUsage` 不回金額（題數、答得出比例、👎 比例、每日題數）；**金額只有 node 帳本有**，管理頁另打 svc `op:'usage'`（需 can_manage）取 `{month, usd, cap_usd}`。
 - 頁面可見性＝模組層 requires 且分頁層 requires 都通過（與殼 isModulePermitted ∧ isViewPermitted 相同）。
 - `expires_at` 空白的 live 題視為過期（fail-closed）。
+
+### 12.12 全面審查後的契約對齊（2026-11-02 夜，Codex＋Fable 互盲審查；本節優先於 §12.11）
+- 管理 action 共 **9 支**：§12.11 的 8 支＋寫 `aihKbImport`（只新增 draft，依 question 去重）。
+- node 會透過 runGas 呼叫的全域函式：§12.11 的 8 支＋**唯讀輔助 4 支** `aihPageList_`、`aihPermsOfUid_`、`aihPageVisible_`、`handleAihPendingList_`（後者帶使用者本人 token，仍經 aihEnter_ 驗 platform.aihelp）。以上 12 支都不得出現在 Code.gs（測試全文比對）。
+- 回應：Origin 錯、IP 限流、未捕捉例外一律 HTTP 200＋`{ok:false,code}`（forbidden／rate_global／ai_error）；只有 token 無效回 401。
+- `page` 後端驗存在且本人可見，否則正規化為通用頁；👎 由 `aihFeedback_` 回傳原題寫 pending，回應 `noted` 只有 pending 寫成功才為 true。
+- 月額度不持久化「已撞頂」旗標，一律即時以「已結算＋有效預扣」判斷。rid 結果寫狀態檔保留 10 分鐘（含已扣款的失敗）；前端失敗後的「重試」沿用同一 rid。
+- AI 錯誤回 `fallback`：本人可見、未過期的知識題原文最多 3 題（目前頁優先）。
+- **未決（等 Eason）**：問題自由文字裡的同仁姓名是否遮罩（§12.6 原本只列四類；可做，但兩字姓名誤遮率高）；§12.10-1 是否放寬為「通用題在任何頁都算數」。
