@@ -297,3 +297,13 @@
 - 停用營運部：一次性 `orgDisableOps202610`（dryrun 預覽）／`orgDisableOpsRollback202610`，同仁名單 `?orgtools=1`「停用營運部（10/29）」「退回停用營運部」；只寫 org 那一格啟用；dept／p_dept／兼任部門有非停用同仁 → 拒絕只列 emp_no。停用後認領的部門下拉不再出現營運部；營運部的預設權限規則（Perms.gs audit.read、Inspect.gs insp-*）沒人掛就不生效，不刪。
 - 考勤（StoreOps.gs）本來就是同辦公室總監，不受影響。
 - 測試：`test/org-upgrade.mock.test.mjs` T3、第 20 節；`test/org-front.test.mjs` 20。
+
+## 21. 兼任部門可選總監／部門同仁，權限等同主要部門（Eason 2026-11-02）
+- Eason：「兼任要可以選部門總監還是部門同仁。有兼任的該部門權限等同於主要部門的權限。」起因：某位同仁兼任財務部，卻核不到財務同仁的工時與假單（考勤只看主要部門）。
+- **存法**：staff 第 27 欄 `extra_depts` 改存 `部門:職稱`（例 `fin:hm,it:hs,ck`）；職稱只有總監 `hm`／部門同仁 `hs`；中央工廠 `ck` 不分。前端送 `[{dept, title}]`；舊格式只有代碼＝**照主要職稱**（主要是總監→總監，其他→部門同仁；管理部一律同仁）——Eason 選「照他主要職稱」。存檔當下定下職稱，之後主要職稱再變，兼任職稱不跟著變。
+- **讀法**：`Staff.gs stfExtraRoles_／stfExtraCodes_／stfExtraHeadDepts_`（只有這三支解析格子）。名單、我的資料多回 `extra_titles`，畫面顯示「兼任：財務部（總監）」。
+- **兼任總監等同該部門總監**：考勤核定工時與申請（StoreOps attApproverOf_ dept、考勤選單 storeAttGate_、總部班別 storeSchedDirector_）、認領審核／人事異動直屬主管／績效評核範圍（stfReviewScope_ extraHeads＋stfScopeExtraMeets_，職級比照總監）、請購請款第一關 head（ApprovalRoute，職級比照總監）。
+- **功能權限**（權限設定的規則）：每個兼任部門算一個身分＝總部階梯＋該部門＋選的職稱（permCompute_ idents；權限設定人數 permAcCounts_ 同算法）；只因兼任拿到的來源標 `via:'extra'`。門市／辦公室同仁兼任總部部門也一樣拿到那個部門的權限。
+- **被核的一方不變**（Eason 選「只看主要部門」）：兼任者本人的工時、假單、認領、人事異動仍由主要部門的主管核。
+- 刻意沒做：單位通訊錄（stfManagerScope_）、打卡端主管鑰匙。
+- 測試：att-hr-acting 第 10 節、org-upgrade T2／R2、org-front T5／#4、dd it_backend oracle、e2e t10。

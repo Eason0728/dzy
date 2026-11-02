@@ -100,7 +100,7 @@ function apvValidateTable_(rows) {
 // ============================================================
 
 /** staff 列 → 目錄人員。opened＝status active、有 users 帳號且帳號沒停用（「已開通」） */
-function apvPerson_(values, org, extraCodes, userActive) {
+function apvPerson_(values, org, extraCodes, userActive, extraRaw) {
   var unit = String(values[STF_COL.unit] === undefined || values[STF_COL.unit] === null ? '' : values[STF_COL.unit]).trim();
   var title = String(values[STF_COL.title] === undefined || values[STF_COL.title] === null ? '' : values[STF_COL.title]).trim();
   var dept = String(values[STF_COL.dept] === undefined || values[STF_COL.dept] === null ? '' : values[STF_COL.dept]).trim();
@@ -119,7 +119,10 @@ function apvPerson_(values, org, extraCodes, userActive) {
     brand: u ? u.parent : '',
     ladder: u ? (u.ladder || 'store') : '',
     rank: t ? t.rank : 0,
-    extra: extraCodes || [],
+    extra: stfExtraCodes_(extraCodes || []),
+    extraRaw: extraRaw !== undefined ? extraRaw : (extraCodes || []).join(','),
+    // 兼任總監的部門（2026-11-02）：請購請款第一關 head 比照該部門總監
+    extraHeads: stfExtraHeadDepts_(extraRaw !== undefined ? extraRaw : (extraCodes || []).join(','), title, org),
     // 兼任店長的門市（Perms.gs store.sm@<單位>，docs/att-hr-acting/spec.md §2.3）：請購請款第一關 head 比照該店店長
     acting: (typeof permActingUnitsOf_ === 'function' && status === 'active') ? permActingUnitsOf_(String(values[STF_COL.emp_no] || '').trim()) : [],
     opened: status === 'active' && uid !== '' && userActive !== false,
@@ -168,7 +171,14 @@ function apvRoleMembers_(role, of, ctx, opts) {
           var smT = ctx.org && ctx.org.title ? ctx.org.title.sm : null;
           actingHit = of.rank < (smT ? smT.rank : 3);
         }
-        else if (of.ladder === 'hq') hit = of.dept !== '' && p.unit === of.unit && p.dept === of.dept && p.title === 'hm';
+        else if (of.ladder === 'hq') {
+          hit = of.dept !== '' && p.unit === of.unit && p.dept === of.dept && p.title === 'hm';
+          // 兼任總監（2026-11-02）：職級比照總監（同部門總監以上送的單不給他簽）
+          if (!hit && of.dept !== '' && of.unit === 'dzy-hq' && p.extraHeads.indexOf(of.dept) !== -1) {
+            var hmT = ctx.org && ctx.org.title ? ctx.org.title.hm : null;
+            actingHit = of.rank < (hmT ? hmT.rank : 2);
+          }
+        }
         else if (of.ladder === 'office') hit = p.unit === of.unit && p.ladder === 'office' && p.rank === 2;
       }
     } else if (role === 'brand_dir') {
@@ -196,7 +206,7 @@ function apvDirectMembers_(of, ctx) {
   for (var i = 0; i < ctx.people.length; i++) {
     var p = ctx.people[i];
     if (!p.opened || p.emp === of.emp || apvExcluded_(ctx, p.emp)) continue;
-    if (stfScopeMeets_(stfReviewScope_(p.values, ctx.org), need, rctx)) out.push(p);
+    if (stfScopeMeets_(stfReviewScope_(p.values, ctx.org, p.extraRaw), need, rctx)) out.push(p);
   }
   return out;
 }

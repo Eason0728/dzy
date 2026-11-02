@@ -421,15 +421,24 @@ function permCompute_(input) {
   var today = permStr_(input.today);
 
   // 部門只採 org 中存在且啟用的
-  var depts = {};
-  var addDept = function (d) {
-    d = permStr_(d);
-    if (!d) return;
-    var def = org.depts && org.depts[d];
-    if (def && def.active !== false) depts[d] = true;
-  };
-  addDept(staff.dept);
-  (staff.extra_depts || []).forEach(addDept);
+  var deptOk = function (d) { d = permStr_(d); var def = d && org.depts && org.depts[d]; return !!(def && def.active !== false); };
+  // 身分：主要（本人階梯／職稱＋主要部門），再加每個兼任部門各一個（2026-11-02 Eason：兼任部門的權限等同主要部門＝總部階梯、該部門、選的總監／部門同仁）。
+  // staff.extra_roles＝[{dept,title}]（permStaffObj_ 帶）；只有 extra_depts（舊呼叫端、代碼或 '代碼:職稱'）時照 Staff.gs stfExtraRoles_ 換算（沒寫職稱＝照主要職稱）
+  var idents = [{ ladder: ladder, title: title, depts: {}, extra: false }];
+  if (deptOk(staff.dept)) idents[0].depts[permStr_(staff.dept)] = true;
+  var roles = Array.isArray(staff.extra_roles) ? staff.extra_roles
+    : (staff.extra_depts || []).map(function (tok) {
+      var s = permStr_(tok), i = s.indexOf(':');
+      var t = i === -1 ? (title === 'hm' && s !== 'mgmt' ? 'hm' : 'hs') : s.slice(i + 1).trim();
+      return { dept: i === -1 ? s : s.slice(0, i).trim(), title: t === 'hm' || t === 'hs' ? t : 'hs' };
+    });
+  roles.forEach(function (x) {
+    if (!x || !x.title || !deptOk(x.dept)) return;   // 中央工廠 ck 沒有職稱、不是部門：不產生身分
+    var tx = org.titles && org.titles[x.title];
+    if (!tx || tx.active === false || permStr_(tx.parent) !== 'hq') return;
+    var dd = {}; dd[permStr_(x.dept)] = true;
+    idents.push({ ladder: 'hq', title: x.title, depts: dd, extra: true });
+  });
 
   // 3. 規則聯集
   var granted = {};   // perm -> [sources]
@@ -441,12 +450,11 @@ function permCompute_(input) {
     if (!r) return;
     var perm = permStr_(r.perm);
     if (!permIsGrantable_(perm)) return;
-    if (!ladder || permStr_(r.ladder) !== ladder) return;
-    var rt = permStr_(r.title);
-    if (rt !== '*' && rt !== title) return;
-    var rd = permStr_(r.dept);
-    if (rd !== '' && !depts[rd]) return;
+    var rl = permStr_(r.ladder), rt = permStr_(r.title), rd = permStr_(r.dept);
+    var hits = idents.filter(function (id) { return !!id.ladder && rl === id.ladder && (rt === '*' || rt === id.title) && (rd === '' || !!id.depts[rd]); });
+    if (!hits.length) return;
     var src = { perm: perm, source: (rd !== '' && rt === '*') ? 'dept' : 'title' };
+    if (!hits.some(function (id) { return !id.extra; })) src.via = 'extra';   // 只因兼任部門拿到
     if (permStr_(r.rule_id)) src.rule_id = permStr_(r.rule_id);
     addSource(perm, src);
   });
@@ -774,7 +782,10 @@ function permLoadCtx_(useDefaults) {
 /** staff 分頁一列（values）＋兼任代碼陣列 → permCompute_ 的 staff 物件 */
 function permStaffObj_(values, extraCodes) {
   var s = function (k) { return permStr_(values[STF_COL[k]]); };
-  return { emp_no: s('emp_no'), status: s('status'), brand: s('brand'), unit: s('unit'), dept: s('dept'), title: s('title'), extra_depts: extraCodes || [] };
+  // extraCodes＝staff 第 27 欄切開的陣列（'代碼' 或 '代碼:職稱'）：extra_depts 只放代碼，extra_roles 帶職稱（2026-11-02）
+  var toks = extraCodes || [];
+  return { emp_no: s('emp_no'), status: s('status'), brand: s('brand'), unit: s('unit'), dept: s('dept'), title: s('title'),
+    extra_depts: stfExtraCodes_(toks), extra_roles: stfExtraRoles_(toks, s('title')) };
 }
 
 /** 對一列 staff 算權限（ctx 來自 permLoadCtx_；rules 可覆寫成假設的規則集） */

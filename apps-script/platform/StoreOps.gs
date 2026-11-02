@@ -50,9 +50,10 @@ var STORE_REQ_AM_OFFICE_TITLES = ['osv', 'odir'];
 var STORE_REQ_RDD_HQ_TITLES = ['ceo', 'gm', 'chair'];
 // 管理部同仁 → 執行長以上（兩張表相同）
 var STORE_EXEC_TITLES = ['ceo', 'gm', 'chair'];
-// 總部這些主要部門的同仁（hs）改由人資主管核（兩張表相同；2026-10-29 Eason：財務部同仁由人資主管核，財務總監不核）。
-//   這些部門的總監（hm）也不再因職稱拿到考勤管理選單（Q4 B）；人資主管、admin、att.extra 例外照舊可核。要加部門只改這裡。
-var STORE_ATT_HR_ONLY_DEPTS = ['fin'];
+// 總部這些主要部門的同仁（hs）改由人資主管核（兩張表相同）；這些部門的總監（hm）也不因職稱拿到考勤管理選單（Q4 B）。
+//   人資主管、admin、att.extra 例外照舊可核。要加部門只改這裡。
+//   2026-10-29 曾放 'fin'（財務總監不核）；2026-11-02 Eason：財務總監也要核 → 清空，財務部回到「同部門總監核」，人資主管照舊可核。
+var STORE_ATT_HR_ONLY_DEPTS = [];
 // 考勤管理選單（platform.att）：會核人的職稱＋責任制職稱（區督導 2026-10-21 起核品牌內店長的申請）
 var STORE_ATT_GATE_TITLES = ['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo', 'gm', 'chair'];
 // 排班管理選單（platform.sched，2026-10-24 Eason）：只給「能排班」的人＝店長同等職（店長、廠長、區經理）；人資主管另算，admin 是 '*'。
@@ -244,7 +245,8 @@ function attApproverOf_(approver, target, org, mode, rctx) {
     storeRegionCovers_(approver, title, need.unit, rctx);
   if (need.kind === 'hq_exec') return ao.ladder === 'hq' && STORE_REQ_RDD_HQ_TITLES.indexOf(title) !== -1;
   if (need.kind === 'office') return ao.ladder === 'office' && title === 'odir' && aUnit === need.unit;
-  if (need.kind === 'dept') return ao.ladder === 'hq' && title === 'hm' && stfStr_(approver.dept) === need.dept;
+  if (need.kind === 'dept') return (ao.ladder === 'hq' && title === 'hm' && stfStr_(approver.dept) === need.dept) ||
+    (Array.isArray(approver.extra_heads) && approver.extra_heads.indexOf(need.dept) !== -1);   // 兼任總監（2026-11-02）
   if (need.kind === 'mgmt') return ao.ladder === 'hq' && STORE_EXEC_TITLES.indexOf(title) !== -1;
   return false;
 }
@@ -787,6 +789,7 @@ function storeDutyUnitsMap_(maps, storeUnits) {
 
 function storePeople_() {
   var extraMap = stfReadExtraMap_();
+  var orgX = stfReadOrg_();
   var dutyMap = {};
   try {
     if (clkSheetsReady_()) dutyMap = storeDutyUnitsMap_(clkMaps_(), storeClockUnits_());
@@ -799,7 +802,8 @@ function storePeople_() {
       emp: s.emp, name: stfStr_(v[STF_COL.name]), status: stfStr_(v[STF_COL.status]),
       unit: stfStr_(v[STF_COL.unit]), dept: stfStr_(v[STF_COL.dept]), title: stfStr_(v[STF_COL.title]),
       userId: stfStr_(v[STF_COL.user_id]), hire: s.hire, confirmedAt: storeDatePart_(v[STF_COL.confirmed_at]),
-      values: v, extra: stfSplitCodes_(extraMap[s.emp])
+      values: v, extra: stfSplitCodes_(extraMap[s.emp]),
+      extra_heads: stfExtraHeadDepts_(extraMap[s.emp], stfStr_(v[STF_COL.title]), orgX)   // 兼任總監的部門（2026-11-02：核那個部門同仁，等同主要部門總監）
     };
   });
 }
@@ -894,7 +898,7 @@ function storeSchedDirector_(me, org, pilot) {
   var out = { units: [], hqShift: false };
   if (!me || stfStr_(me.status) !== 'active') return out;
   var title = stfStr_(me.title);
-  out.hqShift = title === 'hm' || title === 'odir';
+  out.hqShift = title === 'hm' || title === 'odir' || (Array.isArray(me.extra_heads) && me.extra_heads.length > 0);   // 兼任總監（2026-11-02）等同總監
   if (title === 'odir') {
     out.units = attViewUnitsOf_(me, org, null).filter(function (u) { return (pilot || []).indexOf(u) !== -1; });   // attViewUnitsOf_ 的 odir 分支不用區域索引
   }
@@ -1084,6 +1088,8 @@ function storeAttGate_(values) {
   if (STORE_ATT_GATE_TITLES.indexOf(p.title) !== -1 && !hrOnlyHead) return true;
   if (stfIsHrHead_(p)) return true;
   if (storeRowActingPilot_(values, storePilotUnits_()).length) return true;   // 兼任店長
+  // 兼任總監（2026-11-02）：跟主要部門總監一樣有考勤管理（人資核的部門照 STORE_ATT_HR_ONLY_DEPTS 排除）
+  if (stfExtraHeadDepts_(stfReadExtraMap_()[stfNormEmp_(values[STF_COL.emp_no])], p.title, stfReadOrg_()).some(function (d) { return STORE_ATT_HR_ONLY_DEPTS.indexOf(d) === -1; })) return true;
   var perms = storeRowPerms_(values);
   if (perms.indexOf(STORE_PERM_ATT_EXTRA) !== -1) return true;
   // 沒有 att.view@ 碼就不讀 org（Fable 審查 2：一般同仁每次登入都會走到這裡）
@@ -1106,7 +1112,9 @@ function storeSchedGate_(values) {
   if (storeRowActingPilot_(values, storePilotUnits_()).length) return true;   // 兼任店長（Q1 A：可排兼任店的班）
   if (storeSchedViewGate_(values)) return true;   // 督導／總監「只看」名單非空＝唯讀看班表（2026-10-25 Eason）
   // 總監排班（2026-10-30）：sched_units 非空或 sched_hq_shift＝true，不必有 hq 打卡對照（跟 ident 同一個函式）
-  var dir = storeSchedDirector_({ status: 'active', unit: stfStr_(values[STF_COL.unit]), title: p.title }, stfReadOrg_(), storePilotUnits_());
+  var orgS = stfReadOrg_();
+  var dir = storeSchedDirector_({ status: 'active', unit: stfStr_(values[STF_COL.unit]), title: p.title,
+    extra_heads: stfExtraHeadDepts_(stfReadExtraMap_()[stfNormEmp_(values[STF_COL.emp_no])], p.title, orgS) }, orgS, storePilotUnits_());
   if (dir.units.length || dir.hqShift) return true;
   var u = stfReadOrg_().unit[stfStr_(values[STF_COL.unit])];   // 總部／品牌辦公室同仁（單位階梯 hq／office）
   if (!(u && u.active && STORE_SCHED_GATE_LADDERS.indexOf(u.ladder || 'store') !== -1)) return false;

@@ -115,7 +115,7 @@ export function mountList(el, ctx) {
       const change = p.has_pending_change ? `<div class="text-muted">${p.status === 'active' ? '要改成' : '填的是'}：${esc(orgText(p, 'p_'))}</div>` : '';
       const reason = p.reject_reason && (p.status === 'rejected' || p.status === 'unclaimed')
         ? `<div class="text-muted">${p.status === 'unclaimed' ? '上次退回' : '原因'}：${esc(p.reject_reason)}</div>` : '';
-      const extra = (p.extra_dept_names || []).length ? `<div class="text-muted" data-role="extra-depts">兼任：${esc(p.extra_dept_names.join('、'))}</div>` : '';
+      const extra = (p.extra_dept_names || []).length ? `<div class="text-muted" data-role="extra-depts">兼任：${esc(extraLabels(p).join('、'))}</div>` : '';
       const flagTags = (p.flags || []).map((f) => `<span class="tag tag-warn" data-role="flag-tag">${esc(FLAG_TEXT[f] || f)}</span>`).join(' ');
       const priv = showPrivate && p.status !== 'unclaimed'
         ? `<div class="text-muted">生日 ${esc(p.birthday)}・手機 ${esc(p.phone)}・${esc(p.address)}</div>` : '';
@@ -238,17 +238,27 @@ export function mountList(el, ctx) {
     return list;
   }
   // 不在可選項裡的舊代碼（例如部門後來被停用）：畫面看不到、不可改，送出時原樣保留
+  // 名單與我的資料的「兼任：財務部（總監）」
+  function extraLabels(p) {
+    const t = p.extra_titles || [];
+    return (p.extra_dept_names || []).map((n, i) => n + (t[i] === 'hm' ? '（總監）' : t[i] === 'hs' ? '（同仁）' : ''));
+  }
   function extraHidden(p) {
     const vis = extraChoices(p).map((c) => c.code);
     const names = p.extra_dept_names || [];
     return (p.extra_depts || []).map((c, i) => ({ code: c, name: names[i] || c })).filter((x) => vis.indexOf(x.code) === -1);
   }
+  // 兼任部門的身分（2026-11-02 Eason）：每個兼任部門選「總監」或「部門同仁」；中央工廠不分。目前的值看 extra_titles，沒有（舊資料）＝照主要職稱
+  const roleOf = (p, code) => { const i = (p.extra_depts || []).indexOf(code); const t = i === -1 ? '' : ((p.extra_titles || [])[i] || ''); return t || (p.title === 'hm' && code !== 'mgmt' ? 'hm' : 'hs'); };
   function extraHtml(p) {
     const have = p.extra_depts || [];
     const all = extraChoices(p).map((c) => ({ code: c.code, name: c.name })).concat(extraHidden(p).map((x) => ({ code: x.code, name: x.name + '（目前不可選，保留不動）' })));
-    const boxes = all.map((c, i) => `<div class="checkbox-row"><input type="checkbox" id="ed-x-${i}" data-code="${esc(c.code)}"${have.indexOf(c.code) !== -1 ? ' checked' : ''}><label for="ed-x-${i}">${esc(c.name)}</label></div>`).join('');
-    const hidden = '';
-    return `<div class="field" data-role="extra-wrap"><span class="field-label">兼任部門</span>${boxes}${hidden}<p class="field-hint">兼任不影響審核，審核只看主要部門。</p></div>`;
+    const boxes = all.map((c, i) => {
+      const role = roleOf(p, c.code);
+      const sel = c.code === 'ck' ? '' : `<select class="input input-sm" style="width:auto;flex:0 0 auto;margin-left:auto" data-role-for="${esc(c.code)}" aria-label="${esc(c.name)}的身分">${c.code === 'mgmt' ? '' : `<option value="hm"${role === 'hm' ? ' selected' : ''}>總監</option>`}<option value="hs"${role !== 'hm' || c.code === 'mgmt' ? ' selected' : ''}>部門同仁</option></select>`;
+      return `<div class="checkbox-row"><input type="checkbox" id="ed-x-${i}" data-code="${esc(c.code)}"${have.indexOf(c.code) !== -1 ? ' checked' : ''}><label for="ed-x-${i}" style="white-space:nowrap">${esc(c.name)}</label>${sel}</div>`;
+    }).join('');
+    return `<div class="field" data-role="extra-wrap"><span class="field-label">兼任部門</span>${boxes}<p class="field-hint">兼任部門的權限等同主要部門：選「總監」可核那個部門同仁的工時、假單、認領、人事異動與請購。他自己仍由主要部門的主管核。</p></div>`;
   }
 
   const li = (items) => (items.length ? `<ul>${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="text-muted">（無）</p>');
@@ -730,9 +740,11 @@ export function mountList(el, ctx) {
         // 停用部門的舊代碼也是勾選框（預設勾選）；取消勾選＝移除，保持勾選＝原樣送回
         const checked = Array.from(body.querySelectorAll('input[data-code]')).filter((n) => n.checked).map((n) => n.getAttribute('data-code'));
         const order = extraChoices(p).map((c) => c.code).concat(extraHidden(p).map((x) => x.code));
-        const next = order.filter((c) => checked.indexOf(c) !== -1);
-        const before = p.extra_depts || [];
-        if (next.length !== before.length || next.some((c) => before.indexOf(c) === -1)) payload.extra_depts = next;
+        const roleSel = (c) => { const s = body.querySelector(`select[data-role-for="${c}"]`); return c === 'ck' ? '' : (s ? s.value : roleOf(p, c)); };
+        const next = order.filter((c) => checked.indexOf(c) !== -1).map((c) => ({ dept: c, title: roleSel(c) }));
+        const key = (l) => l.map((x) => x.dept + ':' + x.title).sort().join(',');
+        const before = (p.extra_depts || []).map((c) => ({ dept: c, title: c === 'ck' ? '' : roleOf(p, c) }));
+        if (key(next) !== key(before)) payload.extra_depts = next;
       }
       run('staffEdit', payload, '已儲存');
     } else if (act === 'rename') {

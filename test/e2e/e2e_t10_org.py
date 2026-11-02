@@ -57,6 +57,7 @@ class Mock10(MockBackend):
         o['dept_name'] = self._org_name('dept', r['dept'])
         o['extra_depts'] = list(r['extra'])
         o['extra_dept_names'] = [self.DEPT_NAME[c] for c in r['extra']]
+        o['extra_titles'] = [r.get('xt', {}).get(c, '') for c in r['extra']]   # 2026-11-02 兼任身分（總監 hm／部門同仁 hs／中央工廠 ''）
         o['flags'] = list(r['flags'])
         return o
 
@@ -76,7 +77,8 @@ class Mock10(MockBackend):
             if 'extra_depts' in p:
                 if not staff_ok:
                     return {'ok': False, 'error': '沒有權限修改兼任部門'}
-                r['extra'] = [c for c in p['extra_depts']]
+                r['extra'] = [x['dept'] for x in p['extra_depts']]
+                r['xt'] = {x['dept']: x['title'] for x in p['extra_depts']}
             return {'ok': True, 'data': {'staff': self.obj(r)}}
         if action in ('orgUpgrade2026', 'orgRollback2026') and role != 'admin':
             return {'ok': False, 'error': '沒有權限'}
@@ -182,10 +184,14 @@ def main():
             ad.click(row1 + ' [data-act="edit"]')
             ad.wait_for_selector('[data-code="ops"]')
             ad.check('[data-code="ops"]')
+            # 2026-11-02 兼任部門選身分：每個部門一個下拉（總監／部門同仁），中央工廠沒有；管理部只有部門同仁
+            check(ad.locator('select[data-role-for="ops"]').count() == 1 and ad.locator('select[data-role-for="ck"]').count() == 0, '★兼任部門有身分下拉（中央工廠沒有）')
+            ad.select_option('select[data-role-for="ops"]', 'hm')
             ad.click('.dialog .btn-primary:has-text("儲存")')
-            ad.wait_for_function("() => document.querySelector('[data-role=\"rows\"]').innerText.includes('訓練部、營運部')")
-            check(mock.edits[-1].get('extra_depts') == ['training', 'ops'], '★勾選營運部 → 帶 extra_depts=[training, ops]：%s' % mock.edits[-1].get('extra_depts'))
-            check('兼任：訓練部、營運部' in ad.inner_text(row1), '儲存後名單兼任文字更新')
+            ad.wait_for_function("() => document.querySelector('[data-role=\"rows\"]').innerText.includes('營運部（總監）')")
+            sent = mock.edits[-1].get('extra_depts')
+            check([x['dept'] for x in sent] == ['training', 'ops'] and sent[1]['title'] == 'hm' and sent[0]['title'] in ('hm', 'hs'), '★勾選營運部、選總監 → 帶 extra_depts=[training, ops:總監]：%s' % sent)
+            check('兼任：訓練部（' in ad.inner_text(row1) and '營運部（總監）' in ad.inner_text(row1), '儲存後名單兼任文字更新（帶身分）')
             check('bulletin_admin' not in mock.edits[-1], '★公告管理沒動 → 不帶 bulletin_admin：%s' % mock.edits[-1])
             # ③b 公告管理（2026-10-26 改到「權限設定」：同仁名單編輯框不再有勾選，也不再送 bulletin_admin）
             ad.click(row1 + ' [data-act="edit"]')
@@ -253,7 +259,7 @@ def main():
             # ⑥ 我的資料
             m1 = open_as('DZY001', 'e2e-pw-DZY001', '/me/profile')
             m1.wait_for_selector('[data-role="extra-depts"]')
-            check('兼任：訓練部、營運部' in m1.inner_text('[data-role="extra-depts"]'), '★我的資料顯示「兼任：訓練部、營運部」')
+            check('兼任：訓練部（' in m1.inner_text('[data-role="extra-depts"]') and '營運部（總監）' in m1.inner_text('[data-role="extra-depts"]'), '★我的資料顯示「兼任：訓練部（…）、營運部（總監）」')
             check(m1.locator('input[id*="extra"], #me-x-it').count() == 0, '唯讀（沒有可編輯欄位）')
             shot(m1, 'profile_extra')
             m2 = open_as('DZY003', 'e2e-pw-DZY003', '/me/profile')

@@ -200,6 +200,15 @@ const TODAY = todayTaipei();
  * storeMap={unit:store}；pilot=[store units]；allStaff（算兼任店長要查本人在職）
  * 回 {perms:[只含 GRANTABLE＋att.view@＋payroll.store@＋implied audit.read], scope}
  */
+// 身分（2026-11-02：兼任部門的權限等同主要部門）：主要（本人階梯／職稱＋主要部門）＋每個兼任部門（總部階梯、該部門、職稱＝照主要職稱：總監→總監、其他→部門同仁；管理部一律同仁；中央工廠 ck 不算）
+// 兼任的職稱存檔當下就定下來（格子存 '部門:職稱'）：之後主要職稱再變，兼任職稱不跟著變 → xr＝存檔當下的 {部門: 職稱}；沒有（還沒存過）＝照現在的主要職稱
+const xrRole = (title, d) => (title === 'hm' && d !== 'mgmt' ? 'hm' : 'hs');
+const xrFreeze = (staff) => Object.fromEntries((staff.extra || []).map((d) => [d, xrRole(staff.title, d)]));
+function identsOf(staff, u) {
+  const ids = [{ ladder: u.ladder, title: staff.title, dept: staff.dept && DEPTS.indexOf(staff.dept) !== -1 ? staff.dept : '' }];
+  (staff.extra || []).forEach((d) => { if (d && d !== 'ck' && DEPTS.indexOf(d) !== -1) ids.push({ ladder: 'hq', title: staff.xr && staff.xr[d] !== undefined ? staff.xr[d] : xrRole(staff.title, d), dept: d }); });
+  return ids;
+}
 function expectPerms(staff, rules, exs, storeMap, pilot) {
   const empty = { perms: [], scope: 'none' };
   if (staff.status !== 'active') return empty;
@@ -207,14 +216,11 @@ function expectPerms(staff, rules, exs, storeMap, pilot) {
   if (!u) return empty;
   const t = TITLES[staff.title];
   if (!t || t.ladder !== u.ladder || !titleFitsUnit(staff.title, staff.unit)) return empty;
-  const depts = {};
-  [staff.dept].concat(staff.extra || []).forEach((d) => { if (d && DEPTS.indexOf(d) !== -1) depts[d] = true; });
+  const ids = identsOf(staff, u);
   const P = {};
   rules.forEach((r) => {
     if (GRANTABLE.indexOf(r.perm) === -1) return;
-    if (r.ladder !== u.ladder) return;
-    if (r.title !== '*' && r.title !== staff.title) return;
-    if (r.dept !== '' && !depts[r.dept]) return;
+    if (!ids.some((id) => r.ladder === id.ladder && (r.title === '*' || r.title === id.title) && (r.dept === '' || r.dept === id.dept))) return;
     P[r.perm] = true;
   });
   const removes = {};
@@ -381,6 +387,7 @@ function build() {
     if (s.extra.length) {
       const ed = post(sb, 'staffEdit', { emp_no: emp, extra_depts: s.extra }, A);
       if (!ed.ok) throw new Error('staffEdit extra ' + J(ed));
+      s.xr = xrFreeze(s);
     }
     staff.push(s);
   }
@@ -527,10 +534,8 @@ console.log('逐人比對 ' + compared + ' 位在職同仁');
     const n = staff.filter((s) => {
       if (s.status !== 'active') return false;
       const u = UNITS[s.unit]; const t = TITLES[s.title];
-      if (!u || !t || t.ladder !== u.ladder || !titleFitsUnit(s.title, s.unit) || u.ladder !== ladder) return false;
-      if (title !== '*' && title !== s.title) return false;
-      if (dept !== '' && [s.dept].concat(s.extra).indexOf(dept) === -1) return false;
-      return true;
+      if (!u || !t || t.ladder !== u.ladder || !titleFitsUnit(s.title, s.unit)) return false;
+      return identsOf(s, u).some((id) => id.ladder === ladder && (title === '*' || title === id.title) && (dept === '' || dept === id.dept));
     }).length;
     if (n !== mg.data.counts[k]) countBad.push({ k, exp: n, got: mg.data.counts[k] });
   });
@@ -718,9 +723,9 @@ console.log('逐人比對 ' + compared + ' 位在職同仁');
   const t4 = movable.find((s) => s.status === 'active' && s.unit === 'dzy-hq' && s.dept !== 'fin' && s.extra.indexOf('fin') === -1);
   if (t4) {
     const r4 = post(sb, 'staffEdit', { emp_no: t4.emp, extra_depts: t4.extra.concat(['fin']) }, S);
-    const should = !eq(lockedSet(t4), lockedSet(Object.assign({}, t4, { extra: t4.extra.concat(['fin']) })));
+    const should = !eq(lockedSet(t4), lockedSet(Object.assign({}, t4, { extra: t4.extra.concat(['fin']), xr: null })));   // 送舊格式代碼＝全部照現在的主要職稱重定
     ok(should ? (r4.ok === false && r4.code === 'perm_admin_only') : r4.ok === true, '人資給 ' + t4.emp + ' 兼任財務部：鎖碼' + (should ? '會變 → 擋' : '不變 → 放行'), r4);
-    if (r4.ok) t4.extra.push('fin');
+    if (r4.ok) { t4.extra.push('fin'); t4.xr = xrFreeze(t4); }
   }
   // admin 做同樣的調動放行
   const r5 = post(sb, 'staffEdit', { emp_no: t2.emp, brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hm' }, A);
