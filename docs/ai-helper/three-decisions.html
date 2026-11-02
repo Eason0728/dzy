@@ -1,0 +1,156 @@
+<title>AI 小幫手三件事</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700;900&display=swap">
+<style>
+/* 版面：單欄閱讀，最上面是要回答的題目，往下才是「做出來長怎樣」的說明 */
+:root{
+  --bg:#F3F5F8; --surface:#FFFFFF; --ink:#16233A; --muted:#5B6678; --line:#D9DFE8;
+  --navy:#1F416A; --navy-2:#142C4C; --gold:#F2C230; --gold-ink:#3A2C00;
+  --ok:#1E7A4F; --warn:#A35A00; --chip:#E8EEF6;
+  --f-display:"Noto Serif TC","Songti TC",serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1724; --surface:#172234; --ink:#E6ECF5; --muted:#9AA7BA; --line:#2A3850;
+  --navy:#8FB4E3; --navy-2:#0B1220; --gold:#F2C230; --gold-ink:#2A2000;
+  --ok:#5BC48E; --warn:#F0A54A; --chip:#22314A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1724; --surface:#172234; --ink:#E6ECF5; --muted:#9AA7BA; --line:#2A3850;
+  --navy:#8FB4E3; --navy-2:#0B1220; --gold:#F2C230; --gold-ink:#2A2000;
+  --ok:#5BC48E; --warn:#F0A54A; --chip:#22314A; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.7}
+.wrap{max-width:860px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:36px}
+header .brand{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);letter-spacing:.06em}
+header .brand b{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:6px;background:linear-gradient(#2B5A8C,#142C4C);color:#fff;font-family:var(--f-display);font-size:15px}
+h1{font-family:var(--f-display);font-size:30px;line-height:1.3;margin:10px 0 6px;text-wrap:balance}
+h2{font-family:var(--f-display);font-size:21px;margin:0 0 12px;text-wrap:balance}
+p{margin:0}
+.lead{color:var(--muted);max-width:62ch}
+.status{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.pill{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--chip);color:var(--ink)}
+.pill.now{background:var(--gold);color:var(--gold-ink);font-weight:700}
+
+/* 題目 */
+.qs{display:flex;flex-direction:column;gap:14px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.q h3{margin:0;font-size:16px;line-height:1.5;display:flex;gap:10px}
+.q h3 .n{flex:none;font-variant-numeric:tabular-nums;color:var(--navy);font-weight:700}
+.q .why{font-size:13.5px;color:var(--muted)}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.opt:has(input:checked){border-color:var(--navy);background:color-mix(in srgb,var(--navy) 8%,transparent)}
+.opt input{margin-top:5px;accent-color:var(--navy)}
+.opt input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.opt div{min-width:0}
+.opt .t{font-weight:700}
+.opt .d{font-size:13.5px;color:var(--muted)}
+.rec{font-size:11.5px;font-weight:700;letter-spacing:.04em;background:var(--gold);color:var(--gold-ink);padding:1px 7px;border-radius:4px;margin-left:6px;white-space:nowrap}
+.answer{position:sticky;bottom:0;padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
+.answer-in{background:var(--navy-2);color:#fff;border-radius:10px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.answer code{font-size:14px;background:rgba(255,255,255,.1);padding:3px 8px;border-radius:5px;word-break:break-all}
+.answer button{font:inherit;font-weight:700;border:0;border-radius:999px;padding:7px 16px;background:var(--gold);color:var(--gold-ink);cursor:pointer}
+.answer button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+/* 模擬畫面 */
+.demo{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.chat{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.chat .top{background:linear-gradient(#2B5A8C,#142C4C);color:#fff;padding:9px 14px;font-size:13px;display:flex;justify-content:space-between;gap:8px}
+.chat .top span:last-child{opacity:.75}
+.chat .body{padding:14px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.me{align-self:flex-end;background:var(--chip);padding:8px 12px;border-radius:12px 12px 2px 12px;max-width:85%}
+.bot{align-self:flex-start;border:1px solid var(--line);padding:9px 12px;border-radius:12px 12px 12px 2px;max-width:92%}
+.bot .look{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+.go{display:inline-block;margin-top:8px;font-size:13px;font-weight:700;color:var(--navy);border:1px solid var(--navy);border-radius:999px;padding:2px 12px}
+.fb{font-size:12px;color:var(--muted);display:flex;gap:12px;padding:0 14px 12px}
+.tag{font-size:12px;font-weight:700;color:var(--navy)}
+
+/* 表格 */
+.tbl{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12.5px;color:var(--muted);font-weight:500;letter-spacing:.04em;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.no{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;padding:0;margin:0;list-style:none}
+.no li{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.no li::before{content:"✕";color:var(--warn);font-weight:700;margin-right:8px}
+.safe li::before{content:"✓";color:var(--ok)}
+.note{font-size:13px;color:var(--muted)}
+pre.mermaid{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto;margin:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<style>
+.kb{display:flex;flex-direction:column;gap:6px}
+.kb .qa{font-size:14px;background:var(--chip);border-radius:8px;padding:10px 12px}
+.kb .qa b{display:block;margin-bottom:2px}
+.kb .doubt{font-size:13px;color:var(--warn)}
+.ex{font-size:13.5px;background:var(--chip);border-radius:8px;padding:8px 12px;margin:0}
+</style>
+
+<div class="wrap">
+<header>
+  <span class="brand"><b>鼎</b>鼎兆元餐飲集團｜管理系統</span>
+  <h1>AI 小幫手：上線前要你決定的三件事</h1>
+  <p class="lead">都不影響今天照晨報合併、更新 Mac mini。第 1、2 題決定程式要不要再改一點；第 3 題是 10 題知識該不該上架。每題都先勾好推薦，全部照推薦就回「照推薦」。</p>
+</header>
+
+<section>
+  <h2>1、2｜程式要不要再改</h2>
+  <div class="qs" id="qs"></div>
+</section>
+
+<section>
+  <h2>3｜10 題「待確認」的知識</h2>
+  <p class="note" style="margin-bottom:12px">每題附上目前寫的答案和我拿不準的地方。選「上架」＝照這個答案用；「先不上」＝留草稿，等你確認後在管理頁改好再上。</p>
+  <div class="qs" id="kb"></div>
+</section>
+
+<div class="answer"><div class="answer-in"><span>你的答案：<code id="ans">—</code></span><button type="button" id="copy">複製我的答案</button></div></div>
+</div>
+
+<script>
+const QS=[
+ {t:"同仁在問題裡打了別人的姓名，要不要先遮掉再送給 AI？",why:"例：「王小明的班表怎麼改？」AI 不需要知道是誰也答得出來。規格原本只遮手機、身分證、email、員工編號。",ex:"遮掉後送出的會是「[同仁]的班表怎麼改？」，紀錄裡存的也是遮過的。",o:[
+  ["A","遮：只比對「在職同仁的完整姓名」","三個字的全名幾乎不會誤遮一般詞；AI 回答不受影響。要多寫一小段程式＋測試，約半小時。",1],
+  ["B","不遮","維持現狀。姓名會送到 Anthropic 並在系統留 90 天。"]]},
+ {t:"同仁在「完全沒教過」的模組頁問通用問題，要不要讓 AI 回答？",why:"現在的規則（你上次選的）：某個模組一題都還沒上架，同仁在那個模組頁問任何問題，都直接回「這頁還沒教過我」，不叫 AI。",ex:"例：績效評核頁還沒有任何上架的題目，同仁在那頁問「忘記密碼怎麼辦」→ 現在會回「沒教過」。只要那個模組上架任何一題，就會正常回答。",o:[
+  ["A","維持現在的規則，上架時每個模組至少上一題","最省錢、最不會亂答；68 題已經涵蓋每個模組。管理頁可以看出哪個模組還是零題。",1],
+  ["B","放寬：通用題在任何頁都算數","不管在哪頁都答得出登入、密碼這類問題；代價是「沒教過」的頁面也會叫 AI，多花一點錢，答偏的機會也多一點。"]]}
+];
+const KB=[
+ {q:"我的開通申請被退回了怎麼辦？",a:"照主管說的原因改正後，回登入頁再按一次「第一次使用」重新送審（資料要重填）。如果畫面寫「請找人資重新開通」，就找人資。",d:"兩種說法在系統裡同時存在，我把兩種都寫進去了。",r:1},
+ {q:"手機怎麼把管理系統放到主畫面？",a:"iPhone 用 Safari → 分享 → 加入主畫面；Android 用 Chrome → ⋮ → 加到主畫面。",d:"步驟是從打卡連結的圖解借來的，管理系統應該一樣，但沒實機試過。",r:1},
+ {q:"我忘記打卡了，要怎麼補？",a:"在 LINE「鼎兆元打卡」選單 → 加班請假 → 忘打卡，填實際時間送出（7 天內），主管核准。",d:"舊版光復手冊寫「主管直接補登」，新版寫「送忘打卡申請」，我採新版。",r:1},
+ {q:"換手機後打卡說是新裝置、要等核准？",a:"換手機或換開法都算新裝置，要店長核准；之後固定用同一種開法。",d:"這是「專屬打卡連結」的規則；用 LINE 打卡的店是不是也要核准，我不確定。",r:0},
+ {q:"我的薪資明細在哪裡看？",a:"LINE「鼎兆元打卡」選單 → 薪資明細；目前只開放小辛辣光復店和央廚。",d:"其他店什麼時候開放不知道；開放後這題要改。",r:1},
+ {q:"被設為「兼任店長」可以做什麼、不能做什麼？",a:"在兼任店等同店長：核工時與申請、排班、門市營運、審開通、新增同仁、績效打分、看稽核、5,000 元以下請購第一關。不能核自己的申請、收支作廢等。",d:"「兼任店長新增同仁」上線後還沒有真人帳號實際操作過。",r:1},
+ {q:"我要怎麼看自己的班表？",a:"LINE「鼎兆元打卡」選單 → 出勤班表；店長鎖定發布後才看得到。",d:"不確定每家店的 LINE 打卡都已經接上排班。",r:0},
+ {q:"為什麼我只能看班表、不能改？",a:"能排班的是店長（廠長）同等職、人資主管、管理員與總監；區督導只能看。",d:"總監排班上線後還沒請品牌總監實際試過。",r:1},
+ {q:"要怎麼設定某位同仁當「兼任店長」？",a:"資訊部門 → 權限設定 → 個別例外 → 新增，功能選「兼任店長」、選店、填原因。不能設給自己、不含央廚。",d:"我查了系統規則，確實不含央廚，這題可以放心。",r:1},
+ {q:"請購、請款要由誰簽？",a:"依金額自動列出簽核路線：預設 5,000 以下店長、10,000 以下品牌總監、30,000 以下總經理、以上董事長；以送單畫面為準。",d:"預設金額你可能已經在「核決權限」頁改過，我看不到正式資料。",r:1}
+];
+const host=document.getElementById('qs'), kbHost=document.getElementById('kb');
+function radio(name,k,t,d,rec,parent){const id=name+k,lab=document.createElement('label');lab.className='opt';lab.htmlFor=id;
+  lab.innerHTML=`<input type="radio" name="${name}" id="${id}" value="${k}" ${rec?'checked':''}><div><div class="t">${k}．${t}${rec?'<span class="rec">推薦</span>':''}</div>${d?`<div class="d">${d}</div>`:''}</div>`;parent.appendChild(lab);}
+QS.forEach((q,i)=>{const n=i+1,box=document.createElement('div');box.className='q';
+  box.innerHTML=`<h3><span class="n">${n}</span><span>${q.t}</span></h3><p class="why">${q.why}</p><p class="ex">${q.ex}</p><div class="opts"></div>`;
+  q.o.forEach(([k,t,d,r])=>radio('q'+n,k,t,d,r,box.querySelector('.opts')));host.appendChild(box);});
+KB.forEach((x,i)=>{const n=i+1,box=document.createElement('div');box.className='q';
+  box.innerHTML=`<h3><span class="n">3-${n}</span><span>${x.q}</span></h3><div class="kb"><div class="qa"><b>目前的答案</b>${x.a}</div><div class="doubt">拿不準：${x.d}</div></div><div class="opts"></div>`;
+  radio('k'+n,'上架','照這個答案上架','',x.r===1,box.querySelector('.opts'));
+  radio('k'+n,'先不上','留草稿，之後確認再上','',x.r===0,box.querySelector('.opts'));kbHost.appendChild(box);});
+const ansEl=document.getElementById('ans');
+function val(n){const c=document.querySelector(`input[name=${n}]:checked`);return c?c.value:'?'}
+function answers(){
+  const q=[1,2].map(n=>val('q'+n)), recQ=['A','A'];
+  const k=KB.map((x,i)=>val('k'+(i+1))), recK=KB.map(x=>x.r?'上架':'先不上');
+  if(q.join()===recQ.join()&&k.join()===recK.join())return '照推薦';
+  return `1${q[0]} 2${q[1]}｜`+k.map((v,i)=>`3-${i+1}${v}`).join(' ');
+}
+function refresh(){ansEl.textContent=answers()}
+document.addEventListener('change',refresh);refresh();
+document.getElementById('copy').addEventListener('click',async e=>{const txt='AI 小幫手三件事：'+answers(),btn=e.currentTarget;
+  try{await navigator.clipboard.writeText(txt);btn.textContent='已複製'}catch(_){const r=document.createRange();r.selectNodeContents(ansEl);const s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='已選取，請按複製'}
+  setTimeout(()=>btn.textContent='複製我的答案',2000);});
+</script>

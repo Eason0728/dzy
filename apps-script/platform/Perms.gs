@@ -19,10 +19,11 @@ var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit
   'transfer.write',            // 2026-10-24 調撥管理（財務部門看調撥月報、品項記憶、卡關總覽；不鎖碼，Eason Q1 B：人資可在權限設定打開）
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
   'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank',
-  'platform.insp-void'];   // 2026-10-30 作廢巡檢獨立權限碼（Eason 照推薦；預設只給營運部，不鎖碼；正式環境 admin 要再按一次「初始化營運巡檢」補規則）   // 2026-10-27 營運巡檢（docs/inspection/spec.md；預設規則在 Inspect.gs INSP_PERM_DEFAULT_RULES，inspSetup 補進 perm_map；不鎖碼）   // 2026-10-26 績效評核（docs/eval/spec.md §2.2；預設規則在 Eval.gs EV_PERM_DEFAULT_RULES，evSetup 補進 perm_map）
+  'platform.insp-void',
+  'platform.aihelp'];   // 2026-11-02 AI 小幫手管理（docs/ai-helper §8、§12.5；鎖碼：只有 admin 能給）；上一碼 platform.insp-void 的註解：2026-10-30 作廢巡檢獨立權限碼（Eason 照推薦；預設只給營運部，不鎖碼；正式環境 admin 要再按一次「初始化營運巡檢」補規則）   // 2026-10-27 營運巡檢（docs/inspection/spec.md；預設規則在 Inspect.gs INSP_PERM_DEFAULT_RULES，inspSetup 補進 perm_map；不鎖碼）   // 2026-10-26 績效評核（docs/eval/spec.md §2.2；預設規則在 Eval.gs EV_PERM_DEFAULT_RULES，evSetup 補進 perm_map）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
-var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin'];   // 2026-10-19 加薪酬系統；2026-10-25 加收支管理、2026-10-27 Eason 改回不鎖（人資可開，與貨單／調撥／損益同一套）
+var PERM_LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin', 'platform.aihelp'];   // 2026-11-02 加 AI 小幫手管理；2026-10-19 加薪酬系統；2026-10-25 加收支管理、2026-10-27 Eason 改回不鎖（人資可開，與貨單／調撥／損益同一套）
 // 2026-10-26 指定門市只看考勤（docs/att-support/spec.md §2，Eason 7A）：帶單位的功能碼 att.view@<單位代碼>，例 att.view@mala-gf。
 //   不在 PERM_GRANTABLE：對照表規則一律不收（permValidateRule_／permCompute_ 規則迴圈都只認 PERM_GRANTABLE），只能用個別例外給、只能「多給」；
 //   只有 admin 能設（不在 StoreOps.gs STORE_HR_GRANTABLE）；單位要存在、啟用、store 階梯（含央廚 ck）。效果在 StoreOps.gs（ident att.view_people、platform.att）。
@@ -704,7 +705,8 @@ var PERM_NAMES = {
   'payroll.write': '薪酬系統', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對',
   'pnl.read': '損益系統：看', 'pnl.write': '損益系統：填', 'pnl.admin': '損益系統：管', 'transfer.write': '調撥管理',
   'platform.eval-manage': '績效評核：替所屬同仁打分', 'platform.eval-brand': '績效評核：看自己品牌各店', 'platform.eval-all': '績效評核：看全集團', 'platform.eval-admin': '績效評核：題目設定與定稿',
-  'platform.insp-do': '營運巡檢：到店巡檢', 'platform.insp-own': '營運巡檢：看自己店', 'platform.insp-brand': '營運巡檢：看自己品牌各店', 'platform.insp-all': '營運巡檢：看全集團', 'platform.insp-bank': '營運巡檢：題目設定', 'platform.insp-void': '營運巡檢：作廢巡檢'
+  'platform.insp-do': '營運巡檢：到店巡檢', 'platform.insp-own': '營運巡檢：看自己店', 'platform.insp-brand': '營運巡檢：看自己品牌各店', 'platform.insp-all': '營運巡檢：看全集團', 'platform.insp-bank': '營運巡檢：題目設定', 'platform.insp-void': '營運巡檢：作廢巡檢',
+  'platform.aihelp': 'AI 小幫手管理'
 };
 function permName_(code) {
   if (PERM_NAMES[code]) return PERM_NAMES[code];
@@ -844,7 +846,7 @@ function permSessionCompute_(base, staffValues) {
 
 var PERM_MSG_ADMIN_ONLY = '人資主管要請系統管理員設定';
 // 非 admin 的調動改變了對方的鎖碼：依實際變動的碼組出中文訊息（含 platform.permmap 沿用原句）
-var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理', 'payroll.write': '薪酬系統', 'pnl.admin': '損益系統定稿與設定' };
+var PERM_LOCKED_PHRASE = { 'audit.write': '稽核填單', 'platform.staff': '同仁名單', 'platform.users': '系統管理', 'platform.permmap': '系統管理', 'payroll.write': '薪酬系統', 'pnl.admin': '損益系統定稿與設定', 'platform.aihelp': 'AI 小幫手管理' };
 function permLockedMsg_(changedCodes) {
   if (changedCodes.indexOf('platform.permmap') !== -1) return PERM_MSG_ADMIN_ONLY;
   var ph = [];

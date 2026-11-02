@@ -723,6 +723,36 @@ function onViewContentClick(e) {
 }
 
 // ============================================================
+// AI 小幫手（右下角按鈕，docs/ai-helper/spec.md §2）：殼只負責「登入後掛上、登出卸下」，其餘全在 platform/helper/
+// ============================================================
+
+/** 目前網址對應的 {m:模組 id, v:分頁 id}；首頁是 {m:'',v:''} */
+function getRoute() {
+  return { m: currentModule ? currentModule.id : '', v: currentModule && currentView ? currentView : '' };
+}
+
+/** 「帶我去」能不能去：模組有權限 ∧ 分頁存在且有權限（同 isModulePermitted ∧ isViewPermitted） */
+function canGoTo(m, v) {
+  const manifest = allManifests.find((x) => x.id === m);
+  if (!manifest || !isModulePermitted(manifest)) return false;
+  const view = manifest.views.find((x) => x.id === v);
+  return !!view && isViewPermitted(view);
+}
+
+let helperMod = null;
+/** 動態載入：小幫手壞了、載不到都不能影響殼 */
+function mountHelperSafe(shellEl) {
+  import('./helper/widget.js').then((mod) => {
+    if (!auth.getUser()) return;   // 載入期間已登出
+    helperMod = mod;
+    return mod.mountHelper(shellEl, { getRoute, canGo: canGoTo });
+  }).catch(() => { /* 小幫手是附加功能，失敗就沒有按鈕 */ });
+}
+function unmountHelperSafe() {
+  if (helperMod) { try { helperMod.unmountHelper(); } catch (e) { /* ignore */ } }
+}
+
+// ============================================================
 // 畫面骨架（登入後才建立一次；委派監聽器綁在這幾個穩定容器上）
 // ============================================================
 
@@ -755,6 +785,7 @@ function ensureShellDom() {
   const shellEl = el('div', { class: 'app-shell' }, [navDesktopEl, mainEl]);
 
   rootEl.appendChild(shellEl);
+  mountHelperSafe(shellEl);
 
   navDesktopEl.addEventListener('click', onTopNavClick);
   viewNavEl.addEventListener('click', onViewNavClick);
@@ -1018,6 +1049,7 @@ function showLogin() {
 async function doLogout(opts) {
   const expired = !!(opts && opts.expired);
   const leavingUser = auth.getUser();   // 先記下是誰（teardown／logout 之後就拿不到了）
+  unmountHelperSafe();
   await teardownCurrent({ destroy: true });
   await destroyAllParked();   // 保留中的嵌入頁一起卸載（營運系統等會收到登出）
   // 主動登出與被踢登出（代轉 401）都先清本人的表單簽核草稿（spec approvals §14.7「登出時清掉」；稽核草稿刻意保留，見 auth.purgeLogoutDrafts；2026-10-29 對抗驗證 A）

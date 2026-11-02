@@ -1,0 +1,159 @@
+/* platform/helper/helper.css — AI 小幫手：右下角按鈕＋對話側欄（spec §2）。色票取自 tokens.css，不寫死色碼。
+   由 widget.js 在掛載時自己加一個 <link>，不動 index.html。 */
+.aih-root { font-family: var(--font-sans, inherit); }
+.aih-root [hidden] { display: none !important; }
+
+.aih-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 900;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--brand);
+  color: var(--ink-inverse);
+  font-size: var(--fs-md, 16px);
+  font-weight: var(--fw-bold, 700);
+  box-shadow: var(--shadow-lift, 0 4px 16px rgba(0, 0, 0, .15));
+  cursor: pointer;
+}
+.aih-fab:hover { background: var(--brand-dark); }
+.aih-fab:focus-visible, .aih-hbtn:focus-visible, .aih-send:focus-visible, .aih-go:focus-visible,
+.aih-fb-btn:focus-visible, .aih-input:focus-visible { outline: 3px solid var(--tab-line, var(--brand)); outline-offset: 2px; }
+
+.aih-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 76px;
+  z-index: 901;
+  width: 380px;
+  max-width: calc(100vw - 40px);
+  height: min(640px, calc(100vh - 110px));
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+}
+.aih-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--brand);
+  color: var(--ink-inverse);
+}
+.aih-title { flex: 1 1 auto; min-width: 0; font-weight: var(--fw-bold, 700); font-size: var(--fs-md, 16px); }
+.aih-hbtn {
+  flex: none;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-on-dark, rgba(255, 255, 255, .35));
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--ink-inverse);
+  font-size: var(--fs-sm, 13px);
+  cursor: pointer;
+}
+.aih-log {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg);
+}
+.aih-msg { max-width: 92%; min-width: 0; padding: 8px 12px; border-radius: var(--radius, 10px); font-size: var(--fs-base, 15px); line-height: var(--lh-base, 1.5); }
+.aih-user { align-self: flex-end; background: var(--brand-light); border: 1px solid var(--line); }
+.aih-bot { align-self: flex-start; background: var(--card); border: 1px solid var(--line); }
+.aih-err { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+.aih-pending { color: var(--muted); }
+.aih-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }   /* 純文字顯示：換行保留、長字串折行，不解析 Markdown */
+.aih-who { margin: 6px 0 0; font-size: var(--fs-sm, 13px); color: var(--muted); overflow-wrap: anywhere; }
+.aih-gos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.aih-go {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--brand);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--card);
+  color: var(--brand);
+  font-size: var(--fs-sm, 13px);
+  font-weight: var(--fw-bold, 700);
+  cursor: pointer;
+}
+.aih-go:hover { background: var(--brand-light); }
+.aih-retry, .aih-fq {
+  display: block;
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--brand);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--card);
+  color: var(--brand);
+  font-size: var(--fs-sm, 13px);
+  font-weight: var(--fw-bold, 700);
+  text-align: left;
+  cursor: pointer;
+}
+.aih-fallback { align-self: flex-start; max-width: 92%; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius, 10px); background: var(--card); }
+.aih-fa { margin-top: 6px; font-size: var(--fs-sm, 13px); color: var(--muted); }
+.aih-fb { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.aih-fb-btn { min-width: 36px; min-height: 36px; border: 1px solid var(--line); border-radius: var(--radius-sm, 6px); background: var(--card); font-size: 16px; cursor: pointer; }
+.aih-fb-btn[aria-pressed="true"] { background: var(--brand-light); border-color: var(--brand); }
+.aih-fb-btn:disabled { opacity: .6; cursor: default; }
+.aih-fb-note { font-size: var(--fs-xs, 12px); color: var(--muted); }
+.aih-quota { padding: 0 12px; font-size: var(--fs-xs, 12px); color: var(--muted); }
+.aih-quota:empty { display: none; }
+.aih-form { padding: 8px 12px 0; }
+.aih-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 56px;
+  resize: none;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 10px);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;   /* ≥16px：iOS 不會因為聚焦自動放大畫面 */
+}
+.aih-form-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.aih-count { font-size: var(--fs-xs, 12px); color: var(--muted); }
+.aih-send {
+  min-height: 40px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--brand);
+  color: var(--ink-inverse);
+  font-weight: var(--fw-bold, 700);
+  cursor: pointer;
+}
+.aih-send:disabled { opacity: .55; cursor: default; }
+.aih-note { margin: 0; padding: 6px 12px 10px; font-size: var(--fs-xs, 12px); color: var(--muted); line-height: 1.4; }
+
+/* 手機：按鈕固定在右下（殼的下排選單在頁首，不在畫面底部，不會被壓到）；側欄全螢幕 */
+@media (max-width: 860px) {
+  .aih-fab { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .aih-panel {
+    inset: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .aih-hbtn { min-height: 40px; padding: 0 12px; }
+}

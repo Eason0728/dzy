@@ -1,0 +1,238 @@
+<title>AI 小幫手需求確認</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700;900&display=swap">
+<style>
+/* 版面：單欄閱讀，最上面是要回答的題目，往下才是「做出來長怎樣」的說明 */
+:root{
+  --bg:#F3F5F8; --surface:#FFFFFF; --ink:#16233A; --muted:#5B6678; --line:#D9DFE8;
+  --navy:#1F416A; --navy-2:#142C4C; --gold:#F2C230; --gold-ink:#3A2C00;
+  --ok:#1E7A4F; --warn:#A35A00; --chip:#E8EEF6;
+  --f-display:"Noto Serif TC","Songti TC",serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1724; --surface:#172234; --ink:#E6ECF5; --muted:#9AA7BA; --line:#2A3850;
+  --navy:#8FB4E3; --navy-2:#0B1220; --gold:#F2C230; --gold-ink:#2A2000;
+  --ok:#5BC48E; --warn:#F0A54A; --chip:#22314A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1724; --surface:#172234; --ink:#E6ECF5; --muted:#9AA7BA; --line:#2A3850;
+  --navy:#8FB4E3; --navy-2:#0B1220; --gold:#F2C230; --gold-ink:#2A2000;
+  --ok:#5BC48E; --warn:#F0A54A; --chip:#22314A; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.7}
+.wrap{max-width:860px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:36px}
+header .brand{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);letter-spacing:.06em}
+header .brand b{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:6px;background:linear-gradient(#2B5A8C,#142C4C);color:#fff;font-family:var(--f-display);font-size:15px}
+h1{font-family:var(--f-display);font-size:30px;line-height:1.3;margin:10px 0 6px;text-wrap:balance}
+h2{font-family:var(--f-display);font-size:21px;margin:0 0 12px;text-wrap:balance}
+p{margin:0}
+.lead{color:var(--muted);max-width:62ch}
+.status{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.pill{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--chip);color:var(--ink)}
+.pill.now{background:var(--gold);color:var(--gold-ink);font-weight:700}
+
+/* 題目 */
+.qs{display:flex;flex-direction:column;gap:14px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.q h3{margin:0;font-size:16px;line-height:1.5;display:flex;gap:10px}
+.q h3 .n{flex:none;font-variant-numeric:tabular-nums;color:var(--navy);font-weight:700}
+.q .why{font-size:13.5px;color:var(--muted)}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.opt:has(input:checked){border-color:var(--navy);background:color-mix(in srgb,var(--navy) 8%,transparent)}
+.opt input{margin-top:5px;accent-color:var(--navy)}
+.opt input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.opt div{min-width:0}
+.opt .t{font-weight:700}
+.opt .d{font-size:13.5px;color:var(--muted)}
+.rec{font-size:11.5px;font-weight:700;letter-spacing:.04em;background:var(--gold);color:var(--gold-ink);padding:1px 7px;border-radius:4px;margin-left:6px;white-space:nowrap}
+.answer{position:sticky;bottom:0;padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
+.answer-in{background:var(--navy-2);color:#fff;border-radius:10px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.answer code{font-size:14px;background:rgba(255,255,255,.1);padding:3px 8px;border-radius:5px;word-break:break-all}
+.answer button{font:inherit;font-weight:700;border:0;border-radius:999px;padding:7px 16px;background:var(--gold);color:var(--gold-ink);cursor:pointer}
+.answer button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+/* 模擬畫面 */
+.demo{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.chat{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.chat .top{background:linear-gradient(#2B5A8C,#142C4C);color:#fff;padding:9px 14px;font-size:13px;display:flex;justify-content:space-between;gap:8px}
+.chat .top span:last-child{opacity:.75}
+.chat .body{padding:14px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.me{align-self:flex-end;background:var(--chip);padding:8px 12px;border-radius:12px 12px 2px 12px;max-width:85%}
+.bot{align-self:flex-start;border:1px solid var(--line);padding:9px 12px;border-radius:12px 12px 12px 2px;max-width:92%}
+.bot .look{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+.go{display:inline-block;margin-top:8px;font-size:13px;font-weight:700;color:var(--navy);border:1px solid var(--navy);border-radius:999px;padding:2px 12px}
+.fb{font-size:12px;color:var(--muted);display:flex;gap:12px;padding:0 14px 12px}
+.tag{font-size:12px;font-weight:700;color:var(--navy)}
+
+/* 表格 */
+.tbl{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12.5px;color:var(--muted);font-weight:500;letter-spacing:.04em;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.no{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;padding:0;margin:0;list-style:none}
+.no li{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.no li::before{content:"✕";color:var(--warn);font-weight:700;margin-right:8px}
+.note{font-size:13px;color:var(--muted)}
+pre.mermaid{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto;margin:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <span class="brand"><b>鼎</b>鼎兆元餐飲集團｜管理系統</span>
+  <h1>AI 小幫手：做之前要你決定的 10 件事</h1>
+  <p class="lead">同仁在管理系統裡卡住時，點右下角「問小幫手」，幾秒內拿到白話答案。A＝教你怎麼操作；B＝查你自己的帳號狀況，告訴你為什麼看不到、按不了。這頁是需求確認，還沒寫任何程式。</p>
+  <div class="status"><span class="pill">① 查過：系統裡沒有類似功能</span><span class="pill">② 探過：Mac mini 可以呼叫 AI</span><span class="pill now">③ 需求確認 ← 現在</span><span class="pill">規格</span><span class="pill">開發</span></div>
+</header>
+
+<section>
+  <h2>要你回答的題目</h2>
+  <p class="note" style="margin-bottom:12px">每題都先選好推薦的選項了。全部照推薦就直接回我「照推薦」；有改的話，按最下面的「複製我的答案」貼回來。</p>
+  <div class="qs" id="qs"></div>
+</section>
+
+<div class="answer"><div class="answer-in"><span>你的答案：<code id="ans">—</code></span><button type="button" id="copy">複製我的答案</button></div></div>
+
+<section>
+  <h2>做出來長這樣</h2>
+  <div class="demo">
+    <div class="chat">
+      <div class="top"><span>問小幫手</span><span>你在：考勤管理 › 核定工時</span></div>
+      <div class="body">
+        <span class="tag">A 操作說明</span>
+        <div class="me">同仁忘記打下班卡，我要怎麼幫他補？</div>
+        <div class="bot">店長不能直接改打卡時間。要請同仁自己在打卡頁按「忘刷申請」，填實際下班時間送出；送出後會出現在你的「申請審核」分頁，你按核准就補上了。
+          <br><span class="go">帶我去 申請審核 →</span></div>
+      </div>
+      <div class="fb"><span>👍 有幫到</span><span>👎 沒幫到我</span></div>
+    </div>
+    <div class="chat">
+      <div class="top"><span>問小幫手</span><span>你在：首頁</span></div>
+      <div class="body">
+        <span class="tag">B 看得到自己的狀況</span>
+        <div class="me">為什麼我左邊沒有「排班管理」？</div>
+        <div class="bot"><span class="look">已查你的帳號：正職・新竹光復・在職</span>排班管理要店長、廠長、區經理才有。你目前是正職，所以看不到。如果店長請假、要你代排，請人資在「權限設定 → 個別例外」幫你設「兼任店長」，設好重新整理就會出現。</div>
+      </div>
+      <div class="fb"><span>👍 有幫到</span><span>👎 沒幫到我</span></div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:10px">以上是示意，實際答案以寫進知識庫的內容為準。知識庫沒寫的事，小幫手會說「這題我還不會，已經記下來了」，不會自己編。</p>
+</section>
+
+<section>
+  <h2>一題問進來之後會發生什麼</h2>
+<pre class="mermaid">
+flowchart LR
+  A[同仁按「問小幫手」] --> B[公司 Mac mini<br>先確認是本人登入]
+  B --> C{要查他的帳號嗎？}
+  C -- 要 --> D[只用他自己的身分<br>查權限、職稱、單位]
+  C -- 不用 --> E
+  D --> E[連同操作知識庫<br>一起交給 AI]
+  E --> F[白話答案＋帶我去]
+  F --> G{有幫到嗎？}
+  G -- 沒有 --> H[進待回答清單<br>每天彙整進通知匣]
+  H --> I[補答案<br>下次就會答]
+</pre>
+</section>
+
+<section>
+  <h2>小幫手不會做的事</h2>
+  <ul class="no">
+    <li>不代按任何按鈕、不代送單、不代核准</li>
+    <li>不改權限、不改任何資料</li>
+    <li>不查別人的帳號（除非第 2 題你選 B）</li>
+    <li>不查薪資、打卡明細、生日、地址、手機</li>
+    <li>不在 LINE 上回答（那邊是助理小辛）</li>
+    <li>知識庫沒寫的事不自己編</li>
+  </ul>
+</section>
+
+<section>
+  <h2>大概要花多少錢</h2>
+  <div class="tbl"><table>
+    <tr><th>情況</th><th>每月題數</th><th>每月費用（估）</th></tr>
+    <tr><td>只有店長以上在用（第 5 題推薦）</td><td class="num">約 300 題</td><td class="num">約 NT$30～100</td></tr>
+    <tr><td>全體同仁都在用</td><td class="num">約 1,500 題</td><td class="num">約 NT$150～500</td></tr>
+  </table></div>
+  <p class="note" style="margin-top:8px">用最便宜的 Claude Haiku 5.5（官方價：每百萬字詞單位，輸入 0.10 美元、輸出 0.50 美元）。只問操作的一題約 0.1 元台幣，要查帳號的一題約 0.3 元。實際字詞量要等知識庫寫好才量得到，這裡是估計。另開一把專用金鑰，不跟品牌客服共用，到上限自動停。</p>
+</section>
+
+<section>
+  <h2>開工前查到的事</h2>
+  <div class="tbl"><table>
+    <tr><th>查了什麼</th><th>結果</th><th>所以</th></tr>
+    <tr><td>管理系統後端能不能直接叫 AI</td><td>不行，後端的模擬環境不支援連外</td><td>改在 Mac mini 上另寫一小段程式負責叫 AI，做法跟「用 LINE 重設密碼」一樣</td></tr>
+    <tr><td>Mac mini 叫得到 Claude 嗎</td><td>可以，品牌客服 10 月底起每天都在用</td><td>照抄品牌客服的做法；AI 卡住就回「暫時無法回答」，不影響系統其他功能</td></tr>
+    <tr><td>有沒有現成的操作說明可以餵給 AI</td><td>只有打卡、考勤 6 份圖解和一份同仁加入說明；管理系統本身沒有使用說明</td><td><b>知識庫要新寫，這是最大的工作量</b>。先寫首頁、我的資料、考勤、排班這幾個最常用的，Claude 起草、你看過才放上去</td></tr>
+    <tr><td>能不能每頁都放一顆按鈕</td><td>現在的外框沒有地方放</td><td>要改外框（第 1 題）。平常的規則是加功能不改外框，所以要你同意</td></tr>
+  </table></div>
+</section>
+</div>
+
+<script>
+const QS=[
+ {t:"入口放哪裡？",why:"浮動按鈕最方便，但要改外框（平常加功能是不改外框的）。",o:[
+  ["A","每一頁右下角一顆浮動按鈕","卡住時不用離開那一頁；小幫手知道你在哪一頁。要改外框。",1],
+  ["B","左側選單多一個「問小幫手」","不用改外框，但要先切過去才能問，也不知道你剛剛在哪一頁。"]]},
+ {t:"B「查帳號狀況」可以查誰？",why:"店長常問「為什麼我核不到某某」，那就要查到別人。",o:[
+  ["A","只查問的人自己","最安全。店長問「為什麼核不到某某」時，只會說明規則，不查那個人。",1],
+  ["B","主管也能查自己管得到的同仁","店長問題答得更準，但小幫手會讀到同仁的資料，要多一層把關。"]]},
+ {t:"B 查得到哪些東西？",why:"查得越多答得越準，但送到 AI 那邊的資料也越多。",o:[
+  ["A","帳號狀態、單位、部門、職稱、目前有的功能與來由、兼任設定、待我處理的件數","夠回答九成的「為什麼看不到／按不了」。",1],
+  ["B","再加上打卡紀錄、班表","能回答「我這天為什麼算遲到」，但牽涉個資與薪資，第一期不建議。"]]},
+ {t:"答不出來的題目，誰來補答案？",why:"這會決定小幫手學得多快。",o:[
+  ["A","第一個月你自己：Claude 先擬好答案，你看過按確認","最快、答案最準，你每天花幾分鐘。",1],
+  ["B","人資","你不用顧，但人資不一定懂每個系統的規則。"],
+  ["C","各模組的負責人（財務管財務、人資管考勤…）","長期最合理，但要先排好誰負責什麼。"]]},
+ {t:"先給誰用？",why:"先小範圍試，問的題目會比較集中，知識庫好補。",o:[
+  ["A","店長以上＋總部同仁，試一個月","大多數「卡住」都在這群人身上。",1],
+  ["B","一開始就全體同仁","大家都有，但一開始答不出來的題目會很多。"]]},
+ {t:"每人每天最多問幾題？",why:"防止有人一直問、費用暴衝。",o:[
+  ["A","20 題","一般使用夠用。",1],
+  ["B","50 題","比較寬鬆。"],
+  ["C","不設限","只靠每月總上限擋。"]]},
+ {t:"每月費用上限？",why:"到上限按鈕會顯示「本月額度已用完」，同時通知你。",o:[
+  ["A","NT$500（約 15 美元）","全體都用也夠，遠低於你每月 3,000 元的總上限。",1],
+  ["B","NT$200","試用期更保守。"],
+  ["C","NT$1,000","以後擴大也不用改。"]]},
+ {t:"問答紀錄要留多久？",why:"留著才知道大家都卡在哪、知識庫該補什麼。按鈕旁會寫「問答會記錄用來改進」。",o:[
+  ["A","90 天","夠看出趨勢，也不會無限累積。",1],
+  ["B","一年","可以做年度比較。"],
+  ["C","不留，只留答不出來的題目","最少資料，但看不出大家常問什麼。"]]},
+ {t:"答不出來時畫面怎麼顯示？",why:"",o:[
+  ["A","「這題我還不會，已經記下來了」＋建議找誰（例：權限問題找人資）","同仁知道下一步。",1],
+  ["B","只顯示「這題我還不會，已經記下來了」","比較簡單，但同仁還是卡著。"]]},
+ {t:"要不要有「帶我去」按鈕？",why:"答案提到某一頁時，附一顆按鈕直接切過去。只是切頁面，不代按任何東西。",o:[
+  ["A","要","少一步找選單。",1],
+  ["B","不要","只用文字說明在哪裡。"]]}
+];
+const host=document.getElementById('qs');
+QS.forEach((q,i)=>{
+  const n=i+1, box=document.createElement('div'); box.className='q';
+  box.innerHTML=`<h3><span class="n">${n}</span><span>${q.t}</span></h3>${q.why?`<p class="why">${q.why}</p>`:''}<div class="opts"></div>`;
+  const opts=box.querySelector('.opts');
+  q.o.forEach(([k,t,d,rec])=>{
+    const id=`q${n}${k}`, lab=document.createElement('label'); lab.className='opt'; lab.htmlFor=id;
+    lab.innerHTML=`<input type="radio" name="q${n}" id="${id}" value="${k}" ${rec?'checked':''}><div><div class="t">${k}．${t}${rec?'<span class="rec">推薦</span>':''}</div><div class="d">${d}</div></div>`;
+    opts.appendChild(lab);
+  });
+  host.appendChild(box);
+});
+const ansEl=document.getElementById('ans');
+function answers(){
+  const parts=QS.map((q,i)=>{const c=document.querySelector(`input[name=q${i+1}]:checked`);return `${i+1}${c?c.value:'?'}`});
+  const allRec=QS.every((q,i)=>{const c=document.querySelector(`input[name=q${i+1}]:checked`);return c&&q.o.find(o=>o[0]===c.value)[3]});
+  return allRec?'照推薦':parts.join(' ');
+}
+function refresh(){ansEl.textContent=answers()}
+host.addEventListener('change',refresh); refresh();
+document.getElementById('copy').addEventListener('click',async e=>{
+  const txt='AI 小幫手需求：'+answers(), btn=e.currentTarget;
+  try{await navigator.clipboard.writeText(txt);btn.textContent='已複製'}
+  catch(_){const r=document.createRange();r.selectNodeContents(ansEl);const s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='已選取，請按複製'}
+  setTimeout(()=>btn.textContent='複製我的答案',2000);
+});
+</script>

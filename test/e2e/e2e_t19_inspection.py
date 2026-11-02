@@ -216,6 +216,8 @@ def install_routes(context, urls):
     ok_urls = {real, base + '/proxy', base + '/svc/apv-file-put', base + '/svc/apv-file-get'}
 
     def guard(route):
+        if route.request.url.split('?')[0].endswith('/svc/ai-help'):   # AI 小幫手（2026-11-02）：殼登入後會問 status；回「關」＝按鈕不出現，不算流出
+            return route.fulfill(status=200, headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'}, body='{"ok":true,"data":{"on":false,"reason":"off","left_today":0}}')
         if route.request.url.split('?')[0] in ok_urls:
             return route.fallback()
         leaks.append(route.request.url)

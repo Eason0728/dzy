@@ -145,6 +145,9 @@ class MockBackend:
         # 第三期照片路由：<平台主機>/platform/svc/apv-file-put|get（platform/config.js 的 /api 換成 /svc/…）
         if url.startswith(self.urls['platform'][:-len('/api')] + '/svc/apv-file-'):
             return 'svc'
+        # AI 小幫手（2026-11-02）：登入後殼會掛按鈕、開頁打 <平台主機>/platform/svc/ai-help 的 status。預設回「關」＝按鈕不出現（別支 e2e 不受影響、也不算流出）；t21 覆寫 aih_dispatch
+        if url.startswith(self.urls['platform'][:-len('/api')] + '/svc/ai-help'):
+            return 'aih'
         for b, u in self.urls.items():
             if url.startswith(u):
                 return b
@@ -251,6 +254,8 @@ class MockBackend:
 
     # ---- 各後端 dispatch ----
     def dispatch(self, backend, body):
+        if backend == 'aih':   # 小幫手 svc 路由不進 calls 流水帳（別支 e2e 斷言 calls 不受影響）
+            return self.aih_dispatch(body)
         action = body.get('action', '')
         self.calls.append((backend, action))
         if backend == 'platform':
@@ -270,6 +275,11 @@ class MockBackend:
         if backend == 'dorm':
             return self.dorm_action(action, body)
         return {'ok': False, 'error': '未知後端'}
+
+    def aih_dispatch(self, body):
+        # 預設：小幫手關閉（Mac mini 還沒更新／AIH_ON 沒設的樣子）
+        self.aih_calls = getattr(self, 'aih_calls', []) + [body.get('op')]
+        return {'ok': True, 'data': {'on': False, 'reason': 'off', 'left_today': 0}}
 
     def platform_action(self, action, body):
         payload = body.get('payload') or {}

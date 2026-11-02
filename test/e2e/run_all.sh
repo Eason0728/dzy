@@ -27,6 +27,7 @@ TESTS=(
   e2e_t18_eval.py
   e2e_t19_inspection.py
   e2e_t20_acting_switch.py
+  e2e_t21_ai_helper.py
 )
 
 for i in "${!TESTS[@]}"; do
@@ -39,4 +40,4 @@ for i in "${!TESTS[@]}"; do
 done
 
 echo
-echo "e2e 二十一支全部通過"
+echo "e2e 二十二支全部通過"
