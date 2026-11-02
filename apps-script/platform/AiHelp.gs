@@ -673,6 +673,26 @@ function aihConvGet_(uid, conv) {
 }
 
 /**
+ * aihStaffNames_()（node 專用，唯讀）→ { ok:true, names:[...] }：staff 分頁 status＝active 的同仁姓名。
+ * 去前後空白、去重、只收長度 2～6 且不含空白的字串。node 用來把問題裡的完整姓名遮成 [同仁]（spec §12.12）。
+ */
+function aihStaffNames_() {
+  try {
+    var seen = {}, names = [];
+    stfAllRows_().forEach(function (r) {
+      if (aihStr_(r.values[STF_COL.status]) !== 'active') return;
+      var n = aihStr_(r.values[STF_COL.name]);
+      var len = Array.from(n).length;
+      if (len < 2 || len > 6 || /\s/.test(n) || seen[n]) return;
+      seen[n] = true; names.push(n);
+    });
+    return { ok: true, names: names };
+  } catch (e) {
+    return aihNodeFail_('staff_read_failed', '');
+  }
+}
+
+/**
  * aihPurge_(nowMs)（node 每天 03:50 呼叫）→ { ok:true, log_deleted, pending_q_cleared, kb_expired }
  * 1. 刪 90 天前（ts < now−90 天）的 aih_log 列；ts 解析不了的列保留。
  * 2. 90 天前的 aih_pending（任何狀態）把 q 清成空白（列留著，保留 reason／狀態供統計）。

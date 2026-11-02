@@ -788,15 +788,30 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
 // T1-3／T1-5 靜態檢查：7 支不在 Code.gs；頁面地圖＝registry
 // ============================================================
 (() => {
-  const NODE_FNS = ['aiHelpAuthorize_', 'aihKbVisible_', 'aihLogAppend_', 'aihPendingAdd_', 'aihFeedback_', 'aihPurge_', 'aihConvGet_', 'aihDigest_'];
-  ok(NODE_FNS.length === 8 && NODE_FNS.every((n) => CODE_GS.indexOf(n) === -1), '5 Code.gs 全文不出現 node 專用 8 支函式的名字', NODE_FNS.filter((n) => CODE_GS.indexOf(n) !== -1));
+  const NODE_FNS = ['aiHelpAuthorize_', 'aihKbVisible_', 'aihLogAppend_', 'aihPendingAdd_', 'aihFeedback_', 'aihPurge_', 'aihConvGet_', 'aihDigest_', 'aihStaffNames_'];
+  ok(NODE_FNS.length === 9 && NODE_FNS.every((n) => CODE_GS.indexOf(n) === -1), '5 Code.gs 全文不出現 node 專用 9 支函式的名字', NODE_FNS.filter((n) => CODE_GS.indexOf(n) !== -1));
   const { sb } = load(freshSeed(HASHER));
-  ok(NODE_FNS.every((n) => typeof sb[n] === 'function'), '5 8 支都是 sandbox 全域函式（node 可直接呼叫）');
-  ok(!sb.CODE_ALLOWED_ACTIONS.some((a) => NODE_FNS.indexOf(a) !== -1) && sb.CODE_ALLOWED_ACTIONS.filter((a) => /^aih/.test(a)).length === 9, '5 白名單裡沒有 8 支；aih* 管理 action 剛好 9 支（含 aihKbImport）');
+  ok(NODE_FNS.every((n) => typeof sb[n] === 'function'), '5 9 支都是 sandbox 全域函式（node 可直接呼叫）');
+  ok(!sb.CODE_ALLOWED_ACTIONS.some((a) => NODE_FNS.indexOf(a) !== -1) && sb.CODE_ALLOWED_ACTIONS.filter((a) => /^aih/.test(a)).length === 9, '5 白名單裡沒有 9 支；aih* 管理 action 剛好 9 支（含 aihKbImport）');
   // doPost 打得到 7 支名字也一定被拒
   const adm = (() => { const a = load(freshSeed(HASHER)); a.sb.setupStaff(); return [a, adminToken(a.sb)]; })();
-  ok(NODE_FNS.every((n) => post(adm[0].sb, n, { token: adm[1] }, adm[1]).error === '不支援的操作'), '5 用 doPost 打這 8 個名字 → 不支援的操作');
+  ok(NODE_FNS.every((n) => post(adm[0].sb, n, { token: adm[1] }, adm[1]).error === '不支援的操作'), '5 用 doPost 打這 9 個名字 → 不支援的操作');
 })();
+// ============================================================
+// aihStaffNames_：只回 active、長度／空白過濾、去重、不在 Code.gs
+// ============================================================
+(() => {
+  const app = fresh();
+  const { sb, sheets } = app;
+  const mk = (emp, name, status) => { const r = new Array(24).fill(''); r[0] = emp; r[2] = name; r[3] = status; return r; };
+  const rows = [mk('S1', '  測試甲 ', 'active'), mk('S2', '測試甲', 'active'), mk('S3', '離職乙', 'disabled'), mk('S4', '待審丙', 'pending'),
+    mk('S5', '甲', 'active'), mk('S6', '一二三四五六七', 'active'), mk('S7', '測 試', 'active'), mk('S8', '歐陽測試乙丙', 'active'), mk('S9', '', 'active')];
+  rows.forEach((r) => sheets.staff._data.push(r));
+  const r = sb.aihStaffNames_();
+  ok(r.ok === true && eq(r.names, ['測試甲', '歐陽測試乙丙']), '13 aihStaffNames_ 只回 active、去空白去重、長度 2～6 且無空白', r);
+  ok(CODE_GS.indexOf('aihStaffNames_') === -1 && !sb.CODE_ALLOWED_ACTIONS.includes('aihStaffNames_'), '13 aihStaffNames_ 不在 Code.gs／白名單');
+})();
+
 await (async () => {
   const pages = await buildPages();
   const fileText = fs.readFileSync(OUT_FILE, 'utf8');

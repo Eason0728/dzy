@@ -186,9 +186,9 @@ ask／feedback／draft 順序改為：Origin → body 大小 → **驗 token** �
 
 ### 12.12 全面審查後的契約對齊（2026-11-02 夜，Codex＋Fable 互盲審查；本節優先於 §12.11）
 - 管理 action 共 **9 支**：§12.11 的 8 支＋寫 `aihKbImport`（只新增 draft，依 question 去重）。
-- node 會透過 runGas 呼叫的全域函式：§12.11 的 8 支＋**唯讀輔助 4 支** `aihPageList_`、`aihPermsOfUid_`、`aihPageVisible_`、`handleAihPendingList_`（後者帶使用者本人 token，仍經 aihEnter_ 驗 platform.aihelp）。以上 12 支都不得出現在 Code.gs（測試全文比對）。
+- node 會透過 runGas 呼叫的全域函式：§12.11 的 8 支＋**唯讀輔助 5 支** `aihPageList_`、`aihPermsOfUid_`、`aihPageVisible_`、`handleAihPendingList_`、`aihStaffNames_`（`handleAihPendingList_`帶使用者本人 token，仍經 aihEnter_ 驗 platform.aihelp）。以上 13 支都不得出現在 Code.gs（測試全文比對）。
 - 回應：Origin 錯、IP 限流、未捕捉例外一律 HTTP 200＋`{ok:false,code}`（forbidden／rate_global／ai_error）；只有 token 無效回 401。
 - `page` 後端驗存在且本人可見，否則正規化為通用頁；👎 由 `aihFeedback_` 回傳原題寫 pending，回應 `noted` 只有 pending 寫成功才為 true。
 - 月額度不持久化「已撞頂」旗標，一律即時以「已結算＋有效預扣」判斷。rid 結果寫狀態檔保留 10 分鐘（含已扣款的失敗）；前端失敗後的「重試」沿用同一 rid。
 - AI 錯誤回 `fallback`：本人可見、未過期的知識題原文最多 3 題（目前頁優先）。
-- **未決（等 Eason）**：問題自由文字裡的同仁姓名是否遮罩（§12.6 原本只列四類；可做，但兩字姓名誤遮率高）；§12.10-1 是否放寬為「通用題在任何頁都算數」。
+- **已決**：問題自由文字中的在職同仁完整姓名遮成 [同仁]（Eason 2026-11-03 選 A）；§12.10-1 維持（Eason 選 A）。姓名名單由 `aihStaffNames_` 提供（status active、長度 2～6、無空白），node 快取 10 分鐘、長名優先字串替換；取名單失敗照常回答但不遮姓名，只記錯誤碼。知識庫內容不遮。
