@@ -1,7 +1,7 @@
 // node tools/gen-aihelp-pages.mjs —— 產生 apps-script/platform/AiHelpPages.gs（AI 小幫手的頁面地圖 AIH_PAGES）
-// 來源：platform/registry.js 各模組 manifest；每個分頁一列 {m, v, name, view_name, dept, requires}。
+// 來源：platform/registry.js 各模組 manifest；每個分頁一列 {m, v, name, view_name, dept, requires_module, requires}。
 //   m＝模組 id、v＝分頁 id、name＝模組中文名、view_name＝分頁中文名、dept＝部門代碼（沒有就空字串）、
-//   requires＝該分頁自己的 requires（同殼的 isViewPermitted：空陣列＝人人可進；否則任一碼即可）。
+//   requires_module＝模組層 requires、requires＝分頁層 requires；殼是兩者都要通過（isModulePermitted ∧ isViewPermitted），空陣列＝通過，否則任一碼即可。
 // 加／改／刪模組或分頁後要重跑；test/ai-help.mock.test.mjs 會比對產物＝現行 registry（忘了重產就紅）。
 // 用法：node tools/gen-aihelp-pages.mjs [--check]   --check 只比對、不寫檔（不一致結束碼 1）
 
@@ -27,6 +27,7 @@ export async function buildPages(registryPath) {
         name: String(m.name),
         view_name: String(v.name),
         dept: m.dept ? String(m.dept) : '',
+        requires_module: Array.isArray(m.requires) ? m.requires.map(String) : [],
         requires: Array.isArray(v.requires) ? v.requires.map(String) : []
       });
     }
@@ -40,7 +41,7 @@ export function renderSource(pages) {
     '/**',
     ' * AI 小幫手頁面地圖（AIH_PAGES）—— ⚠ 產生物，不要手改。',
     ' * 重產：node tools/gen-aihelp-pages.mjs（讀 platform/registry.js 各 manifest）；test/ai-help.mock.test.mjs 會比對。',
-    ' * requires＝該分頁自己的 requires（空＝人人可進；否則任一碼即可，同前端殼的 isViewPermitted）。',
+    ' * requires_module＋requires：模組層與分頁層都要通過（空＝通過；否則任一碼即可），同前端殼。',
     ' */',
     'var AIH_PAGES = [',
     pages.map((p) => '  ' + JSON.stringify(p)).join(',\n'),

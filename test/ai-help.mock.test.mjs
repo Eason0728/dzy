@@ -1,6 +1,6 @@
 // node test/ai-help.mock.test.mjs —— AI 小幫手 Phase 1（平台後端 .gs）驗收：docs/ai-helper/{spec,plan,task}.md（§12 優先）
 // 做法同 staff.mock.test.mjs：把 .gs 讀進同一個 vm sandbox，管理 action 全程走 doPost（跟正式環境同一條路）；
-// node 專用全域函式（結尾底線 7 支）直接呼叫 sandbox 的全域函式。
+// node 專用全域函式（結尾底線 8 支）直接呼叫 sandbox 的全域函式。
 // ⚠ 姓名、生日、手機、地址都是假資料（dzy 是 public repo，不得出現真實同仁資料）。
 
 'use strict';
@@ -227,6 +227,20 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   ok(SH.every((n) => sheets[n]._rows()[0].length > 3) && sheets.aih_kb._rows().length === 2 && sheets.aih_kb._rows()[1][0] === saved.data.id, '1-1 重跑不動既有資料列');
   ok(Object.keys(sheets).filter((n) => n.indexOf('aih_') === 0).length === 4, '1-1 試算表只多這四張 aih_ 分頁');
 })();
+  // 表頭多一欄：整列比對，也停
+(() => {
+  const seed = freshSeed(HASHER);
+  seed.aih_pending = [['id', 'log_id', 'ts', 'q', 'm', 'v', 'reason', 'status', 'kb_id', 'EXTRA']];
+  const app = load(seed);
+  app.sb.setupStaff();
+  const r = post(app.sb, 'aihSetup', {}, adminToken(app.sb));
+  ok(r.ok === false && r.error === 'bad_request' && !app.sheets.aih_kb, '1-1 既有分頁表頭多一欄（第 10 欄）→ 停，一張都不建', r);
+  const seed2 = freshSeed(HASHER);
+  seed2.aih_kb = [['id', 'm']];
+  const a2 = load(seed2);
+  a2.sb.setupStaff();
+  ok(post(a2.sb, 'aihSetup', {}, adminToken(a2.sb)).error === 'bad_request', '1-1 既有分頁表頭少欄 → 停');
+})();
 (() => {
   // 表頭不符：整個停、一張都不建
   const seed = freshSeed(HASHER);
@@ -342,6 +356,8 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   ok(first.count === 2 && pl.data.items.find((x) => x.id === PENID(3)).count === 1, '1-2 同一題（同頁）出現幾次＝count', pl.data.items.map((x) => [x.id, x.count]));
   ok(post(sb, 'aihPendingSet', { id: PENID(1), status: 'done' }, adm).error === 'bad_request', '1-2 done 沒帶 kb_id → bad_request');
   ok(post(sb, 'aihPendingSet', { id: PENID(1), status: 'done', kb_id: 'kb9999' }, adm).error === 'bad_request', '1-2 done 帶不存在的 kb_id → bad_request');
+  ok(post(sb, 'aihPendingSet', { id: PENID(1), status: 'done', kb_id: k.data.id }, adm).error === 'bad_request' && app.sheets.aih_pending._rows()[1][7] === 'open', '1-2 done 帶的題還是草稿（沒上架）→ bad_request、不動資料');
+  kbSave(sb, adm, { id: k.data.id, status: 'live', expected_updated_at: k.data.updated_at });
   const dn = post(sb, 'aihPendingSet', { id: PENID(1), status: 'done', kb_id: k.data.id }, adm);
   ok(dn.ok && app.sheets.aih_pending._rows()[1][7] === 'done' && app.sheets.aih_pending._rows()[1][8] === k.data.id, '1-2 done 帶 kb_id → 寫入', dn);
   ok(post(sb, 'aihPendingSet', { id: PENID(2), status: 'ignored' }, adm).ok && post(sb, 'aihPendingList', { status: 'open' }, adm).data.items.length === 1, '1-2 ignored → open 剩 1 筆');
@@ -360,7 +376,7 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   sb.aihFeedback_('u900', LOGID(3), false);
   sb.aihFeedback_('u900', LOGID(1), true);
   const u = post(sb, 'aihUsage', { month: '2026-11' }, adm);
-  ok(u.ok && u.data.count === 3 && u.data.usd === 0.003003 && u.data.answered_ratio === 0.6667 && u.data.down_ratio === 0.3333 && eq(u.data.by_day, [{ day: '2026-11-01', count: 2 }, { day: '2026-11-02', count: 1 }]), '1-2 aihUsage 11 月：3 筆、usd 0.003003、答得出來 2/3、👎 1/3、by_day 兩天', u.data);
+  ok(u.ok && u.data.count === 3 && !('usd' in u.data) && u.data.by_day.every((d) => !('usd' in d)) && u.data.answered_ratio === 0.6667 && u.data.down_ratio === 0.3333 && eq(u.data.by_day, [{ day: '2026-11-01', count: 2 }, { day: '2026-11-02', count: 1 }]), '1-2 aihUsage 11 月：3 筆、不含 usd（費用走 node 帳本）、答得出來 2/3、👎 1/3、by_day 兩天', u.data);
   ok(post(sb, 'aihUsage', { month: '2026-10' }, adm).data.count === 1 && post(sb, 'aihUsage', { month: '2026-12' }, adm).data.count === 1, '1-2 月份邊界以台北時間算（10/31 23:59 算 10 月、11/30 16:30 UTC 算 12 月）');
   ok(post(sb, 'aihUsage', { month: '2027-01' }, adm).data.count === 0 && post(sb, 'aihUsage', { month: '2027-01' }, adm).data.answered_ratio === 0, '1-2 空月份比例為 0');
   ok(post(sb, 'aihUsage', { month: '2026-13' }, adm).error === 'bad_request', '1-2 月份格式錯 → bad_request');
@@ -410,9 +426,47 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   const D = sb.aiHelpAuthorize_(app.bTok);
   ok(D.ok === false && D.code === 'unauthorized' && eq(keysOf(D), ['code', 'error', 'ok']) && D.error && !D.who && !D.me, '3 停用帳號（token 還沒過期）→ unauthorized，什麼本人資料都不回', D);
   ok(sb.aiHelpAuthorize_('garbage').code === 'unauthorized' && sb.aiHelpAuthorize_('').code === 'unauthorized' && sb.aiHelpAuthorize_(undefined).code === 'unauthorized', '3 壞 token／空／undefined → unauthorized');
-  // 白名單釘子：偷偷多一個鍵就紅（在 sandbox 內包一層加鍵，驗證測試本身抓得到）
-  const leaky = Object.assign({}, A, { me: Object.assign({}, A.me, { phone: '0911222333' }) });
-  ok(!eq(keysOf(leaky.me), keysOf(A.me)), '3 白名單測試自證：me 多一個鍵 → 鍵比對會不相等（會紅）');
+})();
+
+// ============================================================
+// T1-3 PERMS_ON='1'（正式環境走的路）：source_zh 三種、aihKbVisible_ 依對照表權限
+// ============================================================
+(() => {
+  const app = scene();
+  const { sb } = app;
+  const adm = app.admin;
+  sb.__nowMs = NOW;
+  vm.runInContext("storePilotUnits_ = function () { return ['mzt-gf']; };", app.sb);   // 兼任店長要試點名單（StoreOps.gs 沒載入，補假的）
+  ok(post(sb, 'permInit', {}, adm).ok, 'P 前置：permInit');
+  app.props.PERMS_ON = '1';
+  const rule = post(sb, 'permMapSave', { add: [{ ladder: 'store', dept: '', title: 'pt', perm: 'platform.bulletin' }] }, adm);
+  ok(rule.ok, 'P 前置：對照表加規則「門市計時 → 公告管理」', rule);
+  const ex = post(sb, 'permExSave', { emp_no: app.a.emp, perm: 'dorm.read', mode: 'add', note: '測' }, adm);
+  ok(ex.ok, 'P 前置：給測試甲個別例外 dorm.read', ex);
+  const act = post(sb, 'permExSave', { emp_no: app.a.emp, perm: 'store.sm@mzt-gf', mode: 'add', note: '測' }, adm);
+  ok(act.ok, 'P 前置：給測試甲兼任店長 mzt-gf', act);
+  vm.runInContext('permActingReset_();', sb);
+  const A = sb.aiHelpAuthorize_(app.aTok);
+  const src = (zh) => A.perms.filter((p) => p.name_zh === zh).map((p) => p.source_zh);
+  ok(A.ok && eq(src('公告管理'), ['職稱']), 'P source_zh：規則來自職稱 → 「職稱」', A.perms);
+  ok(eq(src('宿舍：查看'), ['個別例外']), 'P source_zh：個別例外 → 「個別例外」');
+  ok(A.perms.some((p) => p.source_zh === '兼任店長'), 'P source_zh：兼任店長衍生的碼 → 「兼任店長」', A.perms);
+  ok(A.me.acting_unit_names.length === 1 && A.me.acting_unit_names[0] !== '', 'P me.acting_unit_names 有兼任的店名', A.me);
+  ok(eq(Object.keys(A).sort(), ['can_manage', 'me', 'ok', 'perms', 'who']) && eq(Object.keys(A.perms[0]).sort(), ['name_zh', 'source_zh']), 'P 開關開時輸出鍵仍是白名單');
+  // kb 可見
+  const add = (p) => kbSave(sb, adm, Object.assign({ answer: '答', status: 'live', verified_at: '2026-11-02' }, p)).data.id;
+  const kBull = add({ question: '公告管理題', m: 'bulletin', v: 'manage' });
+  const kDorm = add({ question: '宿舍題', m: 'dorm', v: 'list' });
+  const kPay = add({ question: '薪酬題', m: 'payroll', v: 'run' });
+  const ids = (r) => r.items.map((x) => x.id);
+  const VA = sb.aihKbVisible_(app.aUid);
+  ok(ids(VA).includes(kBull) && ids(VA).includes(kDorm) && !ids(VA).includes(kPay), 'P 測試甲（職稱規則＋例外）：看得到公告管理題、宿舍題；看不到薪酬題', ids(VA));
+  const VB = sb.aihKbVisible_(app.bUid);
+  ok(ids(VB).includes(kBull) && !ids(VB).includes(kDorm) && !ids(VB).includes(kPay), 'P 測試乙（同職稱、沒例外）：有公告管理題、沒有宿舍題', ids(VB));
+  // status≠active → unauthorized
+  const brow = app.sheets.staff._data.find((r) => r[0] === app.b.emp);
+  brow[sb.STF_HEADERS.indexOf('status')] = 'resigned';
+  ok(sb.aihKbVisible_(app.bUid).code === 'unauthorized' && sb.aiHelpAuthorize_(app.bTok).code === 'unauthorized', 'P staff status≠active → aihKbVisible_／aiHelpAuthorize_ 都 unauthorized');
 })();
 
 // ============================================================
@@ -465,7 +519,8 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   ok(sb.aihKbVisible_(app.bUid).code === 'unauthorized' && sb.aihKbVisible_('nobody').code === 'unauthorized' && sb.aihKbVisible_('').code === 'unauthorized', '3 停用帳號／不存在／空 uid → unauthorized');
   // 純函式：頁面規則
   ok(sb.aihPageVisible_(['*'], 'staff', 'list') && !sb.aihPageVisible_([], 'staff', 'list') && sb.aihPageVisible_([], '', '') && sb.aihPageVisible_([], 'bulletin', 'board') && !sb.aihPageVisible_([], 'nope', ''), '3 aihPageVisible_ 規則：* 通過、無權限擋、通用人人可見、platform.login 恆成立、不在地圖擋');
-  ok(sb.aihPageVisible_(['platform.review'], 'me', 'review') && !sb.aihPageVisible_([], 'me', 'review') && sb.aihPageVisible_(['platform.staff'], 'me', 'review'), '3 requires 是「任一碼」');
+  ok(sb.aihPageVisible_(['platform.self', 'platform.review'], 'me', 'review') && !sb.aihPageVisible_([], 'me', 'review') && !sb.aihPageVisible_(['platform.staff'], 'me', 'review') && sb.aihPageVisible_(['platform.staff', 'platform.self'], 'me', 'review'), '3 requires 是「任一碼」；模組層與分頁層都要過');
+  ok(!sb.aihPageVisible_(['payroll.admin'], 'payroll', 'group') && sb.aihPageVisible_(['payroll.admin', 'payroll.write'], 'payroll', 'group') && !sb.aihPageVisible_(['platform.review'], 'me', 'review'), '3 有分頁權限（payroll.admin）沒模組權限（payroll.write）→ 不可見；me/review 只有分頁碼 → 不可見');
 })();
 
 // ============================================================
@@ -589,9 +644,9 @@ await (async () => {
   ok(renderSource(pages) === fileText, '5 AiHelpPages.gs 產物＝現行 registry 產出（逐字）');
   const { sb } = load(freshSeed(HASHER));
   ok(eq(JSON.parse(JSON.stringify(sb.AIH_PAGES)), pages), '5 sandbox 載入的 AIH_PAGES 與 registry 一致');
-  ok(pages.length > 50 && pages.every((p) => Object.keys(p).join() === 'm,v,name,view_name,dept,requires' && Array.isArray(p.requires)), '5 每頁的鍵固定為 m,v,name,view_name,dept,requires', pages.length);
-  ok(pages.some((p) => p.m === 'me' && p.v === 'profile' && p.name === '我的資料' && p.view_name === '個人資料' && p.dept === '' && eq(p.requires, ['platform.self'])), '5 抽驗：我的資料／個人資料');
-  const extra = pages.concat([{ m: 'newmod', v: 'main', name: '新模組', view_name: '新', dept: '', requires: [] }]);
+  ok(pages.length > 50 && pages.every((p) => Object.keys(p).join() === 'm,v,name,view_name,dept,requires_module,requires' && Array.isArray(p.requires)), '5 每頁的鍵固定為 m,v,name,view_name,dept,requires_module,requires', pages.length);
+  ok(pages.some((p) => p.m === 'me' && p.v === 'profile' && p.name === '我的資料' && p.view_name === '個人資料' && p.dept === '' && eq(p.requires, ['platform.self']) && eq(p.requires_module, ['platform.self'])), '5 抽驗：我的資料／個人資料');
+  const extra = pages.concat([{ m: 'newmod', v: 'main', name: '新模組', view_name: '新', dept: '', requires_module: [], requires: [] }]);
   ok(renderSource(extra) !== fileText, '5 新增模組而沒重產 → 比對不相等（測試會紅）');
   ok(new Set(pages.map((p) => p.m + '/' + p.v)).size === pages.length, '5 (m,v) 不重複');
 })();

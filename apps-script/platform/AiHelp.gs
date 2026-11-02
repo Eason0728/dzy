@@ -155,16 +155,16 @@ function aihPageExists_(m, v) {
 }
 /**
  * 某人（perms）看不看得到題目的頁面（§12.2）：m 空＝通用，人人可見；m 有、v 空＝該模組任一分頁看得到即可；
- * m、v 都有＝該分頁。分頁 requires 空＝人人可進，否則任一碼即可（同殼 isViewPermitted）；platform.login＝已登入本身，永遠成立。
+ * m、v 都有＝該分頁。模組層 requires_module 與分頁層 requires 都要過（空＝通過，否則任一碼即可；同殼 isModulePermitted ∧ isViewPermitted）；platform.login＝已登入本身，永遠成立。
  * 頁面不在地圖上（模組被拿掉）＝看不到（往關的方向失敗）。
  */
 function aihPageVisible_(perms, m, v) {
   if (m === '') return true;
   var pages = aihPageList_().filter(function (p) { return p.m === m && (v === '' || p.v === v); });
-  return pages.some(function (p) {
-    if (!p.requires.length) return true;
-    return p.requires.some(function (c) { return c === 'platform.login' || hasPerm_(perms, c); });
-  });
+  var pass = function (reqs) {
+    return !reqs.length || reqs.some(function (c) { return c === 'platform.login' || hasPerm_(perms, c); });
+  };
+  return pages.some(function (p) { return pass(p.requires_module || []) && pass(p.requires); });
 }
 
 // 進入點（管理 action 用）
@@ -194,9 +194,11 @@ function handleAihSetup_(token) {
       var sh = ss.getSheetByName(AIH_SH[keys[i]]);
       if (!sh) continue;
       var h = AIH_H[keys[i]];
-      var existing = sh.getRange(1, 1, 1, h.length).getValues()[0].map(function (v) { return String(v).trim(); });
-      var empty = existing.every(function (v) { return v === ''; });
-      if (!empty && existing.join('|') !== h.join('|')) {
+      // 比整列（含預期欄數以外的欄）：多一欄、少一欄都停
+      var width = Math.max(sh.getLastColumn(), h.length);
+      var existing = sh.getRange(1, 1, 1, width).getValues()[0].map(function (v) { return String(v).trim(); });
+      while (existing.length && existing[existing.length - 1] === '') existing.pop();
+      if (existing.length && existing.join('|') !== h.join('|')) {
         return aihFail_('bad_request', '分頁「' + AIH_SH[keys[i]] + '」的表頭與程式不一致，停止初始化以免資料錯位');
       }
     }
@@ -350,7 +352,7 @@ function handleAihPendingList_(token, payload) {
   return { ok: true, data: { items: items, open_count: all.filter(function (o) { return o.status === 'open'; }).length } };
 }
 
-/** payload {id, status, kb_id?}：done 必須帶 kb_id（且要是存在的題目）；其他狀態會把 kb_id 清掉 */
+/** payload {id, status, kb_id?}：done 必須帶 kb_id（且該題要是 status live）；其他狀態會把 kb_id 清掉 */
 function handleAihPendingSet_(token, payload) {
   var c = aihEnter_(token, false);
   if (!c.ok) return c;
@@ -364,7 +366,12 @@ function handleAihPendingSet_(token, payload) {
     var cur = null;
     aihRows_('pending').forEach(function (r) { if (aihStr_(r.id) === id) cur = r; });
     if (!cur) return aihFail_('not_found', '找不到這一筆待回答');
-    if (st === 'done' && !aihRows_('kb').some(function (r) { return aihStr_(r.id) === kbId; })) return aihFail_('bad_request', '找不到這個題目編號');
+    if (st === 'done') {
+      var kbRow = null;
+      aihRows_('kb').forEach(function (r) { if (aihStr_(r.id) === kbId) kbRow = r; });
+      if (!kbRow) return aihFail_('bad_request', '找不到這個題目編號');
+      if (aihStr_(kbRow.status) !== 'live') return aihFail_('bad_request', '請先上架這一題，再標成已處理');
+    }
     var o = aihPendingObj_(cur);
     o.status = st;
     o.kb_id = st === 'done' ? kbId : '';
@@ -374,8 +381,8 @@ function handleAihPendingSet_(token, payload) {
 }
 
 /**
- * payload {month:'YYYY-MM'}（台北；沒給＝本月）→ {month, usd, count, answered_ratio, down_ratio, by_day:[{day,count}], paused}
- * 由 aih_log 加總（T1-2）：usd＝該月各列 usd 之和（以微美元整數加，不累積浮點誤差）；
+ * payload {month:'YYYY-MM'}（台北；沒給＝本月）→ {month, count, answered_ratio, down_ratio, by_day:[{day,count}], paused}
+ * 由 aih_log 統計（只算題數與比例）：費用 usd 不在這裡（§12.7：費用正本是 node 帳本，管理頁另打 svc op usage）；
  * answered_ratio＝kind=answered 的列 / count；down_ratio＝feedback=down 的列 / count（count 0 時兩者為 0）；比例四捨五入到小數 4 位。
  */
 function handleAihUsage_(token, payload) {
@@ -385,12 +392,11 @@ function handleAihUsage_(token, payload) {
   payload = payload || {};
   var month = aihStr_(payload.month) || aihTaipeiMonth_(aihNow_());
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return aihFail_('bad_request', '月份格式錯誤');
-  var micro = 0, count = 0, answered = 0, down = 0, byDay = {};
+  var count = 0, answered = 0, down = 0, byDay = {};
   aihRows_('log').forEach(function (r) {
     var ms = aihParseTs_(r.ts);
     if (isNaN(ms) || aihTaipeiMonth_(ms) !== month) return;
     count++;
-    micro += Math.round((Number(r.usd) || 0) * 1e6);
     if (aihStr_(r.kind) === 'answered') answered++;
     if (aihStr_(r.feedback) === 'down') down++;
     var day = aihTaipeiDay_(ms);
@@ -398,7 +404,7 @@ function handleAihUsage_(token, payload) {
   });
   var ratio = function (n) { return count ? Math.round(n / count * 10000) / 10000 : 0; };
   return { ok: true, data: {
-    month: month, usd: micro / 1e6, count: count, answered_ratio: ratio(answered), down_ratio: ratio(down),
+    month: month, count: count, answered_ratio: ratio(answered), down_ratio: ratio(down),
     by_day: Object.keys(byDay).sort().map(function (d) { return { day: d, count: byDay[d] }; }), paused: aihPaused_()
   } };
 }
