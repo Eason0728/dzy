@@ -7,13 +7,13 @@
   輸入：admin token。輸出：`aihSetup` 建 `aih_kb`／`aih_log`／`aih_pending`（只補不覆蓋、表頭不符停）；`aihKbList {q?, status?}` → `{items:[…kb 欄位]}`；`aihKbSave {id?, …欄位, expected_updated_at?}` → `{id}`（新題自動編號、改題比對 updated_at 防覆蓋）。
   驗收：mock 測試建表兩次不重複；非 platform.aihelp 一律 forbidden；並發改同題第二筆回 conflict。
 - **T1-2 待回答與用量**（AiHelp.gs 後半）
-  `aihPendingList {status?}`、`aihPendingSet {id, status, kb_id?}`、`aihUsage {month}` → `{usd, count, answered_ratio, down_ratio, by_day[]}`。
-  驗收：done 必須帶 kb_id；用量由 aih_log 加總，與手算一致。
+  `aihPendingList {status?}`、`aihPendingSet {id, status, kb_id?}`、`aihUsage {month}` → `{count, answered_ratio, down_ratio, by_day[], paused}`（不含金額，見 spec §12.11）。
+  驗收：done 必須帶 live 題的 kb_id；題數由 aih_log 加總，與手算一致。
 - **T1-3 node 專用全域函式**（實作為 8 支，見 spec §12.11）
   `aiHelpAuthorize_(token)`（spec §6 形狀，鍵白名單）、`aihKbLive_()`（只回 live）、`aihLogAppend_(row)`、`aihPendingAdd_(row)`、`aihFeedback_(uid, id, good)`（只能改自己的 log）、`aihPurge_(nowMs)`（刪 90 天前 log、結案 pending 的 q 清空）。
   驗收：Code.gs 全文不出現這六個名字（測試比對）；staff／系統帳／停用帳號各一例；鍵多一個就紅。
 - **T1-4 權限與分派**
-  Perms.gs `platform.aihelp` 進 GRANTABLE＋LOCKED；Code.gs 分派 7 支 aih* action；dryrun.js READ（aihKbList、aihPendingList、aihUsage）／WRITE（其餘）；perms*.mock 測試數字更新。
+  Perms.gs `platform.aihelp` 進 GRANTABLE＋LOCKED；Code.gs 分派 8 支 aih* action；dryrun.js READ（aihKbList、aihKbHist、aihPendingList、aihUsage）；perms*.mock 測試數字更新。
   驗收：全部既有 node 測試綠；`git diff --stat platform/` 只有 dryrun.js。
 - **T1-5 頁面地圖產生器**
   `tools/gen-aihelp-pages.mjs` → `AiHelpPages.gs`；測試：產物＝現行 registry。

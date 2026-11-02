@@ -155,16 +155,17 @@ function aihPageExists_(m, v) {
 }
 /**
  * 某人（perms）看不看得到題目的頁面（§12.2）：m 空＝通用，人人可見；m 有、v 空＝該模組任一分頁看得到即可；
- * m、v 都有＝該分頁。模組層 requires_module 與分頁層 requires 都要過（空＝通過，否則任一碼即可；同殼 isModulePermitted ∧ isViewPermitted）；platform.login＝已登入本身，永遠成立。
+ * m、v 都有＝該分頁。模組層 requires_module 與分頁層 requires 都要過（任一碼即可；模組層空＝不通過、分頁層空＝通過，同殼 isModulePermitted ∧ isViewPermitted）；platform.login＝已登入本身，永遠成立。
  * 頁面不在地圖上（模組被拿掉）＝看不到（往關的方向失敗）。
  */
 function aihPageVisible_(perms, m, v) {
   if (m === '') return true;
   var pages = aihPageList_().filter(function (p) { return p.m === m && (v === '' || p.v === v); });
-  var pass = function (reqs) {
-    return !reqs.length || reqs.some(function (c) { return c === 'platform.login' || hasPerm_(perms, c); });
+  var any = function (reqs) {
+    return reqs.some(function (c) { return c === 'platform.login' || hasPerm_(perms, c); });
   };
-  return pages.some(function (p) { return pass(p.requires_module || []) && pass(p.requires); });
+  // 模組層空陣列＝看不到（同殼 isModulePermitted 的 [].some）；分頁層空陣列＝通過（同 isViewPermitted）
+  return pages.some(function (p) { return any(p.requires_module || []) && (!p.requires.length || any(p.requires)); });
 }
 
 // 進入點（管理 action 用）
