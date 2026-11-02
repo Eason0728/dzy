@@ -14,12 +14,15 @@
 
 'use strict';
 
-import { getClient, newConvId, errorMessage } from './client.js';
+import { getClient, newConvId, newRid, errorMessage } from './client.js';
 import { isDryRun } from '../dryrun.js';
 
 export const MAX_Q = 300;
 export const NOTE_TEXT = '問題會送交外部 AI（Anthropic）處理，並在系統保存 90 天';
 export const DRYRUN_TEXT = '試跑模式中，小幫手不能使用';
+export const FALLBACK_TITLE = '小幫手暫時無法回答，這頁常見問題：';
+export const FB_NOTED_TEXT = '謝謝，已通知管理人員';
+export const FB_RECEIVED_TEXT = '已收到你的回饋';
 const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
 
 /** 帶我去的項目清洗：只收 {m,v} 字元白名單、label 純字串；最多 2 筆；沒權限的不收 */
@@ -47,6 +50,7 @@ export function createHelper(deps) {
   const isMobile = deps.isMobile || (() => false);
   const setHash = deps.setHash || ((h) => { /* 瀏覽器端由 mountHelper 注入 */ });
   const newConv = deps.newConv || (() => newConvId());
+  const newRidFn = deps.newRid || (() => newRid());
   const dryRun = deps.isDryRun || (() => false);   // 試跑模式：不送 ask／feedback／draft
 
   let host = null, fab = null, panel = null, logEl = null, quotaEl = null, input = null, sendBtn = null, counter = null;
@@ -96,8 +100,9 @@ export function createHelper(deps) {
         downBtn.disabled = false;
         upBtn.setAttribute('aria-pressed', 'false');
         downBtn.setAttribute('aria-pressed', 'false');
-      } else if (!good) {
-        note.textContent = '謝謝，已通知管理人員';
+      } else {
+        // 只有後端說待回答真的寫成功（noted:true）才說「已通知管理人員」，否則只說收到
+        note.textContent = (!good && r.data && r.data.noted === true) ? FB_NOTED_TEXT : FB_RECEIVED_TEXT;
       }
     }).catch(() => { note.textContent = '沒送出，請稍後再試'; upBtn.disabled = false; downBtn.disabled = false; });
   }
@@ -155,26 +160,37 @@ export function createHelper(deps) {
     updateQuota();
   }
 
-  async function send() {
-    if (busy || capped || dryRun()) return;
-    const q = String(input.value || '').trim();
-    if (!q) return;
-    if (q.length > MAX_Q) { addNotice(errorMessage('bad_input'), 'aih-error'); return; }
+  /** 錯誤泡泡下面的「這頁常見問題」：題目是按鈕，點開看知識庫原文（純文字、不經 AI） */
+  function addFallback(list) {
+    const box = h('div', { class: 'aih-fallback', 'data-role': 'aih-fallback' });
+    box.appendChild(h('p', { class: 'aih-text', 'data-role': 'aih-fallback-title' }, FALLBACK_TITLE));
+    list.forEach((it) => {
+      const btn = h('button', { type: 'button', class: 'aih-fq', 'data-role': 'aih-fq', 'aria-expanded': 'false' }, it.question);
+      const ans = h('p', { class: 'aih-text aih-fa', 'data-role': 'aih-fa' }, it.answer);
+      ans.hidden = true;
+      btn.addEventListener('click', () => {
+        ans.hidden = !ans.hidden;
+        btn.setAttribute('aria-expanded', ans.hidden ? 'false' : 'true');
+      });
+      box.appendChild(btn);
+      box.appendChild(ans);
+    });
+    logEl.appendChild(box);
+    scrollEnd();
+  }
+
+  /** 送一題（新問題與「重試」共用）：rid、page 由呼叫端決定——重試沿用同一個 rid 與同一個頁面 */
+  async function runAsk(q, page, rid) {
     busy = true;
     sendBtn.disabled = true;
     if (!conv) conv = newConv();
-    addUser(q);
-    input.value = '';
-    updateCounter();
     const pending = h('div', { class: 'aih-msg aih-bot aih-pending', 'data-role': 'aih-pending' });
     pending.appendChild(h('p', { class: 'aih-text' }, '小幫手查詢中…'));
     logEl.appendChild(pending);
     scrollEnd();
     let r;
     try {
-      let page = { m: '', v: '' };
-      try { page = getRoute() || page; } catch (e) { /* 取不到就當通用頁 */ }
-      r = await client.ask({ q, page, conv });
+      r = await client.ask({ q, page, conv, rid });
     } catch (e) {
       r = { ok: false, code: 'network', error: errorMessage('network') };
     }
@@ -186,11 +202,38 @@ export function createHelper(deps) {
       addAnswer(r.data);
     } else {
       const code = r && typeof r.code === 'string' ? r.code : 'ai_error';
-      addNotice(errorMessage(code), 'aih-error');   // unauthorized＝「請重新登入」，不自動登出
+      const notice = addNotice(errorMessage(code), 'aih-error');   // unauthorized＝「請重新登入」，不自動登出
       if (code === 'cap') setCapped();
+      else if (code === 'network' || code === 'timeout') addRetry(notice, q, page, rid);
+      else if (code === 'ai_error' && r && Array.isArray(r.fallback) && r.fallback.length) addFallback(r.fallback.slice(0, 3));
     }
     busy = false;
     if (!capped) { sendBtn.disabled = false; try { input.focus(); } catch (e) { /* ignore */ } }
+  }
+
+  /** 網路／逾時失敗：同一題給「重試」，沿用同一個 rid（後端 10 分鐘內同 uid＋rid 只算一次） */
+  function addRetry(notice, q, page, rid) {
+    const btn = h('button', { type: 'button', class: 'aih-retry', 'data-role': 'aih-retry' }, '重試');
+    btn.addEventListener('click', () => {
+      if (busy || capped || dryRun() || destroyed) return;
+      try { logEl.removeChild(notice); } catch (e) { /* ignore */ }
+      runAsk(q, page, rid);
+    });
+    notice.appendChild(btn);
+  }
+
+  async function send() {
+    if (busy || capped || dryRun()) return;
+    const q = String(input.value || '').trim();
+    if (!q) return;
+    if (q.length > MAX_Q) { addNotice(errorMessage('bad_input'), 'aih-error'); return; }
+    if (!conv) conv = newConv();
+    addUser(q);
+    input.value = '';
+    updateCounter();
+    let page = { m: '', v: '' };
+    try { page = getRoute() || page; } catch (e) { /* 取不到就當通用頁 */ }
+    await runAsk(q, page, newRidFn());
   }
 
   function updateCounter() {

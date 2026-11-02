@@ -668,6 +668,8 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   // feedback：只能改自己的
   ok(sb.aihFeedback_('u901', LOGID(1), false).code === 'not_found' && app.sheets.aih_log._rows()[1][13] === '', '3 aihFeedback_ 改別人的 log → not_found、不動資料');
   ok(sb.aihFeedback_('u900', LOGID(1), false).ok && app.sheets.aih_log._rows()[1][13] === 'down' && sb.aihFeedback_('u900', LOGID(1), true).ok && app.sheets.aih_log._rows()[1][13] === 'up', '3 aihFeedback_ 自己的 → down／up（可改）');
+  { const fbr = sb.aihFeedback_('u900', LOGID(1), false); ok(fbr.ok && fbr.q === '怎麼改密碼' && fbr.m === '' && fbr.v === '' && fbr.kind === 'answered', '3 aihFeedback_ 成功時回該筆 log 的 q（已遮罩）、m、v、kind（node 用它寫 👎 待回答）', fbr); }
+  ok(sb.aihFeedback_('u901', LOGID(1), false).q === undefined, '3 aihFeedback_ 別人的 log 不回 q');
   ok(sb.aihFeedback_('u900', LOGID(8), true).code === 'not_found' && sb.aihFeedback_('u900', LOGID(1), 'yes').code === 'bad_input' && app.sheets.aih_log._rows()[1].slice(0, 13).join('|') === lr.slice(0, 13).join('|'), '3 不存在 → not_found；good 非布林 → bad_input；其他欄不被動到');
   // pending
   const p1 = sb.aihPendingAdd_({ id: PENID(1), log_id: LOGID(1), q: 'Q1', reason: 'thumbs_down' });

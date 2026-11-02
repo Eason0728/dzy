@@ -639,7 +639,10 @@ function aihPendingAdd_(row) {
   });
 }
 
-/** aihFeedback_(uid, id, good)：只能改「自己的」log 列（uid 要等於該列 uid）；feedback 寫 up／down，可覆寫 */
+/**
+ * aihFeedback_(uid, id, good)：只能改「自己的」log 列（uid 要等於該列 uid）；feedback 寫 up／down，可覆寫。
+ * 回 {ok:true, feedback, q, m, v, kind}：q 是 log 裡已遮罩的問題、m／v／kind 同該列；node 用它寫待回答（👎），不靠記憶體。
+ */
 function aihFeedback_(uid, id, good) {
   if (!aihReady_()) return aihNodeFail_('not_inited', aihEnabledMsg_());
   if (typeof good !== 'boolean') return aihNodeFail_('bad_input', 'good 要是 true 或 false');
@@ -652,7 +655,7 @@ function aihFeedback_(uid, id, good) {
     if (!cur || aihStr_(cur.uid) !== u) return aihNodeFail_('not_found', '找不到這筆紀錄');
     cur.feedback = good ? 'up' : 'down';
     aihWriteAt_('log', cur._row, cur);
-    return { ok: true, feedback: cur.feedback };
+    return { ok: true, feedback: cur.feedback, q: aihStr_(cur.q), m: aihStr_(cur.m), v: aihStr_(cur.v), kind: aihStr_(cur.kind) };
   });
 }
 

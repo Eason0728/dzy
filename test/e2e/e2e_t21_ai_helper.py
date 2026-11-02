@@ -101,7 +101,7 @@ class Mock21(MockBackend):
                 self.n += 1
                 self.pending.append({'id': 'aip_20261102091%03d_%04x' % (self.n, self.n), 'log_id': body['id'], 'ts': '2026-11-02T09:05:00.000Z', 'q': lg['q'],
                                      'm': lg['page']['m'], 'v': lg['page']['v'], 'reason': 'thumbs_down', 'status': 'open', 'kb_id': ''})
-            return {'ok': True, 'data': {}}
+            return {'ok': True, 'data': {'noted': not body.get('good')}}
         if op in ('draft', 'usage'):
             if '*' not in USERS[uid]['perms']:
                 return {'ok': False, 'code': 'forbidden', 'error': 'x'}
@@ -337,7 +337,7 @@ def main():
             ask(pg, '薪水怎麼算')
             before = len(mock.pending)
             pg.locator('[data-role="aih-fb"] [data-act="down"]').last.click()
-            pg.wait_for_function('() => /謝謝/.test(document.querySelector(\'[data-role="aih-fb-note"]\').textContent)', timeout=5000)
+            pg.wait_for_function('() => /謝謝，已通知管理人員/.test(document.querySelector(\'[data-role="aih-fb-note"]\').textContent)', timeout=5000)
             fbs = [b for b in mock.aih_bodies if b.get('op') == 'feedback']
             check(len(fbs) == 1 and fbs[0]['good'] is False and fbs[0]['id'].startswith('aih_'), '④ 👎 打 feedback{id, good:false}：%s' % [{k: v for k, v in b.items() if k != 'token'} for b in fbs])
             check(len(mock.pending) == before + 1 and mock.pending[-1]['reason'] == 'thumbs_down', '④ 後端把這題記進待回答（thumbs_down）')

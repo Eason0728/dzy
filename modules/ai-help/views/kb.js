@@ -56,7 +56,7 @@ export function mountKb(el, ctx) {
   function expireTag(it) {
     if (it.status !== 'live') return '';
     const today = taipeiDay();
-    if (!it.expires_at || it.expires_at < today) return '　·　⚠ 已過期（不會給 AI 用）';
+    if (!it.expires_at || it.expires_at <= today) return '　·　⚠ 已過期（不會給 AI 用）';
     if (it.expires_at <= addDays(today, 14)) return '　·　⚠ 快到期';
     return '';
   }

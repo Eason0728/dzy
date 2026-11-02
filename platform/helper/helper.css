@@ -91,6 +91,22 @@
   cursor: pointer;
 }
 .aih-go:hover { background: var(--brand-light); }
+.aih-retry, .aih-fq {
+  display: block;
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--brand);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--card);
+  color: var(--brand);
+  font-size: var(--fs-sm, 13px);
+  font-weight: var(--fw-bold, 700);
+  text-align: left;
+  cursor: pointer;
+}
+.aih-fallback { align-self: flex-start; max-width: 92%; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius, 10px); background: var(--card); }
+.aih-fa { margin-top: 6px; font-size: var(--fs-sm, 13px); color: var(--muted); }
 .aih-fb { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .aih-fb-btn { min-width: 36px; min-height: 36px; border: 1px solid var(--line); border-radius: var(--radius-sm, 6px); background: var(--card); font-size: 16px; cursor: pointer; }
 .aih-fb-btn[aria-pressed="true"] { background: var(--brand-light); border-color: var(--brand); }

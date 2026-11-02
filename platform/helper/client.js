@@ -3,11 +3,13 @@
  *
  * 路由：BACKENDS.platform 的 …/api 換成 …/svc/ai-help（同 lineAuthUrl／api.js proxyUrl 的做法）。
  * 請求一律 POST、Content-Type: text/plain 的 JSON（免 CORS 預檢），token 由 auth.getToken() 取；
- * 回應 HTTP 200＋{ok:true,data} 或 {ok:false,code,error}（§12.8）。
+ * 回應 HTTP 200＋{ok:true,data} 或 {ok:false,code,error}（§12.8；只有 token 無效是 401＋code unauthorized，也要讀得出來）。
+ * ai_error 的回應帶 fallback:[{id,question,answer}]（知識庫原文最多 3 題，§12.8），原樣（清洗過）放在失敗物件的 fallback。
  *
  * 規則：
  * - 前端自報的東西後端一律不信（§12.2）：ask 不送 alerts、不送 history，只送 q／page{m,v}／conv／rid。
- * - 每次 ask 帶 rid（crypto.randomUUID，失敗退回 Date.now＋亂數；後端 10 分鐘內同 uid＋rid 回放，§12.7）。
+ * - 每次 ask 帶 rid（crypto.randomUUID，失敗退回 Date.now＋亂數；後端 10 分鐘內同 uid＋rid 回放，§12.7）；
+ *   同一題因網路／逾時失敗要重試時，呼叫端把原本的 rid 傳回 ask({rid})，後端才認得是同一題。
  * - 逾時 30 秒（後端 Claude 逾時 15 秒，§12.7）；網路失敗、逾時、非 JSON、HTTP 非 2xx 一律回 {ok:false,code:'network'|'timeout'}，絕不拋例外。
  * - unauthorized 只回「請重新登入」，這裡與 widget 都不會自動登出（登出是殼的事，代轉 401 才會觸發）。
  * - 回傳給畫面的 error 一律是中文訊息表裡的字（後端的 error 內文不直接顯示）。
@@ -45,6 +47,18 @@ export function errorMessage(code) {
 export function helperUrl(platformUrl) {
   const u = platformUrl === undefined ? (BACKENDS.platform || '') : String(platformUrl || '');
   return /\/api$/.test(u) ? u.replace(/\/api$/, '/svc/ai-help') : '';
+}
+
+/** 備援題目清洗：只收 {id,question,answer} 三個字串欄位、最多 3 題（畫面一律 textContent） */
+export function cleanFallback(list) {
+  const out = [];
+  if (!Array.isArray(list)) return out;
+  for (const it of list) {
+    if (out.length >= 3) break;
+    if (!it || typeof it !== 'object' || typeof it.question !== 'string' || typeof it.answer !== 'string' || !it.question.trim()) continue;
+    out.push({ id: typeof it.id === 'string' ? it.id.slice(0, 40) : '', question: it.question.slice(0, 200), answer: it.answer.slice(0, 1500) });
+  }
+  return out;
 }
 
 /** 請求代號：crypto.randomUUID，不能用（舊瀏覽器、非安全環境）就退回 Date.now＋亂數 */
@@ -106,12 +120,18 @@ export function createClient(deps) {
           body: JSON.stringify(Object.assign({}, body, { token })),
           signal: ctl ? ctl.signal : undefined
         });
-        if (!res || res.ok === false) return fail('network');   // 404（Mac mini 還沒更新）、5xx 都算連不上
+        if (!res) return fail('network');
         let json = null;
-        try { json = await res.json(); } catch (e) { return fail('network'); }
+        try { json = await res.json(); } catch (e) { return fail('network'); }      // 不是 JSON（404 頁、5xx 頁）＝連不上
         if (!json || typeof json !== 'object') return fail('network');
+        if (res.ok === false) {                                                       // 非 2xx：只有後端明確回 {ok:false,code}（401 unauthorized）才採用，其餘算連不上
+          return json.ok === false && typeof json.code === 'string' ? fail(json.code) : fail('network');
+        }
         if (json.ok === true) return { ok: true, data: (json.data && typeof json.data === 'object') ? json.data : {} };
-        return fail(typeof json.code === 'string' ? json.code : 'ai_error');
+        const out = fail(typeof json.code === 'string' ? json.code : 'ai_error');
+        const fb = cleanFallback(json.fallback);
+        if (fb.length) out.fallback = fb;
+        return out;
       })();
       const first = await Promise.race([req.catch(() => 'throw'), timeout]);
       if (first === 'timeout') return fail('timeout');
@@ -135,8 +155,9 @@ export function createClient(deps) {
     /** → {on, reason, left_today} */
     status() { return post({ op: 'status' }); },
     /** → {id, kind:'answered'|'unknown', answer, go:[{m,v,label}], who}；不送 alerts、history（§12.2） */
-    ask({ q, page, conv }) {
-      return post({ op: 'ask', q: String(q === undefined || q === null ? '' : q), page: cleanPage(page), conv: String(conv || ''), rid: newRid(d) });
+    ask({ q, page, conv, rid }) {
+      const useRid = typeof rid === 'string' && rid ? rid : newRid(d);   // 重試同一題沿用原 rid；新問題才產新的
+      return post({ op: 'ask', q: String(q === undefined || q === null ? '' : q), page: cleanPage(page), conv: String(conv || ''), rid: useRid });
     },
     /** 👍👎 */
     feedback({ id, good }) { return post({ op: 'feedback', id: String(id || ''), good: good === true }); },

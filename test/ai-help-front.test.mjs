@@ -276,6 +276,87 @@ for (const [code, text] of [['ai_error', '小幫手暫時無法回答'], ['unaut
   await send(h, '問題');
   ok(byRole(h.parent, 'aih-error').textContent.includes('連不上'), 'ask 網路失敗 → 「連不上小幫手」');
 }
+// ⑥b 網路／逾時失敗 → 「重試」沿用同一個 rid（B5）；新問題才換 rid
+{
+  let askN = 0;
+  const h = mkHelper({ handler: (b) => {
+    if (b.op === 'status') return jsonRes({ ok: true, data: { on: true, left_today: 20 } });
+    askN += 1;
+    if (askN === 1) throw new Error('net');
+    return jsonRes({ ok: true, data: { id: 'aih_1', kind: 'answered', answer: '答案', go: [], who: '' } });
+  } });
+  await h.hp.start(h.parent);
+  await byRole(h.parent, 'aih-fab').fire('click');
+  await send(h, '同一題');
+  const retry = byRole(h.parent, 'aih-retry');
+  ok(retry && retry.tag === 'button' && retry.textContent === '重試' && byRole(h.parent, 'aih-error').textContent.includes('連不上'), '網路失敗 → 錯誤泡泡裡有「重試」按鈕');
+  await retry.fire('click');
+  await flush();
+  const asks = h.f.calls.filter((x) => x.body.op === 'ask').map((x) => x.body);
+  ok(asks.length === 2 && asks[0].rid === asks[1].rid && asks[0].q === asks[1].q && asks[0].conv === asks[1].conv, '重試沿用同一個 rid（同題、同 conv）', asks.map((a) => a.rid));
+  ok(byRole(h.parent, 'aih-retry') === null && byRole(h.parent, 'aih-error') === null && byRole(h.parent, 'aih-answer').textContent === '答案', '重試成功：錯誤泡泡與重試鈕消失、顯示答案');
+  ok(allRole(h.parent, 'aih-msg').filter((n) => n.attrs['data-from'] === 'user').length === 1, '重試不會多出一個使用者泡泡');
+  await send(h, '新問題');
+  const asks2 = h.f.calls.filter((x) => x.body.op === 'ask').map((x) => x.body);
+  ok(asks2.length === 3 && asks2[2].rid !== asks2[0].rid, '新問題產新 rid');
+  ok(byRole(h.parent, 'aih-quota').textContent === '今天還可以問 18 題', '重試成功只扣一題');
+}
+{
+  const C2 = await import('../platform/helper/client.js');
+  const f = fakeFetch((b) => (b.op === 'status' ? jsonRes({ ok: true, data: { on: true } }) : new Promise(() => {})));
+  const doc = makeDoc(); const parent = new Node('div');
+  const hp = W.createHelper({ doc, client: C2.createClient({ fetch: f, getToken: () => 't', url: URL_, timeoutMs: 30 }), getRoute: () => ({ m: 'me', v: 'profile' }), canGo: () => true });
+  await hp.start(parent);
+  await byRole(parent, 'aih-fab').fire('click');
+  const inp = byRole(hp.el, 'aih-input'); inp.value = '慢題'; await byRole(hp.el, 'aih-send').fire('click'); await new Promise((r) => setTimeout(r, 120)); await flush();
+  ok(byRole(parent, 'aih-retry') && byRole(parent, 'aih-error').textContent.includes('太久'), '逾時 → 也有「重試」');
+  await byRole(parent, 'aih-retry').fire('click'); await new Promise((r) => setTimeout(r, 120)); await flush();
+  const asks = f.calls.filter((x) => x.body.op === 'ask').map((x) => x.body);
+  ok(asks.length === 2 && asks[0].rid === asks[1].rid, '逾時重試沿用同一個 rid（真 client）');
+  const cc = mkClient(() => jsonRes({ ok: true, data: {} }));
+  await cc.c.ask({ q: 'x', page: {}, conv: '', rid: 'fixed-rid-0001' });
+  ok(cc.f.calls[0].body.rid === 'fixed-rid-0001', 'client.ask({rid}) 原樣帶出');
+}
+// ⑥c ai_error 備援：這頁常見問題（純文字、點開看原答案）
+{
+  const evil = '<img src=x onerror=alert(1)>';
+  const fb = [{ id: 'kb0001', question: '怎麼改密碼' + evil, answer: '到「我的資料」按改密碼。\n' + evil }, { id: 'kb0002', question: '第二題', answer: '答二' }, { id: 'kb0003', question: '第三', answer: '答三' }, { id: 'kb0004', question: '第四（超過三題）', answer: 'x' }];
+  const h = mkHelper({ handler: askHandler({ ok: false, code: 'ai_error', error: 'raw', fallback: fb }) });
+  await h.hp.start(h.parent);
+  await byRole(h.parent, 'aih-fab').fire('click');
+  await send(h, '問題');
+  ok(byRole(h.parent, 'aih-fallback-title').textContent === '小幫手暫時無法回答，這頁常見問題：', 'ai_error＋fallback → 「小幫手暫時無法回答，這頁常見問題：」');
+  const qs = allRole(h.parent, 'aih-fq');
+  ok(qs.length === 3 && qs[0].tag === 'button' && qs[0].textContent === '怎麼改密碼' + evil, '最多 3 題、題目是按鈕、純文字');
+  const as = allRole(h.parent, 'aih-fa');
+  ok(as.length === 3 && as.every((a) => a.hidden === true), '答案預設收起');
+  await qs[0].fire('click');
+  ok(as[0].hidden === false && as[0].textContent === '到「我的資料」按改密碼。\n' + evil && qs[0].attrs['aria-expanded'] === 'true', '點開看知識庫原文（純文字）');
+  await qs[0].fire('click');
+  ok(as[0].hidden === true, '再點收起');
+  ok(h.parent.all((n) => ['img', 'script', 'a', 'iframe'].includes(n.tag)).length === 0, '備援區沒有任何會執行的節點');
+  ok(byRole(h.parent, 'aih-send').disabled === false && byRole(h.parent, 'aih-retry') === null, 'ai_error 不給重試鈕（重試只給網路／逾時），送出鈕恢復');
+  const none = mkHelper({ handler: askHandler({ ok: false, code: 'ai_error', error: 'raw' }) });
+  await none.hp.start(none.parent);
+  await byRole(none.parent, 'aih-fab').fire('click');
+  await send(none, '問題');
+  ok(byRole(none.parent, 'aih-fallback') === null && byRole(none.parent, 'aih-error').textContent.includes('小幫手暫時無法回答'), '沒有 fallback → 只顯示一般錯誤');
+}
+// ⑥d client：401 unauthorized 與 fallback 清洗（B6）
+{
+  const t401 = mkClient(() => jsonRes({ ok: false, code: 'unauthorized', error: 'x' }, { ok: false, status: 401 }));
+  const r = await t401.c.status();
+  ok(r.ok === false && r.code === 'unauthorized' && r.error === '請重新登入', 'HTTP 401＋{code:unauthorized} → unauthorized（請重新登入），不是「連不上」');
+  const t500 = mkClient(() => jsonRes({ ok: false, code: 'forbidden' }, { ok: false, status: 502 }));
+  ok((await t500.c.status()).code === 'forbidden', '非 2xx 但有明確 code 就照 code');
+  const html = mkClient(() => ({ ok: false, status: 502, async json() { throw new Error('html'); } }));
+  ok((await html.c.status()).code === 'network', '非 2xx 且不是 JSON → network');
+  const ae = mkClient(() => jsonRes({ ok: false, code: 'ai_error', error: 'x', fallback: [{ id: 'kb1', question: 'Q', answer: 'A', extra: 1 }, { id: 5, question: '', answer: 'x' }, null, 'str', { question: 'Q2', answer: 'A2' }, { question: 'Q3', answer: 'A3' }, { question: 'Q4', answer: 'A4' }] }));
+  const e = await ae.c.ask({ q: 'x', page: {}, conv: '' });
+  ok(e.code === 'ai_error' && e.fallback.length === 3 && JSON.stringify(e.fallback[0]) === JSON.stringify({ id: 'kb1', question: 'Q', answer: 'A' }) && e.fallback[1].id === '', 'client：ai_error 的 fallback 清洗（只留 id／question／answer、最多 3 題、壞項丟掉）', e);
+  const kbsrc = read('modules/ai-help/views/kb.js');
+  ok(/it\.expires_at <= today\) return '　·　⚠ 已過期/.test(kbsrc) && !/it\.expires_at < today/.test(kbsrc), 'B8 管理頁：expires_at <= 今天 視為已過期（與後端 aihKbVisible_ 一致）');
+}
 // ⑦ 帶我去
 {
   ok(JSON.stringify(W.cleanGo([{ m: 'me', v: 'profile', label: '我的資料' }], () => true)) === JSON.stringify([{ m: 'me', v: 'profile', label: '我的資料' }]), 'cleanGo：合格項目保留');
@@ -328,6 +409,16 @@ for (const [code, text] of [['ai_error', '小幫手暫時無法回答'], ['unaut
   await up.fire('click');
   await flush();
   ok(up.disabled === false && byRole(h.parent, 'aih-fb-note').textContent.includes('沒送出'), 'feedback 失敗 → 提示、按鈕恢復可再按');
+}
+// ⑧b 👎：只有 noted:true 才說「已通知管理人員」
+for (const [noted, want] of [[true, '謝謝，已通知管理人員'], [false, '已收到你的回饋'], [undefined, '已收到你的回饋']]) {
+  const h = mkHelper({ handler: (b) => (b.op === 'status' ? jsonRes({ ok: true, data: { on: true } }) : b.op === 'ask' ? jsonRes({ ok: true, data: { id: 'aih_1', kind: 'answered', answer: 'a', go: [], who: '' } }) : jsonRes({ ok: true, data: noted === undefined ? {} : { noted } })) });
+  await h.hp.start(h.parent);
+  await byRole(h.parent, 'aih-fab').fire('click');
+  await send(h, '問題');
+  await byRole(h.parent, 'aih-fb').querySelector('[data-act="down"]').fire('click');
+  await flush();
+  ok(byRole(h.parent, 'aih-fb-note').textContent === want, `👎 回 noted=${noted} → 「${want}」`, byRole(h.parent, 'aih-fb-note').textContent);
 }
 // ⑨ 鍵盤
 {
