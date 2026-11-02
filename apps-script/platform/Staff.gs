@@ -353,6 +353,36 @@ function stfReadExtraMap_() {
   return map;
 }
 
+// 兼任部門的身分（2026-11-02 Eason：「兼任要可以選部門總監還是部門同仁；有兼任的該部門權限等同於主要部門的權限」）。
+// 格子存 'fin:hm,it:hs,ck'（部門代碼:職稱）；職稱只有總監 hm／部門同仁 hs；中央工廠 ck 不分職稱。
+// 舊資料只有代碼（'fin'）＝照主要職稱：主要職稱是總監 hm → 總監，其他 → 部門同仁（Eason 選「照他主要職稱」）。
+// 被核的一方不變：兼任者本人的工時、假單、認領、人事異動照舊只看主要部門（Eason 選「只看主要部門」）。
+var STF_EXTRA_ROLE_TITLES = ['hm', 'hs'];
+function stfExtraCodeOf_(tok) { var s = stfStr_(tok), i = s.indexOf(':'); return i === -1 ? s : s.slice(0, i).trim(); }
+/** 格子（或代碼／'代碼:職稱' 陣列）→ 部門代碼陣列 */
+function stfExtraCodes_(raw) { return (Array.isArray(raw) ? raw : stfSplitCodes_(raw)).map(stfExtraCodeOf_).filter(function (c) { return c; }); }
+/** 格子（或陣列）→ [{dept, title}]；ck 的 title 是 ''；職稱不認得一律當部門同仁（往權限少的方向） */
+function stfExtraRoles_(raw, mainTitle) {
+  return (Array.isArray(raw) ? raw : stfSplitCodes_(raw)).map(function (tok) {
+    var s = stfStr_(tok), i = s.indexOf(':');
+    var dept = i === -1 ? s : s.slice(0, i).trim();
+    if (!dept) return null;
+    if (dept === STF_EXTRA_CK) return { dept: dept, title: '' };
+    var t = i === -1 ? (stfStr_(mainTitle) === 'hm' && dept !== STF_MGMT_DEPT ? 'hm' : 'hs') : s.slice(i + 1).trim();
+    return { dept: dept, title: STF_EXTRA_ROLE_TITLES.indexOf(t) !== -1 ? t : 'hs' };
+  }).filter(function (x) { return x; });
+}
+/** [{dept, title}] → 格子文字 */
+function stfExtraFormat_(roles) { return roles.map(function (r) { return r.dept === STF_EXTRA_CK || !r.title ? r.dept : r.dept + ':' + r.title; }).join(','); }
+/** 兼任總監的部門（只算 org 裡啟用、屬於 dzy-hq、不是管理部的部門；管理部不設總監） */
+function stfExtraHeadDepts_(raw, mainTitle, org) {
+  return stfExtraRoles_(raw, mainTitle).filter(function (r) {
+    if (r.title !== 'hm' || r.dept === STF_MGMT_DEPT) return false;
+    var d = org && org.dept ? org.dept[r.dept] : null;
+    return !!(d && d.active && d.parent === 'dzy-hq');
+  }).map(function (r) { return r.dept; });
+}
+
 function stfExtraDeptName_(org, code) {
   if (code === STF_EXTRA_CK) return '中央工廠';   // 兼任的是單位中央工廠；品牌欄 2026-10-23 起叫「研發部」，不跟著品牌名
   return org.dept[code] ? org.dept[code].name : code;
@@ -405,26 +435,32 @@ function stfFlags_(o, org) {
 
 /** 把 extra_depts／extra_dept_names（及可選的 flags）補進 stfToObj_ 的結果 */
 function stfDecorate_(o, extraMap, org, withFlags) {
-  var codes = stfSplitCodes_(extraMap[stfNormEmp_(o.emp_no)]);
-  o.extra_depts = codes;
-  o.extra_dept_names = codes.map(function (c) { return stfExtraDeptName_(org, c); });
+  var roles = stfExtraRoles_(extraMap[stfNormEmp_(o.emp_no)], o.title);
+  o.extra_depts = roles.map(function (r) { return r.dept; });
+  o.extra_dept_names = roles.map(function (r) { return stfExtraDeptName_(org, r.dept); });
+  o.extra_titles = roles.map(function (r) { return r.title; });   // 與 extra_depts 一一對應：'hm' 總監／'hs' 部門同仁／''（中央工廠）
   if (withFlags) o.flags = stfFlags_(o, org);
   return o;
 }
 
 /**
- * 驗證兼任部門陣列。回 {error} 或 {codes: 排序後的代碼陣列}。
- * 規則：陣列；每個是 dzy-hq 底下 active 的部門（或特別代碼 ck）；不得等於主要部門（主要單位是 ck 也不能再兼任 ck）；不得重複。
+ * 驗證兼任部門陣列。回 {error} 或 {codes: 排序後的 '代碼:職稱' 陣列（ck 只有代碼）}。
+ * 每一項是 {dept, title}（2026-11-02 起；title＝hm 總監／hs 部門同仁，ck 不用填）或舊格式字串代碼（＝照主要職稱 mainTitle）。
+ * 規則：陣列；每個是 dzy-hq 底下 active 的部門（或特別代碼 ck）；不得等於主要部門（主要單位是 ck 也不能再兼任 ck）；不得重複；管理部不能選總監。
  */
-function stfCleanExtraDepts_(org, list, mainUnit, mainDept, existing) {
-  existing = existing || [];   // 這個人目前就有的兼任代碼：停用或已不存在也原樣放行；新加入的才要求啟用中
+function stfCleanExtraDepts_(org, list, mainUnit, mainDept, existing, mainTitle) {
+  existing = stfExtraCodes_(existing || []);   // 這個人目前就有的兼任代碼：停用或已不存在也原樣放行；新加入的才要求啟用中
   if (!Array.isArray(list)) return { error: '兼任部門格式錯誤' };
   var seen = {};
   var codes = [];
   for (var i = 0; i < list.length; i++) {
-    if (typeof list[i] !== 'string') return { error: '兼任部門格式錯誤' };
-    var c = list[i].trim();
-    if (!c) return { error: '兼任部門格式錯誤' };
+    var item = list[i], c, role;
+    if (typeof item === 'string') { c = item.trim(); role = stfStr_(mainTitle) === 'hm' && c !== STF_MGMT_DEPT ? 'hm' : 'hs'; }   // 舊格式：照主要職稱（管理部不設總監＝同仁）
+    else if (item && typeof item === 'object' && typeof item.dept === 'string') { c = item.dept.trim(); role = stfStr_(item.title); }
+    else return { error: '兼任部門格式錯誤' };
+    if (!c || c.indexOf(':') !== -1) return { error: '兼任部門格式錯誤' };
+    if (c !== STF_EXTRA_CK && STF_EXTRA_ROLE_TITLES.indexOf(role) === -1) return { error: '兼任部門要選「總監」或「部門同仁」' };
+    if (c !== STF_EXTRA_CK && c === STF_MGMT_DEPT && role === 'hm') return { error: '管理部不設總監，兼任管理部只能選部門同仁' };
     if (seen[c]) return { error: '兼任部門不能重複' };
     seen[c] = true;
     if (c === STF_EXTRA_CK) {
@@ -434,9 +470,9 @@ function stfCleanExtraDepts_(org, list, mainUnit, mainDept, existing) {
       if ((!d || !d.active || d.parent !== 'dzy-hq') && existing.indexOf(c) === -1) return { error: '兼任部門只能選鼎兆元總部底下啟用中的部門' };
       if (c === mainDept) return { error: '兼任部門不能和主要部門相同' };
     }
-    codes.push(c);
+    codes.push(c === STF_EXTRA_CK ? c : c + ':' + role);
   }
-  var orderOf = function (c) { return c === STF_EXTRA_CK ? 1e9 : (org.dept[c] ? org.dept[c].order : 5e8); };
+  var orderOf = function (t) { var c = stfExtraCodeOf_(t); return c === STF_EXTRA_CK ? 1e9 : (org.dept[c] ? org.dept[c].order : 5e8); };
   codes.sort(function (a, b) { return orderOf(a) - orderOf(b) || (a < b ? -1 : 1); });
   return { codes: codes };
 }
@@ -463,7 +499,7 @@ function stfPruneExtraDept_(row, empNo, newDept, newUnit) {
   var dropCk = newUnit === STF_EXTRA_CK;
   if ((!newDept && !dropCk) || stfExtraColState_() !== 'ok') return;
   var cur = stfSplitCodes_(stfReadExtraMap_()[stfNormEmp_(empNo)]);
-  var next = cur.filter(function (c) { return !(newDept && c === newDept) && !(dropCk && c === STF_EXTRA_CK); });
+  var next = stfExtraAfterPrune_(cur, newDept, newUnit);
   if (next.length === cur.length) return;
   stfWriteExtraCell_(row, next);
 }
@@ -471,7 +507,7 @@ function stfPruneExtraDept_(row, empNo, newDept, newUnit) {
 /** stfPruneExtraDept_ 的純計算版（不寫表）：主要部門／單位改成 newDept／newUnit 後，兼任代碼剩哪些 */
 function stfExtraAfterPrune_(cur, newDept, newUnit) {
   var dropCk = newUnit === STF_EXTRA_CK;
-  return cur.filter(function (c) { return !(newDept && c === newDept) && !(dropCk && c === STF_EXTRA_CK); });
+  return cur.filter(function (t) { var c = stfExtraCodeOf_(t); return !(newDept && c === newDept) && !(dropCk && c === STF_EXTRA_CK); });
 }
 
 /** 第二期：這位操作者是不是系統管理者（role admin；人資 platform.staff 不算） */
@@ -941,7 +977,7 @@ function stfLoginGate_(userId) {
  * 審核者本人必須 status active、單位 active、職稱 active 且屬於該單位的職稱階梯；未知 ladder 一律沒有資格。
  * 人資（platform.staff）與 admin 不在這裡判斷（stfReviewer_ 另外放行）。
  */
-function stfReviewScope_(values, org) {
+function stfReviewScope_(values, org, extraRaw) {
   if (stfStr_(values[STF_COL.status]) !== 'active') return null;
   var unitCode = stfStr_(values[STF_COL.unit]);
   var unit = org.unit[unitCode];
@@ -971,10 +1007,13 @@ function stfReviewScope_(values, org) {
   var acting = typeof permActingUnitsOf_ === 'function' ? permActingUnitsOf_(stfNormEmp_(values[STF_COL.emp_no])).filter(function (c) {
     var au = org.unit[c]; return !!(au && au.active && (au.ladder || 'store') === 'store' && c !== 'ck');
   }) : [];
-  if (!kinds.length && !acting.length) return null;
+  // 兼任總監（2026-11-02 Eason：兼任部門的權限等同主要部門）：另外當作那些部門的總監（stfScopeExtraMeets_ 比對）。extraRaw 省略＝自己讀 staff 第 27 欄
+  var extraHeads = stfExtraHeadDepts_(extraRaw !== undefined ? extraRaw : stfReadExtraMap_()[stfNormEmp_(values[STF_COL.emp_no])], title.code, org);
+  if (!kinds.length && !acting.length && !extraHeads.length) return null;
   // emp／title（區域，docs/regions/spec.md 第 5 節）：給 stfScopeMeetsKind_ 問 regionOfficeCovers_ 用
   return { kinds: kinds, unit: unitCode, unit_name: unit.name, brand: unit.parent, dept: dept, rank: title.rank, titleLadder: title.parent,
-    emp: stfNormEmp_(values[STF_COL.emp_no]), title: title.code, acting: acting, actingRank: org.title.sm ? org.title.sm.rank : 3 };
+    emp: stfNormEmp_(values[STF_COL.emp_no]), title: title.code, acting: acting, actingRank: org.title.sm ? org.title.sm.rank : 3,
+    extraHeads: extraHeads, extraRank: org.title.hm ? org.title.hm.rank : 2 };
 }
 
 /** 被審的一個身分（單位、部門、職稱）需要哪一種審核者；回 null＝資料已不合規或沒有上一層 → 只有人資 */
@@ -1027,6 +1066,7 @@ function stfReviewNeed_(org, unitCode, dept, titleCode) {
 function stfScopeMeets_(scope, need, rctx) {
   if (!scope || !need) return false;
   if (stfScopeActingMeets_(scope, need)) return true;
+  if (stfScopeExtraMeets_(scope, need)) return true;
   // 同一個職稱階梯才比職級：被審的人職級跟審核者同級或更高 → 擋（不同階梯不比；第二期起職稱＝權限，不能核准同級或更高）
   if (scope.titleLadder === need.title.parent && scope.rank <= need.title.rank) return false;
   return [need].concat(need.alt || []).some(function (o) { return stfScopeMeetsKind_(scope, o, rctx); });
@@ -1039,6 +1079,14 @@ function stfScopeActingMeets_(scope, need) {
   if (!scope.acting || !scope.acting.length || !need.title || need.title.parent !== 'store') return false;
   if (need.title.rank >= scope.actingRank) return false;
   return [need].concat(need.alt || []).some(function (o) { return o.kind === 'store' && scope.acting.indexOf(o.unit) !== -1; });
+}
+/**
+ * 兼任總監（2026-11-02）：被審身分的任一種需求是「部門 dept、部門在 scope.extraHeads」，且被審職稱在總部階梯、職級低於總監 hm（同一般總監「同階梯職級要更高」）。
+ */
+function stfScopeExtraMeets_(scope, need) {
+  if (!scope.extraHeads || !scope.extraHeads.length || !need.title || need.title.parent !== 'hq') return false;
+  if (need.title.rank >= scope.extraRank) return false;
+  return [need].concat(need.alt || []).some(function (o) { return o.kind === 'dept' && scope.extraHeads.indexOf(o.dept) !== -1; });
 }
 function stfScopeMeetsKind_(scope, o, rctx) {
   // 品牌辦公室同仁（第 20 節）：同辦公室的總監；不靠 kinds
@@ -1499,7 +1547,7 @@ function handleStaffEdit_(token, payload) {
   }
   var extraNew = null;
   if (payload.extra_depts !== undefined) {
-    var ex = stfCleanExtraDepts_(org, payload.extra_depts, stfStr_(t.v[STF_COL.unit]), stfStr_(t.v[STF_COL.dept]), stfSplitCodes_(stfReadExtraMap_()[t.emp]));
+    var ex = stfCleanExtraDepts_(org, payload.extra_depts, stfStr_(t.v[STF_COL.unit]), stfStr_(t.v[STF_COL.dept]), stfSplitCodes_(stfReadExtraMap_()[t.emp]), stfStr_(t.v[STF_COL.title]));
     if (ex.error) return { ok: false, error: ex.error };
     // 清單已用（可能剛改過的）新主要部門驗過；和現值不同才寫
     if (ex.codes.join(',') !== stfStr_(stfReadExtraMap_()[t.emp])) {
@@ -2551,7 +2599,7 @@ function stf2610bPlan_(dir) {
   stfAllRows_().forEach(function (x) {
     var v = x.values, emp = stfStr_(v[STF_COL.emp_no]);
     var hit = stfStr_(v[STF_COL.dept]) === STF_2610B.code || stfStr_(v[STF_COL.p_dept]) === STF_2610B.code
-      || stfSplitCodes_(extra[stfNormEmp_(emp)]).indexOf(STF_2610B.code) !== -1;
+      || stfExtraCodes_(extra[stfNormEmp_(emp)]).indexOf(STF_2610B.code) !== -1;
     if (hit) plan.members.push(emp);
   });
   plan.action = 'deactivate';
@@ -2918,7 +2966,7 @@ function stf2610oPlan_(dir) {
     if (stfStr_(v[STF_COL.status]) === 'disabled') return;
     var emp = stfStr_(v[STF_COL.emp_no]);
     if (stfStr_(v[STF_COL.dept]) === STF_2610O.code || stfStr_(v[STF_COL.p_dept]) === STF_2610O.code ||
-        stfSplitCodes_(extra[emp.toUpperCase()]).indexOf(STF_2610O.code) !== -1) plan.members.push(emp);
+        stfExtraCodes_(extra[emp.toUpperCase()]).indexOf(STF_2610O.code) !== -1) plan.members.push(emp);
   });
   plan.action = 'deactivate';
   return plan;

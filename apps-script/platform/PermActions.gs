@@ -137,16 +137,14 @@ function permAcCounts_(permOrg, keys) {
     if (!tdef || tdef.active === false || permStr_(tdef.parent) !== ladder) return;
     // 單位限定職稱（與 permCompute_ 同一關）：例如切換後還掛中央工廠的店長不算人數
     if (permOrg.unitRules && typeof stfTitleUnitOk_ === 'function' && !stfTitleUnitOk_(permOrg.unitRules, st.title, st.unit)) return;
-    var depts = {};
-    [st.dept].concat(st.extra_depts || []).forEach(function (d) {
-      d = permStr_(d);
-      var def = d && permOrg.depts[d];
-      if (def && def.active !== false) depts[d] = true;
+    // 身分：主要＋每個兼任部門（2026-11-02，同 permCompute_：兼任＝總部階梯、該部門、選的職稱）；同一人命中同一鍵只算一次
+    var deptOk = function (d) { d = permStr_(d); var def = d && permOrg.depts[d]; return !!(def && def.active !== false); };
+    var ids = [{ ladder: ladder, title: st.title, dept: deptOk(st.dept) ? permStr_(st.dept) : '' }];
+    (st.extra_roles || []).forEach(function (x) {
+      if (x && x.title && deptOk(x.dept) && permOrg.titles[x.title] && permStr_(permOrg.titles[x.title].parent) === 'hq') ids.push({ ladder: 'hq', title: x.title, dept: permStr_(x.dept) });
     });
     parsed.forEach(function (k) {
-      if (k.ladder !== ladder) return;
-      if (k.title !== '*' && k.title !== st.title) return;
-      if (k.dept !== '' && !depts[k.dept]) return;
+      if (!ids.some(function (id) { return k.ladder === id.ladder && (k.title === '*' || k.title === id.title) && (k.dept === '' || k.dept === id.dept); })) return;
       counts[k.key]++;
     });
   });

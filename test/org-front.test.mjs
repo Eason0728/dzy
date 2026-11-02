@@ -129,7 +129,8 @@ const rows = (el) => el.querySelector('[data-role="rows"]').innerHTML;
   ok(!body.includes('data-code="zzz"'), 'T5 不列別的單位底下的部門');
   ok(/data-code="training"[^>]*checked/.test(body), 'T5 目前兼任預先勾選');
   const call = ctx.calls.find((c) => c.action === 'staffEdit');
-  ok(call && JSON.stringify(call.payload.extra_depts) === JSON.stringify(['ops', 'ck']), 'T5 送出帶 extra_depts（依勾選）', call);
+  ok(call && JSON.stringify(call.payload.extra_depts.map((x) => x.dept)) === JSON.stringify(['ops', 'ck']), 'T5 送出帶 extra_depts（依勾選）', call);
+  ok(call && call.payload.extra_depts.every((x) => (x.dept === 'ck' ? x.title === '' : x.title === 'hm' || x.title === 'hs')), 'T5 每個兼任部門帶身分（總監／部門同仁；中央工廠不分，2026-11-02）', call);
 }
 { // 沒改兼任 → 不帶
   const ctx = makeCtx(baseHandler(), { perms: ['platform.staff'] });
@@ -243,7 +244,7 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   el2.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
   await flush();
   call = ctx2.calls.find((c) => c.action === 'staffEdit');
-  ok(call && JSON.stringify(call.payload.extra_depts) === JSON.stringify(['training', 'ops', 'old']), '#4-1 ★改別的勾選、停用代碼保持勾選 → 原樣送回', call);
+  ok(call && JSON.stringify(call.payload.extra_depts.map((x) => x.dept)) === JSON.stringify(['training', 'ops', 'old']), '#4-1 ★改別的勾選、停用代碼保持勾選 → 原樣送回', call);
 }
 { // 停用兼任取消勾選就移除
   const P4 = Object.assign({}, P1, { extra_depts: ['training', 'old'], extra_dept_names: ['訓練部', '舊部門'] });
@@ -254,7 +255,7 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   el.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
   await flush();
   const call = ctx.calls.find((c) => c.action === 'staffEdit');
-  ok(call && JSON.stringify(call.payload.extra_depts) === JSON.stringify(['training']), '#4-1 取消勾選停用代碼 → 從 extra_depts 移除', call);
+  ok(call && JSON.stringify(call.payload.extra_depts.map((x) => x.dept)) === JSON.stringify(['training']), '#4-1 取消勾選停用代碼 → 從 extra_depts 移除', call);
 }
 { // #3 代碼含特殊字元也能正確讀勾選（不靠 id 選擇器）
   const ORG3 = Object.assign({}, ORG, { depts: ORG.depts.concat([{ code: 'r.d', name: '特殊部', parent: 'dzy-hq' }]) });
@@ -266,7 +267,7 @@ ok(!(await profileHtml([])).includes('兼任'), 'T6 沒有兼任就不顯示');
   el.querySelector('[data-role="rows"]').fire('click', { target: btn('edit', 'DZY001') });
   await flush();
   const call = ctx.calls.find((c) => c.action === 'staffEdit');
-  ok(call && JSON.stringify(call.payload.extra_depts) === JSON.stringify(['ops', 'r.d']), '#4-3 代碼含「.」時原本勾選仍被保留', call);
+  ok(call && JSON.stringify(call.payload.extra_depts.map((x) => x.dept)) === JSON.stringify(['ops', 'r.d']), '#4-3 代碼含「.」時原本勾選仍被保留', call);
   ok(!/id="ed-x-r/.test(ctx.dialogs[0].body.innerHTML), '#4-3 不再把代碼拼進 id');
 }
 { // #2 試跑模式放行 orgUpgrade2026 dryrun:true，dryrun:false 與 rollback 仍攔

@@ -274,14 +274,14 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   // 人資可設
   const r1 = post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['training', 'it'] }, hrTok);
   ok(r1.ok && r1.data.staff.extra_depts.join() === 'it,training' && r1.data.staff.extra_dept_names.join() === '資訊部,訓練部', 'T2 正：人資可設兼任（依 org order 排序，回傳含名稱）', r1);
-  ok(staffOf(app, crew.emp).extra_depts === 'it,training', 'T2 存成逗號字串、無空白、排序');
+  ok(staffOf(app, crew.emp).extra_depts === 'it:hs,training:hs', 'T2 存成逗號字串（代碼:職稱，2026-11-02 起；沒選職稱＝照主要職稱 hs）、無空白、排序');
   ok(item(crew.emp).extra_depts.join() === 'it,training' && item(crew.emp).extra_dept_names.join() === '資訊部,訓練部', 'T2 list 回 extra_depts／extra_dept_names');
   const me = post(sb, 'myProfile', {}, crew.token);
   ok(me.ok && me.data.extra_depts.join() === 'it,training' && me.data.extra_dept_names.join() === '資訊部,訓練部', 'T2 我的資料唯讀顯示兼任');
   // admin 也可
-  ok(post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['it'] }, tok).ok && staffOf(app, crew.emp).extra_depts === 'it', 'T2 正：admin 可設');
+  ok(post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['it'] }, tok).ok && staffOf(app, crew.emp).extra_depts === 'it:hs', 'T2 正：admin 可設');
   // 不給＝保留；其他欄位修改不動它
-  ok(post(sb, 'staffEdit', { emp_no: crew.emp, phone: '0933444555' }, hrTok).ok && staffOf(app, crew.emp).extra_depts === 'it', 'T2 沒帶 extra_depts＝保留');
+  ok(post(sb, 'staffEdit', { emp_no: crew.emp, phone: '0933444555' }, hrTok).ok && staffOf(app, crew.emp).extra_depts === 'it:hs', 'T2 沒帶 extra_depts＝保留');
   // 只寫該格：同列 hire_date／last_day 不受影響
   app.sheets.staff._data.find((r) => r[0] === crew.emp)[24] = '2026-01-02';
   post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['it', 'training'] }, hrTok);
@@ -291,7 +291,7 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   ok(rc.ok && staffOf(app, crew.emp).extra_depts === '' && rc.data.staff.extra_depts.length === 0, 'T2 正：給 [] 清空');
   // 特別代碼 ck
   const rk = post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['ck', 'training'] }, hrTok);
-  ok(rk.ok && staffOf(app, crew.emp).extra_depts === 'training,ck' && rk.data.staff.extra_dept_names.join() === '訓練部,中央工廠', 'T2 正：特別代碼 ck＝兼任中央工廠（排最後）', rk);
+  ok(rk.ok && staffOf(app, crew.emp).extra_depts === 'training:hs,ck' && rk.data.staff.extra_dept_names.join() === '訓練部,中央工廠', 'T2 正：特別代碼 ck＝兼任中央工廠（排最後）', rk);
   post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: [] }, hrTok);
 
   // 反：非人資
@@ -320,15 +320,15 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   // 主要部門變動 → 自動從兼任移除（後台改）
   post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['it', 'training'] }, hrTok);
   const mv = post(sb, 'staffEdit', { emp_no: crew.emp, brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' }, tok);
-  ok(mv.ok && staffOf(app, crew.emp).extra_depts === 'training' && mv.data.staff.extra_depts.join() === 'training', 'T2 後台改主要部門 → 新主要部門自動從兼任移除', mv);
+  ok(mv.ok && staffOf(app, crew.emp).extra_depts === 'training:hs' && mv.data.staff.extra_depts.join() === 'training', 'T2 後台改主要部門 → 新主要部門自動從兼任移除', mv);
   // 同一次改主要部門又帶新的兼任：用新主要部門驗
-  ok(post(sb, 'staffEdit', { emp_no: crew.emp, dept: 'fin', extra_depts: ['it'] }, tok).ok && staffOf(app, crew.emp).dept === 'fin' && staffOf(app, crew.emp).extra_depts === 'it', 'T2 同次改主要部門＋兼任：以新主要部門驗證');
+  ok(post(sb, 'staffEdit', { emp_no: crew.emp, dept: 'fin', extra_depts: ['it'] }, tok).ok && staffOf(app, crew.emp).dept === 'fin' && staffOf(app, crew.emp).extra_depts === 'it:hs', 'T2 同次改主要部門＋兼任：以新主要部門驗證');
   ok(post(sb, 'staffEdit', { emp_no: crew.emp, dept: 'it', extra_depts: ['it'] }, hrTok).ok === false, 'T2 反：同次把主要部門改成兼任中的部門 → 擋');
   // 核准（staffConfirm）搬 p_dept → 自動移除
   post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['it', 'training'] }, hrTok);
   const sp = post(sb, 'saveMyProfile', { brand: 'dzy', unit: 'dzy-hq', dept: 'training', title: 'hs', phone: '0933444555', address: '新竹市測試路二段2號' }, crew.token);
   ok(sp.ok, 'T2 （前置）同仁送出改部門', sp);
-  ok(post(sb, 'staffConfirm', { emp_no: crew.emp }, tok).ok && staffOf(app, crew.emp).dept === 'training' && staffOf(app, crew.emp).extra_depts === 'it', 'T2 核准改部門 → 新主要部門自動從兼任移除');
+  ok(post(sb, 'staffConfirm', { emp_no: crew.emp }, tok).ok && staffOf(app, crew.emp).dept === 'training' && staffOf(app, crew.emp).extra_depts === 'it:hs', 'T2 核准改部門 → 新主要部門自動從兼任移除');
 
   // 欄位不存在 → 自動補；表頭不符 → 停
   const a2 = fresh();
@@ -337,9 +337,9 @@ const login = (app, u, p) => post(app.sb, 'login', { username: u, password: p })
   hc[26] = ''; hc[27] = '';   // 模擬舊表：只有 hire_date、last_day（line_revoked_at 也是後來才補的）
   ok(post(a2.sb, 'staffList', {}, a2.tok).data.staff.every((x) => Array.isArray(x.extra_depts) && x.extra_depts.length === 0), 'T2 欄位不存在：list 不炸、回 []');
   const r2 = post(a2.sb, 'staffEdit', { emp_no: p2.emp, extra_depts: ['it'] }, a2.hrTok);
-  ok(r2.ok && hc[26] === 'extra_depts' && staffOf(a2, p2.emp).extra_depts === 'it', 'T2 欄位不存在：寫入時自動補表頭並寫入', r2);
+  ok(r2.ok && hc[26] === 'extra_depts' && staffOf(a2, p2.emp).extra_depts === 'it:hs', 'T2 欄位不存在：寫入時自動補表頭並寫入', r2);
   a2.sb.setupStaff();
-  ok(hc[26] === 'extra_depts' && staffOf(a2, p2.emp).extra_depts === 'it', 'T2 setupStaff 重跑：欄位與值不變');
+  ok(hc[26] === 'extra_depts' && staffOf(a2, p2.emp).extra_depts === 'it:hs', 'T2 setupStaff 重跑：欄位與值不變');
   const a3 = fresh();
   const p3 = mk(a3, '測試壬', { brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hs' });
   a3.sheets.staff._data[0][26] = 'something_else';
@@ -946,7 +946,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   const org = sb.stfReadOrg_();
   const f = (list, ex) => sb.stfCleanExtraDepts_(org, list, 'dzy-hq', 'it', ex);
   const r = f(['training', 'old', 'ops'], ['training', 'old']);
-  ok(!r.error && r.codes.sort().join() === 'old,ops,training', 'R2 兼任：原有 [training,old] 送 [training,old,ops] → 通過（old 原樣保留）', r);
+  ok(!r.error && r.codes.sort().join() === 'old:hs,ops:hs,training:hs', 'R2 兼任：原有 [training,old] 送 [training,old,ops] → 通過（old 原樣保留）', r);
   ok(!!f(['new-inactive'], []).error && !!f(['training', 'old'], ['training']).error, 'R2 兼任：新加入的不存在代碼 → 擋');
   app.sheets.org._data.find((x) => x[0] === 'dept' && x[1] === 'ops')[7] = 'FALSE';
   const f2 = (list, ex) => sb.stfCleanExtraDepts_(sb.stfReadOrg_(), list, 'dzy-hq', 'it', ex);
@@ -956,7 +956,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   app.sheets.staff._data[0][26] = 'extra_depts';
   app.sheets.staff._data.find((x) => x[0] === crew.emp)[26] = 'training,old';
   const e = post(sb, 'staffEdit', { emp_no: crew.emp, extra_depts: ['training', 'old', 'it'] }, tok);
-  ok(e.ok && app.sheets.staff._data.find((x) => x[0] === crew.emp)[26] === 'it,training,old', 'R2 兼任：staffEdit 帶入原有停用代碼可存', e);
+  ok(e.ok && app.sheets.staff._data.find((x) => x[0] === crew.emp)[26] === 'it:hs,training:hs,old:hs', 'R2 兼任：staffEdit 帶入原有停用代碼可存', e);
 })();
 
 (() => {

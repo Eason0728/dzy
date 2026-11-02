@@ -260,7 +260,7 @@ function apvDirectory_() {
   readUsersRows_().forEach(function (r) { uact[String(r[AUTH_USERS_COL.id])] = isActiveValue_(r[AUTH_USERS_COL.active]); });
   var people = stfAllRows_().map(function (r) {
     var emp = stfNormEmp_(r.values[STF_COL.emp_no]);
-    return apvPerson_(r.values, org, stfSplitCodes_(extra[emp]), uact[stfStr_(r.values[STF_COL.user_id])] === true);
+    return apvPerson_(r.values, org, stfSplitCodes_(extra[emp]), uact[stfStr_(r.values[STF_COL.user_id])] === true, extra[emp] || '');
   });
   var byEmp = {};
   people.forEach(function (p) { byEmp[p.emp] = p; });
