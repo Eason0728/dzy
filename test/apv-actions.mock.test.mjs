@@ -545,18 +545,21 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   ok(EVENTS(app, id).some((e) => e.action === 'reassign' && /DZY904/.test(e.note)), '寫 reassign 事件');
   ok(decide(app, 'DZY904', id, 'approve').data.status === 'handling', '被改派的人核准 → handling');
   ok(re('DZY910', { to: 'DZY905' }).error === 'conflict', 'handling 時不能改派');
-  // 董事長自己送 → exception
-  const ex = sendExpense(app, 'DZY906', 800);
-  ok(ex.ok && ex.data.status === 'exception', '董事長自己送支出單 → exception', ex);
+  // 製造 exception（董事長自己送已改成自核，不再產生 exception）：店員送 42,000（董事長級），董事長帳號停用 → reconcile 跳過該關、已無更高一級 → exception
+  const ex = sendExpense(app, 'DZY901', 42000);
+  ok(ex.ok && ex.data.status === 'signing', '前提：店員送 42,000 → 董事長簽核中', ex);
   const exId = ex.data.id;
+  app.sheets.staff._data.forEach((r) => { if (r[app.sb.STF_COL.emp_no] === 'DZY906') r[app.sb.STF_COL.status] = 'disabled'; });
+  app.sb.apvReconcile_();
+  ok(formOf(app, exId).status === 'exception', '董事長級的單、董事長停用 → reconcile 轉 exception', formOf(app, exId));
   const hrTodo = post(app, 'DZY910', 'apvTodo', {});
   ok(hrTodo.data.exception.length === 1 && hrTodo.data.exception[0].id === exId, '人資 apvTodo.exception 看得到');
   ok(post(app, 'admin', 'apvTodo', {}).data.exception.length === 1, 'admin apvTodo.exception 看得到');
-  ok(post(app, 'DZY906', 'apvDecide', { id: exId, rev: 1, step: 4, decision: 'approve' }).error !== undefined && formOf(app, exId).status === 'exception', 'exception 時沒人能按核准（董事長自己也不行）');
   const stepIdx = getForm(app, 'DZY910', exId).data.form.step;
+  ok(['DZY904', 'DZY905', 'DZY906'].every((w) => post(app, w, 'apvDecide', { id: exId, rev: 1, step: stepIdx, decision: 'approve' }).error !== undefined) && formOf(app, exId).status === 'exception', 'exception 時沒人能按核准（總經理、執行長、董事長都不行）');
   ok(post(app, 'DZY910', 'apvReassign', { id: exId, rev: 1, step: stepIdx, to: 'DZY910', reason: '人資自己簽' }).error === 'bad_request', '人資不能把單改派給自己（除非本人是合格權限人）');
-  ok(post(app, 'DZY910', 'apvReassign', { id: exId, rev: 1, step: stepIdx, to: 'DZY906', reason: '改派' }).error === 'bad_request', '改派給送件人（董事長）被擋');
-  const rx = post(app, 'DZY910', 'apvReassign', { id: exId, rev: 1, step: stepIdx, to: 'DZY904', reason: '董事長本人送單，請總經理簽' });
+  ok(post(app, 'DZY910', 'apvReassign', { id: exId, rev: 1, step: stepIdx, to: 'DZY901', reason: '改派' }).error === 'bad_request', '改派給送件人被擋');
+  const rx = post(app, 'DZY910', 'apvReassign', { id: exId, rev: 1, step: stepIdx, to: 'DZY904', reason: '董事長停用，請總經理簽' });
   ok(rx.ok && rx.data.status === 'signing' && decide(app, 'DZY904', exId, 'approve').data.status === 'handling', 'exception 改派給總經理 → signing → 核准 → handling', rx);
   // 作廢
   const v1 = sendExpense(app, 'DZY901', 800);
@@ -786,6 +789,71 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
 }
 
 // ============================================================
+// 本人核准（2026-11-02）：請購／請款送件人本人在這張單的核決權限內 → 送出即核准、直接交承辦
+// ============================================================
+{
+  const app = freshApp();
+  const MSG = '本人核准（金額在自己的核決權限內）';
+  const checkSelf = (emp, amount, label, role) => {
+    const r = sendExpense(app, emp, amount);
+    const id = r.data && r.data.id;
+    const steps = r.ok ? r.data.route.steps : [];
+    ok(r.ok && r.data.status === 'handling' && steps.length === 1 && steps[0].status === 'done' && steps[0].self === true && steps[0].by === emp && steps[0].role === role, label + '：送出即 handling、steps[0] done＋self＋by＝送件人', r);
+    const f = formOf(app, id);
+    ok(f.status === 'handling' && f.handler_dept === 'fin', label + '：表單狀態 handling、承辦部門 fin');
+    const ev = EVENTS(app, id).map((e) => e.action + ':' + e.actor);
+    ok(ev.join() === 'submit:' + emp + ',approve:' + emp, label + '：事件 submit＋approve（同一人）', ev);
+    const ap = EVENTS(app, id).find((e) => e.action === 'approve');
+    const sub = EVENTS(app, id).find((e) => e.action === 'submit');
+    ok(ap.note === MSG && ap.sha256 === sub.sha256, label + '：approve 事件 note 正確、sha256 與送出版本相同', ap);
+    return id;
+  };
+  const idSm = checkSelf('DZY902', 3000, '店長送 3,000（店長級）', 'head');
+  const todoFin = post(app, 'DZY909', 'apvTodo', {});
+  ok(todoFin.ok && todoFin.data.handle.some((x) => x.id === idSm) && todoFin.data.sign.length === 0, '財務部待我辦看得到自核的單；沒有簽核中的單');
+  ok(post(app, 'DZY902', 'apvTodo', {}).data.sign.length === 0, '自核者自己的待我簽沒有這張單');
+  ok(post(app, 'DZY909', 'apvHandle', { id: idSm, rev: 1, step: null, result: 'done' }).data.status === 'done', '自核的單財務可正常承辦結案');
+  checkSelf('DZY903', 3000, '品牌總監送 3,000（店長級）', 'head');
+  checkSelf('DZY904', 25000, '總經理送 25,000（總經理級）', 'gm');
+  checkSelf('DZY906', 800, '董事長送 800', 'head');
+  checkSelf('DZY906', 42000, '董事長送 42,000（董事長級）', 'chair');
+  // 不自核
+  const ft = sendExpense(app, 'DZY901', 3000);
+  ok(ft.ok && ft.data.status === 'signing' && !ft.data.route.steps[0].self && ft.data.route.steps[0].status === 'pending', '店員送 3,000：不自核，照舊給店長簽', ft);
+  ok(!EVENTS(app, ft.data.id).some((e) => e.action === 'approve'), '店員的單沒有 approve 事件');
+  const smHi = sendExpense(app, 'DZY902', 8600);
+  ok(smHi.ok && smHi.data.status === 'signing' && smHi.data.route.steps[0].role === 'brand_dir' && !smHi.data.route.steps[0].self, '店長送 8,600（品牌總監級）：不自核', smHi);
+  // 請購也適用
+  const pu = post(app, 'DZY902', 'apvSubmit', { client_id: newCid(), type: 'purchase', body: purchaseBody(), files: [] });
+  ok(pu.ok && pu.data.status === 'handling' && pu.data.route.steps[0].self === true, '請購（店長、小額）同樣自核', pu);
+  // apvRoutePreview 對自核者回 self:true
+  const pv = (who, p) => post(app, who, 'apvRoutePreview', p);
+  const p1 = pv('DZY902', { type: 'expense', amount: 3000 });
+  ok(p1.ok && p1.data.steps[0].self === true && p1.data.steps[0].status === 'done' && p1.data.steps[0].role === 'head', '預覽：店長 3,000 → step self:true', p1);
+  const p2 = pv('DZY901', { type: 'expense', amount: 3000 });
+  ok(p2.ok && !p2.data.steps[0].self && p2.data.steps[0].status === 'pending', '預覽：店員 3,000 → 不是 self', p2);
+  const p3 = pv('DZY906', { type: 'expense', amount: 42000 });
+  ok(p3.ok && p3.data.steps[0].self === true, '預覽：董事長 42,000 → self:true', p3);
+  // resubmit：先被退回，再送時金額落在自己權限內 → 自核
+  const a = sendExpense(app, 'DZY902', 8600);
+  const rj = post(app, 'DZY903', 'apvDecide', { id: a.data.id, rev: 1, step: 0, decision: 'reject', note: '金額太高請拆單' });
+  ok(rj.ok && rj.data.status === 'rejected', '前提：店長 8,600 被品牌總監退回', rj);
+  const f2 = upload(app, 'DZY902');
+  const rs = post(app, 'DZY902', 'apvResubmit', { id: a.data.id, rev: 1, step: null, body: expenseBody({ amount: 3000 }), files: [f2] });
+  ok(rs.ok && rs.data.rev === 2 && rs.data.status === 'handling' && rs.data.route.steps[0].self === true && rs.data.route.steps[0].by === 'DZY902', '再送改 3,000：自核者再送也自核 → handling', rs);
+  const ev2 = EVENTS(app, a.data.id).filter((e) => e.rev === 2 || e.rev === '2').map((e) => e.action);
+  ok(ev2.includes('submit') && ev2.includes('approve'), '再送後 rev 2 的事件含 submit＋approve', ev2);
+  const f3 = upload(app, 'DZY902');
+  const b = sendExpense(app, 'DZY902', 8600);
+  post(app, 'DZY903', 'apvDecide', { id: b.data.id, rev: 1, step: 0, decision: 'reject', note: '退' });
+  const rs2 = post(app, 'DZY902', 'apvResubmit', { id: b.data.id, rev: 1, step: null, body: expenseBody({ amount: 8600 }), files: [f3] });
+  ok(rs2.ok && rs2.data.status === 'signing' && !rs2.data.route.steps[0].self, '再送仍是 8,600：不自核，重新給品牌總監簽', rs2);
+  // 人事異動不受影響
+  const tr = post(app, 'DZY902', 'apvSubmit', { client_id: newCid(), type: 'personnel', subject: 'DZY901', body: { kind: 'transfer', effective: '2026-11-01', from: { unit: 'mala-gf', title: 'ft', pay: 30000 }, to: { unit: 'mala-hq', title: 'ofs' }, reason: '測試原因' }, files: [] });
+  ok(tr.ok && tr.data.status === 'signing' && !tr.data.route.steps.some((x) => x.self), '人事異動（店長送調職）仍照舊簽核、沒有 self 關', tr);
+}
+
+// ============================================================
 // 13. 檔案：authorize／register／canRead／sweep／backup（jobs 專用）
 // ============================================================
 {
@@ -875,7 +943,9 @@ const idRe = (() => { const d = new Date(Date.now() + 8 * HOUR); const p = (n) =
   const d2 = app.sb.apvDigest_();
   ok(d2.count === 2 && /承辦：財務部/.test(d2.text) && /4天/.test(d2.text), 'handling 超過 72 小時也算；卡在承辦部門', d2.text);
   // exception 當天即列
-  const e = sendExpense(app, 'DZY906', 800);
+  const e = sendExpense(app, 'DZY901', 42000);
+  app.sheets.staff._data.forEach((r) => { if (r[app.sb.STF_COL.emp_no] === 'DZY906') r[app.sb.STF_COL.status] = 'disabled'; });
+  app.sb.apvReconcile_();
   const d3 = app.sb.apvDigest_();
   ok(d3.count === 3 && d3.text.includes(e.data.id + '｜費用請款｜無合格簽核人｜0天'), 'exception 不等 72 小時，當天就列', d3.text);
   // 已結案／撤回不列

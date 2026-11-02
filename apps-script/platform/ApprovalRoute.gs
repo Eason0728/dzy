@@ -246,6 +246,22 @@ function apvNewStep_(role, of, ctx) {
   return { role: role, scope: apvScope_(role, of, ctx), status: 'pending', of: of ? of.emp : '' };
 }
 
+/**
+ * 送件人本人是不是 role 這一級或更高一級的權限人（請購／費用請款自核用）。
+ * 用送件人自己的組織脈絡、不比職級、不排除本人；例：店長送店長級→是；品牌總監送店長級→品牌總監那一級命中→是。
+ */
+function apvSenderCovers_(sender, role, ctx) {
+  if (!sender || !sender.opened) return false;
+  var i = APV_ROLES.indexOf(role);
+  if (i === -1) return false;
+  var c0 = { org: ctx.org, people: ctx.people, byEmp: ctx.byEmp, regionCtx: ctx.regionCtx, exclude: [] };
+  for (; i < APV_ROLES.length; i++) {
+    var ms = apvRoleMembers_(APV_ROLES[i], sender, c0, { noRank: true });
+    for (var j = 0; j < ms.length; j++) if (ms[j].emp === sender.emp) return true;
+  }
+  return false;
+}
+
 /** 找不到人時，下一個更高的權限人；direct 找不到 → 從品牌總監往上；董事長之後沒有 */
 function apvNextRole_(role) {
   if (role === 'direct') return 'brand_dir';
@@ -295,7 +311,10 @@ function apvBuildRoute_(input) {
     var role = sender.ladder === 'hq' ? row.hq_role : row.store_role;   // 總部各部門用 hq_role，其餘（門市、央廚、品牌辦公室）用 store_role
     route.thr_ver = table.ver || 0;
     route.row = { seq: row.seq, max: apvOpenMax_(row.max) ? null : Number(row.max), role: role };
-    route.steps.push(apvNewStep_(role, sender, ctx));
+    var st = apvNewStep_(role, sender, ctx);
+    // 本人在核決權限內（2026-11-02 Eason）：送件人就是這一級（或更高一級）的權限人 → 送出即本人核准，直接交承辦
+    if (apvSenderCovers_(sender, role, ctx)) { st.status = 'done'; st.by = sender.emp; st.at = input.now || 0; st.self = true; }
+    route.steps.push(st);
     return { ok: true, route: route };
   }
   if (input.type !== 'personnel') return { ok: false, error: 'bad_request' };

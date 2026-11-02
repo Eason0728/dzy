@@ -724,6 +724,7 @@ function apvWriteVersion_(c, fr, isNew, norm, eff, items, signedAtSubmit, note) 
   else { apvSaveForm_(fr); }
   apvAddEvent_(f, c.actor, 'submit', note, sha, c.now);
   if (signedAtSubmit) apvAddEvent_(f, c.actor, 'sign', '', sha, c.now);
+  if ((eff.route.steps || []).some(function (s) { return s.self && s.status === 'done'; })) apvAddEvent_(f, c.actor, 'approve', '本人核准（金額在自己的核決權限內）', sha, c.now);
   eff.skips.forEach(function (s) {
     apvAddEvent_(f, 'system', 'skip', apvRoleLabel_(s.role) + (s.next ? ' 找不到合格的人，改找' + apvRoleLabel_(s.next) : ' 找不到合格的人，已無更高一級'), '', c.now);
   });
