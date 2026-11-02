@@ -233,6 +233,7 @@ def main():
             pg.context.close()
 
             mock.aih_mode = 'off'
+            mock.aih_calls.clear()   # 清空前面累積的呼叫，下面「關閉時仍呼叫 status」才是這一頁自己打的
             pg = new_page()
             login(pg, 'admin')
             pg.wait_for_timeout(800)

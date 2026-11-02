@@ -289,6 +289,9 @@ function handleAihKbSave_(token, payload) {
     // 到期日：沒有（新題或空值）補 verified＋180 天；重新確認（verified_at 變了）而沒另外給 expires_at 也順延 180 天
     if (payload.expires_at === undefined && payload.verified_at !== undefined && base.verified_at && verified !== base.verified_at) expires = '';
     expires = expires ? aihNormDate_(expires) : aihAddDays_(verified, AIH_KB_VALID_DAYS);
+    // 到期日必須晚於確認日；上架（live）的題目還必須晚於台北今天（否則一上架就是過期，等於沒上架）
+    if (expires <= verified) return aihFail_('bad_request', '到期日要晚於確認日');
+    if (status === 'live' && expires <= aihTaipeiDay_(aihNow_())) return aihFail_('bad_request', '上架的題目，到期日要晚於今天');
     var next = { id: base.id, m: f.m, v: f.v, question: f.question, answer: f.answer, who: f.who, go_m: f.go_m, go_v: f.go_v, status: status,
       source: f.source, verified_at: verified, expires_at: expires, updated_at: base.updated_at, updated_by: base.updated_by };
     if (cur) {
@@ -616,7 +619,7 @@ function aihLogAppend_(row) {
 
 /**
  * aihPendingAdd_(row)：row {id, log_id?, ts?, q, m?, v?, reason}。id 必須是 aip_…；reason unknown／thumbs_down；status 一律 open。
- * 同 id＝冪等；同 log_id 同 reason 已有一筆＝回那筆（dup:true），避免連按 👎 灌水。
+ * 同 id＝冪等；同 log_id 同 reason 已有一筆、或同 log_id 已有「open」的待回答（不論 reason，例如 unknown 那筆還在清單上）＝回那筆（dup:true），避免連按 👎 灌水、同一題在清單上出現兩次。
  */
 function aihPendingAdd_(row) {
   if (!aihReady_()) return aihNodeFail_('not_inited', aihEnabledMsg_());
@@ -631,7 +634,7 @@ function aihPendingAdd_(row) {
   return aihNodeLock_(function () {
     var dup = null;
     aihRows_('pending').forEach(function (r) {
-      if (aihStr_(r.id) === id || (logId && aihStr_(r.log_id) === logId && aihStr_(r.reason) === reason)) dup = r;
+      if (aihStr_(r.id) === id || (logId && aihStr_(r.log_id) === logId && (aihStr_(r.reason) === reason || aihStr_(r.status) === 'open'))) dup = r;
     });
     if (dup) return { ok: true, id: aihStr_(dup.id), dup: true };
     aihAppend_('pending', { id: id, log_id: logId, ts: ts, q: q.slice(0, AIH_MAX.q), m: aihStr_(row.m), v: aihStr_(row.v), reason: reason, status: 'open', kb_id: '' });

@@ -197,7 +197,8 @@ export function createHelper(deps) {
     if (destroyed) return;
     try { logEl.removeChild(pending); } catch (e) { /* ignore */ }
     if (r && r.ok && r.data) {
-      if (typeof left === 'number') left -= 1;
+      if (typeof r.data.left_today === 'number') left = r.data.left_today;   // 以後端算的為準
+      else if (typeof left === 'number') left -= 1;
       updateQuota();
       addAnswer(r.data);
     } else {
@@ -260,6 +261,17 @@ export function createHelper(deps) {
     if (e && (e.key === 'Escape' || e.key === 'Esc')) close();
   }
 
+  /** 側欄每次打開都重打 status：更新剩餘題數；額度用完／被關掉就收起輸入框（失敗就維持畫面不動） */
+  async function refreshStatus() {
+    let r;
+    try { r = await client.status(); } catch (e) { return; }
+    if (destroyed || !r || !r.ok || !r.data || typeof r.data !== 'object') return;
+    if (typeof r.data.left_today === 'number') left = r.data.left_today;
+    if (r.data.reason === 'cap' && !capped) { setCapped(); addNotice(errorMessage('cap'), 'aih-cap'); }
+    else if (r.data.on !== true && r.data.reason !== 'cap' && !capped) { setCapped(); addNotice(errorMessage('off'), 'aih-off'); }
+    updateQuota();
+  }
+
   function open() {
     if (isOpen || destroyed) return;
     isOpen = true;
@@ -268,6 +280,7 @@ export function createHelper(deps) {
     doc.addEventListener('keydown', onDocKey);
     if (!conv && !capped) conv = newConv();   // 同一個側欄開著期間 conv 不變
     try { (capped ? panel.querySelector('[data-role="aih-close"]') : input).focus(); } catch (e) { /* ignore */ }
+    if (!dryRun()) refreshStatus();
   }
 
   function close() {

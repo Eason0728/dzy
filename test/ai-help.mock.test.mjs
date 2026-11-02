@@ -297,6 +297,21 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   ok(row[8] === 'draft' && /^\d{4}-\d\d-\d\d$/.test(row[10]) && row[11] === sb.aihAddDays_(row[10], 180) && row[13] === 'BOSS', '1-1 新題 status 預設 draft、expires_at＝verified_at＋180 天、updated_by 記帳號', row);
   ok(histRows(app).length === 2 && histRows(app)[0][2] === 'create' && histRows(app)[0][1] === 'kb0001' && JSON.parse(histRows(app)[0][3]).question === '怎麼改密碼' && histRows(app)[0][4] === 'BOSS', '1-1 hist：每題新增各留一列（整列快照＋誰）');
 
+  // R5：到期日要晚於確認日；上架的題目到期日要晚於台北今天
+  { const app = scene(); const { sb } = app; const adm = app.admin;
+    const a = kbSave(sb, adm, { question: '到期測試一', answer: 'x', verified_at: '2026-11-01', expires_at: '2026-11-01' });
+    ok(a.ok === false && a.error === 'bad_request', 'R5 expires_at ＝ verified_at → bad_request', a);
+    const b = kbSave(sb, adm, { question: '到期測試二', answer: 'x', verified_at: '2026-11-01', expires_at: '2026-10-31' });
+    ok(b.ok === false && b.error === 'bad_request', 'R5 expires_at 早於 verified_at → bad_request');
+    const c = kbSave(sb, adm, { question: '到期測試三', answer: 'x', status: 'live', verified_at: '2026-06-01', expires_at: '2026-11-02' });
+    ok(c.ok === false && c.error === 'bad_request', 'R5 live 且 expires_at ＝ 今天 → bad_request（與 aihKbVisible_ 的 <= 今天算過期一致）');
+    const d = kbSave(sb, adm, { question: '到期測試四', answer: 'x', status: 'live', verified_at: '2026-06-01', expires_at: '2026-11-03' });
+    ok(d.ok === true, 'R5 live 且 expires_at 是明天 → 通過', d);
+    const e = kbSave(sb, adm, { question: '到期測試五', answer: 'x', status: 'draft', verified_at: '2026-06-01', expires_at: '2026-11-02' });
+    ok(e.ok === true, 'R5 draft 可以先放過期日（只有上架才擋）', e);
+    const f = kbSave(sb, adm, { question: '到期測試六', answer: 'x', status: 'live', verified_at: '2026-01-01' });
+    ok(f.ok === false, 'R5 live 且 verified＋180 天已過（2026-06-30）→ bad_request', f); }
+
   // 改題：expected_updated_at
   const ts1 = r1.data.updated_at;
   const bad = kbSave(sb, adm, { id: 'kb0001', answer: '新答案', expected_updated_at: '1999-01-01T00:00:00.000Z' });
@@ -436,6 +451,7 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   const long = SEED.filter((o) => !o.answer || o.answer.length > 300);
   ok(long.length === 0, 'SEED 規則2 answer 非空且 ≤ 300 字', long.map((o) => [o.question, o.answer.length]));
   ok(SEED.every((o) => o.source.trim() && o.source.length <= sb.AIH_MAX.source), 'SEED 規則2 source 非空、≤ 上限');
+  ok(SEED.every((o) => !/~\/|\/Users\/|\.claude\//.test(o.source)), 'SEED 規則2 source 不得含本機路徑（~/、/Users/、.claude/），改寫白話文件名稱');
   ok(SEED.every((o) => o.who.trim() && o.who.length <= sb.AIH_MAX.who), 'SEED 規則2 who 非空、≤ 上限');
   // 規則 3：個資、金鑰、內部主機名
   const prose = (o) => [o.question, o.answer, o.who].join('\n');
@@ -615,7 +631,8 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   const staffMod = add({ question: '同仁名單模組題', m: 'staff' });
   const draft = add({ question: '草稿題', status: 'draft' });
   const off = add({ question: '下架題', status: 'off' });
-  const expired = add({ question: '過期題', expires_at: '2026-11-02' });         // 到期當天＝過期
+  const expired = add({ question: '過期題', expires_at: '2026-11-02', status: 'draft', verified_at: '2026-10-01' });         // 到期當天＝過期（aihKbSave 不准上架已過期的題，這裡先存草稿再手改成 live）
+  app.sheets.aih_kb._data.find((r) => r[0] === expired)[8] = 'live';
   const lastDay = add({ question: '明天才到期', expires_at: '2026-11-03' });
   const noExp = add({ question: '沒到期日' });
   app.sheets.aih_kb._data.find((r) => r[0] === noExp)[11] = '';
@@ -676,6 +693,15 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   ok(p1.ok && p1.dup === false && app.sheets.aih_pending._rows()[1][7] === 'open', '3 aihPendingAdd_ 寫入（status open）');
   ok(sb.aihPendingAdd_({ id: PENID(2), log_id: LOGID(1), q: 'Q1', reason: 'thumbs_down' }).dup === true && sb.aihPendingAdd_({ id: PENID(1), q: 'Q1', reason: 'unknown' }).dup === true && app.sheets.aih_pending._rows().length === 2, '3 同 id、或同 log 同 reason 重複 → dup（不灌水）');
   ok(sb.aihPendingAdd_({ id: PENID(3), q: 'Q', reason: 'bad' }).code === 'bad_input' && sb.aihPendingAdd_({ id: 'x', q: 'Q', reason: 'unknown' }).code === 'bad_input' && sb.aihPendingAdd_({ id: PENID(3), q: '', reason: 'unknown' }).code === 'bad_input', '3 aihPendingAdd_ reason／id／q 不對 → bad_input');
+  { // R4：同 log_id 已有 open 的待回答（不論 reason）就不再新增
+    const before = app.sheets.aih_pending._rows().length;
+    const u = sb.aihPendingAdd_({ id: PENID(5), log_id: LOGID(2), q: 'Q2', reason: 'unknown' });
+    const d = sb.aihPendingAdd_({ id: PENID(6), log_id: LOGID(2), q: 'Q2', reason: 'thumbs_down' });
+    ok(u.ok && u.dup === false && d.ok && d.dup === true && d.id === PENID(5) && app.sheets.aih_pending._rows().length === before + 1, 'R4 同 log_id 已有 open 的 unknown → 👎 不再寫第二筆（回 ok、dup:true）');
+    const row = app.sheets.aih_pending._data.find((r) => r[0] === PENID(5)); row[7] = 'done';
+    const again = sb.aihPendingAdd_({ id: PENID(7), log_id: LOGID(2), q: 'Q2', reason: 'thumbs_down' });
+    ok(again.ok && again.dup === false, 'R4 原本那筆已結案（非 open）→ 👎 可以再開一筆');
+  }
   // conv：同 uid 同 conv 最近 3 組，舊→新
   const C = 'aic_20261102150000_0001';
   [1, 2, 3, 4].forEach((i) => sb.aihLogAppend_(logRow({ id: LOGID(10 + i), uid: 'u900', conv: C, q: 'Q' + i, answer: 'A' + i, ts: iso(NOW + i * 1000) })));
@@ -709,12 +735,13 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   post(sb, 'aihPendingSet', { id: PENID(2), status: 'ignored' }, adm);
   // 知識：到期（live）→ off；未到期不動；draft 不動
   const mk = (q, p) => kbSave(sb, adm, Object.assign({ question: q, answer: 'a', status: 'live', verified_at: '2026-11-02' }, p)).data.id;
-  const kExp = mk('今天到期', { expires_at: '2026-11-02' });
-  const kPast = mk('早就到期', { expires_at: '2026-10-01' });
+  const kExp = mk('今天到期', { expires_at: '2026-11-02', verified_at: '2026-10-01', status: 'draft' });
+  const kPast = mk('早就到期', { expires_at: '2026-10-01', verified_at: '2026-09-01', status: 'draft' });
+  [kExp, kPast].forEach((id) => { app.sheets.aih_kb._data.find((r) => r[0] === id)[8] = 'live'; });   // aihKbSave 不准上架已過期的題，手改成 live 模擬「放到過期」
   const kOk = mk('還沒到期', { expires_at: '2026-11-03' });
   const kNoExp = mk('沒到期日');
   app.sheets.aih_kb._data.find((r) => r[0] === kNoExp)[11] = '';
-  const kDraft = mk('草稿過期', { expires_at: '2026-10-01', status: 'draft' });
+  const kDraft = mk('草稿過期', { expires_at: '2026-10-01', verified_at: '2026-09-01', status: 'draft' });
   const histBefore = histRows(app).length;
   const res = sb.aihPurge_(NOW);
   ok(res.ok && res.log_deleted === 2 && res.pending_q_cleared === 2 && res.kb_expired === 3, '3 aihPurge_ 回報：刪 2 筆 log、清 2 個 q、到期（含無到期日）下架 3 題', res);
@@ -747,7 +774,7 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   sb.aihPendingAdd_({ id: PENID(4), q: '已略過', reason: 'unknown', ts: iso(NOW - 1000) });
   post(sb, 'aihPendingSet', { id: PENID(4), status: 'ignored' }, adm);
   [6, 7, 8, 9, 10, 11].forEach((i) => sb.aihPendingAdd_({ id: PENID(i), q: '雜' + i, reason: 'unknown', ts: iso(NOW - 2 * DAY) }));
-  const mk = (q, e) => kbSave(sb, adm, { question: q, answer: 'a', status: 'live', verified_at: '2026-11-02', expires_at: e }).data.id;
+  const mk = (q, e) => { const id = kbSave(sb, adm, { question: q, answer: 'a', status: 'draft', verified_at: '2026-10-01', expires_at: e }).data.id; app.sheets.aih_kb._data.find((r) => r[0] === id)[8] = 'live'; return id; };
   const e14 = mk('14天後', '2026-11-16'), e15 = mk('15天後', '2026-11-17'), e0 = mk('今天', '2026-11-02'), e1 = mk('明天', '2026-11-03');
   const d = sb.aihDigest_(NOW);
   ok(d.ok && eq(Object.keys(d).sort(), ['expiring', 'new_pending', 'ok', 'paused', 'top']) && d.new_pending === 1 && d.paused === false, '8 aihDigest_：過去 24 小時新增且 open 只算 1（略過的、2 天前的不算）', d);

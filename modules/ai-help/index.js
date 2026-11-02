@@ -51,7 +51,7 @@ async function mountTop(topEl, ctx, seq, rerender) {
   topEl.appendChild(h('span', { class: 'aim-chip' + (paused ? ' is-paused' : ''), 'data-role': 'top-state' }, paused ? '小幫手已暫停' : '小幫手運作中'));
   const pauseBtn = lockIfDryrun(h('button', { type: 'button', class: 'btn btn-secondary', 'data-act': 'pause' }, paused ? '恢復小幫手' : '暫停小幫手'));
   pauseBtn.addEventListener('click', async () => {
-    const msg = paused ? '恢復小幫手？同仁就又能問問題了。' : '暫停小幫手？暫停後同仁問問題都會得到「暫時無法回答」，直到你恢復。';
+    const msg = paused ? '恢復小幫手？同仁就又能問問題了。' : '暫停後，同仁畫面上的小幫手按鈕會消失（已打開的對話框會顯示『目前沒有開放』）。確定暫停？';
     if (!(await ctx.ui.confirm(msg))) return;
     const done = busyBtn(pauseBtn, '處理中');
     const x = await ctx.api.call('platform', 'aihPauseSet', { paused: !paused });

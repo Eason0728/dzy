@@ -357,6 +357,32 @@ for (const [code, text] of [['ai_error', '小幫手暫時無法回答'], ['unaut
   const kbsrc = read('modules/ai-help/views/kb.js');
   ok(/it\.expires_at <= today\) return '　·　⚠ 已過期/.test(kbsrc) && !/it\.expires_at < today/.test(kbsrc), 'B8 管理頁：expires_at <= 今天 視為已過期（與後端 aihKbVisible_ 一致）');
 }
+// ⑥e R8：剩餘題數以後端為準；側欄每次打開都重打 status
+{
+  let statusLeft = 20, statusReason = '';
+  const h = mkHelper({ handler: (b) => (b.op === 'status' ? jsonRes({ ok: true, data: { on: true, reason: statusReason, left_today: statusLeft } }) : jsonRes({ ok: true, data: { id: 'aih_1', kind: 'answered', answer: 'a', go: [], who: '', left_today: 7 } })) });
+  await h.hp.start(h.parent);
+  await byRole(h.parent, 'aih-fab').fire('click'); await flush();
+  await send(h, '問題');
+  ok(byRole(h.parent, 'aih-quota').textContent === '今天還可以問 7 題', 'ask 成功回應帶 left_today → 用它更新剩餘題數（不是前端自己減一）');
+  statusLeft = 3;
+  await byRole(h.parent, 'aih-close').fire('click');
+  const n0 = h.f.calls.filter((x) => x.body.op === 'status').length;
+  await byRole(h.parent, 'aih-fab').fire('click'); await flush();
+  ok(h.f.calls.filter((x) => x.body.op === 'status').length === n0 + 1 && byRole(h.parent, 'aih-quota').textContent === '今天還可以問 3 題', '側欄每次打開重打 status、剩餘題數跟著更新');
+  statusReason = 'cap'; statusLeft = 0;
+  await byRole(h.parent, 'aih-close').fire('click');
+  await byRole(h.parent, 'aih-fab').fire('click'); await flush();
+  ok(byRole(h.parent, 'aih-input').hidden === true && byRole(h.parent, 'aih-panel').textContent.includes('本月額度已用完'), '重開時 status 回 cap → 輸入框收起、顯示額度用完');
+}
+{
+  let fail = false;
+  const h = mkHelper({ handler: (b) => { if (b.op === 'status' && fail) throw new Error('net'); return jsonRes({ ok: true, data: { on: true, reason: '', left_today: 12 } }); } });
+  await h.hp.start(h.parent);
+  fail = true;
+  await byRole(h.parent, 'aih-fab').fire('click'); await flush();
+  ok(byRole(h.parent, 'aih-quota').textContent === '今天還可以問 12 題' && byRole(h.parent, 'aih-input').hidden === false, '重打 status 失敗 → 畫面維持原樣');
+}
 // ⑦ 帶我去
 {
   ok(JSON.stringify(W.cleanGo([{ m: 'me', v: 'profile', label: '我的資料' }], () => true)) === JSON.stringify([{ m: 'me', v: 'profile', label: '我的資料' }]), 'cleanGo：合格項目保留');
