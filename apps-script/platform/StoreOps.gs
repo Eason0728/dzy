@@ -597,6 +597,9 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
       // 個人例外的帳號：打卡店在試點也算（試點沒含他的部門時，人資主管仍核得到；2026-10-29 審查低 3）
       var pOk = storeAnyIn_(t.pilotUnits || [t.unit], pilot) || (a.ex && storeAnyIn_(a.units, pilot));
       if (pOk && hrsT[t.emp]) storeAttListAdd_(L.hours, a);
+      // 品牌辦公室同仁兼任門市店長：他在兼任店的打卡帳號不算支援（照原身分由總監核），但本人也可核自己的工時
+      //   （2026-11-03 Eason 選「改程式」：比照 10-30 兼任店長可核自己在兼任店的工時；申請照舊不能核自己，總監照舊也核得到）
+      else if (self && needH && storeAnyIn_(a.units, pilot) && a.units.some(function (u) { return storeActingHas_(me, u); })) storeAttListAdd_(L.hours, a);
       if (pOk && reqT[t.emp]) storeAttListAdd_(L.req, a);
       if (pOk && viewable && viewUnits.indexOf(stfStr_(t.unit)) !== -1) storeAttListAdd_(L.view, a);
     } else if (self && storeAnyIn_(a.units, pilot) && needH && a.units.some(function (u) { return storeActingHas_(me, u); })) {
