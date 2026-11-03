@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""資料帶入測試（財務部門）：三個 iframe 型模組——貨單核對 modules/purchase、調撥管理 modules/transfer-fin、損益試算 modules/pnl。
+"""資料帶入測試（財務部門）：貨單、調撥是 iframe；損益 2026-11-03 起原生（另見 e2e_t22_pnl_*）。
+iframe 型：貨單核對 modules/purchase、調撥管理 modules/transfer-fin；原生型：損益試算 modules/pnl（斷言原生畫面：無 iframe、無密碼框、權限分頁、首頁提醒、不外洩金鑰）。
 
-被嵌的三個網頁本體在別的 repo（mala-purchase／mala-transfer／mala-pnl-auto），這裡用「假子頁」取代：
-用正式網址當別名（dzy.mozhuting.com、dzy-bulletin.github.io、eason0728.github.io、mala-pnl.github.io 都由 Playwright route 餵本機內容），
+被嵌的兩個網頁本體在別的 repo（mala-purchase／mala-transfer），這裡用「假子頁」取代：
+用正式網址當別名（dzy.mozhuting.com、dzy-bulletin.github.io、eason0728.github.io 都由 Playwright route 餵本機內容），
 iframe 的 origin 與 postMessage targetOrigin 跟正式環境一模一樣，驗的是 dzy 殼＋模組的轉接：握手、入場券、分頁同步、代轉白名單、
-敏感欄位剝除、試跑攔截、角色可見性、首頁提醒數字。資料隨機重抽（分頁清單、張數、待補項數、門市數、動作與 payload、角色權限），
-E2E_SEED=<種子> 重現；零真實後端。
+敏感欄位剝除、試跑攔截、角色可見性、首頁提醒數字。損益走假代轉（ns pnl 的 getSettings／getMonth／getTrend／getTrendMulti 假資料）。
+資料隨機重抽（分頁清單、張數、待補項數、門市數、角色權限），E2E_SEED=<種子> 重現；零真實後端。
 
 用法：python3 test/e2e/dd_fin_embeds.py（埠 9182）
 """
@@ -166,7 +167,12 @@ class MockEmbeds(MockBackend):
         self.ns_calls.append((ns, action, payload, who))
         # 上游回傳形狀：{ok:true,data:X}；殼 transformResponse_ 會包成 data.data
         if ns == 'pnl' and action == 'getSettings':
-            return 200, {'ok': True, 'data': {'stores': [{'store_id': c, 'name': n} for c, n in self.ds['stores']]}}
+            role = '管理者' if who == 'pnladm' else '檢視者' if who == 'pnlread' else '填寫者'
+            return 200, {'ok': True, 'data': {'stores': [{'store_id': c, 'name': n, 'brand': '麻的小辛辣'} for c, n in self.ds['stores']], 'accounts': [], 'me': {'name': u['user']['name'], 'role': role}, 'can_see_all': False}}
+        if ns == 'pnl' and action == 'getTrend':
+            return 200, {'ok': True, 'data': []}
+        if ns == 'pnl' and action == 'getTrendMulti':
+            return 200, {'ok': True, 'data': {'months': [], 'stores': {}}}
         if ns == 'pnl' and action == 'getMonth':
             n = self.ds['pending'].get(payload.get('store_id'), 0)
             return 200, {'ok': True, 'data': {'result': {'pending': [{'k': i} for i in range(n)]}}}
@@ -221,7 +227,6 @@ def main():
                 pg.route(SITE + '/**', site_route)
                 pg.route(PURCHASE_ORIGIN + '/**', child('purchase', '/dzy-purchase/review.html'))
                 pg.route(TRANSFER_ORIGIN + '/**', child('transfer', '/mala-transfer/report.html'))
-                pg.route(PNL_ORIGIN + '/**', child('pnl', '/'))
                 pg.route(PURCHASE_API + '/sso/counts', counts_route)
                 pg.on('request', lambda req: external.append(req.url) if EXTERNAL.match(req.url) else None)
                 pg.goto(SITE + '/index.html' + query)
@@ -246,6 +251,10 @@ def main():
 
             def wait_home_loaded(pg, mod):
                 pg.wait_for_function("(m) => { const b = document.querySelector('[data-role=alert-list][data-module=' + m + ']'); return b && !b.textContent.includes('讀取中'); }", arg=mod, timeout=12000)
+
+            def native_ok(pg, who):
+                check(pg.locator('[data-keep="pnl"] iframe').count() == 0, '損益（%s）：原生畫面，沒有 iframe' % who)
+                check(pg.locator('[data-keep="pnl"] input[type="password"]').count() == 0, '損益（%s）：畫面上沒有密碼框（沒有任何登入表單）' % who)
 
             def alert_lines(pg, mod):
                 return [t.strip().rstrip('›').strip() for t in pg.locator('[data-role="alert-list"][data-module="%s"] [data-role="alert-row"]' % mod).all_inner_texts()]
@@ -293,7 +302,7 @@ def main():
             if want_pnl:
                 tgt = next(c for c, _ in ds['stores'] if ds['pending'][c] > 0)
                 pg.locator('[data-role="alert-list"][data-module="pnl"] [data-role="alert-row"]').first.click()
-                pg.wait_for_selector('[data-keep="pnl"] iframe', timeout=10000)
+                pg.wait_for_selector('[data-keep="pnl"] [data-role^="pnl-"]', timeout=10000)
                 check(pg.evaluate('location.hash') == '#/pnl/pending?store=%s' % tgt, '點損益提醒 → #/pnl/pending?store=%s：%s' % (tgt, pg.evaluate('location.hash')))
                 pg.goto(SITE + '/index.html#/home')
                 wait_home_loaded(pg, 'purchase')
@@ -412,49 +421,21 @@ def main():
             tfr2 = frame_of(pg, TRANSFER_ORIGIN)
             check(tfr2.evaluate('window.__mark') == 'kept' and pg.locator('[data-keep="transfer-fin"] iframe').count() == 1, '切走再回來：調撥 iframe 沒重載（keepAlive）、只有一個 iframe')
 
-            # ====== ⑤ 損益試算（填級）：八分頁、call、at 同步、管級動作被平台擋 ======
+            # ====== ⑤ 損益試算（填級，原生畫面）：八分頁、沒有 iframe／密碼框、不外洩金鑰 ======
             pg.click('[data-role="nav-desktop"] [data-nav="pnl"]')
-            pg.wait_for_selector('[data-keep="pnl"] iframe[data-role="pnl-frame"]', timeout=10000)
-            pfr = frame_of(pg, PNL_ORIGIN + '/')
-            check(pfr is not None and pfr.url == PNL_ORIGIN + '/?embed=dzy', '損益 iframe 正式網址 /?embed=dzy：%s' % (pfr and pfr.url))
-            pfr.wait_for_function("() => !!window.__nav", timeout=10000)
-            cur_view = pg.evaluate('location.hash').split('/')[2].split('?')[0]
-            check(pfr.evaluate('window.__nav') == cur_view, '損益子頁收到的 nav＝目前分頁 %s（剛才若由提醒進過 pending，keepAlive 會停在那裡）' % cur_view)
+            pg.wait_for_selector('[data-keep="pnl"] [data-role^="pnl-"]', timeout=10000)
+            native_ok(pg, '填級')
             check([t['id'] for t in tabs(pg)] == [t for t, _ in PNL_TABS[:8]], '填級（pnl.write）：八個分頁、沒有「設定」：%s' % [t['id'] for t in tabs(pg)])
             for tid, _ in R.sample(PNL_TABS[:8], 8):
                 pg.locator('[data-role="view-nav"] .nav-item[data-view="%s"]' % tid).click()
-                pfr.wait_for_function("(t) => window.__nav === t", arg=tid, timeout=5000)
-            check(True, '損益八個分頁各點一次，子頁收到 dzy-pnl-nav')
-            # 子頁自己切頁（dzy-pnl-at）→ 頁頂跟著換；不認得的頁名不理
-            at = R.choice([t for t, _ in PNL_TABS[:8]])
-            pfr.evaluate("(p) => window.__raw({type:'dzy-pnl-at', v:1, p})", at)
-            pg.wait_for_function("(h) => location.hash === h", arg='#/pnl/%s' % at, timeout=5000)
-            check(pg.locator('[data-role="view-nav"] .nav-item.is-active').get_attribute('data-view') == at, '子頁送 dzy-pnl-at %s → 頁頂與網址跟著換' % at)
-            pfr.evaluate("() => window.__raw({type:'dzy-pnl-at', v:1, p:'login'})")
-            pg.wait_for_timeout(300)
-            check(pg.evaluate('location.hash') == '#/pnl/%s' % at, '不認得的頁名 login：網址不變')
-            bad = []
-            n_calls = R.randint(6, 12)
-            for i in range(n_calls):
-                kind = R.choice(['read', 'write', 'admin', 'unknown'])
-                action = {'read': R.choice([a for a in P_READ if a not in ('getMonth', 'getSettings')]), 'write': R.choice([a for a in P_WRITE if a not in P_ADMIN]), 'admin': R.choice(P_ADMIN), 'unknown': R.choice(['login', 'createInvite', 'dzyProxy', 'changeMyPasscode'])}[kind]   # getMonth／getSettings 的 mock 另有固定形狀（首頁提醒用）
-                body = {'store_id': R.choice(ds['stores'])[0], 'month': '2026-%02d' % R.randint(1, 12)}
-                for k in R.sample(['key', 'token', 'operator', 'level', 'inner', 'action'], R.randint(0, 6)):
-                    body[k] = 'LEAK-' + k
-                cid = 'p%d_%d' % (i, R.randint(1, 9999))
-                before = len(mock.ns_calls)
-                n_got = pfr.evaluate('window.__got.length')
-                res = pfr.evaluate("([id, a, b]) => window.__call(id, a, b)", [cid, action, body])
-                clean = {k: v for k, v in body.items() if k not in ('key', 'token', 'operator', 'level', 'inner', 'action')}
-                if kind in ('read', 'write'):
-                    good = res == {'ok': True, 'data': {'echo': action, 'payload': clean, 'operator': '財務全權（finall）（管理系統）'}} and len(mock.ns_calls) == before + 1
-                elif kind == 'admin':
-                    good = res == {'ok': False, 'error': 'BUSY', 'message': '沒有權限'} and len(mock.ns_calls) == before
-                else:
-                    good = res == {'timeout': True} and len(mock.ns_calls) == before and pfr.evaluate('window.__got.length') == n_got
-                if not good:
-                    bad.append((kind, action, body, res))
-            check(not bad, '損益 %d 次隨機 call（填級）：讀寫放行且剝除 key／token／operator／level／inner／action；管級動作被平台 403 → BUSY；白名單外的 login／createInvite 直接忽略' % n_calls + ('' if not bad else '，錯：%s' % bad[:2]))
+                pg.wait_for_function("(h) => location.hash.split('?')[0] === h", arg='#/pnl/%s' % tid, timeout=5000)
+                pg.wait_for_selector('[data-keep="pnl"] [data-role^="pnl-"]', timeout=8000)
+                pg.wait_for_function("() => !document.querySelector('[data-keep=pnl] [data-role=pnl-loading]')", timeout=8000)
+                native_ok(pg, '填級 %s' % tid)
+                pg.wait_for_function("(t) => { const a = document.querySelector('[data-role=view-nav] .nav-item.is-active'); return a && a.getAttribute('data-view') === t; }", arg=tid, timeout=5000)
+                check(pg.locator('[data-role="view-nav"] .nav-item.is-active').get_attribute('data-view') == tid, '損益分頁 %s：頁頂高亮跟著換' % tid)
+            check(any(c[0] == 'pnl' and c[1] == 'getTrend' for c in mock.ns_calls) and any(c[0] == 'pnl' and c[1] == 'getSettings' for c in mock.ns_calls), '原生儀表板經代轉讀到 getSettings／getTrend（ctx.api.call(pnl)）')
+            check(not [c for c in mock.ns_calls if c[1] in P_WRITE], '填級只瀏覽八個分頁：沒有任何寫入代轉')
             pg.screenshot(path=os.path.join(ART, 'embeds-pnl.png'))
             pg.context.close()
 
@@ -466,14 +447,12 @@ def main():
             wait_home_loaded(rd, 'pnl')
             check('沒有待辦' in rd.locator('[data-role="alert-list"][data-module="pnl"]').inner_text() and not [c for c in mock.ns_calls if c[3] == 'pnlread'], '看級：首頁提醒不算待補（沒打 getMonth）')
             rd.click('[data-role="nav-desktop"] [data-nav="pnl"]')
-            rd.wait_for_selector('[data-keep="pnl"] iframe', timeout=10000)
+            rd.wait_for_selector('[data-keep="pnl"] [data-role="pnl-dash-head"]', timeout=10000)
+            native_ok(rd, '看級')
             check([t['id'] for t in tabs(rd)] == ['dashboard'], '看級：只剩儀表板分頁：%s' % [t['id'] for t in tabs(rd)])
-            rfr = frame_of(rd, PNL_ORIGIN)
-            rfr.wait_for_function("() => window.__nav === 'dashboard'", timeout=10000)
-            res = rfr.evaluate("() => window.__call('r1', 'getMonth', {store_id:'gf', month:'2026-09'})")
-            check(res.get('ok') is True, '看級：getMonth（讀）放行：%s' % res)
-            res = rfr.evaluate("() => window.__call('r2', 'addEntry', {store_id:'gf'})")
-            check(res == {'ok': False, 'error': 'BUSY', 'message': '沒有權限'}, '看級：addEntry（寫）被代轉 403：%s' % res)
+            rd.wait_for_function("() => !document.querySelector('[data-keep=pnl] [data-role=pnl-loading]') && !document.querySelector('[data-keep=pnl] [data-role=pnl-skeleton]')", timeout=10000)
+            check(any(c[1] == 'getMonth' and c[3] == 'pnlread' for c in mock.ns_calls), '看級：儀表板 getMonth（讀）放行')
+            check(not [c for c in mock.ns_calls if c[3] == 'pnlread' and c[1] in P_WRITE], '看級：沒有任何寫入代轉')
             rd.goto(SITE + '/index.html#/pnl/settings')
             rd.wait_for_timeout(800)
             check(rd.evaluate('location.hash') != '#/pnl/settings', '看級硬輸入 #/pnl/settings：不停在設定分頁：%s' % rd.evaluate('location.hash'))
@@ -482,16 +461,14 @@ def main():
             am = new_page()
             do_login(am, 'pnladm')
             am.click('[data-role="nav-desktop"] [data-nav="pnl"]')
-            am.wait_for_selector('[data-keep="pnl"] iframe', timeout=10000)
+            am.wait_for_selector('[data-keep="pnl"] [data-role="pnl-dash-head"]', timeout=10000)
+            native_ok(am, '管級')
             check([t['id'] for t in tabs(am)] == [t for t, _ in PNL_TABS], '管級（pnl.admin）：九個分頁含設定：%s' % [t['id'] for t in tabs(am)])
-            afr = frame_of(am, PNL_ORIGIN)
-            afr.wait_for_function("() => window.__nav === 'dashboard'", timeout=10000)
-            adm_action = R.choice(P_ADMIN)
-            res = afr.evaluate("(a) => window.__call('a1', a, {store_id:'gf'})", adm_action)
-            check(res.get('ok') is True and res['data']['echo'] == adm_action, '管級：%s 放行：%s' % (adm_action, res))
             am.locator('[data-role="view-nav"] .nav-item[data-view="settings"]').click()
-            afr.wait_for_function("() => window.__nav === 'settings'", timeout=5000)
-            check(am.evaluate('location.hash') == '#/pnl/settings', '管級：設定分頁點得到')
+            am.wait_for_function("() => location.hash === '#/pnl/settings'", timeout=5000)
+            am.wait_for_selector('[data-keep="pnl"] [data-role^="pnl-set"], [data-keep="pnl"] [data-role="pnl-error"], [data-keep="pnl"] .tabs, [data-keep="pnl"] .card', timeout=8000)
+            native_ok(am, '管級 settings')
+            check(am.evaluate('location.hash') == '#/pnl/settings', '管級：設定分頁點得到、仍是原生畫面')
             am.context.close()
 
             # ====== ⑦ 試跑模式：寫入全攔、讀取照常、嵌入警語 ======
@@ -514,13 +491,10 @@ def main():
             r3 = dtf.evaluate("() => window.__call('d3', 'adminUpdate', {op:'memoryEdit'})")
             check(r1.get('ok') is True and r2 == {'ok': False, 'error': '試跑模式，未寫入', 'code': 'DRYRUN'} and r3 == {'ok': False, 'error': '試跑模式，未寫入', 'code': 'DRYRUN'}, '試跑：調撥讀取照常、buildMonthlyReport／adminUpdate 回 DRYRUN：%s' % [r2, r3])
             dr.click('[data-role="nav-desktop"] [data-nav="pnl"]')
-            dr.wait_for_selector('[data-keep="pnl"] iframe', timeout=10000)
-            dpf = frame_of(dr, PNL_ORIGIN)
-            dpf.wait_for_function("() => window.__nav === 'dashboard'", timeout=10000)
-            wa = R.choice([a for a in P_WRITE if a not in P_ADMIN])
-            r4 = dpf.evaluate("(a) => window.__call('d4', a, {store_id:'gf'})", wa)
-            r5 = dpf.evaluate("() => window.__call('d5', 'getSettings', {})")
-            check(r4 == {'ok': False, 'error': 'BAD_INPUT', 'message': '試跑模式，未寫入'} and r5.get('ok') is True, '試跑：損益 %s 回 BAD_INPUT 試跑、getSettings 照常：%s' % (wa, r4))
+            dr.wait_for_selector('[data-keep="pnl"] [data-role="pnl-dash-head"]', timeout=10000)
+            native_ok(dr, '試跑')
+            dr.wait_for_function("() => !document.querySelector('[data-keep=pnl] [data-role=pnl-skeleton]')", timeout=10000)
+            check(any(c[1] == 'getSettings' and c[3] == 'finall' for c in mock.ns_calls), '試跑：損益原生畫面讀取照常（getSettings 放行）')
             check(len([c for c in mock.ns_calls if c[1] in T_WRITE + P_WRITE]) == n_w, '試跑模式：代轉一筆寫入都沒收到')
             dr.screenshot(path=os.path.join(ART, 'embeds-dryrun.png'))
             dr.context.close()
