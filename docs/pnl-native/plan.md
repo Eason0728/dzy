@@ -40,7 +40,7 @@ P1 與 P3 可平行（P3 先對假後端開發）；P4 要等 P1＋P2；P5 可�
 ### C5 附件
 - 附件URL 新格式：`pnlfile:<store_id>/<YYYY-MM>/<file_id>.<ext>`，`file_id`＝Utilities.getUuid() 去掉 `-`，`ext` 由 MIME 決定（jpg、png、pdf、webp、heic）。例：`pnlfile:S01/2026-10/3f9a0c1e2b4d4e8f9a7b6c5d4e3f2a1b.jpg`。
 - 實體路徑：`<dataDir>/files/<store_id>/<YYYY-MM>/<file_id>.<ext>`，權限 600。
-- **P1 實作調整**：kit 新增 `MiniFiles` 同步檔案服務（app.json `files:{dir:'files'}`），上傳由 gas 端在同一次請求內直接寫檔（tmp→fsync→rename），不經 jobs.js；檔案寫入不隨交易回滾，寫檔後若丟例外留下孤兒檔，由下面的開機掃描處理。
+- **P1 實作調整**：kit 新增 `MiniFiles` 同步檔案服務（app.json `files:{dir:'files'}`），上傳由 gas 端在同一次請求內直接寫檔（tmp→fsync→rename），不經 jobs.js；P1 審查後：執行器 commit／rollback 時一併提交／刪除本次請求寫的檔（MiniFiles 日誌），寫檔後丟例外不留孤兒檔；開機掃描保留作第二道防線（例如 Code.gs 自己接住錯誤回 ok:false 的情況）。
 - 上傳順序（GPT-10，原設計）：jobs.js 先寫暫存檔 `<…>/.tmp-<file_id>` → 驗 sha256 → fsync → rename 成正式檔 → 才 runGas 寫明細（附件URL＋sha256）。runGas 失敗 → 刪正式檔。開機時掃描：沒有任何明細引用、且超過 1 小時的檔案移到 `files/.orphan/`（不刪，黃燈）；明細引用但檔案不存在 → 紅燈。
 - 舊格式 `https://drive.google.com/file/d/<id>/…` 在 mini 上讀取時，由搬遷對照表 `files/drive-map.jsonl`（每列 `{drive_id, pnlfile}`）轉換；搬遷完成後明細欄位一律改寫成新格式，對照表保留供回退。
 
