@@ -1,8 +1,8 @@
 /**
  * modules/pnl/views/settings.js — 損益試算「設定」頁（只有 pnl.admin 看得到；T17＋T18）
- * 分頁：門市｜科目｜門市科目｜連接器｜匯入範本｜系統設定｜使用者｜月份作業｜異動紀錄｜匯出 CSV｜維護
+ * 分頁：門市｜科目｜門市科目｜連接器｜匯入範本｜系統設定｜使用者｜月份作業｜匯出 CSV｜維護
  *   表格編輯（settings-tables.js）：存檔 → saveSettings 帶 base_version（樂觀鎖），CONFLICT 時重讀。
- *   月份作業／異動紀錄／匯出／維護（settings-ops.js）。純函式在 settings-lib.js。
+ *   月份作業／匯出／維護（settings-ops.js）。純函式在 settings-lib.js。
  * 行為正本：~/mala-pnl-auto/gas/settings.html（不要外觀、登入、邀請碼、通行碼、登出所有裝置）。
  */
 'use strict';
@@ -11,7 +11,7 @@ import { call, errText } from '../lib/api.js';
 import { getSettings, isAdmin, invalidateSettings } from '../state.js';
 import { currentMonth } from '../bridge.js';
 import { loadingHtml, noticeHtml, errorHtml } from './common.js';
-import { clone, shiftMonth, mapRowsFrom, shadowUsers, makeLogEntry, diffIsEmpty } from './settings-lib.js';
+import { clone, shiftMonth, mapRowsFrom, shadowUsers, diffIsEmpty } from './settings-lib.js';
 import { TABLE_SECTIONS } from './settings-tables.js';
 import { OPS_SECTIONS } from './settings-ops.js';
 
@@ -46,12 +46,11 @@ function textNode(tag, text, cls) {
 
 export function mountSettings(el, ctx) {
   const esc = ctx.fmt.esc;
-  const S = { ctx, esc, alive: true, data: null, draft: null, tab: 'stores', logs: [], panelEl: null, ops: null, accErrs: {}, saStore: '' };
+  const S = { ctx, esc, alive: true, data: null, draft: null, tab: 'stores', panelEl: null, ops: null, accErrs: {}, saStore: '' };
   const dialogs = new Set();
   let loadSeq = 0;
 
   S.toast = (msg, type) => ctx.ui.toast(msg, type);
-  S.log = (action, summary) => { S.logs.unshift(makeLogEntry(action, summary)); };
   S.err = (text) => { const e = S.panelEl && S.panelEl.querySelector('[data-role="pnl-set-err"]'); if (e) e.textContent = text || ''; };
   function applyMsg(key) {
     const m = S.ops && S.ops.msgs[key];

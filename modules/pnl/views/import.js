@@ -6,7 +6,7 @@
 'use strict';
 
 import { call, errText } from '../lib/api.js';
-import { getSettings, storeOptions, settle, sel, isAdmin, canWrite } from '../state.js';
+import { getSettings, invalidateSettings, storeOptions, settle, sel, isAdmin, canWrite } from '../state.js';
 import { currentMonth } from '../bridge.js';
 import { storeSelectHtml, monthSelectHtml, loadingHtml, noticeHtml, errorHtml } from './common.js';
 import { loadXlsx } from '../lib/load-xlsx.js';
@@ -171,9 +171,24 @@ export function mountImport(el, ctx) {
     const rows = templates.map((t) => ({ tpl_id: t.tpl_id, name: t.name, file_type: t.file_type, header_row: t.header_row, date_col: t.date_col, amount_col: t.amount_col, group_col: t.group_col, mapping: t.mapping })).concat([newTpl]);
     busy = true; ctx.ui.loading(true);
     let r;
-    try { r = await call(ctx, 'saveSettings', { table: 'templates', rows }); } finally { busy = false; ctx.ui.loading(false); }
+    const payload = { table: 'templates', rows };
+    const bv = settings && settings.versions && settings.versions.templates;
+    if (bv) payload.base_version = bv;
+    try { r = await call(ctx, 'saveSettings', payload); } finally { busy = false; ctx.ui.loading(false); }
     if (!alive) return;
-    if (!r.ok) { toast(errText(r), 'danger'); return; }
+    if (!r.ok) {
+      if (r.error === 'CONFLICT') {
+        toast('範本剛被別人改過，已重新載入，請再存一次', 'warn');
+        invalidateSettings();
+        const r2 = await getSettings(ctx, true);
+        if (!alive) return;
+        if (r2.ok) { settings = r2.data; templates = settings.templates || []; accounts = settings.accounts || accounts; }
+        return;
+      }
+      toast(errText(r), 'danger'); return;
+    }
+    if (r.data && typeof r.data.version === 'string') { if (!settings.versions) settings.versions = {}; settings.versions.templates = r.data.version; }
+    invalidateSettings();
     templates = rows;
     currentTpl = newTpl; currentTplSaved = true;
     const selEl = $('[data-role="pnl-import-tpl"]');

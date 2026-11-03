@@ -35,7 +35,7 @@ def proxy(mock, body):
         return 403, {'ok': False, 'error': '沒有權限', 'code': 'FORBIDDEN'}
     if action not in READ and level == 'read':
         return 403, {'ok': False, 'error': '沒有權限', 'code': 'FORBIDDEN'}
-    if action in ADMIN and action != 'getJob' and level != 'admin':
+    if action in ADMIN and level != 'admin':   # getJob 也只給管（同 Auth.gs PROXY_PNL_ADMIN_ACTIONS；夜審 #8）
         return 403, {'ok': False, 'error': '沒有權限', 'code': 'FORBIDDEN'}
     for k in FORBIDDEN_FIELDS:
         if isinstance(payload, dict) and k in payload:

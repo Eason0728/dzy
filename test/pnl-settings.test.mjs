@@ -140,7 +140,11 @@ t('CSV：BOM／CRLF／跳脫／公式注入／金額壞值／檔名', () => {
   assert.equal(L.csvFilename('明細', 'a/b', '2026-08'), '明細_a_b_2026-08.csv');
   assert.equal(L.numCell(-0.001, 2), '0.00');
 });
-t('異動紀錄時間（台北）', () => {
-  assert.equal(L.makeLogEntry('a', 'b', Date.UTC(2026, 10, 3, 16, 5, 6)).at, '2026-11-04 00:05:06');
+t('排隊結果：skipped 定稿、提醒最多 10 條、連接器失敗', () => {
+  assert.equal(L.describeDraftResult({ store_id: 'S01', month: '2026-10', skipped: true, status: '定稿' }), 'S01 2026-10 月份已定稿（狀態：定稿），未重建');
+  const w = Array.from({ length: 12 }, (_, i) => '警告' + i);
+  const txt = L.formatConnectorIssues({ warnings: w, connectorFailures: [{ connector: 'pos', code: 'AUTH', acc_id: 'A1', message: '登入失敗' }] });
+  assert.match(txt, /pos:AUTH\(A1\)（登入失敗）/);
+  assert.match(txt, /警告9/); assert.ok(!/警告10/.test(txt)); assert.match(txt, /…等 12 條/);
 });
 console.log('settings: ' + n + ' passed');

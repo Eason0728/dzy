@@ -20,8 +20,8 @@ export const ADD_ALLOWED_MODES = { 手動: true, 連接器: true };
 
 export const PHOTO_MAX_DIM = 1600;
 export const PHOTO_QUALITY = 0.82;
-/** 後端：base64 字串長度上限 8MB（ATTACHMENT_MAX_BASE64_LENGTH_） */
-export const ATTACH_MAX_BASE64 = 8 * 1024 * 1024;
+/** 代轉層與執行器整個 JSON body 上限 4MB → base64 長度上限 3,900,000 字元（約 2.9MB 檔案） */
+export const ATTACH_MAX_BASE64 = 3900000;
 
 export function catOf(key) { return CATS.filter((c) => c.key === key)[0] || null; }
 
@@ -154,7 +154,7 @@ export function fitSize(w, h, max) {
 
 /**
  * 選檔檢查：回 {kind:'image'|'pdf'} 或 {error}
- * HEIC／HEIF 擋下（後端也擋）；圖片前端壓縮成 JPEG；PDF 照傳（base64 超過後端上限 8MB 由 checkBase64 擋）
+ * HEIC／HEIF 擋下（後端也擋）；圖片前端壓縮成 JPEG；PDF 照傳（base64 超過上限 由 checkBase64 擋）
  */
 export function classifyFile(file) {
   const name = String((file && file.name) || '').toLowerCase();
@@ -166,7 +166,7 @@ export function classifyFile(file) {
 }
 
 export function checkBase64(b64) {
-  return typeof b64 === 'string' && b64.length > 0 && b64.length <= ATTACH_MAX_BASE64 ? null : '檔案超過 8MB，請縮小後再上傳';
+  return typeof b64 === 'string' && b64.length > 0 && b64.length <= ATTACH_MAX_BASE64 ? null : '檔案太大（上限約 2.9MB），請縮小或分開上傳';
 }
 
 /** 附件網址 → getAttachment 的 file_id：本機 pnlfile:… 整串；舊的 drive 網址取檔案 ID；其他回 null */

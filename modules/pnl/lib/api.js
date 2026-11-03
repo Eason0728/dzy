@@ -50,7 +50,7 @@ export async function waitJob(ctx, jobId, onTick, opts) {
     if (r.data && (r.data.status === 'done' || r.data.status === 'fail')) return { ok: true, job: r.data };
     await sleep(interval);
   }
-  return { ok: false, error: 'TIMEOUT', message: '還在處理中，稍後到設定頁看結果' };
+  return { ok: false, error: 'TIMEOUT', message: '還在處理中，稍後重新整理這一頁看結果' };
 }
 
 /** 回應是排隊（mini）就等工作做完；不是（舊後端直接回結果）就原樣回。回 {ok, data, job?} */

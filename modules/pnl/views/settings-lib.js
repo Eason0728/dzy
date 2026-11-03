@@ -399,6 +399,8 @@ export function scopeNote(role, stores, allStoreIds) {
 // ---------------------------------------------------------------- 月份作業（結果文字）
 
 export function formatDraftWarning(w) {
+  if (typeof w === 'string') return w;
+  if (!w || typeof w !== 'object') return String(w == null ? '' : w);
   const acc = w.acc_id || '';
   if (w.code === 'MANUAL_EXISTS') return acc + ' 本月已有其他來源的值' + (w.existing_sources && w.existing_sources.length ? '（' + w.existing_sources.join('／') + '）' : '') + '，未自動帶入';
   if (w.code === 'STALE_SAME_SOURCE') {
@@ -407,6 +409,15 @@ export function formatDraftWarning(w) {
   }
   if (w.code === 'NO_FIXED') return acc + ' 是固定科目，但這家店沒設定固定值';
   return w.code + (acc ? '(' + acc + ')' : '');
+}
+
+/** 提醒清單：最多列 10 條，其餘「…等 N 條」 */
+export function listWarnings(warns, max) {
+  const lim = max || 10;
+  const arr = warns || [];
+  const shown = arr.slice(0, lim).map(formatDraftWarning);
+  if (arr.length > lim) shown.push('…等 ' + arr.length + ' 條');
+  return shown;
 }
 
 export function formatRefreshFixedResult(res) {
@@ -422,7 +433,7 @@ export function formatRefreshFixedResult(res) {
     if (d.reason === 'PREV_NOT_FINAL') return acc + ' 上月未定稿，結轉未動';
     return acc + ' ' + d.action;
   });
-  (res.warnings || []).forEach((w) => lines.push(formatDraftWarning(w)));
+  listWarnings(res.warnings).forEach((w) => lines.push(w));
   return lines.length ? head + '；' + lines.join('、') : head;
 }
 
@@ -431,18 +442,17 @@ export function formatConnectorIssues(res) {
   const parts = [];
   const fails = res.connectorFailures || [];
   if (fails.length) {
-    parts.push('待處理（' + fails.length + '）：' + fails.map((f) => f.connector + ':' + f.code + (f.acc_id ? '(' + f.acc_id + ')' : '') + (f.message ? '（' + f.message + '）' : '')).join('、'));
+    parts.push('待處理（' + fails.length + '）：' + fails.map((f) => typeof f === 'string' ? f : f.connector + ':' + f.code + (f.acc_id ? '(' + f.acc_id + ')' : '') + (f.message ? '（' + f.message + '）' : '')).join('、'));
   }
   const warns = res.warnings || [];
-  if (warns.length) parts.push('提醒（' + warns.length + '）：' + warns.map(formatDraftWarning).join('、'));
+  if (warns.length) parts.push('提醒（' + warns.length + '）：' + listWarnings(warns).join('、'));
   if (res.timedOut) parts.push('執行逾時，部分連接器未跑完，明天 06:30 每日更新會接續，或稍後再按一次');
   return parts.join('；');
 }
 
 /** 建立草稿完成後的一句話 */
 export function describeDraftResult(res) {
-  if (res.skipped) return res.store_id + ' ' + res.month + ' 已定稿' + (res.status ? '（狀態：' + res.status + '）' : '') + '，未重建';
-  if (res.created === false) return res.store_id + ' ' + res.month + ' 月份已存在' + (res.status ? '（狀態：' + res.status + '）' : '') + '，未重複建立';
+  if (res.skipped) return res.store_id + ' ' + res.month + ' 月份已定稿' + (res.status ? '（狀態：' + res.status + '）' : '') + '，未重建';
   return res.store_id + ' ' + res.month + ' 草稿已建立' + (typeof res.entriesAdded === 'number' ? '（帶入 ' + res.entriesAdded + ' 筆）' : '');
 }
 
@@ -583,12 +593,4 @@ export function buildEntriesCsvRows(entries, opts) {
     ]);
   });
   return rows;
-}
-
-// ---------------------------------------------------------------- 本次異動紀錄（後端沒有讀取異動紀錄分頁的動作，這頁記錄本次開啟期間在設定頁做過的變更）
-
-export function makeLogEntry(action, summary, now) {
-  const d = new Date((now === undefined ? Date.now() : now) + 8 * 3600 * 1000);
-  const p = (n) => String(n).padStart(2, '0');
-  return { at: d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds()), action, summary };
 }

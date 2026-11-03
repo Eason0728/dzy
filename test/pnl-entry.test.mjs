@@ -104,9 +104,11 @@ t('選檔：HEIC 擋下、PDF 照傳、圖片壓縮、其他格式擋下', () =>
   assert.equal(classifyFile({ name: 'a.png', type: '' }).kind, 'image');
   assert.ok(classifyFile({ name: 'a.docx', type: 'application/msword' }).error);
 });
-t('大小上限＝後端 base64 8MB', () => {
+t('大小上限＝base64 3,900,000 字元（約 2.9MB）', () => {
   assert.equal(checkBase64('abc'), null);
-  assert.ok(checkBase64('a'.repeat(ATTACH_MAX_BASE64 + 1)));
+  assert.equal(ATTACH_MAX_BASE64, 3900000);
+  assert.equal(checkBase64('a'.repeat(ATTACH_MAX_BASE64)), null);
+  assert.match(checkBase64('a'.repeat(ATTACH_MAX_BASE64 + 1)), /上限約 2\.9MB/);
   assert.ok(checkBase64(''));
 });
 t('附件 id：pnlfile 整串、drive 網址取 ID、其他 null', () => {

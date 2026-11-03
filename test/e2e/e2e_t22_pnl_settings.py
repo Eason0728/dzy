@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """e2e ㉒：損益試算原生化 — 設定頁（T17＋T18）。真的損益後端（pnl_backend.mjs，埠 18924）＋站台埠 8834，零真實資料。
-驗：write／read 看不到設定分頁；admin 十一個區塊每顆按鈕都點過（門市、科目、門市科目、連接器、匯入範本、系統設定、使用者、
-月份作業含排隊進度、異動紀錄、匯出 CSV、維護區預覽→確認）；金鑰欄不是 password；沒有登入框；mock.leaked == []。"""
+驗：write／read 看不到設定分頁；admin 十個區塊每顆按鈕都點過（門市、科目、門市科目、連接器、匯入範本、系統設定、使用者、
+月份作業含排隊進度、匯出 CSV、維護區預覽→確認）；金鑰欄不是 password；沒有登入框；mock.leaked == []。"""
 import csv
 import io
 import json
@@ -109,7 +109,7 @@ def main():
             open_settings(pg)
             no_login_form(pg, 'admin 設定頁')
             sec_tabs = pg.locator(SET + ' [data-role="pnl-set-tab"]').all_inner_texts()
-            check(sec_tabs == ['門市', '科目', '門市科目', '連接器', '匯入範本', '系統設定', '使用者', '月份作業', '異動紀錄', '匯出 CSV', '維護'], '設定十一個區塊：%s' % sec_tabs)
+            check(sec_tabs == ['門市', '科目', '門市科目', '連接器', '匯入範本', '系統設定', '使用者', '月份作業', '匯出 CSV', '維護'], '設定十個區塊：%s' % sec_tabs)
 
             # ====== ③ 門市 ======
             rows = pg.locator(SET + ' [data-role="pnl-set-stores"] [data-role="pnl-set-row"]')
@@ -397,15 +397,6 @@ def main():
             pg.select_option('[data-role="pnl-fin-month"]', '2026-01'); pg.click('[data-act="fin-load"]')
             pg.wait_for_selector('[data-role="pnl-fin-status"]:has-text("尚無這個月份")')
             check(True, '沒建過的月份：提示先建草稿')
-
-            # ====== ⑪ 異動紀錄 ======
-            tab(pg, '異動紀錄')
-            lrows = pg.locator(SET + ' [data-role="pnl-set-logrow"]')
-            check(lrows.count() >= 10, '異動紀錄列出本次做過的存檔與作業：%d 筆' % lrows.count())
-            lt = pg.locator(SET + ' [data-role="pnl-set-log"]').inner_text()
-            check('存檔：門市' in lt and '建立草稿' in lt and '解除定稿' in lt, '紀錄內容含存檔／建草稿／解除定稿')
-            pg.click('[data-act="log-clear"]')
-            check(pg.locator(SET + ' [data-role="pnl-set-logrow"]').count() == 0, '清除畫面上的紀錄')
 
             # ====== ⑫ 匯出 CSV ======
             tab(pg, '匯出 CSV')

@@ -72,6 +72,7 @@ def run():
 
     png_path, pdf_path = tmpfile('a.png', PNG), tmpfile('a.pdf', PDF)
     heic_path = tmpfile('a.heic', b'\x00\x00\x00\x18ftypheic')
+    bigpdf_path = tmpfile('big.pdf', PDF + b'0' * (3 * 1024 * 1024))   # base64 約 4.0M 字元，超過 3,900,000
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch()
@@ -173,6 +174,10 @@ def run():
             pg.click(a8 + ' [data-act="add-submit"]')
             pg.wait_for_function("(s) => document.querySelector(s).textContent.includes('HEIC')", arg=a8 + ' [data-role="pnl-add-error"]')
             check(not calls_of('uploadAttachment') and not calls_of('addEntry'), 'HEIC：擋下，沒有上傳也沒有新增')
+            pg.set_input_files(a8 + ' [data-role="pnl-file"]', bigpdf_path)
+            pg.click(a8 + ' [data-act="add-submit"]')
+            pg.wait_for_function("(s) => document.querySelector(s).textContent.includes('上限約 2.9MB')", arg=a8 + ' [data-role="pnl-add-error"]')
+            check(not calls_of('uploadAttachment') and not calls_of('addEntry'), '大檔 PDF（>2.9MB）：擋下，沒有上傳也沒有新增')
             pg.set_input_files(a8 + ' [data-role="pnl-file"]', png_path)
             pg.click(a8 + ' [data-act="add-submit"]')
             pg.wait_for_function("(t) => document.querySelector('[data-keep=pnl] [data-role=pnl-pending-total]').textContent === t", arg='本月待補 %d 項' % (n0 - 1), timeout=15000)

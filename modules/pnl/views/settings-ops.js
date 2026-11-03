@@ -1,5 +1,5 @@
 /**
- * modules/pnl/views/settings-ops.js — 設定頁的作業區塊：月份作業、異動紀錄、匯出 CSV、維護
+ * modules/pnl/views/settings-ops.js — 設定頁的作業區塊：月份作業、匯出 CSV、維護
  * 對照 settings.html 的 buildCreateDraftPanel／buildRefreshConnectorsPanel、entry.html 的定稿區、dashboard.html 的「下載明細 CSV」，
  * 以及試算表選單搬來的維護動作（後端 adminMaint.js，規格 plan.md C7）。
  * 建立草稿／立即拉取／建上月草稿在 mini 上回 {queued, job_id}：用 settleQueued／waitJob 等做完，畫面顯示「排隊中／執行中」。
@@ -103,7 +103,6 @@ const month = {
         const text = describeDraftResult(res) + (issues ? '；' + issues : '');
         S.say('create', text);
         S.toast(describeDraftResult(res), 'ok');
-        S.log('建立草稿', text);
       });
       case 'refresh-fixed': return busy(t, async () => {
         const sid = o.createStore, mon = o.createMonth;
@@ -120,7 +119,6 @@ const month = {
         const text = formatRefreshFixedResult(Object.assign({ store_id: sid, month: mon }, r.data));
         S.say('fixed', text);
         S.toast('已重新帶入固定值（更新 ' + (r.data.updated || 0) + '、補寫 ' + (r.data.added || 0) + '、作廢 ' + (r.data.voided || 0) + '）', 'ok');
-        S.log('重新帶入固定值', text);
       });
       case 'refresh-conn': return busy(t, async () => {
         const sid = o.refreshStore, mon = o.refreshMonth;
@@ -134,7 +132,6 @@ const month = {
         const text = describeRefreshConnectors(Object.assign({ store_id: sid, month: mon }, r.data));
         S.say('refresh', text);
         S.toast('已重新拉取連接器', 'ok');
-        S.log('立即拉取連接器', text);
       });
       case 'fin-load': return busy(t, async () => {
         await loadFin(S);
@@ -148,7 +145,6 @@ const month = {
         if (!S.alive) return;
         if (!r.ok) { S.say('fin', errText(r), true); return S.toast(errText(r), 'danger'); }
         S.toast('已定稿', 'ok');
-        S.log('定稿', fin.store_id + ' ' + fin.month + (fin.pending.length ? '（確認為 0：' + fin.pending.join('、') + '）' : ''));
         await loadFin(S);
       });
       case 'fin-unlock': return busy(t, async () => {
@@ -161,7 +157,6 @@ const month = {
         if (!S.alive) return;
         if (!r.ok) { S.say('fin', errText(r), true); return S.toast(errText(r), 'danger'); }
         S.toast('已解除定稿', 'ok');
-        S.log('解除定稿', fin.store_id + ' ' + fin.month + '：' + reason);
         await loadFin(S);
       });
       default:
@@ -182,23 +177,6 @@ async function loadFin(S) {
   o.msgs.fin = '';
   S.redraw();
 }
-
-// ================================================================ 異動紀錄
-const logTab = {
-  id: 'log', label: '異動紀錄',
-  render(S) {
-    const esc = S.esc;
-    const body = S.logs.length ? S.logs.map((l) => `<tr data-role="pnl-set-logrow"><td>${esc(l.at)}</td><td>${esc(l.action)}</td><td>${esc(l.summary)}</td></tr>`).join('')
-      : '<tr><td colspan="3" class="text-muted" data-role="pnl-set-empty">這次開啟設定頁之後還沒有任何異動</td></tr>';
-    return `<div class="card stack" data-role="pnl-set-log"><div class="card-title">異動紀錄</div>
-      <p class="field-hint">列出這次開啟設定頁之後做過的存檔與月份作業（時間為台北時間）。完整的歷史異動紀錄存在損益資料庫的「異動紀錄」分頁，後端目前沒有開放讀取。</p>
-      <div class="table-wrap"><table class="table"><thead><tr><th>時間</th><th>動作</th><th>內容</th></tr></thead><tbody>${body}</tbody></table></div>
-      <div class="card-row"><button type="button" class="btn btn-secondary" data-act="log-clear" data-role="pnl-log-clear">清除畫面上的紀錄</button></div></div>`;
-  },
-  async event(S, kind, t) {
-    if (kind === 'click' && t.dataset.act === 'log-clear') { S.logs.length = 0; S.redraw(); }
-  }
-};
 
 // ================================================================ 匯出 CSV
 const exportTab = {
@@ -235,7 +213,6 @@ const exportTab = {
       downloadCsv(filename, withBom(buildCsv(rows)));
       S.say('export', '已下載 ' + filename + '（' + entries.length + ' 筆）');
       S.toast('已下載 ' + filename, 'ok');
-      S.log('匯出 CSV', filename + '（' + entries.length + ' 筆）');
     });
   }
 };
@@ -272,7 +249,6 @@ async function previewThenApply(S, o) {
   const text = r.data && r.data.applied === false ? (r.data.reason || '沒有變更') : o.doneText(r.data || {});
   S.say(key, text);
   S.toast(text, 'ok');
-  S.log(o.title, text);
   return r.data;
 }
 
@@ -311,7 +287,6 @@ const maint = {
         S.ops.selfcheck = r.data;
         const box = S.panelEl.querySelector('[data-role="pnl-selfcheck-result"]');
         if (box) box.innerHTML = selfCheckHtml(S, r.data);
-        S.log('自我檢查', describeSelfCheck(r.data).warnings.length ? '有 ' + describeSelfCheck(r.data).warnings.length + ' 項需要處理' : '全部正常');
       });
       case 'maint-sync-safe':
       case 'maint-sync-full': {
@@ -371,7 +346,6 @@ const maint = {
         const text = (d.month || '上月') + ' 草稿：' + lines.join('；');
         S.say('lastmonth', (d.month || '上月') + ' 草稿處理完成（共 ' + lines.length + ' 家）');
         S.toast('上月草稿處理完成', 'ok');
-        S.log('建立上月草稿', text);
       });
       case 'maint-s01seed': return busy(t, async () => {
         if (!(await S.ask('載入光復門市資料', S.lines(['載入光復門市與門市科目（已載過不會重複寫入）。']), '確認載入'))) return;
@@ -381,7 +355,6 @@ const maint = {
         if (!r.ok) { S.say('s01seed', errText(r), true); return S.toast(errText(r), 'danger'); }
         S.say('s01seed', '已載入光復門市資料');
         S.toast('已載入光復門市資料', 'ok');
-        S.log('載入光復門市資料', '完成');
         await S.reload();
       });
       default:
@@ -395,4 +368,4 @@ function selfCheckHtml(S, data) {
   return `<div class="stack">${warn}<div class="field-hint" style="white-space:pre-wrap">${d.lines.map(esc).join('\n')}</div></div>`;
 }
 
-export const OPS_SECTIONS = [month, logTab, exportTab, maint];
+export const OPS_SECTIONS = [month, exportTab, maint];

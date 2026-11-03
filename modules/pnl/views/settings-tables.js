@@ -28,7 +28,6 @@ async function confirmAndSave(S, title, table, rows, diff, notes, warnings, onSa
   if (!r.ok) return false;
   onSaved(r);
   S.toast(title + '已存檔', 'ok');
-  S.log('存檔：' + title, '新增 ' + diff.added.length + '、修改 ' + diff.changed.length + '、刪除 ' + diff.removed.length);
   return true;
 }
 
@@ -81,7 +80,6 @@ const stores = {
         if (!r.ok) return S.toast(errText(r), 'danger');
         const msg = describeGroupUnits(r.data);
         S.toast('已載入集團單位清單（' + msg + '）', 'ok');
-        S.log('載入集團單位清單', msg);
         await S.reload();
         break;
       }

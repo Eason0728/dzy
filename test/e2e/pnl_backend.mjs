@@ -44,4 +44,8 @@ const { createJobs } = require(path.join(KIT, 'apps/pnl/jobs.js'));
 const jobs = createJobs({ runGas: r.runGas, env: { PNL_JOBS_ON: '1' }, log: () => {}, setTimer: (fn, ms) => { const t = setTimeout(fn, ms); return { clear: () => clearTimeout(t) }; } });
 await jobs.ready;
 setInterval(() => { jobs._.drainQueue(); }, 1000);
+// 結束時刪掉暫存資料夾（夜審 #14：不在 $TMPDIR 累積）
+const cleanup = () => { try { fs.rmSync(dir, { recursive: true, force: true }); fs.rmSync(data, { recursive: true, force: true }); } catch (_) { /* 盡力 */ } };
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { cleanup(); process.exit(0); });
+process.on('exit', cleanup);
 console.log('READY ' + port);
