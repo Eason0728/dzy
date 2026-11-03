@@ -3,7 +3,7 @@
 - 分級：完整
 - 分級依據：排程=否 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
 - 現在在：④（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
-- 等 Eason：無（P2 通過，下一步 P3 原生前端）
+- 等 Eason：無（P3 完成，下一步 P4 影子期，需 Eason 在 Mac mini 操作，另給交辦）
 
 ## Eason 決定（2026-11-03）
 - 範圍：四頁（儀表板、填資料、匯入、設定）一次做完才切換，不新舊並存。
@@ -48,6 +48,7 @@
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
 |---|---|---|---|---|---|
+| 2026-11-03 | 階段關 P3＋夜間全面審查 | T13–T18（dzy pnl-native-p3）＋全系統 | Fable 全面審查 15 條（高1 中6 低8）全修；Codex 額度用完，Eason 決定不等 | 1 | scratchpad night-review/fable-result.md |
 | 2026-11-03 | 階段關 P2 | T08–T12（mala-pnl-auto pnl-native-p2、dzy-minikit pnl-p2） | 第 1 輪 2 阻斷（onApi 不觸發、待連線清單交錯）＋11 建議；第 2 輪可合併，#14–#17 收尾已改 | 2 | Eason0728/mala-pnl-auto#73 |
 | 2026-11-03 | 階段關 P1 | T04–T07（mala-pnl-auto pnl-native-p1、dzy-minikit pnl-p1） | 第 1 輪 1 阻斷（app.json 漏 3 檔）＋判斷 4 點；第 2 輪可合併 | 2 | Eason0728/mala-pnl-auto#72 |
 | 2026-11-03 | 階段關 P0 | T01–T03（dzy-minikit pnl-p0、mala-pnl-auto pnl-native-p0） | 第 1 輪 1 阻斷＋7 建議；第 2 輪可合併，#4 #7 收尾已修 | 2 | Eason0728/mala-pnl-auto#71 |
