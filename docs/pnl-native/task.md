@@ -29,9 +29,9 @@
 - **T09 逐步工作**（C3）：拆出 pnlStepDaily_、pnlStepMonthly_、pnlActiveStores_；原 dailyRefresh_／monthlyDraft_ 在 Apps Script 改呼叫這些 step（行為不變）。
   - 驗收：[ ] 每個 step 單店 < 5 秒（測試資料）　[ ] Apps Script 模式整體結果與改前相同（快照比對）
 - **T10 jobs.js 排程與連線**：06:30 每日、1 號 06:00 月初、開機補跑、失敗店 30 分鐘重試一次、通知匣、/health 併入。
-  - 驗收：[ ] 假時鐘測試：時間到才跑、已跑不重跑、錯過補跑　[ ] fetch 逾時 45 秒、log 不含網址與金鑰　[ ] 通知匣 key 照 pnlsys:…
+  - 驗收：[ ] 假時鐘測試：時間到才跑、已跑不重跑、錯過補跑（一律以 C9 排程紀錄判斷）　[ ] 匯入 gas-import done 列後當天不補跑　[ ] fetch 逾時 45 秒、log 不含網址與金鑰　[ ] 通知匣 key 照 pnlsys:…
 - **T11 使用者觸發排隊**（C4）：工作佇列分頁、getJob、onApi 立刻撿單。
-  - 驗收：[ ] refreshConnectors 回 job_id、3 秒內開始執行　[ ] getJob 只看得到自己可看門市的工作　[ ] 同店同月重複按只排一筆
+  - 驗收：[ ] refreshConnectors 回 job_id、3 秒內開始執行　[ ] running 中斷電、重啟後租約過期重跑且不重複入帳　[ ] getJob 只看得到自己可看門市的工作　[ ] 同店同月重複按只排一筆
 - **T12 連接器網址放寬**：允許 http://127.0.0.1／localhost（僅 mini 模式）。
   - 驗收：[ ] Apps Script 模式仍只收 https　[ ] mini 模式收本機、拒其他 http
 
@@ -46,13 +46,17 @@
 
 ## P4 影子期
 - **T19 mirror 設定與附件抓取**：app.json mirror（含 files 欄 `明細.附件URL`）。
-  - 驗收：[ ] mirror-now 讀回後列數與舊端一致　[ ] 附件 sha256 全對或列入 known-missing
+  - 驗收：[ ] mirror-now 讀回後列數與舊端一致　[ ] 被明細引用的附件 sha256 全對（known-missing 不算通過，例外需 Eason 逐筆核准）
+- **T19b 演練副本**（spec §5.1）：每天 mirror 後複製 staging 庫、跑每日更新、重放當天推送；外部只打唯讀端點、通知匣寫本機檔。
+  - 驗收：[ ] staging 與舊端當天處理後結果比對全同　[ ] staging 期間不會寫到任何正式系統
 - **T20 比對工具**（C8）：compare.js 舊端 getMonth vs mini getMonth。
   - 驗收：[ ] 人為改一筆金額能抓到 diff　[ ] summary 正確
 
 ## P5 手冊
-- **T21 DEPLOY／CUTOVER／ROLLBACK**（apps/pnl/）：照現金帳手冊格式；含 4 處網址、FROZEN、附件對照表回寫。
-  - 驗收：[ ] 回退在測試資料完整演練一次並留紀錄
+- **T21 DEPLOY／CUTOVER／ROLLBACK**（apps/pnl/）：照現金帳手冊格式；含 4 處網址、刪舊觸發器、收回試算表編輯權、FROZEN、排程紀錄匯入（C9）、附件對照表回寫、新上傳附件回傳 Drive、保存嵌入版 pages/index.html、舊端停用模式（spec §5.4）。
+  - 驗收：[ ] 回退在測試資料完整演練一次並留紀錄　[ ] 演練包含「切換後新上傳一張附件」與「回退後舊嵌入版能打開」
+- **T21b 舊端停用模式**（mala-pnl-auto）：`PNL_DECOMMISSIONED=1` 時除 MiniBridge 與 health 外全部 GONE。
+  - 驗收：[ ] 每個 doPost action 與 api action 在停用模式回 GONE　[ ] MiniBridge 仍可用　[ ] 拿掉旗標後行為與現在相同
 
 ## P6 上線
 - **T22 外部網址改讀設定**：mala-fortune push_pnl_pos.py 讀 `PNL_PUSH_URL`；守門 PNL_HEALTH_URL 與 skip 判斷。

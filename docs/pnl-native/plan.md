@@ -31,13 +31,16 @@ P1 與 P3 可平行（P3 先對假後端開發）；P4 要等 P1＋P2；P5 可�
 - 每個 step 回 `{ok, store_id, month, status: 'done'|'partial'|'fail', detail}`；`detail` 不含金鑰、網址。
 
 ### C4 使用者觸發的連網動作
-- mini 上 `refreshConnectors`、`createDraft`（含連接器）不直接連網：寫一筆工作到分頁 `工作佇列`（欄：job_id、種類、store_id、月份、狀態、建立者、建立時間、完成時間、結果JSON），回 `{ok:true, data:{queued:true, job_id}}`。
+- mini 上 `refreshConnectors`、`createDraft`（含連接器）不直接連網：寫一筆工作到分頁 `工作佇列`（欄：job_id、種類、store_id、月份、狀態、建立者、建立時間、開始時間、租約到期、嘗試次數、完成時間、結果JSON），回 `{ok:true, data:{queued:true, job_id}}`。
+- 狀態機（GPT-05）：`queued → running → done｜fail`。claim＝一次 runGas 內把 queued 改 running、寫租約到期（現在＋10 分鐘）、嘗試次數＋1；**結果寫入與改 done 在同一次 runGas**（kit 一請求一交易，同成同敗）。重啟時 running 且租約過期 → 改回 queued 重跑；因為 createDraft／connector 寫入本身有 MANUAL_EXISTS／同來源冪等，重跑不會重複入帳。嘗試 3 次仍失敗 → fail。
+- 唯一鍵：同 `種類＋store_id＋月份` 已有 queued／running 的工作 → 回既有 job_id，不新增。
 - jobs.js 的 `onApi` 收到這兩個 action 立刻撿單；前端每 3 秒用新 action `getJob {job_id}` 查狀態，最多 3 分鐘。
 - `job_id` 格式：`J` + `yyyyMMddHHmmss`（台北）+ `-` + 4 位隨機小寫英數。例：`J20261103213005-k3x9`。
 
 ### C5 附件
 - 附件URL 新格式：`pnlfile:<store_id>/<YYYY-MM>/<file_id>.<ext>`，`file_id`＝Utilities.getUuid() 去掉 `-`，`ext` 由 MIME 決定（jpg、png、pdf、webp、heic）。例：`pnlfile:S01/2026-10/3f9a0c1e2b4d4e8f9a7b6c5d4e3f2a1b.jpg`。
 - 實體路徑：`<dataDir>/files/<store_id>/<YYYY-MM>/<file_id>.<ext>`，權限 600。
+- 上傳順序（GPT-10）：jobs.js 先寫暫存檔 `<…>/.tmp-<file_id>` → 驗 sha256 → fsync → rename 成正式檔 → 才 runGas 寫明細（附件URL＋sha256）。runGas 失敗 → 刪正式檔。開機時掃描：沒有任何明細引用、且超過 1 小時的檔案移到 `files/.orphan/`（不刪，黃燈）；明細引用但檔案不存在 → 紅燈。
 - 舊格式 `https://drive.google.com/file/d/<id>/…` 在 mini 上讀取時，由搬遷對照表 `files/drive-map.jsonl`（每列 `{drive_id, pnlfile}`）轉換；搬遷完成後明細欄位一律改寫成新格式，對照表保留供回退。
 
 ### C6 退場動作
@@ -45,6 +48,11 @@ P1 與 P3 可平行（P3 先對假後端開發）；P4 要等 P1＋P2；P5 可�
 
 ### C7 維護動作（取代試算表選單，只 pnl.admin，經 dzyProxy level=admin）
 `adminSelfCheck`、`adminSyncSeed {full:boolean}`、`adminApplyS01Connectors`、`adminCreateLastMonthDraft`、`adminLoadStoreSeedS01`。三處白名單（gas `DZY_PROXY_ACTIONS_`、dzy `bridge.js PNL_ACTIONS`、dzy `platform/dryrun.js`）必須一致，測試比對。
+
+### C9 排程紀錄（GPT-02）
+- 分頁 `排程紀錄`（欄：run_key、種類、store_id、業務日期、狀態、開始時間、完成時間、來源）。`run_key`＝`<daily|monthly>:<store_id>:<YYYY-MM-DD>`，例 `daily:S01:2026-11-03`；`來源` ∈ `mini`｜`gas-import`。
+- jobs.js 決定要不要跑（含開機補跑）只看這張表：該 run_key 狀態 done 就不跑。
+- 切換時由搬遷工具依舊端 `PNL_DAILY_REFRESH_PROGRESS`／`PNL_MONTHLY_DRAFT_PROGRESS` 與當天日期，寫入 `來源=gas-import` 的 done 列。
 
 ### C8 比對工具輸出（影子期）
 - `apps/pnl/tools/compare.js` 對每店每月輸出一行 JSON：`{store_id, month, same: true|false, diffs: [{field, old, new}]}`，field 為八大項名稱或 `pending`；最後一行 `{summary: {total, same, diff}}`。

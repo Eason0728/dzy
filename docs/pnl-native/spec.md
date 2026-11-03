@@ -40,6 +40,7 @@ Mac mini 新 app「pnl」（dzy-minikit kit 執行器）
 ### 1.3 登入與帳號（Q3）
 - mini 上只開：`dzyProxy`、`posPush`、`purchasePush`、`expensePush`、`health`。`login`、`registerWithInvite`、token 類動作一律回 `GONE`。
 - 影子帳號「管理系統:<帳號>」機制保留（計算可看門市要用），非此前綴的舊帳號在搬遷時標停用，Eason 本人那列也停（試算表選單已不存在）。
+- 門市範圍（GPT-15，Fable 複核：現行即如此）：管理系統決定「角色」（read／write／admin），損益影子帳號的「可看門市」決定「哪些店」；所有讀寫都由損益端比對可看門市，附件由檔案路徑反查門市，不信任參數。影子帳號第一次建立時預設 ALL，要限縮由 pnl.admin 在設定頁改。原生版照此不變。
 
 ### 1.4 連接器
 - 現金帳、調撥已在 mini：連接器網址改 `http://127.0.0.1:8795/cashbook/api`、`http://127.0.0.1:8800/transfer/api`（實際路徑以 ports.json 為準）。連接器網址驗證由「必須 https://」放寬為「https:// 或 http://127.0.0.1／localhost」。
@@ -83,18 +84,33 @@ Mac mini 新 app「pnl」（dzy-minikit kit 執行器）
 ### 5.1 影子階段（切換前約一週）
 - mini app 以 `mirror` 模式上線：每天從舊端讀回整份資料（只讀、不排程、不推送），前端還是舊的嵌入版。
 - 期間跑 §3.1 的每日比對；新前端在本機與測試帳號上驗收。
+- **演練副本**（GPT-07）：每天 mirror 完把資料庫複製成隔離的 staging 庫，在 staging 上真的跑一次 jobs.js 每日更新（連接器只打唯讀端點、通知匣改寫本機檔），並把當天舊端收到的推送依同一 payload 重放進 staging；比對 staging 處理後與舊端當天處理後的結果。讓排程、兩段式連線、BUSY 路徑在切換前就正式跑過。
+- **切換清單**（GPT-08，缺一項或任一 diff 都禁止切換）：①8 月裁判八項差 0 ②光復 2026-09、2026-10 八項差 0 ③所有啟用門市最近 3 個月每日比對連 3 天全同 ④演練副本連 3 天全同 ⑤所有被明細引用的附件 sha256 全對（GPT-09：known-missing 不再算通過，例外要 Eason 逐筆核准並保留舊檔位置）。
 
 ### 5.2 切換（Q5：平日晚上約 1 小時，避開 05:15、06:30；事前通知會計與財務主管）
-1. 舊端設 `FROZEN=1`（只剩讀取），最後一次 export → import → verify → 附件補抓。
+0. （GPT-02、06）刪除舊端全部觸發器（每日更新、月初草稿、onChange）、把光復試算表編輯權限收回到只剩擁有者；確認舊端當天 06:30 已跑完。
+1. 舊端設 `FROZEN=1`（只剩讀取），最後一次 export → import → verify → 附件補抓；同時把舊端「今天已跑過的排程」寫進 mini 的排程紀錄（plan C9），mini 不會當晚補跑一次。
 2. mini app 移除 mirror、開排程。
 3. 改 4 處網址：mala-fortune secret `PNL_PUSH_URL`、purchase `.env`、dzy-platform `.env` `PROXY_URL_PNL`（重啟平台）、schedule-watchdog `PNL_HEALTH_URL`。
 4. 管理系統前端 push（新 modules/pnl）。
 5. 冒煙：/pnl/health 綠、管理系統打開損益試算三種權限各看一次、手動觸發一次每日更新、POS 推送 dry-run。
 6. 舊入口退場（Q3）：mala-pnl.github.io 改「已搬到管理系統」頁、舊試算表改唯讀（Q1）、乾淨範本加停用說明（Q4）。
 
+### 5.2b 切換空窗的推送（GPT-01、03，Fable 2026-11-03 複核）
+- 貨單（mala-purchase pnl_outbox）與費用請款（apv.js）收到 FROZEN／BUSY 都會保留重送（指數退避），損益端以同來源整批比對／`[APV-…]` 冪等，不漏不重。舊端 FROZEN 必須回錯誤碼 `FROZEN`（不可回 BAD_INPUT／LOCKED，那兩個在來源端是終態）。
+- POS／LINE Pay（push_pnl_pos.py）沒有 outbox，但每天推「當月累計」、損益端相同內容 no-op → 隔天自動補齊。**例外是月底最後一天**（隔天改推新月）→ 切換日不得排在每月最後一天與 1–3 號；切換完成後手動跑一次 `--mtd` 推送當冒煙。
+- 連網在 Node 端做，不佔執行器佇列；佇列只跑 step 本身（< 5 秒），推送不會因為連接器等 45 秒而 BUSY。
+
 ### 5.3 回退（切換後發現問題）
-- mini 資料目錄放 READONLY → `export.js --from-db` → 舊端 `rollback-push.js` 寫回 → 附件URL 用對照表改回 → 舊端拿掉 FROZEN → 4 處網址改回 → dzy 前端 revert 到 iframe 版。
+1. （GPT-11）停 mini 排程、等在途工作做完（工作佇列無 running）→ 資料目錄放 READONLY → 同一時點取 DB 快照＋附件目錄快照。
+2. `export.js --from-db` → 舊端 `rollback-push.js` 寫回。
+3. 附件（GPT-12）：搬家時來自 Drive 的照對照表改回；**切換後才上傳的 pnlfile** 由回退工具逐檔上傳回 Drive「損益附件」資料夾、驗 sha256、改寫明細欄。
+4. （GPT-13）恢復舊端：重建兩個觸發器、拿掉 FROZEN、解除舊端停用模式（§5.4）、試算表編輯權限恢復、mala-pnl.github.io 重新部署保存好的嵌入版 `pages/index.html`（切換前先存一份）。
+5. 4 處網址改回 → dzy 前端 revert 到 iframe 版。
 - 回退手冊在切換前用測試資料演練一次（成功標準）。
+
+### 5.4 舊端停用模式（GPT-14）
+- 切換完成後舊 GAS 設 `PNL_DECOMMISSIONED=1`：除了 MiniBridge（搬遷／回退專用金鑰）與 health 以外，所有 action（含 dzyProxy、各推送、使用者 API）一律回 `GONE`，同時換掉 `PNL_TOKEN_SECRET` 讓所有舊登入立即失效。回退時拿掉。
 
 ## 6. 測試
 - mala-pnl-auto：既有 `node --test test/*.test.js test/ui/*.test.js`、judge；新增 `pnlHttp_` 兩種執行環境、逐步排程、附件 `pnlfile:` 格式、GONE 動作。
