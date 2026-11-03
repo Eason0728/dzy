@@ -331,10 +331,12 @@ function setup() {
   ok(['mztlzl:DZY202', 'mztlzl:DZY203', 'mztlzl:DZY204', 'mztlzl:DZY206'].every((x) => has(H, x)), '3 ★核定工時：六張犁全店（含區經理工時，同店長）', H);
   ok(['mztlzl:DZY202', 'mztlzl:DZY203', 'mztlzl:DZY204'].every((x) => has(R, x)), '3 ★申請：六張犁計時正職', R);
   ok(!has(R, 'mztlzl:DZY206') && has(R, 'mztgf:DZY231'), '3 各店店長的申請本來就由督導（主要身分）核、區經理只給總監（2026-11-03），不受兼任影響', R);
-  ok(!H.some((x) => x.indexOf(':DZY201') !== -1) && !R.some((x) => x.indexOf(':DZY201') !== -1), '3 ★不核自己（含自己的六張犁帳號）');
+  // 2026-11-03 Eason：辦公室同仁兼任店長，也可核自己在兼任店的工時（比照 10-30）；自己原本的帳號與所有申請照舊不核
+  ok(has(H, 'mztlzl:DZY201') && !has(H, 'hq:DZY201'), '3 ★可核自己在兼任店（六張犁）的工時，不核自己原本的帳號', H);
+  ok(!R.some((x) => x.indexOf(':DZY201') !== -1), '3 ★自己的申請照舊不能核（含六張犁帳號）', R);
   ok(!H.some((x) => /DZY23[012]/.test(x) && x.indexOf('mztlzl:') !== 0), '3 不核別店');
   // 他自己照原身分：辦公室總監核他的工時（兩個帳號）
-  ok(has(app.H('DZY210'), 'hq:DZY201') && has(app.H('DZY210'), 'mztlzl:DZY201'), '3 ★兼任者本人的工時照原身分由辦公室總監核（含六張犁帳號）');
+  ok(has(app.H('DZY210'), 'hq:DZY201') && has(app.H('DZY210'), 'mztlzl:DZY201'), '3 ★兼任者本人的工時照原身分由辦公室總監核（含六張犁帳號；總監照舊核得到）');
   // 值班主管：兼任者與 DZY204 都是六張犁值班主管
   app.setDuty('DZY201', 'mztlzl', 'TRUE');
   app.setDuty('DZY204', 'mztlzl', 'TRUE');
@@ -573,6 +575,22 @@ function setup() {
   ok(!sb.apvDirectMembers_(dir.byEmp.DZY202, dir).some((x) => x.emp === 'DZY202'), '9 ★人事異動直屬主管不含對象本人');
 })();
 
+
+// 9b. 品牌辦公室同仁兼任門市店長：可核自己在兼任店的工時（2026-11-03 Eason 選「改程式」）
+(() => {
+  const app = setup();
+  const { sb } = app;
+  ok(!has(app.H('DZY201'), 'mztlzl:DZY201'), '9b 前置：沒設兼任時督導不能核自己的六張犁工時');
+  const s = app.ex(app.tok.DZY220, 'DZY201', 'store.sm@mzt-lzl');
+  ok(s.ok && has(app.H('DZY201'), 'mztlzl:DZY201'), '9b ★設了六張犁兼任店長 → 核定工時名單有自己的六張犁帳號', app.H('DZY201'));
+  ok(!has(app.R('DZY201'), 'mztlzl:DZY201'), '9b ★申請照舊不能自己核');
+  ok(!has(app.H('DZY201'), 'hq:DZY201'), '9b 不含自己原本（總部）的帳號');
+  const v = (app.ident('DZY201').att || {}).view_people || [];
+  ok(!v.some((x) => x.sub === 'DZY201'), '9b 自己不會跑進只看名單', v);
+  post(sb, 'permExRevoke', { ex_id: s.data.ex_id }, app.tok.DZY220);
+  sb.permActingReset_();
+  ok(!has(app.H('DZY201'), 'mztlzl:DZY201'), '9b ★撤銷兼任後立刻收回');
+})();
 
 // 10. 兼任部門可選總監／部門同仁；兼任的部門權限等同主要部門（2026-11-02 Eason：舊資料照主要職稱、被核的人只看主要部門）
 (() => {
