@@ -358,7 +358,7 @@ var PROXY_READ_ACTIONS = {
   // 排班管理首頁待辦（2026-10-24，營運系統 docs/autoschedule/hr-move-spec.md §5）：與 platform/dryrun.js READ_ACTIONS.schedule 一致
   schedule: ['schedAlerts'],
   // 損益試算（2026-10-24，損益 Apps Script 的 dzyProxy 入口；損益後端 gas/dzyProxy.js DZY_PROXY_ACTIONS_ 另有一份第二道白名單）
-  pnl: ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment'],
+  pnl: ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment', 'getJob', 'adminSelfCheck'],
   // 調撥管理（2026-10-24）：只有 transfer.write，讀寫都要它；分讀寫只為了試跑模式能照常讀。與 platform/dryrun.js READ_ACTIONS.transfer 一致
   transfer: ['bootstrap', 'adminData', 'adminOverview', 'getDoc']
 };
@@ -378,7 +378,7 @@ var PROXY_WRITE_ACTIONS = {
   cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock'],
   // 損益試算：「管」級動作另由 PROXY_PNL_ADMIN_ACTIONS 要求 pnl.admin，損益後端也依角色擋
   pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
-    'refreshConnectors', 'refreshFixed', 'loadGroupUnits'],
+    'refreshConnectors', 'refreshFixed', 'loadGroupUnits', 'adminSyncSeed', 'adminApplyS01Connectors', 'adminCreateLastMonthDraft', 'adminLoadStoreSeedS01'],
   // 調撥管理：adminUpdate 只准 op＝memoryEdit／memoryDelete，由 mini 的 proxy-hook 再限（其餘 op 一律 OP_FORBIDDEN）
   transfer: ['buildMonthlyReport', 'adminUpdate']
 };
@@ -492,7 +492,8 @@ function proxyWithOperator_(res, ns, user, perms) {
 }
 
 /** 損益試算「管」級動作（定稿、解除定稿、設定、建草稿、重拉連接器、重帶固定值、載入集團單位） */
-var PROXY_PNL_ADMIN_ACTIONS = ['finalize', 'unlock', 'saveSettings', 'createDraft', 'refreshConnectors', 'refreshFixed', 'loadGroupUnits'];
+var PROXY_PNL_ADMIN_ACTIONS = ['finalize', 'unlock', 'saveSettings', 'createDraft', 'refreshConnectors', 'refreshFixed', 'loadGroupUnits',
+  'getJob', 'adminSelfCheck', 'adminSyncSeed', 'adminApplyS01Connectors', 'adminCreateLastMonthDraft', 'adminLoadStoreSeedS01'];   // 2026-11-03 原生化 P3：排隊查詢與維護動作也只給 pnl.admin
 
 /** 損益試算：pnl.admin 隱含 pnl.write（讀寫閘門與挑金鑰沿用 <ns>.write／<ns>.read 的既有規則） */
 function proxyPnlPerms_(perms) {
