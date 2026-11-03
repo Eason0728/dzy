@@ -3,7 +3,7 @@
 - 分級：完整
 - 分級依據：排程=否 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
 - 現在在：④（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
-- 等 Eason：無（P1 實作完成，待 P1 階段關）
+- 等 Eason：無（P1 通過，下一步 P2）
 
 ## Eason 決定（2026-11-03）
 - 範圍：四頁（儀表板、填資料、匯入、設定）一次做完才切換，不新舊並存。
@@ -39,11 +39,12 @@
 - dzy-minikit apps/pnl/gas/ 目前是從損益分支手動複製（清單已補 3 檔）；損益合 main＋push 後要正式跑一次 `kit/bin/sync-gas.sh pnl` 覆蓋。
 - 附件目錄 `<dataDir>/files` 的備份（kit 每日備份只含 app.db）：P2 T10 一起做。
 - 已修（P1 審查）：gasshim getLastRow 尾端空白列、MiniFiles 回滾。
-- P2 前：adminCreateLastMonthDraft 在 mini 上連接器失敗會每次堆一列 log（P2 兩段式後解決）；mala-pnl-auto 自己的 mock 測試清單補載入 runtime／attachLocal／adminMaint。
+- P2 前：selfCheck 加 runtime 欄；getLastColumn 尾端空格（既有行為，評估）；MiniFiles.remove 不進回滾日誌（損益未用）；adminCreateLastMonthDraft 在 mini 上連接器失敗會每次堆一列 log（P2 兩段式後解決）；mala-pnl-auto 自己的 mock 測試清單補載入 runtime／attachLocal／adminMaint。
 
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
 |---|---|---|---|---|---|
+| 2026-11-03 | 階段關 P1 | T04–T07（mala-pnl-auto pnl-native-p1、dzy-minikit pnl-p1） | 第 1 輪 1 阻斷（app.json 漏 3 檔）＋判斷 4 點；第 2 輪可合併 | 2 | Eason0728/mala-pnl-auto#72 |
 | 2026-11-03 | 階段關 P0 | T01–T03（dzy-minikit pnl-p0、mala-pnl-auto pnl-native-p0） | 第 1 輪 1 阻斷＋7 建議；第 2 輪可合併，#4 #7 收尾已修 | 2 | Eason0728/mala-pnl-auto#71 |
 | 2026-11-03 | 設計審 | requirements／spec／plan／task v1 | GPT 15 條（全標高）：11 條確定成立已改文件；4 條交 Fable 複核：04 不成立、01／03 部分成立（補切換日限制與 FROZEN 錯誤碼）、15 現行行為（寫明） | 1 | scratchpad design-review/gpt-result.md；Fable 複核回報 |
 
