@@ -36,9 +36,10 @@
 - 損益前端規模：shell 2215＋dashboard 1599＋entry 1059＋import 776＋importLogic 526＋settings 2701＋css 2314 行（計算 engine 在後端，前端不重算）。
 
 ## 合併 main 後待做（P1 起累積）
-- dzy-minikit apps/pnl/app.json 的 gas／gasSource 加 runtime.js、adminMaint.js、attachLocal.js，跑 `kit/bin/sync-gas.sh pnl`（gas-sync pnl 測試才會綠）。
+- dzy-minikit apps/pnl/gas/ 目前是從損益分支手動複製（清單已補 3 檔）；損益合 main＋push 後要正式跑一次 `kit/bin/sync-gas.sh pnl` 覆蓋。
 - 附件目錄 `<dataDir>/files` 的備份（kit 每日備份只含 app.db）：P2 T10 一起做。
-- gasshim getLastRow 含尾端空白列，與真環境「最後一列有內容」不同；saveSettings 縮表後的空白列在 mini 會被算進去（P1 審查請判斷影響）。
+- 已修（P1 審查）：gasshim getLastRow 尾端空白列、MiniFiles 回滾。
+- P2 前：adminCreateLastMonthDraft 在 mini 上連接器失敗會每次堆一列 log（P2 兩段式後解決）；mala-pnl-auto 自己的 mock 測試清單補載入 runtime／attachLocal／adminMaint。
 
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
