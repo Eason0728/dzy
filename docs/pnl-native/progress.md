@@ -2,8 +2,8 @@
 - 開案日：2026-11-03
 - 分級：完整
 - 分級依據：排程=否 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
-- 現在在：④（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
-- 等 Eason：合併 Eason0728/mala-pnl-auto#76；之後照 dzy-minikit apps/pnl/DEPLOY.md 部署、挑切換日
+- 現在在：⑤（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
+- 等 Eason：照 ~/dzy-minikit/apps/pnl/DEPLOY.md 部署（切換前一天），再挑切換日照 CUTOVER.md
 
 ## Eason 決定（2026-11-03）
 - 範圍：四頁（儀表板、填資料、匯入、設定）一次做完才切換，不新舊並存。
@@ -44,6 +44,10 @@
 - P2 前：selfCheck 加 runtime 欄；getLastColumn 尾端空格（既有行為，評估）；MiniFiles.remove 不進回滾日誌（損益未用）；adminCreateLastMonthDraft 在 mini 上連接器失敗會每次堆一列 log（P2 兩段式後解決）；mala-pnl-auto 自己的 mock 測試清單補載入 runtime／attachLocal／adminMaint。
 
 - P3 T13：dzy bridge.js PNL_ACTIONS／platform/dryrun.js／Auth.gs 白名單加 getJob 與五個 admin 維護動作（三處一致測試）。
+
+## 已合併（2026-11-03）
+- mala-pnl-auto #74（P0–P2）、#76（切換準備）、#77（註解）；dzy-minikit #74（P0–P2）、#75（切換準備＋手冊）；dzy #90（白名單後端先行）。
+- 待切換當晚合併：dzy `pnl-native-p3`（新畫面）、mala-fortune／mala-gas `pnl-mini-url`（推送與守門網址）。
 
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
