@@ -26,6 +26,8 @@ P1 與 P3 可平行（P3 先對假後端開發）；P4 要等 P1＋P2；P5 可�
 - jobs.js 流程：`runGas(step, args, {results})` → 若回 `{ok:false, error:'PNL_NEED_FETCH', needed:[req…]}` → Node 逐一 fetch（逾時 45 秒）→ 帶著 results 重跑同一 step；同一 step 最多重跑 3 輪。
 - gas 端每個 step 必須在「需要的連線都拿到結果」前不寫任何資料（丟錯前不寫，kit 會 rollback）。
 
+- **P2 實作調整**（2026-11-03）：介面是 `pnlHttp_(url, opts)`（與 UrlFetchApp.fetch 同簽名），結果鍵＝`sha256(url＋'\n'＋payload)` hex（不另設 id 格式）。mini 上缺結果時**不立即丟錯**，記進清單並回 code 0 的假回應讓程式照失敗路徑跑完（一輪收齊全部請求），步驟結尾 `pnlHttpEnd_()` 才丟 PNL_NEED_FETCH；kit 回滾整個請求。jobs.js 以 `pnlTakeNeeded_()` 取清單（全域變數，回滾不影響）。
+
 ### C3 逐步工作
 - 排程 step 名與參數：`pnlStepDaily_(store_id, month)`、`pnlStepMonthly_(store_id, month)`；store 清單由 `pnlActiveStores_()` 取得。
 - 每個 step 回 `{ok, store_id, month, status: 'done'|'partial'|'fail', detail}`；`detail` 不含金鑰、網址。
@@ -36,6 +38,8 @@ P1 與 P3 可平行（P3 先對假後端開發）；P4 要等 P1＋P2；P5 可�
 - 唯一鍵：同 `種類＋store_id＋月份` 已有 queued／running 的工作 → 回既有 job_id，不新增。
 - jobs.js 的 `onApi` 收到這兩個 action 立刻撿單；前端每 3 秒用新 action `getJob {job_id}` 查狀態，最多 3 分鐘。
 - `job_id` 格式：`J` + `yyyyMMddHHmmss`（台北）+ `-` + 4 位隨機小寫英數。例：`J20261103213005-k3x9`。
+
+- **P2 實作調整**：前端查詢 action 名為 `getJob`（只 pnl.admin、只在 mini）；維護區「建上月草稿」在 mini 上同樣逐店排隊，回 `{month, queued:true, jobs:[{store_id, job_id}]}`。工作執行中以全域旗標 `PNL_IN_JOB_` 讓 api 走原邏輯（使用者無法設定）。
 
 ### C5 附件
 - 附件URL 新格式：`pnlfile:<store_id>/<YYYY-MM>/<file_id>.<ext>`，`file_id`＝Utilities.getUuid() 去掉 `-`，`ext` 由 MIME 決定（jpg、png、pdf、webp、heic）。例：`pnlfile:S01/2026-10/3f9a0c1e2b4d4e8f9a7b6c5d4e3f2a1b.jpg`。
