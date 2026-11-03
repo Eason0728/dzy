@@ -64,5 +64,5 @@ P1 與 P3 可平行（P3 先對假後端開發）；P4 要等 P1＋P2；P5 可�
 | 長工作卡住 kit 佇列（其他請求 BUSY） | C3 逐店 step，每 step 目標 < 5 秒 |
 | 兩段式重跑造成重複寫入 | C2 規定拿到全部結果前不寫；冪等鍵沿用既有 client_id／MANUAL_EXISTS 規則 |
 | 附件搬遷漏檔 | size＋sha256 逐檔比對、known-missing 清單、黃燈 |
-| 切換後推送打到舊端 | 舊端 FROZEN 後推送回 FROZEN（會在推送端日誌看到），4 處網址列入冒煙檢查 |
+| 切換後推送打到舊端 | 舊端 FROZEN 後推送回 MOVED（來源端視為暫時性、會重送），4 處網址列入冒煙檢查 |
 | kit 改動影響其他 5 支 app | maxBodyBytes 選填、預設不變；kit 全套測試＋update-all 前先在一支 app 試 |

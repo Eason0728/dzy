@@ -11,7 +11,7 @@
   - 驗收：[ ] ports.json 登記新埠與 /pnl　[ ] 本機 `node kit/runner/server.js apps/pnl` 啟動、/pnl/health 有回應　[ ] 不含任何金鑰值
 - **T03 舊端 MiniBridge**（mala-pnl-auto gas/）
   - 照 `kit/gas/MiniBridge.gs` 加 `__miniExport`、`__miniFile`、`FROZEN`；publicSurface 白名單同步。
-  - 驗收：[ ] publicSurface 測試綠　[ ] 沒有 MINI_EXPORT_KEY 一律 AUTH　[ ] FROZEN=1 時所有寫入回 FROZEN、讀取照常
+  - 驗收：[ ] publicSurface 測試綠　[ ] 沒有 MINI_EXPORT_KEY 一律 AUTH　[ ] FROZEN=1 時 HTTP 寫入回 MOVED、MINI_READ_ACTIONS 照常（已完成 2026-11-03，issue #71）
 
 ## P1 離線可跑
 - **T04 執行環境旗標與 GONE**（C1、C6）：`pnlIsMini_()`；mini 上觸發器相關函式 no-op；C6 清單回 GONE。
@@ -56,7 +56,7 @@
 - **T21 DEPLOY／CUTOVER／ROLLBACK**（apps/pnl/）：照現金帳手冊格式；含 4 處網址、刪舊觸發器、收回試算表編輯權、FROZEN、排程紀錄匯入（C9）、附件對照表回寫、新上傳附件回傳 Drive、保存嵌入版 pages/index.html、舊端停用模式（spec §5.4）。
   - 驗收：[ ] 回退在測試資料完整演練一次並留紀錄　[ ] 演練包含「切換後新上傳一張附件」與「回退後舊嵌入版能打開」
 - **T21b 舊端停用模式**（mala-pnl-auto）：`PNL_DECOMMISSIONED=1` 時除 MiniBridge 與 health 外全部 GONE。
-  - 驗收：[ ] 每個 doPost action 與 api action 在停用模式回 GONE　[ ] MiniBridge 仍可用　[ ] 拿掉旗標後行為與現在相同
+  - 驗收：[ ] 每個 doPost action 與 api action 在停用模式回 GONE，**含 HtmlService 舊網頁經 google.script.run 直呼 api() 的路徑**（Fable P0 #3：FROZEN 閘門只在 doGet／doPost）　[ ] MiniBridge 仍可用　[ ] 拿掉旗標後行為與現在相同
 
 ## P6 上線
 - **T22 外部網址改讀設定**：mala-fortune push_pnl_pos.py 讀 `PNL_PUSH_URL`；守門 PNL_HEALTH_URL 與 skip 判斷。
