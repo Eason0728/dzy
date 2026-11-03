@@ -46,9 +46,15 @@ export function storeOptions(org, region, regions) {
   return opts;
 }
 
-/** 督導下拉：只列該品牌在職區督導（regionList.candidates 已由後端篩好）；目前存的督導若不在名單＝已失效 */
+/**
+ * 負責人下拉：該品牌在職的區督導與區經理（regionList.candidates 已由後端篩好；2026-11-03 起區經理也能當負責人）；
+ * label＝姓名（職稱・單位），兩種職稱並列時分得出來。目前存的負責人若不在名單＝已失效
+ */
 export function supervisorOptions(candidates, brand, current) {
-  const list = (candidates || []).filter((c) => c.brand === brand).map((c) => ({ emp_no: c.emp_no, name: c.name }));
+  const list = (candidates || []).filter((c) => c.brand === brand).map((c) => {
+    const tail = [c.title_name, c.unit_name].filter(Boolean).join('・');
+    return { emp_no: c.emp_no, name: c.name, label: tail ? `${c.name}（${tail}）` : c.name };
+  });
   const stale = !!current && !list.some((c) => c.emp_no === current);
   return { list, stale };
 }

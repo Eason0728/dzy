@@ -1047,6 +1047,7 @@ function stfReviewNeed_(org, unitCode, dept, titleCode) {
     if (t.rank >= 3) {
       need.kind = 'brand'; need.brand = u.parent; need.unit = unitCode;   // unit：區域限區用（regionOfficeCovers_）
       if (t.rank === 3) need.alt = [{ kind: 'store', unit: unitCode }];
+      if (t.rank >= 4) need.headOnly = true;   // 區經理 am：只給品牌總監（2026-11-03）
       return need;
     }
     need.kind = 'store'; need.unit = unitCode; return need;
@@ -1067,6 +1068,7 @@ function stfScopeMeets_(scope, need, rctx) {
   if (!scope || !need) return false;
   if (stfScopeActingMeets_(scope, need)) return true;
   if (stfScopeExtraMeets_(scope, need)) return true;
+  if (stfScopeRegionHeadMeets_(scope, need, rctx)) return true;
   // 同一個職稱階梯才比職級：被審的人職級跟審核者同級或更高 → 擋（不同階梯不比；第二期起職稱＝權限，不能核准同級或更高）
   if (scope.titleLadder === need.title.parent && scope.rank <= need.title.rank) return false;
   return [need].concat(need.alt || []).some(function (o) { return stfScopeMeetsKind_(scope, o, rctx); });
@@ -1088,12 +1090,23 @@ function stfScopeExtraMeets_(scope, need) {
   if (need.title.rank >= scope.extraRank) return false;
   return [need].concat(need.alt || []).some(function (o) { return o.kind === 'dept' && scope.extraHeads.indexOf(o.dept) !== -1; });
 }
+/**
+ * 區經理當區域負責人（2026-11-03，Regions.gs REG_HEAD_STORE_TITLES）：被審身分要的是品牌辦公室（brand，帶 unit）、
+ * 那家店所屬區域的負責人是本人、且被審職稱在門市階梯、職級低於本人（店長可以，區經理本人不行）。開關關＝不適用。
+ */
+function stfScopeRegionHeadMeets_(scope, need, rctx) {
+  if (!rctx || !rctx.on || typeof REG_HEAD_STORE_TITLES === 'undefined' || REG_HEAD_STORE_TITLES.indexOf(scope.title) === -1) return false;
+  if (scope.titleLadder !== 'store' || !need.title || need.title.parent !== 'store' || need.title.rank >= scope.rank) return false;
+  return [need].concat(need.alt || []).some(function (o) { return o.kind === 'brand' && !!o.unit && regionIsHead_(rctx.idx, o.unit, scope.emp); });
+}
 function stfScopeMeetsKind_(scope, o, rctx) {
   // 品牌辦公室同仁（第 20 節）：同辦公室的總監；不靠 kinds
   if (o.kind === 'office_head') return scope.titleLadder === 'office' && scope.unit === o.unit && STF_OFFICE_HEAD_TITLES.indexOf(scope.title) !== -1;
   if (scope.kinds.indexOf(o.kind) === -1) return false;
   if ((o.kind === 'store' || o.kind === 'ck') && scope.unit !== o.unit) return false;
   if (o.kind === 'brand' && scope.brand !== o.brand) return false;
+  // 區經理本人（2026-11-03 執行長：區經理與督導同一層）：只給品牌總監
+  if (o.kind === 'brand' && o.headOnly && STF_OFFICE_HEAD_TITLES.indexOf(scope.title) === -1) return false;
   // 區域（docs/regions/spec.md 第 5 節）：門市的品牌辦公室審核，區督導只限負責該店的區（開關關＝一律 true）
   if (o.kind === 'brand' && o.unit && rctx && rctx.on && !regionOfficeCovers_({ emp: scope.emp, title: scope.title }, o.unit, rctx)) return false;
   if (o.kind === 'dept' && scope.dept !== o.dept) return false;

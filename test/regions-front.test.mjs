@@ -96,6 +96,11 @@ ok(opts.find((o) => o.unit === 'mzt-a').disabled && opts.find((o) => o.unit === 
 // 督導下拉
 let s = M.supervisorOptions(list.candidates, 'mzt', 'DZY101');
 ok(eq(s.list.map((c) => c.emp_no), ['DZY101']) && s.stale === false, '2 督導下拉只列該品牌候選人');
+{
+  const am = M.supervisorOptions([{ emp_no: 'DZY141', name: '經理甲', title: 'am', title_name: '區經理', unit: 'mzt-gf', unit_name: '新竹光復', brand: 'mzt' },
+    { emp_no: 'DZY101', name: '督導甲', title: 'osv', title_name: '區督導', unit: 'mzt-office', unit_name: '墨竹亭品牌辦公室', brand: 'mzt' }], 'mzt', 'DZY141');
+  ok(eq(am.list.map((c) => c.label), ['經理甲（區經理・新竹光復）', '督導甲（區督導・墨竹亭品牌辦公室）']) && am.stale === false, '2 區經理也列進負責人下拉，標示「姓名（職稱・單位）」（2026-11-03）', am.list);
+}
 s = M.supervisorOptions(list.candidates, 'mala', 'DZY999');
 ok(eq(s.list.map((c) => c.emp_no), ['DZY102']) && s.stale === true && M.supervisorOptions(list.candidates, 'mala', '').stale === false, '2 存著的督導不在候選名單＝已失效');
 // preview 差異

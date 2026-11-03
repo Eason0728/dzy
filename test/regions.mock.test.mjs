@@ -204,7 +204,9 @@ const { sb } = app;
   ok(app.sheets.regions._rows().length === 1, '1 setupStaff 重跑只補不覆蓋');
   const l0 = app.list();
   ok(l0 && eq(l0.regions, []) && typeof l0.ver === 'string' && l0.on === false, '1 regionList：空、有 ver、開關關', l0);
-  ok(eq(l0.candidates.map((c) => c.emp_no).sort(), ['DZY101', 'DZY102', 'DZY131']) && l0.candidates.every((c) => eq(Object.keys(c), ['emp_no', 'name', 'unit', 'unit_name', 'brand'])), '1 regionList 督導候選人＝在職 osv（不含離職、行政）、只給五欄', l0.candidates);
+  ok(eq(l0.candidates.map((c) => c.emp_no).sort(), ['DZY101', 'DZY102', 'DZY114', 'DZY131']) && l0.candidates.every((c) => eq(Object.keys(c), ['emp_no', 'name', 'title', 'title_name', 'unit', 'unit_name', 'brand'])), '1 regionList 負責人候選人＝在職 osv＋門市區經理（不含離職、行政）、只給七欄', l0.candidates);
+  const amC = l0.candidates.find((c) => c.emp_no === 'DZY114');
+  ok(amC && amC.title === 'am' && amC.title_name === '區經理' && amC.brand === 'mzt' && amC.unit === 'mzt-gf', '1 區經理候選人帶職稱與所屬門市、品牌＝門市的品牌', amC);
   ok(post(sb, 'regionList', {}, app.login('DZY101')).ok === false, '1 regionList 沒有 platform.staff → 拒絕');
 
   const a = app.save({ name: '北區', brand: 'mzt', stores: ['mzt-gf'], supervisor: 'dzy101', active: true });
@@ -318,7 +320,7 @@ const { sb } = app;
   // 開關關：全部照舊
   ok(eq(app.pending('DZY101'), ALLP) && eq(app.pending('DZY102'), ALLP), '3 關：兩位督導都看得到全品牌店長認領');
   const reqOffA = app.req('DZY101'), hoursOffA = app.hours('DZY101');
-  ok(eq(reqOffA, ['DZY111', 'DZY112', 'DZY113', 'DZY114']), '3 關：督導甲 req＝全品牌店長＋區經理', reqOffA);
+  ok(eq(reqOffA, ['DZY111', 'DZY112', 'DZY113']), '3 關：督導甲 req＝全品牌店長（2026-11-03 起不核區經理）', reqOffA);
 
   app.setOn(true);
   ok(eq(app.pending('DZY101'), ['DZY121']), '3 ★開：督導甲只審得到 A 區（光復）店長認領');
@@ -329,7 +331,7 @@ const { sb } = app;
   ok(hr.ok && hr.data.people.length === 3, '3 開：人資照舊全部', hr);
 
   // 考勤 req
-  ok(eq(app.req('DZY101'), ['DZY111', 'DZY114']), '3 ★開：督導甲 req＝A 區店長＋A 區區經理', app.req('DZY101'));
+  ok(eq(app.req('DZY101'), ['DZY111']), '3 ★開：督導甲 req＝A 區店長（區經理只給總監）', app.req('DZY101'));
   ok(eq(app.req('DZY102'), ['DZY112']), '3 ★開：督導乙 req＝B 區店長（光復區經理、六張犁店長都不在）', app.req('DZY102'));
   ok(has(app.req('DZY114'), 'DZY111'), '3 開：A 區店長請假，同店區經理照舊能核');
   ok(has(app.req('DZY103'), 'DZY114') && !has(app.req('DZY103'), 'DZY111'), '3 開：區經理申請＝總監能核（總監照舊不核店長）');
@@ -502,6 +504,65 @@ const { sb } = app;
   ok(eq(fl.region_store_dup, [{ code: 'r-mzt-1', name: '甲', brand: 'mzt', stores: ['mzt-lzl'] }, { code: 'r-mzt-2', name: '乙', brand: 'mzt', stores: ['mzt-lzl'] }]), '7.6 ★region_store_dup 列出兩區', fl);
   ok(eq(fl.region_store_inactive, [{ code: 'r-mzt-1', name: '甲', brand: 'mzt', stores: ['mzt-wx'] }]), '7.6 region_store_inactive 只剩停用門市', fl.region_store_inactive);
   ok(eq(app.list().flags.region_store_dup, []), '7.6 regionList 帶 region_store_dup（目前空）');
+})();
+
+// ============================================================
+// 8. 區經理當區域負責人（2026-11-03 執行長：區經理與督導同一層）
+// ============================================================
+(() => {
+  const w = world();
+  const has = (a, x) => Array.isArray(a) && a.indexOf(x) !== -1;
+  ok(w.save({ name: '北區', brand: 'mzt', stores: ['mzt-gf'], supervisor: 'DZY101' }).ok, '8 北區（光復）督導甲');
+  const r = w.save({ name: '中區', brand: 'mzt', stores: ['mzt-js', 'mzt-lzl'], supervisor: 'dzy114' });
+  ok(r.ok && r.data.region.supervisor === 'DZY114', '8 中區（金山、六張犁）負責人＝光復區經理（區不必含自己的店）', r);
+  const badBrand = post(w.sb, 'regionSave', { region: { name: '別品牌', brand: 'mala', stores: [], supervisor: 'DZY114' }, expected_ver: w.list().ver }, w.hrTok);
+  ok(badBrand.code === 'bad_supervisor', '8 ★別品牌的區經理 → bad_supervisor', badBrand);
+  const badPt = post(w.sb, 'regionSave', { region: { name: '計時區', brand: 'mzt', stores: [], supervisor: 'DZY115' }, expected_ver: w.list().ver }, w.hrTok);
+  ok(badPt.code === 'bad_supervisor', '8 ★門市計時同仁 → bad_supervisor', badPt);
+
+  // 開關關：區經理只管自己那家店（照舊）
+  ok(has(w.req('DZY114'), 'DZY111') && !has(w.req('DZY114'), 'DZY112') && !has(w.req('DZY114'), 'DZY113'), '8 關：區經理只核同店店長', w.req('DZY114'));
+  ok(eq(w.pending('DZY114'), ['DZY121']), '8 關：區經理只審同店店長認領', w.pending('DZY114'));
+
+  w.setOn(true);
+  ok(eq(w.req('DZY114'), ['DZY111', 'DZY112', 'DZY113']), '8 ★開：區經理核同店＋區內各店店長的申請', w.req('DZY114'));
+  ok(eq(w.pending('DZY114'), ['DZY121', 'DZY122', 'DZY123']), '8 ★開：區經理審同店＋區內各店店長的認領', w.pending('DZY114'));
+  ok(eq(w.req('DZY101'), ['DZY111']) && eq(w.req('DZY102'), []), '8 開：督導甲只核北區店長；沒負責區的督導乙核不到', [w.req('DZY101'), w.req('DZY102')]);
+  ok(has(w.req('DZY103'), 'DZY114') && !has(w.req('DZY101'), 'DZY114'), '8 ★區經理本人的申請只給總監，督導不核', [w.req('DZY103'), w.req('DZY101')]);
+  ok(!has(w.req('DZY114'), 'DZY114') && !has(w.pending('DZY114'), 'DZY114'), '8 區經理不核自己');
+  ok(eq(w.hours('DZY114'), w.hours('DZY114')) && !has(w.hours('DZY114'), 'DZY112'), '8 核定工時不受影響（區經理不核別店工時）', w.hours('DZY114'));
+
+  // 人事異動直屬主管
+  const sb = w.sb;
+  sb.regionCtxReset_();
+  const org = sb.stfReadOrg_();
+  const people = sb.stfAllRows_().map((x) => sb.apvPerson_(x.values, org, [], true));
+  const byEmp = {}; people.forEach((p) => { byEmp[p.emp] = p; });
+  const rc = sb.regionCtx_();
+  const direct = (emp) => sb.apvDirectMembers_(byEmp[emp], { org, people, byEmp, exclude: [], regionCtx: rc }).map((p) => p.emp).sort();
+  ok(eq(direct('DZY112'), ['DZY103', 'DZY114']), '8 ★金山店長直屬主管＝中區負責人（區經理）＋總監', direct('DZY112'));
+  ok(eq(direct('DZY111'), ['DZY101', 'DZY103', 'DZY114']), '8 光復店長直屬主管＝北區督導＋總監＋同店區經理（不變）', direct('DZY111'));
+  ok(eq(direct('DZY114'), ['DZY103']), '8 ★區經理本人的直屬主管只剩總監', direct('DZY114'));
+
+  // 只看考勤、稽核範圍、我的區域
+  const view = (w.ident('DZY114').att.view_people || []).map((x) => x.sub);
+  ok(has(view, 'DZY112') && has(view, 'DZY113') && !has(view, 'DZY101'), '8 ★開：區經理只看區內各店考勤', view);
+  const ctx = sb.permLoadCtx_(true);
+  const sm = ctx.storeMap;
+  const sc = sb.permComputeRow_(ctx, sb.stfFindByEmp_('DZY114').values, []).auditScope;
+  ok(Array.isArray(sc) && ['mzt-gf', 'mzt-js', 'mzt-lzl'].every((u) => !sm[u] || sc.indexOf(sm[u]) !== -1), '8 ★稽核範圍＝自己的店＋負責區域的店', sc);
+  const offSc = sb.permComputeRow_(Object.assign({}, ctx, { regionCtx: { on: false, idx: ctx.regionCtx.idx } }), sb.stfFindByEmp_('DZY114').values, []).auditScope;
+  ok(eq(offSc, sm['mzt-gf'] ? [sm['mzt-gf']] : []), '8 關：稽核範圍只剩自己的店', offSc);
+  const mu = post(sb, 'myUnit', {}, w.login('DZY114'));
+  ok(mu.ok && mu.data.regions.length === 1 && eq(mu.data.regions[0].stores.map((s) => s.unit).sort(), ['mzt-js', 'mzt-lzl']) && mu.data.private === true, '8 我的區域＝中區兩家店；自己那家店的通訊錄照舊', mu.data && mu.data.regions);
+
+  // 區經理離職 → 區視同沒有負責人（店長申請改由總監）
+  const row = w.sheets.staff._data.find((x) => x[0] === 'DZY114');
+  row[sb.STF_COL.status] = 'disabled';
+  sb.regionCtxReset_();
+  ok(has(w.req('DZY103'), 'DZY112'), '8 區經理離職 → 中區店長申請改由總監核', w.req('DZY103'));
+  row[sb.STF_COL.status] = 'active';
+  w.setOn(false);
 })();
 
 // ============================================================

@@ -543,7 +543,20 @@ function permCompute_(input) {
     scope = permUniqSorted_(list);
   } else if (has('audit.read.own')) {
     var own = permStr_(storeMap[permStr_(staff.unit)]);
-    scope = own ? [own] : [];
+    var ownList = own ? [own] : [];
+    // 區經理當區域負責人（2026-11-03）：另外看他負責區域的門市（開關開才算）
+    var rc2 = input.regionCtx;
+    if (rc2 && rc2.on && typeof REG_HEAD_STORE_TITLES !== 'undefined' && REG_HEAD_STORE_TITLES.indexOf(title) !== -1) {
+      var idx2 = rc2.idx || {};
+      ((idx2.bySupervisor || {})[empNo] || []).forEach(function (c) {
+        var reg = (idx2.byRegion || {})[c];
+        (reg ? reg.stores : []).forEach(function (u) {
+          var st = permStr_(storeMap[u]);
+          if (st) ownList.push(st);
+        });
+      });
+    }
+    scope = permUniqSorted_(ownList);
   }
   return { perms: perms, auditScope: scope, sources: sources };
 }

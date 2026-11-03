@@ -208,7 +208,7 @@ function pers(kind, senderEmp, subjectEmp, people, extra) {
   const ctx = ctxOf(X);
   const direct = (emp) => who(sb.apvDirectMembers_(ctx.byEmp[emp], ctx)).sort().join();
   ok(direct('DZY902') === 'DZY903,DZY916,DZY922', '15 店長的直屬主管＝品牌辦公室區督導以上＋同店區經理', direct('DZY902'));
-  ok(direct('DZY922') === 'DZY903,DZY916', '15 區經理的直屬主管＝品牌辦公室（不含店長）', direct('DZY922'));
+  ok(direct('DZY922') === 'DZY903', '15 區經理的直屬主管＝品牌總監（不含店長；2026-11-03 起區督導不算，同一層）', direct('DZY922'));
   ok(direct('DZY910') === 'DZY904,DZY905,DZY906,DZY921', '15 廠長的直屬主管＝研發總監或執行長以上', direct('DZY910'));
   ok(direct('DZY921') === 'DZY904,DZY905,DZY906', '15 研發總監的直屬主管＝執行長以上', direct('DZY921'));
   ok(direct('DZY909') === 'DZY910,DZY921', '15 ck 正職的直屬主管＝廠長、研發總監', direct('DZY909'));

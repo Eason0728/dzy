@@ -197,7 +197,7 @@ def main():
             hr.click('[data-act="add"][data-brand="mala"]')
             card = hr.locator('[data-role="region-brand"][data-brand="mala"] [data-role="region-card"][data-code=""]')
             opts = card.locator('[data-f="supervisor"] option').all_inner_texts()
-            check(opts == ['（暫時沒有督導）', '督導甲', '督導乙'], '②督導下拉只列該品牌在職區督導：%s' % opts)
+            check(opts == ['（暫時沒有督導）', '督導甲（小辛辣品牌辦公室）', '督導乙（小辛辣品牌辦公室）'], '②負責人下拉只列該品牌候選人、顯示「姓名（單位）」：%s' % opts)
             card.locator('[data-f="name"]').fill('中區')
             card.locator('[data-f="store"][value="mala-a"]').check()
             card.locator('[data-f="store"][value="mala-b"]').check()

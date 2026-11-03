@@ -445,7 +445,7 @@ function oracle(W) {
       if (a.title === 'osv') return covers(a, 'osv', nd.unit);
       return a.title === 'odir' && on && !hasSup(nd.unit);
     }
-    if (nd.kind === 'brand_office') return au.ladder === 'office' && ['osv', 'odir'].indexOf(a.title) !== -1 && au.parent === nd.brand && covers(a, a.title, nd.unit);
+    if (nd.kind === 'brand_office') return au.ladder === 'office' && a.title === 'odir' && au.parent === nd.brand;   // 2026-11-03：區經理只給品牌總監
     if (nd.kind === 'hq_exec') return au.ladder === 'hq' && EXEC.indexOf(a.title) !== -1;
     if (nd.kind === 'office') return au.ladder === 'office' && a.title === 'odir' && a.unit === nd.unit;
     if (nd.kind === 'dept') return au.ladder === 'hq' && a.title === 'hm' && a.dept === nd.dept;

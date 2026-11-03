@@ -158,3 +158,24 @@
 ## 13. 不做／留給實作者
 - 不做：公告依區發送、區域業績報表、督導改同仁資料、區域歷史（誰哪天管哪區）。
 - 留給實作者：region code 產生規則細節、卡片排版、收合預設、staff_log detail 格式。
+
+## 14. 區經理也能當區域負責人（2026-11-03）
+
+起因：執行長要的簽核是「門市主管 → 轄區的區經理或督導 → 營運總監」；Eason 確認區經理與督導**同一層**，區經理照 10 月一級主管會議**歸屬門市**（不搬品牌辦公室）。確認頁 https://claude.ai/artifact/Gqn1U1CT1gG4Ver8vZrwkD ，Eason 回「A」＝四題照推薦。
+
+| 題 | 決定 |
+|---|---|
+| 1 區經理本人的申請／認領／人事異動第一關 | 只給品牌總監（odir）；區督導不再簽區經理 |
+| 2 營運總監是誰 | 品牌辦公室總監 odir（營運部 10-29 已停用） |
+| 3 區經理負責的區要不要含自己的店 | 不用，同品牌就好 |
+| 4 除了簽核 | 跟督導一樣：區內只看考勤、只看班表、稽核範圍、我的區域 |
+
+- 負責人資格（`Regions.gs regSupervisorOk_`）：在職，且（區督導 osv＋該品牌品牌辦公室）或（區經理 am＋該品牌啟用中門市、非 ck）。常數 `REG_HEAD_OFFICE_TITLES`／`REG_HEAD_STORE_TITLES`；判斷「這家店的負責人是不是某人」一律用 `regionIsHead_(idx, storeUnit, emp)`。regionList 候選人多回 `title`、`title_name`，下拉顯示「姓名（職稱・單位）」。
+- 區經理當負責人只在 **REGIONS_ON 開**時生效（關＝只管自己那家店，照舊）：
+  - 考勤申請 head（`StoreOps.gs storeRegionHeadCovers_`）、支援帳號第 3 層、只看考勤（`attViewUnitsOf_`）、只看班表（`storeSchedViewGate_`）。
+  - 認領審核、人事異動直屬主管、績效評核範圍（`Staff.gs stfScopeRegionHeadMeets_`：被審者在門市階梯且職級低於本人、需求是 brand＋該店）。
+  - 稽核範圍（`Perms.gs` audit.read.own：自己的店＋負責區域的店）。
+  - 我的區域（`regionDirectory_`）：區經理也列他負責的區，不受開關影響（同督導）。
+- 區經理本人：`StoreOps.gs STORE_REQ_AM_OFFICE_TITLES=['odir']`；`Staff.gs stfReviewNeed_` 門市 rank≥4 帶 `headOnly`，`stfScopeMeetsKind_` brand 只給 `STF_OFFICE_HEAD_TITLES`。這條開關關也生效。
+- 核定工時不變（店長核）；區經理負責別區時，自己那家店的店長仍由他以「同店區經理」身分簽。
+- 測試：regions.mock 第 8 節；storeops.mock 3b／13f、apv-route 15、org-upgrade 15、att-hr-acting 3 改斷言。

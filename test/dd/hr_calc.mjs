@@ -305,7 +305,7 @@ function expectReview(R, T) {
     const office = T.brand + '-hq';
     if (tr <= 2) return R.unit === T.unit && ['sm', 'am'].includes(R.title);
     if (T.title === 'sm') return (R.unit === office && ['osv', 'odir'].includes(R.title)) || (R.unit === T.unit && R.title === 'am');
-    if (T.title === 'am') return R.unit === office && ['osv', 'odir'].includes(R.title);
+    if (T.title === 'am') return R.unit === office && R.title === 'odir';   // 2026-11-03：區經理只給品牌總監（督導同一層）
     return false;
   }
   if (tl === 'office') {

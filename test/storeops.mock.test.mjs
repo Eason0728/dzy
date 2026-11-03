@@ -529,7 +529,7 @@ function noDirSched(id) {
   g('3b 申請：店長核本店計時、正職；不含自己、不含區經理', R('DZY101'), ['DZY103', 'DZY104']);
   g('3b 申請：區經理核同店店長；不核別店店長、不核計時正職、不核自己', R('DZY102'), ['DZY101']);
   g('3b 申請：另一店區經理只核自己那店的店長', R('DZY106'), ['DZY105']);
-  g('3b 申請：區督導核品牌內所有店長與區經理；不核別品牌、不核辦公室同仁', R('DZY121'), ['DZY101', 'DZY102', 'DZY105', 'DZY106']);
+  g('3b 申請：區督導核品牌內所有店長；區經理只給總監（2026-11-03）；不核別品牌、不核辦公室同仁', R('DZY121'), ['DZY101', 'DZY105']);
   g('3b 申請：別品牌區督導只核自己品牌的店長', R('DZY123'), ['DZY108']);
   g('3b 申請：總監核區經理（預設）與同辦公室行政、督導；不核店長', R('DZY120'), ['DZY102', 'DZY106', 'DZY121', 'DZY122']);
   g('3b 申請：小辛辣總監只核自己辦公室', R('DZY124'), ['DZY123']);
@@ -554,7 +554,7 @@ function noDirSched(id) {
   ok(req('DZY102', 'DZY101') === true && req('DZY102', 'DZY105') === false && hrs('DZY102', 'DZY101') === false && hrs('DZY102', 'DZY104') === false, '3b 區經理：核同店店長申請、不核別店；不核任何工時');
   ok(req('DZY121', 'DZY101') === true && req('DZY121', 'DZY108') === false && hrs('DZY121', 'DZY101') === false, '3b 區督導：核本品牌店長申請、不核別品牌；不核工時');
   ok(req('DZY111', 'DZY110') === true && hrs('DZY111', 'DZY110') === false && hrs('DZY110', 'DZY111') === true, '3b 研發總監核廠長申請、不核廠長工時；廠長核研發總監工時');
-  ok(req('DZY121', 'DZY102') === true && req('DZY120', 'DZY102') === true && req('DZY123', 'DZY102') === false && req('DZY101', 'DZY102') === false, '3b 區經理本人的申請：本品牌區督導／總監可、別品牌與同店店長不行');
+  ok(req('DZY121', 'DZY102') === false && req('DZY120', 'DZY102') === true && req('DZY123', 'DZY102') === false && req('DZY101', 'DZY102') === false, '3b ★區經理本人的申請：只有本品牌總監（2026-11-03 起區督導不核，與區經理同一層）');
   ok(req('DZY134', 'DZY111') === true && req('DZY110', 'DZY111') === false && req('DZY120', 'DZY111') === false && hrs('DZY134', 'DZY111') === false, '3b 研發總監本人的申請：執行長以上可、廠長與品牌總監不行；執行長不核工時');
   ok(req('DZY101', 'DZY104') === true && req('DZY105', 'DZY104') === false && req('DZY102', 'DZY104') === false, '3b 計時申請：同店店長可、別店店長與區經理不行');
   ok(req('DZY120', 'DZY122') === true && req('DZY121', 'DZY122') === false && req('DZY131', 'DZY132') === true && req('DZY130', 'DZY132') === false && req('DZY134', 'DZY133') === true, '3b 品牌辦公室／部門／管理部的申請同工時規則');
@@ -1585,7 +1585,7 @@ function noDirSched(id) {
     g('13f ★人資主管：值班主管的申請照舊全可核', tg({ hrHead: true }).filter((e) => ['DZY401', 'DZY405', 'DZY408', 'DZY410'].indexOf(e) !== -1), ['DZY401', 'DZY405', 'DZY408', 'DZY410']);
     g('13f admin：同上', tg({ admin: true }, { emp: '', status: 'active', unit: '', dept: '', title: '' }).filter((e) => ['DZY401', 'DZY405'].indexOf(e) !== -1), ['DZY401', 'DZY405']);
     g('13f 值班店長自己核不到值班區經理之外的人：店長核一般正職，不核兼值班者', tg({}, P.DZY401).sort(), ['DZY406']);
-    g('13f 督導核值班店長與值班區經理與兼值班者', tg({}, P.DZY403).filter((e) => ['DZY401', 'DZY402', 'DZY405', 'DZY410'].indexOf(e) !== -1), ['DZY401', 'DZY402', 'DZY405', 'DZY410']);
+    g('13f 督導核值班店長與兼值班者（值班區經理只給總監，2026-11-03）', tg({}, P.DZY403).filter((e) => ['DZY401', 'DZY402', 'DZY405', 'DZY410'].indexOf(e) !== -1), ['DZY401', 'DZY405', 'DZY410']);
     void all;
   }
 

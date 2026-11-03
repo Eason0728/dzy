@@ -45,7 +45,8 @@ var STORE_REQ_HEAD_BY_OFFICE = ['osv'];
 // 區域開關開、且這家店沒有有效督導（沒劃區或區沒督導）時，店長本人的申請另外放行同品牌辦公室的這些職稱（docs/regions/spec.md 第 0 節 Q4）
 var STORE_REQ_HEAD_NO_SUP_OFFICE = ['odir'];
 // 申請：區經理本人的申請 → 該品牌辦公室的這些職稱（預設區督導、總監；要改只改這裡）
-var STORE_REQ_AM_OFFICE_TITLES = ['osv', 'odir'];
+// 2026-11-03 執行長：區經理與督導同一層 → 區經理本人的申請只給品牌總監（不再給區督導）
+var STORE_REQ_AM_OFFICE_TITLES = ['odir'];
 // 申請：廚藝總監本人的申請 → 總部這些職稱（預設執行長、總經理、董事長；要改只改這裡）
 var STORE_REQ_RDD_HQ_TITLES = ['ceo', 'gm', 'chair'];
 // 管理部同仁 → 執行長以上（兩張表相同）
@@ -162,7 +163,7 @@ function storeAttMode_(mode) { return mode === 'req' ? 'req' : 'hours'; }
  * mode：'hours' 核定工時（預設）／'req' 加班單、請假單、忘刷單。target＝{unit, dept, title}。回 {kind, unit?, brand?, dept?}：
  *   'unit'         本單位店長／廠長（hours：門市／中央工廠所有打卡的人；req：計時、正職）
  *   'head'         req 店長／廠長本人：同單位區經理（中央工廠＝廚藝總監），門市另可由該品牌辦公室區督導
- *   'brand_office' req 區經理本人：該品牌辦公室區督導、總監
+ *   'brand_office' req 區經理本人：該品牌總監（2026-11-03 起不再給區督導）
  *   'hq_exec'      req 廚藝總監本人：總部執行長、總經理、董事長
  *   'office'       品牌辦公室行政／督導（同辦公室總監）
  *   'dept'         總部部門同仁（同主要部門的總監）　'mgmt' 管理部同仁（執行長以上）
@@ -235,7 +236,8 @@ function attApproverOf_(approver, target, org, mode, rctx) {
   }
   if (sameMan) return false;
   if (need.kind === 'head') {
-    if (ao.ladder === 'store') return STORE_REQ_HEAD_BY_UNIT.indexOf(title) !== -1 && aUnit === need.unit;
+    if (ao.ladder === 'store') return (STORE_REQ_HEAD_BY_UNIT.indexOf(title) !== -1 && aUnit === need.unit) ||
+      storeRegionHeadCovers_(approver, title, need.unit, rctx);   // 區經理當區域負責人（2026-11-03）：簽區內各店
     if (ao.ladder !== 'office' || ao.unit.parent !== need.brand) return false;
     if (STORE_REQ_HEAD_BY_OFFICE.indexOf(title) !== -1) return storeRegionCovers_(approver, title, need.unit, rctx);
     return STORE_REQ_HEAD_NO_SUP_OFFICE.indexOf(title) !== -1 && !!rctx && !!rctx.on &&
@@ -253,6 +255,12 @@ function attApproverOf_(approver, target, org, mode, rctx) {
 
 /** p.acting_units（storePeople_ 由 Perms.gs permActingUnitsOf_ 帶入：兼任店長的單位）是否含 unit */
 function storeActingHas_(p, unit) { return !!unit && !!p && Array.isArray(p.acting_units) && p.acting_units.indexOf(unit) !== -1; }
+
+/** 區經理是這家店所屬區域的負責人（Regions.gs REG_HEAD_STORE_TITLES、regionIsHead_）；開關關＝false（只管自己那家店，照舊） */
+function storeRegionHeadCovers_(approver, title, unit, rctx) {
+  if (!rctx || !rctx.on || typeof REG_HEAD_STORE_TITLES === 'undefined' || REG_HEAD_STORE_TITLES.indexOf(title) === -1) return false;
+  return regionIsHead_(rctx.idx, unit, approver.emp);
+}
 
 /** 區域限區（Regions.gs regionOfficeCovers_）；沒給 rctx 或開關關 → true */
 function storeRegionCovers_(approver, title, unit, rctx) {
@@ -362,11 +370,13 @@ function attViewUnitsOf_(me, org, regionIdx) {
   if (!me || stfStr_(me.status) !== 'active') return [];
   var title = stfStr_(me.title);
   var o = storeOrgOf_(me, org);
-  if (!o || o.ladder !== 'office') return [];
+  // 區經理當區域負責人（2026-11-03）：單位在門市，只看他負責的區（跟區督導同一套）
+  var storeHead = !!o && o.ladder === 'store' && typeof REG_HEAD_STORE_TITLES !== 'undefined' && REG_HEAD_STORE_TITLES.indexOf(title) !== -1;
+  if (!o || (o.ladder !== 'office' && !storeHead)) return [];
   var out = [];
   var brand = o.unit.parent;
   if (!brand || brand === STF_EXTRA_CK) return [];
-  if (title === 'osv') {
+  if (title === 'osv' || storeHead) {
     var codes = regionIdx && regionIdx.bySupervisor ? regionIdx.bySupervisor[stfStr_(me.emp)] : null;
     if (!codes || !codes.length) return [];
     codes.forEach(function (c) {
@@ -525,6 +535,8 @@ function storeSupportApprovers_(units, people, org, rctx, excludeDuty, excludeEm
     },
     function (c) { return c.ladder === 'store' && STORE_SUP_L2.indexOf(c.title) !== -1 && su.indexOf(c.unit) !== -1; },
     function (c) {
+      // 區經理當區域負責人（2026-11-03）：跟該區督導同一層
+      if (c.ladder === 'store' && shops.some(function (u) { return storeRegionHeadCovers_(c, c.title, u, rctx); })) return true;
       if (!rctx || !rctx.on || c.ladder !== 'office' || STORE_SUP_L3_OFFICE.indexOf(c.title) === -1) return false;
       return shops.some(function (u) { return org.unit[u].parent === c.brand && regionOfficeCovers_({ emp: c.emp, title: c.title }, u, rctx); });
     },
@@ -968,7 +980,7 @@ function storeIdent_(sub) {
   try { viewOn = PropertiesService.getScriptProperties().getProperty('REGIONS_ON') === '1'; } catch (e) { viewOn = false; }
   if (viewOn && p && !admin && !hrHead) {
     var vIdx = null;
-    if (p.title === 'osv' && typeof regionIndexLive_ === 'function') {
+    if ((p.title === 'osv' || p.title === 'am') && typeof regionIndexLive_ === 'function') {
       try { vIdx = regionIndexLive_(); } catch (e2) { vIdx = null; }
     }
     viewUnits = attViewUnitsOf_(me, org, vIdx);
@@ -1133,10 +1145,10 @@ function storeSchedViewGate_(values) {
   try { on = PropertiesService.getScriptProperties().getProperty('REGIONS_ON') === '1'; } catch (e) { on = false; }
   if (!on) return false;
   var title = stfStr_(values[STF_COL.title]);
-  if (title !== 'osv' && title !== 'odir') return false;
+  if (title !== 'osv' && title !== 'odir' && title !== 'am') return false;
   var me = { emp: stfNormEmp_(values[STF_COL.emp_no]), status: stfStr_(values[STF_COL.status]), unit: stfStr_(values[STF_COL.unit]), dept: stfStr_(values[STF_COL.dept]), title: title };
   var idx = null;
-  if (title === 'osv') {
+  if (title === 'osv' || title === 'am') {
     if (typeof regionIndexLive_ !== 'function') return false;
     try { idx = regionIndexLive_(); } catch (e2) { return false; }
   }
