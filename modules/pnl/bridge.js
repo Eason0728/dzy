@@ -15,7 +15,8 @@ export const DEV_PNL_ORIGIN = 'http://localhost:8912';
 /** 允許代轉的 action（必須與 platform/dryrun.js READ_ACTIONS.pnl＋WRITE_ACTIONS.pnl 一致，test 比對） */
 export const PNL_ACTIONS = ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment',
   'addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
-  'refreshConnectors', 'refreshFixed', 'loadGroupUnits'];
+  'refreshConnectors', 'refreshFixed', 'loadGroupUnits',
+  'getJob', 'adminSelfCheck', 'adminSyncSeed', 'adminApplyS01Connectors', 'adminCreateLastMonthDraft', 'adminLoadStoreSeedS01'];
 
 const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
 
