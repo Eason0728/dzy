@@ -1,63 +1,46 @@
 /**
- * modules/pnl/index.js — 損益試算：把損益網頁整頁嵌進內容區（iframe），呼叫一律由本模組代轉（見 bridge.js）。
- * 只理會「這個 iframe 本身」且 origin 正確的訊息；回覆時 targetOrigin 寫死損益網頁網址。
+ * modules/pnl/index.js — 損益試算（原生化 P3，2026-11-03；規格 ~/dzy/docs/pnl-native/spec.md §2）
+ * 四頁原生畫面：儀表板、填資料（待補＋五類）、匯入、設定。每次讀寫經平台代轉（ns pnl）到 Mac mini 的損益後端；
+ * 不再嵌 mala-pnl.github.io，也沒有任何登入表單。首頁提醒 alerts()：有「填」以上權限才算本月待補。
  */
 'use strict';
 
-import { pnlTarget, parseCall, toPageResult, navMessage, atPage, currentMonth, buildAlerts } from './bridge.js';
+import { mountDashboard } from './views/dashboard.js';
+import { mountEntry } from './views/entry.js';
+import { mountImport } from './views/import.js';
+import { mountSettings } from './views/settings.js';
+import { reset } from './state.js';
+import { call } from './lib/api.js';
+import { currentMonth, buildAlerts } from './bridge.js';
 
-const LOAD_TIMEOUT_MS = 20000;
+const ENTRY_VIEWS = ['pending', 'food', 'labor', 'controllable', 'uncontrollable', 'revenue'];
 const ALERT_CACHE_MS = 10 * 60 * 1000;
-let state = null;   // { el, ctx, frame, target, down, timer, ready }
+
+let currentEl = null;
+let viewUnmount = null;
 let alertCache = null;   // { at, items, promise }
 
-function clearDown() {
-  if (!state) return;
-  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
-  if (state.down && state.down.parentNode) state.down.parentNode.removeChild(state.down);
-  state.down = null;
-}
-
-function sendNav() {
-  if (!state || !state.ready || !state.frame.contentWindow) return;
-  state.frame.contentWindow.postMessage(navMessage(state.ctx.viewId), state.target.origin);
-}
-
-function showDown() {
-  if (!state || state.down) return;
-  const n = document.createElement('div');
-  n.className = 'card';
-  n.setAttribute('data-role', 'pnl-down');
-  n.textContent = '損益試算暫時連不上，請稍後重新整理。';
-  state.el.insertBefore(n, state.frame);
-  state.down = n;
-}
-
-async function onMessage(e) {
-  if (!state || e.origin !== state.target.origin || e.source !== state.frame.contentWindow) return;
-  const d = e.data;
-  if (d && d.type === 'dzy-pnl-ready' && d.v === 1) { clearDown(); state.ready = true; sendNav(); return; }
-  // 損益頁自己切頁（填資料頁裡的類別膠囊、「前往填資料」）→ 頁頂分頁跟著換（ctx.nav 只在本模組在畫面上時才換網址）
-  const at = atPage(d);
-  if (at) { if (at !== state.ctx.viewId) state.ctx.nav(at); return; }
-  const call = parseCall(d);
-  if (!call) return;
-  const frame = state.frame, origin = state.target.origin, ctx = state.ctx;
+function renderView(el, ctx) {
+  if (typeof viewUnmount === 'function') viewUnmount();
+  viewUnmount = null;
+  while (el.firstChild) el.removeChild(el.firstChild);
+  const v = ctx.viewId;
   let r;
-  try { r = await ctx.api.call('pnl', call.action, call.payload); } catch (err) { r = { ok: false, error: '網路連線失敗，請稍後再試', status: 0 }; }
-  if (!state || state.frame !== frame || !frame.contentWindow) return;   // 已切走
-  frame.contentWindow.postMessage({ type: 'dzy-pnl-result', v: 1, id: call.id, result: toPageResult(r) }, origin);
+  if (ENTRY_VIEWS.indexOf(v) !== -1) r = mountEntry(el, ctx, v);
+  else if (v === 'import') r = mountImport(el, ctx);
+  else if (v === 'settings') r = mountSettings(el, ctx);
+  else r = mountDashboard(el, ctx);
+  viewUnmount = typeof r === 'function' ? r : null;
 }
 
-/** 讀各店本月待補項數；失敗回 null（首頁就不顯示，不報錯） */
 async function loadPending(ctx) {
-  const s = await ctx.api.call('pnl', 'getSettings', {});
-  const stores = s && s.ok && s.data && s.data.data && Array.isArray(s.data.data.stores) ? s.data.data.stores : null;
+  const s = await call(ctx, 'getSettings', {});
+  const stores = s.ok && s.data && Array.isArray(s.data.stores) ? s.data.stores : null;
   if (!stores) return null;
   const month = currentMonth();
   const rows = await Promise.all(stores.map(async (st) => {
-    const r = await ctx.api.call('pnl', 'getMonth', { store_id: st.store_id, month });
-    const p = r && r.ok && r.data && r.data.data && r.data.data.result ? r.data.data.result.pending : null;
+    const r = await call(ctx, 'getMonth', { store_id: st.store_id, month });
+    const p = r.ok && r.data && r.data.result ? r.data.result.pending : null;
     return { store_id: st.store_id, name: st.name || st.store_id, count: Array.isArray(p) ? p.length : 0 };
   }));
   return buildAlerts(rows, month);
@@ -65,34 +48,19 @@ async function loadPending(ctx) {
 
 export default {
   mount(el, ctx) {
-    const target = pnlTarget(location.hostname);
-    const bar = document.createElement('div');
-    bar.className = 'bulletin-bar';
-    bar.textContent = '損益數字只有財務部門與被開通「損益試算」權限的人看得到；所有修改都會記錄是誰做的。';
-    const frame = document.createElement('iframe');
-    frame.title = '損益試算';
-    frame.className = 'bulletin-frame';
-    frame.setAttribute('data-role', 'pnl-frame');
-    frame.addEventListener('error', () => showDown());
-    state = { el, ctx, frame, target, down: null, timer: null, ready: false };
-    window.addEventListener('message', onMessage);
-    el.appendChild(bar);
-    el.appendChild(frame);
-    state.timer = setTimeout(showDown, LOAD_TIMEOUT_MS);
-    frame.src = target.url;
+    currentEl = el;
+    renderView(el, ctx);
     return function unmount() {
-      window.removeEventListener('message', onMessage);
-      clearDown();
-      state = null;
-      while (el.firstChild) el.removeChild(el.firstChild);
+      if (typeof viewUnmount === 'function') viewUnmount();
+      viewUnmount = null;
+      currentEl = null;
+      reset();
     };
   },
   onRoute(ctx) {
-    if (!state) return;
-    state.ctx = ctx;
-    sendNav();
+    if (currentEl) renderView(currentEl, ctx);
   },
-  /** 首頁「待辦與異常」（Q7）：有「填」以上權限才算；結果快取 10 分鐘，Apps Script 慢時這次不顯示、下次就有 */
+  /** 首頁「待辦與異常」：有「填」以上權限才算；結果快取 10 分鐘，後端慢時這次不顯示、下次就有 */
   async alerts(ctx) {
     if (!(ctx.can('pnl.write') || ctx.can('pnl.admin'))) return [];
     const now = Date.now();

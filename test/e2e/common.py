@@ -219,6 +219,9 @@ class MockBackend:
             if getattr(self, pre + '_alerts_fail', False):
                 return 502, {'ok': False, 'error': 'UPSTREAM_DOWN'}
             return 200, getattr(self, pre + '_alerts', {'ok': True, 'data': {'items': [], 'partial': False, 'pending': False}})
+        if ns == 'pnl' and os.environ.get('PNL_RUNNER'):   # 損益試算原生化（P3）：轉給本機真的損益後端（pnl_mock.py）
+            import pnl_mock
+            return pnl_mock.proxy(self, body)
         if ns == 'cashbook':   # 收支管理（2026-10-24）：有狀態的假現金帳在 cashbook_mock.py
             import cashbook_mock
             return cashbook_mock.proxy(self, body)
