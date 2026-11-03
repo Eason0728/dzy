@@ -3,7 +3,7 @@
 - 分級：完整
 - 分級依據：排程=否 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
 - 現在在：④（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
-- 等 Eason：無（P1 通過，下一步 P2）
+- 等 Eason：無（P2 實作完成，待 P2 階段關）
 
 ## Eason 決定（2026-11-03）
 - 範圍：四頁（儀表板、填資料、匯入、設定）一次做完才切換，不新舊並存。
@@ -37,7 +37,8 @@
 
 ## 合併 main 後待做（P1 起累積）
 - dzy-minikit apps/pnl/gas/ 目前是從損益分支手動複製（清單已補 3 檔）；損益合 main＋push 後要正式跑一次 `kit/bin/sync-gas.sh pnl` 覆蓋。
-- 附件目錄 `<dataDir>/files` 的備份（kit 每日備份只含 app.db）：P2 T10 一起做。
+- 附件目錄 `<dataDir>/files` 的備份（kit 每日備份只含 app.db）：**P2 未做**，移到 P5 部署手冊（照 apv-backup tar 做法）。
+- 切換時 .env 要設 `PNL_JOBS_ON=1`、`NOTIFY_INBOX_URL`、`NOTIFY_INBOX_TOKEN`（jobs.js 用）；影子期不設。
 - 已修（P1 審查）：gasshim getLastRow 尾端空白列、MiniFiles 回滾。
 - P2 前：selfCheck 加 runtime 欄；getLastColumn 尾端空格（既有行為，評估）；MiniFiles.remove 不進回滾日誌（損益未用）；adminCreateLastMonthDraft 在 mini 上連接器失敗會每次堆一列 log（P2 兩段式後解決）；mala-pnl-auto 自己的 mock 測試清單補載入 runtime／attachLocal／adminMaint。
 
