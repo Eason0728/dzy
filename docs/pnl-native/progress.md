@@ -3,7 +3,7 @@
 - 分級：完整
 - 分級依據：排程=否 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
 - 現在在：⑤（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
-- 等 Eason：照 ~/dzy-minikit/apps/pnl/DEPLOY.md 部署（切換前一天），再挑切換日照 CUTOVER.md
+- 等 Eason：明天 03:45 後請 mini 的 Claude 做 DEPLOY 第 12 步（看第一次備份）、第 13 步收尾；之後挑切換日照 CUTOVER.md
 
 ## Eason 決定（2026-11-03）
 - 範圍：四頁（儀表板、填資料、匯入、設定）一次做完才切換，不新舊並存。
@@ -44,6 +44,11 @@
 - P2 前：selfCheck 加 runtime 欄；getLastColumn 尾端空格（既有行為，評估）；MiniFiles.remove 不進回滾日誌（損益未用）；adminCreateLastMonthDraft 在 mini 上連接器失敗會每次堆一列 log（P2 兩段式後解決）；mala-pnl-auto 自己的 mock 測試清單補載入 runtime／attachLocal／adminMaint。
 
 - P3 T13：dzy bridge.js PNL_ACTIONS／platform/dryrun.js／Auth.gs 白名單加 getJob 與五個 admin 維護動作（三處一致測試）。
+
+## 部署紀錄（2026-11-03 晚）
+- 舊端 @30（clasp push＋redeploy 同一部署 ID），屬性 MINI_EXPORT_KEY／MINI_ROLLBACK_KEY／MINI_APP／MINI_FILE_COLUMNS 已設；錯金鑰仍 AUTH、health 正常、舊畫面照常。
+- mini：update-all --only 五支 app → 85bf7c6 全綠（營運系統不動）；apps/pnl 29 檔核對 OK；不 clone ~/mala-pnl-auto（權杖無此 repo），裁判／演練改 MacBook 跑；預演匯出 11 分頁 776 列 7 秒；.env 八值填好、PNL_JOBS_ON 未開；試跑 yellow 只有 pnl_jobs_off、殺掉自動重起；START.txt 已寫；Funnel /pnl 已加（基準五值不變），手機 4G 驗證兩個 health 都正常。
+- 手冊修正 PR：dzy-minikit #76。
 
 ## 已合併（2026-11-03）
 - mala-pnl-auto #74（P0–P2）、#76（切換準備）、#77（註解）；dzy-minikit #74（P0–P2）、#75（切換準備＋手冊）；dzy #90（白名單後端先行）。
