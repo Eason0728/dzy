@@ -39,4 +39,9 @@ const q = await post({ action: 'dzyProxy', key: KEY, level: 'admin', account: 'S
 if (q.ok && q.data && q.data.queued) { const j = await r.runGas('pnlJobClaim_'); await r.runGas('pnlJobRun_', j.job_id, {}); }
 const fx = JSON.parse(fs.readFileSync(path.join(PNL, 'test/fixtures/202608-S01.json'), 'utf8'));
 await r.runGas('__testAppendEntries', fx.entries);
+// 排隊工作（建立草稿／立即拉取／建上月草稿）：用 mini 正式的 jobs.js 每秒撿一次單（沒有連接器就不連網）
+const { createJobs } = require(path.join(KIT, 'apps/pnl/jobs.js'));
+const jobs = createJobs({ runGas: r.runGas, env: { PNL_JOBS_ON: '1' }, log: () => {}, setTimer: (fn, ms) => { const t = setTimeout(fn, ms); return { clear: () => clearTimeout(t) }; } });
+await jobs.ready;
+setInterval(() => { jobs._.drainQueue(); }, 1000);
 console.log('READY ' + port);
