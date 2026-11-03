@@ -1,41 +1,43 @@
-# P4 影子期方案（p4-plan.md）
-版本：v1 / 2026-11-03　依據：spec.md §5.1（含 GPT-07／08／09 修訂）、plan.md、task.md T19／T19b／T20
+# P4 一次搬家方案（p4-plan.md）
+版本：v2 / 2026-11-03（Eason 決定：**跳過影子期**——目前沒有人在用損益試算，改成「一次搬家＋全量比對＋事後觀察 3 天」）
+依據：spec.md §5（已依本版修訂）、plan.md、task.md
 
-## 目標
-Mac mini 上的損益 app 以「只讀備份（mirror）」模式跑約一週：每天 03:45 從舊端（Google 試算表）讀回整份資料，新舊逐項比對；同時在隔離副本上演練排程。**切換清單 5 項全過**才進 P5／P6。這一週會計照常用舊系統，什麼都不變。
+## 為什麼可以跳過、代價怎麼補
+| 影子期原本防的 | 跳過後的影響 | 補法 |
+|---|---|---|
+| 切換後會計當天打不開 | 目前沒人用，不受影響 | — |
+| 排程、連接器在真資料上第一次跑 | 切換後第一個 06:30 才真的跑 | 切換當晚手動跑一次每日更新（全部門市），當場看結果 |
+| 多天重複比對抓「某些日子才有」的差異 | 只有切換當晚一次全量比對 | 計算程式一行沒改＋裁判測試；觀察期每天跑一次比對工具（新端 vs 凍結的舊端快照，只比切換前的月份） |
+| 退回簡單（停掉新的即可） | 要走退回手冊、把新資料寫回舊端 | P5 退回手冊先在測試資料演練一次 |
+| 切換初期資料只在 mini | mini 出狀況時推送延後 | 推送端都會重送；切換日避開月底與 1–3 號 |
 
-## 切換清單（spec §5.1，缺一項或有任何差異都不准切換）
+## 切換關卡（搬家當晚，缺一項或有任何差異就不切，直接解凍舊端）
 1. 8 月裁判八項差 0（mini 上）
-2. 光復 2026-09、2026-10 八項差 0（新舊比對）
-3. 所有啟用門市最近 3 個月，每日比對連續 3 天全同
-4. 演練副本連續 3 天與舊端全同
-5. 所有被明細引用的附件 sha256 全對（known-missing 要 Eason 逐筆核准）
+2. **全量比對**：所有門市 × 所有有資料的月份，新舊 getMonth 八大項＋待補清單完全相同
+3. 所有被明細引用的附件逐檔抓到、sha256 對上（抓不到的要 Eason 逐筆核准，保留舊檔位置）
+4. 手動跑一次每日更新（全部門市），連接器結果與舊端當天 06:30 一致、/pnl/health 綠（沒有 pnl_jobs_off）
+5. 三條推送各手動打一次冒煙（POS `--mtd`、貨單、費用請款各一筆測試）回 ok
 
-## 要先做的程式（我在 MacBook 上做，P4-a）
+## 要先做的程式（我在 MacBook 上做）
 | # | 做什麼 | repo |
 |---|---|---|
-| A1 | **合併 P0–P2**：mala-pnl-auto `pnl-native-p2` → main；dzy-minikit `pnl-p2` → main（含 kit 共用改動：上傳上限、MiniFiles、getLastRow，另外 5 支 mini app 要一起更新，測試已全綠）；push。合 main 後 `kit/bin/sync-gas.sh pnl` 正式同步。 | 兩個 |
-| A2 | **附件鏡像**：kit `mirror.files` 目前只收英數欄名、裸檔案 ID；損益是「明細.附件URL」（中文欄名、完整雲端硬碟網址）。改 kit：欄名允許中文、加選填 `idPattern`（從網址取 ID）；損益 miniBridge 的 `__miniFile` 同步支援從網址取 ID。檔案先照 mirror 慣例存 `files/<ID>.<ext>`，切換時再轉成 pnlfile 版面（P5 手冊）。 | dzy-minikit、mala-pnl-auto |
-| A3 | **比對工具** `apps/pnl/tools/compare.js`（C8）：在 mini 上跑，對每店每月分別問舊端（dzyProxy＋同一把金鑰）與 mini 本機的 getMonth，逐項比八大項＋待補清單，輸出 JSON lines＋摘要；結果寫 `$DATA/compare/YYYY-MM-DD.jsonl`。mirror 的 readActions 加 `dzyProxy`（mirror 模式每個請求都回滾，讀取安全；只對本機直連）。 | dzy-minikit |
-| A4 | **演練副本** `apps/pnl/tools/rehearse.js`（T19b）：每天 mirror 完把資料庫複製到 `$DATA/staging/`，用正式 jobs.js 對副本跑一次當天每日更新（連接器只打唯讀端點、通知不送），再用 compare.js 比副本 vs 舊端當天 06:30 後的結果。 | dzy-minikit |
-| A5 | launchd：03:45 mirror 由 kit 本來就排；比對 07:30、演練 07:00 各一支排程（或併進 jobs 的 mirror 後回呼），log 帶日期戳；結果進 `/pnl/health`（compare_diff 黃燈）。 | dzy-minikit |
-| A6 | 守門與指揮台 patch（WATCH-PATCH.md 已產生）：加 `pnl-server` 格。 | mala-fortune |
+| B1 | **合併 P0–P2**：mala-pnl-auto `pnl-native-p2` → main；dzy-minikit `pnl-p2` → main（kit 共用改動會連帶更新另外 5 支 mini app，測試已全綠）；push；`kit/bin/sync-gas.sh pnl` 正式同步。 | 兩個 |
+| B2 | **app.json 改正式模式**：拿掉 mirror、readActions 照正式；`.env.example` 已備。 | dzy-minikit |
+| B3 | **附件一次性搬遷工具** `apps/pnl/tools/migrate-files.js`：讀明細「附件URL」所有雲端硬碟網址 → 向舊端 `__miniFile` 逐檔要（size＋sha256 驗）→ 存成 `files/<store>/<YYYY-MM>/<新id>.<ext>` → 寫 `files/drive-map.jsonl` → 改寫明細欄為 `pnlfile:`（另存原值對照，回退用）。損益 miniBridge 的 `__miniFile` 要能從網址取 ID（`MINI_FILE_COLUMNS` 用「明細.附件URL」）。 | dzy-minikit、mala-pnl-auto |
+| B4 | **全量比對工具** `apps/pnl/tools/compare.js`（C8）：mini 上跑，所有門市 × 月份，舊端（dzyProxy＋同一把金鑰）vs 新端，輸出 JSON lines＋摘要；觀察期每天跑一次（只比切換前月份）。 | dzy-minikit |
+| B5 | **排程紀錄匯入**（C9）：搬家時把舊端當天已跑的每日更新寫成 `gas-import` done，mini 當晚不重跑；寫進搬遷步驟。 | dzy-minikit |
+| B6 | **舊端停用模式** T21b（`PNL_DECOMMISSIONED=1`，含 google.script.run 路徑）＋ mala-fortune／schedule-watchdog 網址改讀設定（T22）＋舊網址「已搬家」頁（T23）。 | mala-pnl-auto、mala-fortune、mala-pnl.github.io |
+| B7 | **P5 手冊** DEPLOY／CUTOVER／ROLLBACK（apps/pnl/），照現金帳手冊格式；退回在測試資料演練一次。 | dzy-minikit |
 
-**演練範圍的取捨（我替你先定，可改）**：spec 原本寫「把當天舊端收到的推送也重放進副本」。舊端沒有保存推送內容，要重放得改舊端記錄每筆推送（動正式系統）。我改成：演練只跑「每日更新＋連接器＋排隊」；三條推送（POS、貨單、費用請款）已有整合測試，切換當晚再各手動打一次冒煙。理由是不為了演練去改正式系統，要改回去跟我說。
+做完走 Fable 階段關；P6 上線前 Fable＋GPT 互盲審三塊（金額、排程推送、搬遷退回）。
 
-## 要 Eason 做的（P4-b，依序；每步我會給可整段貼的指令）
-1. **在 MacBook 推損益舊端搬家通道**（gas/miniBridge.js，原功能不變，只多一條唯讀匯出通道）：`clasp push` → `clasp redeploy <部署ID>`。自動模式會擋正式部署，所以要你本人貼指令，我逐行核對輸出。
-2. **舊 Apps Script 加兩個指令碼屬性**：`MINI_EXPORT_KEY`（自己產生的長字串）、`MINI_APP=pnl`；附件鏡像另加 `MINI_FILE_COLUMNS`（值我給）。
-3. **Mac mini 上照 apps/pnl/MIRROR.md 部署**（交辦給 mini 的 Claude）：拉程式、建資料夾、填 .env（MINI_EXPORT_KEY、舊端網址）、啟動、第一次讀回、Funnel 加 `/pnl` 路徑（你說可以才加）。另外 5 支 mini app 跟著更新 kit（`kit/bin/update-all.sh`），更新後逐支看健康燈。
-4. 守門 patch：`clasp push`（schedule-watchdog）要你貼。
-5. 之後每天看指揮台那一格；連續 3 天全綠、5 項清單全過，我就寫 P5 切換手冊給你排切換日。
-
-## 風險與退路
-- 影子期完全不碰舊系統的寫入；mini 上的 pnl 只讀，出事就停掉 mini 上的 pnl，舊系統照常。
-- kit 共用改動影響另外 5 支 mini app：合併前全套測試綠；更新後若任何一支燈號異常，用 `kit/bin/update-all.sh` 的回退（回到前一版 commit）＋重啟。
-- 舊端加 MiniBridge 的唯一行為差異：多一條需要金鑰的匯出通道；沒設 FROZEN 前其他功能一字不變（P0 審查已驗）。
+## 要 Eason 做的（切換前後；每步我給可整段貼的指令並逐行核對）
+1. MacBook 推損益舊端（含搬家通道與停用模式，兩者預設都不生效）：`clasp push` → `clasp redeploy`。
+2. 舊 Apps Script 加指令碼屬性：`MINI_EXPORT_KEY`、`MINI_APP=pnl`、`MINI_FILE_COLUMNS`。
+3. Mac mini 照 DEPLOY.md 安裝（交辦給 mini 的 Claude）：拉程式、建資料夾、填 .env、Funnel 加 `/pnl`（你說可以才加）、另外 5 支 app 跟著更新後逐支看燈。
+4. 挑一個平日晚上（避開月底與 1–3 號）照 CUTOVER.md 切換，約 1 小時。
+5. 觀察 3 天：每天看指揮台那一格與比對工具結果；有問題照 ROLLBACK.md 退回。
 
 ## 時程（估）
-- P4-a 程式：我這邊約 1 個晚上（含 Fable 階段關）。
-- P4-b 部署：你約 30–45 分鐘（含 mini 交辦）。
-- 影子期：部署後至少 3 天（清單第 3、4 項要連 3 天）。
+- B1–B7 程式＋審查：我這邊約 1–2 個晚上。
+- 安裝：你約 30 分鐘；切換當晚約 1 小時；觀察 3 天。
