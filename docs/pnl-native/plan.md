@@ -16,7 +16,7 @@ P1 與 P3 可平行（P3 先對假後端開發）；P4 要等 P1＋P2；P5 可�
 
 ## 共用契約（逐字格式；兩個以上任務都會產生或讀的值）
 ### C1 執行環境旗標
-- Script Property（mini 上＝.env）`PNL_RUNTIME`：值只有 `mini`；沒設＝Apps Script。gas 端判斷函式 `pnlIsMini_()` ＝ `PropertiesService.getScriptProperties().getProperty('PNL_RUNTIME') === 'mini'`。
+- gas 端判斷函式 `pnlIsMini_()`（gas/runtime.js）：kit 沙盒標記 `__shim` 存在，**或** Script Property `PNL_RUNTIME`＝`mini`，兩者任一即為 mini（P1 實作：避免 .env 漏設時誤判成 Apps Script）。
 
 ### C2 對外連線兩段式
 - gas 端所有對外連線改呼叫 `pnlHttp_(req)`，`req`＝`{ id: <string>, url: <string>, method: 'post', payload: <string JSON> }`。
@@ -40,7 +40,8 @@ P1 與 P3 可平行（P3 先對假後端開發）；P4 要等 P1＋P2；P5 可�
 ### C5 附件
 - 附件URL 新格式：`pnlfile:<store_id>/<YYYY-MM>/<file_id>.<ext>`，`file_id`＝Utilities.getUuid() 去掉 `-`，`ext` 由 MIME 決定（jpg、png、pdf、webp、heic）。例：`pnlfile:S01/2026-10/3f9a0c1e2b4d4e8f9a7b6c5d4e3f2a1b.jpg`。
 - 實體路徑：`<dataDir>/files/<store_id>/<YYYY-MM>/<file_id>.<ext>`，權限 600。
-- 上傳順序（GPT-10）：jobs.js 先寫暫存檔 `<…>/.tmp-<file_id>` → 驗 sha256 → fsync → rename 成正式檔 → 才 runGas 寫明細（附件URL＋sha256）。runGas 失敗 → 刪正式檔。開機時掃描：沒有任何明細引用、且超過 1 小時的檔案移到 `files/.orphan/`（不刪，黃燈）；明細引用但檔案不存在 → 紅燈。
+- **P1 實作調整**：kit 新增 `MiniFiles` 同步檔案服務（app.json `files:{dir:'files'}`），上傳由 gas 端在同一次請求內直接寫檔（tmp→fsync→rename），不經 jobs.js；檔案寫入不隨交易回滾，寫檔後若丟例外留下孤兒檔，由下面的開機掃描處理。
+- 上傳順序（GPT-10，原設計）：jobs.js 先寫暫存檔 `<…>/.tmp-<file_id>` → 驗 sha256 → fsync → rename 成正式檔 → 才 runGas 寫明細（附件URL＋sha256）。runGas 失敗 → 刪正式檔。開機時掃描：沒有任何明細引用、且超過 1 小時的檔案移到 `files/.orphan/`（不刪，黃燈）；明細引用但檔案不存在 → 紅燈。
 - 舊格式 `https://drive.google.com/file/d/<id>/…` 在 mini 上讀取時，由搬遷對照表 `files/drive-map.jsonl`（每列 `{drive_id, pnlfile}`）轉換；搬遷完成後明細欄位一律改寫成新格式，對照表保留供回退。
 
 ### C6 退場動作

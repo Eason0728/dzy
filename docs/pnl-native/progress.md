@@ -3,7 +3,7 @@
 - 分級：完整
 - 分級依據：排程=否 發訊息=否 外部後台=是 被看到=是 寫正式資料=是
 - 現在在：④（①｜②｜③-需求｜③-規格｜③-方案｜④｜⑤｜結案）
-- 等 Eason：無（2026-11-03「開工」；P0 完成，下一步 P1）
+- 等 Eason：無（P1 實作完成，待 P1 階段關）
 
 ## Eason 決定（2026-11-03）
 - 範圍：四頁（儀表板、填資料、匯入、設定）一次做完才切換，不新舊並存。
@@ -34,6 +34,11 @@
 ## ② 探（初步）
 - 代轉已存在：`ctx.api.call('pnl', <action>)` → mini → GAS doPost dzyProxy（`modules/pnl/index.js` 的 alerts 已在用）。白名單 18 支 action 見 `modules/pnl/bridge.js` PNL_ACTIONS。
 - 損益前端規模：shell 2215＋dashboard 1599＋entry 1059＋import 776＋importLogic 526＋settings 2701＋css 2314 行（計算 engine 在後端，前端不重算）。
+
+## 合併 main 後待做（P1 起累積）
+- dzy-minikit apps/pnl/app.json 的 gas／gasSource 加 runtime.js、adminMaint.js、attachLocal.js，跑 `kit/bin/sync-gas.sh pnl`（gas-sync pnl 測試才會綠）。
+- 附件目錄 `<dataDir>/files` 的備份（kit 每日備份只含 app.db）：P2 T10 一起做。
+- gasshim getLastRow 含尾端空白列，與真環境「最後一列有內容」不同；saveSettings 縮表後的空白列在 mini 會被算進去（P1 審查請判斷影響）。
 
 ## 關卡紀錄
 | 日期 | 關 | 對象 | 結果 | 第幾次 | 證據 |
