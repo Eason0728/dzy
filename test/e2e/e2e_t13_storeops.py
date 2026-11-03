@@ -347,7 +347,7 @@ def main():
             at.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
             at.wait_for_selector(SCH + ':has-text("等你核准")', timeout=10000)
             hrows = [x.replace('›', '').strip() for x in at.locator(SCH).all_inner_texts()]
-            check(hrows == ['11 月班表還沒送出', '2 位同仁的班表等你核准', '1 位同仁下個月班表還沒送出'], '首頁排班管理組顯示總部三種提醒：%s' % hrows)
+            check(hrows == ['11 月班表還沒送出', '2 位同仁的班表等你核准', '1 位同仁下一期班表還沒填完'], '首頁排班管理組顯示總部三種提醒：%s' % hrows)
             at.click(SCH + ':has-text("等你核准")')
             at.wait_for_selector('[data-keep="schedule"] iframe[data-role="store-frame"]')
             check(at.evaluate('location.hash') == '#/schedule/approve', '點「2 位同仁的班表等你核准」→ 網址 #/schedule/approve：%s' % at.evaluate('location.hash'))

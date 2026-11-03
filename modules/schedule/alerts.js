@@ -9,9 +9,13 @@ export { unwrap } from '../attendance/alerts.js';
 
 const periodsOf = (it) => (it && Array.isArray(it.periods) ? it.periods.filter((p) => typeof p === 'string' && p) : []);
 
-/** 總部排班提醒（營運系統 docs/schedule-hq/spec.md §10.2）：data.self＝{due:['YYYY-MM'…], wait:N, missing:N}；缺或形狀不對＝沒有（不顯示） */
+/** 總部排班提醒（營運系統 server/sched-alerts.js）：data.self＝{due:['T02'…], wait:N, missing:N}；缺或形狀不對＝沒有（不顯示）。
+ *  2026-11-03 起總部改四週一期、存檔就生效：due 是期別、意思是「還沒填完」，wait 固定 0；舊版營運系統送 'YYYY-MM' 照舊顯示「N 月班表還沒送出」 */
 const countOf = (v) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
-const monthText = (m) => { const x = /^\d{4}-(\d{2})$/.exec(typeof m === 'string' ? m : ''); return x ? `${Number(x[1])} 月` : ''; };
+const monthText = (m) => {
+  if (typeof m === 'string' && /^T\d{2,}$/.test(m)) return `${m} 班表還沒填完`;
+  const x = /^\d{4}-(\d{2})$/.exec(typeof m === 'string' ? m : ''); return x ? `${Number(x[1])} 月班表還沒送出` : '';
+};
 function selfOf(data) {
   const s = data && typeof data === 'object' && data.self && typeof data.self === 'object' ? data.self : {};
   return { due: Array.isArray(s.due) ? s.due.map(monthText).filter(Boolean) : [], wait: countOf(s.wait), missing: countOf(s.missing) };
@@ -33,9 +37,9 @@ export function toAlerts(data) {
     out.push({ level: 'warn', text: `${(it && it.name) || (it && it.code) || '門市'} ${ps.join('、')} 班表還沒送到 LINE`, view: 'board' });
   }
   const me = selfOf(data);
-  for (const m of me.due) out.push({ level: 'warn', text: `${m}班表還沒送出`, view: 'self' });
+  for (const m of me.due) out.push({ level: 'warn', text: m, view: 'self' });
   if (me.wait > 0) out.push({ level: 'info', text: `${me.wait} 位同仁的班表等你核准`, view: 'approve' });
-  if (me.missing > 0) out.push({ level: 'warn', text: `${me.missing} 位同仁下個月班表還沒送出`, view: 'approve' });
+  if (me.missing > 0) out.push({ level: 'warn', text: `${me.missing} 位同仁下一期班表還沒填完`, view: 'approve' });
   for (const f of fixedOf(data)) out.push({ level: 'warn', text: `${f.name} 有 ${f.missing} 位同仁還沒設固定班別（平日班表空白）`, view: 'fixedstaff' });
   return out;
 }

@@ -50,7 +50,7 @@ await t('self.wait：info，view approve；badge 加上 wait', () => {
   assert.equal(toBadge({ items: [{ periods: ['T01', 'T02'] }], self: { wait: 3, due: ['2026-11'], missing: 5 } }), 5);   // due、missing 不進 badge
 });
 await t('self.missing：warn，view approve', () => {
-  assert.deepEqual(toAlerts({ items: [], self: { due: [], wait: 0, missing: 2 } }), [{ level: 'warn', text: '2 位同仁下個月班表還沒送出', view: 'approve' }]);
+  assert.deepEqual(toAlerts({ items: [], self: { due: [], wait: 0, missing: 2 } }), [{ level: 'warn', text: '2 位同仁下一期班表還沒填完', view: 'approve' }]);
 });
 await t('self 三種並列：門市提醒在前，順序 due、wait、missing', () => {
   const r = toAlerts({ items: [{ name: '光復店', periods: ['T01'] }], self: { due: ['2026-11'], wait: 1, missing: 4 } });
@@ -89,7 +89,7 @@ await t('api.js 轉接後 alerts／badge 正確', async () => {
 await t('api.js 轉接：self 一起帶回', async () => {
   fakeFetch({ ok: true, data: { items: [], asOf: 'x', self: { due: ['2026-11'], wait: 2, missing: 1 } } });
   const a = await mod.alerts(ctx);
-  assert.deepEqual(a.map((x) => x.text), ['11 月班表還沒送出', '2 位同仁的班表等你核准', '1 位同仁下個月班表還沒送出']);
+  assert.deepEqual(a.map((x) => x.text), ['11 月班表還沒送出', '2 位同仁的班表等你核准', '1 位同仁下一期班表還沒填完']);
   assert.equal(await mod.badge(ctx), 2);
 });
 await t('零件數信封 → 空陣列、badge 0', async () => {
@@ -111,3 +111,8 @@ await t('manifest ns／backend＝schedule，requires＝platform.sched', () => {
   assert.deepEqual(manifest.requires, ['platform.sched']);
 });
 console.log(`schedule-alerts: ${n} passed`);
+
+t('總部 2026-11-03 起四週一期、存檔就生效：due 是期別 → 「T02 班表還沒填完」；舊的月份照舊', () => {
+  assert.deepEqual(toAlerts({ items: [], self: { due: ['T02'], wait: 0, missing: 0 } }), [{ level: 'warn', text: 'T02 班表還沒填完', view: 'self' }]);
+  assert.deepEqual(toAlerts({ items: [], self: { due: ['T1', 'TX'], wait: 0, missing: 0 } }), [], '不合格的期別不顯示');
+});
