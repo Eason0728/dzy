@@ -97,7 +97,7 @@ Mac mini 新 app「pnl」（dzy-minikit kit 執行器）
 6. 舊入口退場（Q3）：mala-pnl.github.io 改「已搬到管理系統」頁、舊試算表改唯讀（Q1）、乾淨範本加停用說明（Q4）。
 
 ### 5.2b 切換空窗的推送（GPT-01、03，Fable 2026-11-03 複核）
-- 貨單（mala-purchase pnl_outbox）與費用請款（apv.js）收到 FROZEN／BUSY 都會保留重送（指數退避），損益端以同來源整批比對／`[APV-…]` 冪等，不漏不重。舊端 FROZEN 必須回錯誤碼 `FROZEN`（不可回 BAD_INPUT／LOCKED，那兩個在來源端是終態）。
+- 貨單（mala-purchase pnl_outbox）與費用請款（apv.js）收到 FROZEN／BUSY 都會保留重送（指數退避），損益端以同來源整批比對／`[APV-…]` 冪等，不漏不重。舊端 FROZEN 回錯誤碼 `MOVED`（MiniBridge 既有行為；Fable P0 審查已核對三個來源都視為暫時性、會重送；絕不可改成 BAD_INPUT／LOCKED，那兩個在來源端是終態）。凍結期 `MINI_READ_ACTIONS` 只放 `health`，**不可放 dzyProxy**（閘門只看外層 action，放了 inner 寫入會穿過）；所以切換那一小時管理系統的損益頁會暫時讀不到，事前通知。
 - POS／LINE Pay（push_pnl_pos.py）沒有 outbox，但每天推「當月累計」、損益端相同內容 no-op → 隔天自動補齊。**例外是月底最後一天**（隔天改推新月）→ 切換日不得排在每月最後一天與 1–3 號；切換完成後手動跑一次 `--mtd` 推送當冒煙。
 - 連網在 Node 端做，不佔執行器佇列；佇列只跑 step 本身（< 5 秒），推送不會因為連接器等 45 秒而 BUSY。
 
