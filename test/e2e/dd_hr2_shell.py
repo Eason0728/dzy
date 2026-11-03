@@ -466,7 +466,7 @@ def main():
         if sp.get('wait', 0) > 0:
             want.append(('%d 位同仁的班表等你核准' % sp['wait'], 'approve'))
         if sp.get('missing', 0) > 0:
-            want.append(('%d 位同仁下個月班表還沒送出' % sp['missing'], 'approve'))
+            want.append(('%d 位同仁下一期班表還沒填完' % sp['missing'], 'approve'))
         for f in sd.get('fixed', []):
             want.append(('%s 有 %d 位同仁還沒設固定班別（平日班表空白）' % (f['name'], f['missing']), 'fixedstaff'))
         pg.wait_for_function("() => !document.querySelector('[data-role=\"alert-list\"][data-module=\"schedule\"]')?.textContent.includes('讀取中')", timeout=8000)
