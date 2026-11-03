@@ -86,7 +86,7 @@ Mac mini 新 app「pnl」（dzy-minikit kit 執行器）
 
 ### 5.2 切換（Q5：平日晚上約 1 小時，避開 05:15、06:30；事前通知會計與財務主管）
 0. （GPT-02、06）刪除舊端全部觸發器（每日更新、月初草稿、onChange）、把光復試算表編輯權限收回到只剩擁有者；確認舊端當天 06:30 已跑完。
-1. 舊端設 `FROZEN=1`（只剩讀取），最後一次 export → import → verify → 附件補抓；同時把舊端「今天已跑過的排程」寫進 mini 的排程紀錄（plan C9），mini 不會當晚補跑一次。
+1. 舊端設 `FROZEN=1`（只剩讀取），最後一次 export → import → verify → 附件補抓。（P4 定案：**不匯入排程紀錄**——每日更新本身冪等，mini 開排程後當晚重跑一次當天每日更新，正好當作切換關卡 4；`ledger-import.js` 保留為選用。）
 2. mini app 移除 mirror、開排程。
 3. 改 4 處網址：mala-fortune secret `PNL_PUSH_URL`、purchase `.env`、dzy-platform `.env` `PROXY_URL_PNL`（重啟平台）、schedule-watchdog `PNL_HEALTH_URL`。
 4. 管理系統前端 push（新 modules/pnl）。
@@ -94,7 +94,7 @@ Mac mini 新 app「pnl」（dzy-minikit kit 執行器）
 6. 舊入口退場（Q3）：mala-pnl.github.io 改「已搬到管理系統」頁、舊試算表改唯讀（Q1）、乾淨範本加停用說明（Q4）。
 
 ### 5.2b 切換空窗的推送（GPT-01、03，Fable 2026-11-03 複核）
-- 貨單（mala-purchase pnl_outbox）與費用請款（apv.js）收到 FROZEN／BUSY 都會保留重送（指數退避），損益端以同來源整批比對／`[APV-…]` 冪等，不漏不重。舊端 FROZEN 回錯誤碼 `MOVED`（MiniBridge 既有行為；Fable P0 審查已核對三個來源都視為暫時性、會重送；絕不可改成 BAD_INPUT／LOCKED，那兩個在來源端是終態）。凍結期 `MINI_READ_ACTIONS` 只放 `health`，**不可放 dzyProxy**（閘門只看外層 action，放了 inner 寫入會穿過）；所以切換那一小時管理系統的損益頁會暫時讀不到，事前通知。
+- 貨單（mala-purchase pnl_outbox）與費用請款（apv.js）收到 FROZEN／BUSY 都會保留重送（指數退避），損益端以同來源整批比對／`[APV-…]` 冪等，不漏不重。舊端 FROZEN 回錯誤碼 `MOVED`（MiniBridge 既有行為；Fable P0 審查已核對三個來源都視為暫時性、會重送；絕不可改成 BAD_INPUT／LOCKED，那兩個在來源端是終態）。凍結期 `MINI_READ_ACTIONS` 放 `health,dzyProxy:read`：**不可放整個 dzyProxy**（閘門只看外層 action，放了 inner 寫入會穿過）；`dzyProxy:read` 是損益版閘門的特例，只放行 level=read（檢視者，後端寫入一律擋），切換當晚全量比對要用；副作用是舊端帳號層多一個比對用影子帳號。舊端 api() 在凍結期另外只放行純查詢（擋舊網頁 google.script.run 路徑）。切換那一小時管理系統的損益頁會暫時讀不到。
 - POS／LINE Pay（push_pnl_pos.py）沒有 outbox，但每天推「當月累計」、損益端相同內容 no-op → 隔天自動補齊。**例外是月底最後一天**（隔天改推新月）→ 切換日不得排在每月最後一天與 1–3 號；切換完成後手動跑一次 `--mtd` 推送當冒煙。
 - 連網在 Node 端做，不佔執行器佇列；佇列只跑 step 本身（< 5 秒），推送不會因為連接器等 45 秒而 BUSY。
 

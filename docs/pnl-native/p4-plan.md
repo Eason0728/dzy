@@ -25,7 +25,7 @@
 | B2 | **app.json 改正式模式**：拿掉 mirror、readActions 照正式；`.env.example` 已備。 | dzy-minikit |
 | B3 | **附件一次性搬遷工具** `apps/pnl/tools/migrate-files.js`：讀明細「附件URL」所有雲端硬碟網址 → 向舊端 `__miniFile` 逐檔要（size＋sha256 驗）→ 存成 `files/<store>/<YYYY-MM>/<新id>.<ext>` → 寫 `files/drive-map.jsonl` → 改寫明細欄為 `pnlfile:`（另存原值對照，回退用）。損益 miniBridge 的 `__miniFile` 要能從網址取 ID（`MINI_FILE_COLUMNS` 用「明細.附件URL」）。 | dzy-minikit、mala-pnl-auto |
 | B4 | **全量比對工具** `apps/pnl/tools/compare.js`（C8）：mini 上跑，所有門市 × 月份，舊端（dzyProxy＋同一把金鑰）vs 新端，輸出 JSON lines＋摘要；觀察期每天跑一次（只比切換前月份）。 | dzy-minikit |
-| B5 | **排程紀錄匯入**（C9）：搬家時把舊端當天已跑的每日更新寫成 `gas-import` done，mini 當晚不重跑；寫進搬遷步驟。 | dzy-minikit |
+| B5 | **排程紀錄匯入**（C9，**選用**）：`ledger-import.js` 可把舊端當天已跑的每日更新寫成 `gas-import` done；P4 定案不用——當晚讓 mini 重跑一次當天每日更新當關卡 4（冪等，P4 審查實測不雙寫、保留人工後備）。 | dzy-minikit |
 | B6 | **舊端停用模式** T21b（`PNL_DECOMMISSIONED=1`，含 google.script.run 路徑）＋ mala-fortune／schedule-watchdog 網址改讀設定（T22）＋舊網址「已搬家」頁（T23）。 | mala-pnl-auto、mala-fortune、mala-pnl.github.io |
 | B7 | **P5 手冊** DEPLOY／CUTOVER／ROLLBACK（apps/pnl/），照現金帳手冊格式；退回在測試資料演練一次。 | dzy-minikit |
 
