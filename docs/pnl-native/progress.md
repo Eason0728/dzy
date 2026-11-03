@@ -38,6 +38,7 @@
 ## 合併 main 後待做（P1 起累積）
 - dzy-minikit apps/pnl/gas/ 目前是從損益分支手動複製（清單已補 3 檔）；損益合 main＋push 後要正式跑一次 `kit/bin/sync-gas.sh pnl` 覆蓋。
 - 附件目錄 `<dataDir>/files` 的備份（kit 每日備份只含 app.db）：**P2 未做**，移到 P5 部署手冊（照 apv-backup tar 做法）。
+- 切換冒煙清單要加：`/pnl/health` 不得有 `pnl_jobs_off`（夜審 #1）、附件上限約 2.9MB（代轉 4MB）。
 - 切換時 .env 要設 `PNL_JOBS_ON=1`、`NOTIFY_INBOX_URL`、`NOTIFY_INBOX_TOKEN`（jobs.js 用）；影子期不設。
 - 已修（P1 審查）：gasshim getLastRow 尾端空白列、MiniFiles 回滾。
 - P2 前：selfCheck 加 runtime 欄；getLastColumn 尾端空格（既有行為，評估）；MiniFiles.remove 不進回滾日誌（損益未用）；adminCreateLastMonthDraft 在 mini 上連接器失敗會每次堆一列 log（P2 兩段式後解決）；mala-pnl-auto 自己的 mock 測試清單補載入 runtime／attachLocal／adminMaint。
