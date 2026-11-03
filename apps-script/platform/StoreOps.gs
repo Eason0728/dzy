@@ -867,19 +867,26 @@ function storeHomeFn_() {
 
 /**
  * 總部排班身分（ident.self，2026-10-25 docs/schedule-hq/spec.md §3.1）：本人 staff_clock 中 state=confirmed、roster_active 不是 FALSE、
- * 打卡店別（store_code）＝'hq' 的對照；不論 role、不受試點限制。approval＝有人核他工時（attNeedOf_ 'hours' 不是 null）；
+ * 打卡店別（store_code）＝'hq' 的對照；不論 role、不受試點限制。個人例外的總部同仁另列例外那家的對照（多 home_clock＝'hq'，2026-11-03）。approval＝有人核他工時（attNeedOf_ 'hours' 不是 null）；
  * false（總監、執行長以上）→ 營運系統那邊送出就生效。admin 沒有同仁編號 → []。
  */
 function storeSelfClocks_(p, org) {
   if (!p || !p.emp || !clkSheetsReady_()) return [];
   var approval = attNeedOf_(p, org, 'hours') !== null;
   var seen = {}, out = [];
+  // 個人例外（STORE_NOT_SUPPORT_EX）的總部同仁：在別家打卡、班表在總部自填（2026-11-03 Eason：財務部吳佳宜）→ 那家的帳號也列，多 home_clock＝hq；
+  // 營運系統要另外設 sch_home（server/tools/set-sched-home.js）才會用，沒設＝不進任何店
+  var exClocks = storeIsHqTarget_(p, org) ? (STORE_NOT_SUPPORT_EX[stfStr_(p.emp)] || []) : [];
   clkMaps_().forEach(function (m) {
-    if (m.emp_no !== p.emp || m.state !== 'confirmed' || m.roster_active === 'FALSE' || m.store_code !== STORE_SELF_CLOCK) return;
+    if (m.emp_no !== p.emp || m.state !== 'confirmed' || m.roster_active === 'FALSE') return;
+    var ex = m.store_code !== STORE_SELF_CLOCK && exClocks.indexOf(stfStr_(m.store_code)) !== -1;
+    if (m.store_code !== STORE_SELF_CLOCK && !ex) return;
     var k = m.store_code + '|' + m.emp_id;
     if (seen[k]) return;
     seen[k] = true;
-    out.push({ clock: m.store_code, emp_id: m.emp_id, approval: approval });
+    var o = { clock: m.store_code, emp_id: m.emp_id, approval: approval };
+    if (ex) o.home_clock = STORE_SELF_CLOCK;
+    out.push(o);
   });
   out.sort(function (a, b) { return a.emp_id < b.emp_id ? -1 : (a.emp_id > b.emp_id ? 1 : 0); });
   return out;

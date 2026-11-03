@@ -499,6 +499,11 @@ function setup() {
     ok(rows.every((r) => r && r.home_tag === '總部' && r.home_clock === 'hq' && r.support === undefined), '7-2g ★例外帳號帶 home_tag 總部＋home_clock hq', rows);
     const others = app.ident('DZY220').att.people.filter((x) => x.sub !== 'DZY222');
     ok(others.length > 0 && others.every((x) => x.home_tag === undefined && x.home_clock === undefined), '7-2g 其他帳號沒有 home_tag／home_clock'); }
+  // 7-2h 例外帳號列進本人 ident.self、帶 home_clock hq（2026-11-03 Eason：吳佳宜改總部自填排班）；沒例外的人 self 只有 hq
+  { const self = app.ident('DZY222').self || [];
+    ok(self.some((x) => x.clock === 'mztgf' && x.emp_id === 'MZTGF222' && x.home_clock === 'hq'), '7-2h ★例外帳號進 self、帶 home_clock hq', self);
+    ok(self.every((x) => x.clock === 'hq' ? x.home_clock === undefined : x.home_clock === 'hq'), '7-2h hq 帳號沒有 home_clock', self);
+    ok((app.ident('DZY231').self || []).every((x) => x.clock === 'hq' && x.home_clock === undefined), '7-2h 沒例外的人 self 只有 hq'); }
   // 7-2e 試點沒含總部時：例外帳號的打卡店在試點，人資主管仍核得到（2026-10-29 審查低 3）
   app.props.STORE_SSO_UNITS = PILOT.split(',').filter((u) => u !== 'dzy-hq').join(','); sb.permActingReset_();
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222') && !has(app.H('DZY231'), 'mztgf:DZY222'), '7-2e ★試點沒含總部：例外帳號人資主管仍核得到、店長仍沒有');
