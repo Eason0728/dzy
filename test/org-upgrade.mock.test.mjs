@@ -1124,7 +1124,7 @@ const bakNames = (app) => Object.keys(app.sheets).filter((k) => /^(org_bak|clk_b
   ok(!pendingOf(amJS.token).includes(pSm.emp) && !pendingOf(amJS.token).includes(pPt.emp), '15 ★區經理不能審別店（別品牌）的店長／同仁');
   ok(!pendingOf(smGF.token).includes(pAm.emp) && !pendingOf(smGF.token).includes(pSm.emp), '15 ★店長不能審區經理、也不能審同級店長');
   ok(pendingOf(smGF.token).includes(pPt.emp), '15 店長照舊審同店計時');
-  ok(pendingOf(osv.token).includes(pAm.emp) && pendingOf(osv.token).includes(pSm.emp), '15 品牌辦公室（區督導）審區經理、店長');
+  ok(!pendingOf(osv.token).includes(pAm.emp) && pendingOf(osv.token).includes(pSm.emp), '15 區督導審店長；區經理只給總監（2026-11-03 同一層）');
   ok(!pendingOf(amGF.token).includes(pAm.emp), '15 ★區經理不能審同級區經理');
   ok(pendingOf(rdd.token).includes(pFm.emp) && pendingOf(rdd.token).includes(pCkPt.emp), '15 廚藝總監審廠長、央廚計時');
   ok(!pendingOf(fm.token).includes(pRdd.emp) && !pendingOf(fm.token).includes(pFm.emp) && pendingOf(fm.token).includes(pCkPt.emp), '15 ★廠長不能審廚藝總監／同級廠長；照舊審央廚計時');

@@ -330,7 +330,7 @@ function setup() {
   const H = app.H('DZY201'), R = app.R('DZY201');
   ok(['mztlzl:DZY202', 'mztlzl:DZY203', 'mztlzl:DZY204', 'mztlzl:DZY206'].every((x) => has(H, x)), '3 ★核定工時：六張犁全店（含區經理工時，同店長）', H);
   ok(['mztlzl:DZY202', 'mztlzl:DZY203', 'mztlzl:DZY204'].every((x) => has(R, x)), '3 ★申請：六張犁計時正職', R);
-  ok(has(R, 'mztlzl:DZY206') && has(R, 'mztgf:DZY231'), '3 區經理、各店店長的申請本來就由督導（主要身分）核，不受兼任影響', R);
+  ok(!has(R, 'mztlzl:DZY206') && has(R, 'mztgf:DZY231'), '3 各店店長的申請本來就由督導（主要身分）核、區經理只給總監（2026-11-03），不受兼任影響', R);
   // 2026-11-03 Eason：辦公室同仁兼任店長，也可核自己在兼任店的工時（比照 10-30）；自己原本的帳號與所有申請照舊不核
   ok(has(H, 'mztlzl:DZY201') && !has(H, 'hq:DZY201'), '3 ★可核自己在兼任店（六張犁）的工時，不核自己原本的帳號', H);
   ok(!R.some((x) => x.indexOf(':DZY201') !== -1), '3 ★自己的申請照舊不能核（含六張犁帳號）', R);

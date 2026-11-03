@@ -22,6 +22,10 @@ var REG_NAME_MAX = 12;
 var REG_CODE_RE = /^r-[a-z0-9]+(-[a-z0-9]+)*$/;
 // 限區的品牌辦公室職稱：區督導 osv；已停用的 oam 若還有人掛著，同 osv 處理（往拒絕方向）
 var REG_LIMITED_TITLES = ['osv', 'oam'];
+// 區域負責人可選的職稱（2026-11-03 執行長：區經理與督導同一層，都能當區域負責人）：
+// 品牌辦公室的區督導 osv；門市的區經理 am（區經理照 10 月一級主管會議歸屬門市，不搬到品牌辦公室）
+var REG_HEAD_OFFICE_TITLES = ['osv'];
+var REG_HEAD_STORE_TITLES = ['am'];
 var REG_MSG = {
   NO_PERM: '沒有權限',
   ADMIN_ONLY: '只有系統管理者可以切換依區域審核',
@@ -35,7 +39,7 @@ var REG_MSG = {
   BRAND_LOCKED: '區域建立後不能改品牌，請停用後另建',
   BAD_STORE: '門市不正確（必須是該品牌啟用中的門市，不含中央工廠）：',
   STORE_TAKEN: '這家門市已經在別的區域：',
-  BAD_SUPERVISOR: '督導必須是在職、職稱區督導、且在該品牌的品牌辦公室'
+  BAD_SUPERVISOR: '負責人必須是在職的區督導（該品牌的品牌辦公室）或區經理（該品牌的門市）'
 };
 
 // ============================================================
@@ -61,11 +65,23 @@ function regStoreOk_(org, unitCode, brand) {
 function regSupervisorOk_(org, values, brand) {
   if (!values) return false;
   if (regStr_(values[STF_COL.status]) !== 'active') return false;
-  if (regStr_(values[STF_COL.title]) !== 'osv') return false;
-  var t = org.title.osv;
+  var tc = regStr_(values[STF_COL.title]);
+  var t = org.title[tc];
   if (!t || !t.active) return false;
   var u = org.unit[regStr_(values[STF_COL.unit])];
-  return !!u && u.active && u.ladder === 'office' && u.parent === brand;
+  if (!u || !u.active || u.parent !== brand) return false;
+  if (REG_HEAD_OFFICE_TITLES.indexOf(tc) !== -1) return u.ladder === 'office';
+  if (REG_HEAD_STORE_TITLES.indexOf(tc) !== -1) return (u.ladder || 'store') === 'store' && u.code !== 'ck';
+  return false;
+}
+
+/** 這家店所屬（active）區域的負責人是不是 emp（失效的負責人已在 regionIndex_ 清成 ''）。純函式；idx 為 null＝false */
+function regionIsHead_(idx, storeUnit, emp) {
+  var e = stfNormEmp_(emp);
+  if (!idx || !e) return false;
+  var code = (idx.byStore || {})[regStr_(storeUnit)];
+  var reg = code ? (idx.byRegion || {})[code] : null;
+  return !!reg && reg.supervisorEmp === e;
 }
 
 /** staffRows（stfAllRows_ 的 {row, values} 或 values 陣列）→ {emp: values} */
@@ -216,7 +232,9 @@ function regionDirectory_(values, org, staffRows, idx) {
   if (!values || regStr_(values[STF_COL.status]) !== 'active') return [];
   var title = regStr_(values[STF_COL.title]);
   var unit = org.unit[regStr_(values[STF_COL.unit])];
-  if (!unit || !unit.active || unit.ladder !== 'office') return [];
+  // 區經理當區域負責人（2026-11-03）：單位在門市，也有「我的區域」（只列他負責的區）
+  var storeHead = !!unit && REG_HEAD_STORE_TITLES.indexOf(title) !== -1 && (unit.ladder || 'store') === 'store';
+  if (!unit || !unit.active || (unit.ladder !== 'office' && !storeHead)) return [];
   var brand = unit.parent;
   var emp = stfNormEmp_(values[STF_COL.emp_no]);
   var people = function (storeCode) {
@@ -232,7 +250,7 @@ function regionDirectory_(values, org, staffRows, idx) {
   var order = function (s) { return org.unit[s] ? org.unit[s].order : 0; };
   var byOrder = function (a, b) { return order(a) - order(b); };
   var codes;
-  if (title === 'osv') {
+  if (title === 'osv' || storeHead) {
     codes = (idx.bySupervisor[emp] || []).filter(function (c) { return idx.byRegion[c] && idx.byRegion[c].brand === brand; });
   } else if (title === 'odir') {
     codes = Object.keys(idx.byRegion).filter(function (c) { return idx.byRegion[c].brand === brand; });
@@ -298,14 +316,16 @@ function regRegionView_(g) {
     active: g.active, updated_at: g.updated_at, updated_by: g.updated_by };
 }
 
-/** 督導候選人：在職、職稱 osv、單位是啟用中的品牌辦公室（只回 emp_no、姓名、單位、品牌） */
+/** 負責人候選人：在職的區督導（品牌辦公室）或區經理（門市）（只回 emp_no、姓名、職稱、單位、品牌） */
 function regCandidates_(org, staffRows) {
   return (staffRows || []).map(regRowVals_).filter(function (v) {
     var u = org.unit[regStr_(v[STF_COL.unit])];
     return !!u && regSupervisorOk_(org, v, u.parent);
   }).map(function (v) {
     var u = org.unit[regStr_(v[STF_COL.unit])];
-    return { emp_no: stfNormEmp_(v[STF_COL.emp_no]), name: regStr_(v[STF_COL.name]), unit: u.code, unit_name: u.name, brand: u.parent };
+    var tc = regStr_(v[STF_COL.title]);
+    return { emp_no: stfNormEmp_(v[STF_COL.emp_no]), name: regStr_(v[STF_COL.name]), title: tc, title_name: org.title[tc] ? org.title[tc].name : '',
+      unit: u.code, unit_name: u.name, brand: u.parent };
   });
 }
 

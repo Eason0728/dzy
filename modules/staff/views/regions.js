@@ -78,8 +78,8 @@ export function mountRegions(el, ctx) {
     if (!isNew && region.active && (region.store_dup || []).length) tags.push('<span class="tag tag-warn" data-role="tag-store-dup">有重複劃入的門市</span>');
     const supSel = `<select class="input" id="rg-sup-${k}" data-f="supervisor">
         <option value="">（暫時沒有督導）</option>
-        ${sup.list.map((c) => `<option value="${esc(c.emp_no)}"${c.emp_no === region.supervisor ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}
-      </select>${sup.stale ? '<div class="field-hint">原本的督導已離職或調職，請重選</div>' : ''}${sup.list.length ? '' : '<div class="field-hint">這個品牌目前沒有在職的區督導</div>'}`;
+        ${sup.list.map((c) => `<option value="${esc(c.emp_no)}"${c.emp_no === region.supervisor ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}
+      </select>${sup.stale ? '<div class="field-hint">原本的督導已離職或調職，請重選</div>' : ''}${sup.list.length ? '' : '<div class="field-hint">這個品牌目前沒有在職的區督導或區經理</div>'}`;
     const boxes = opts.length ? opts.map((o, i) => `<div class="checkbox-row"><input type="checkbox" id="rg-st-${k}-${i}" data-f="store" value="${esc(o.unit)}"${o.checked ? ' checked' : ''}${o.disabled ? ' disabled' : ''}>
         <label for="rg-st-${k}-${i}">${esc(o.unit_name)}${o.taken_by ? `　<span class="text-muted">已在 ${esc(o.taken_by)}</span>` : ''}</label></div>`).join('')
       : '<p class="text-muted">這個品牌沒有可以劃區的門市</p>';
@@ -87,7 +87,7 @@ export function mountRegions(el, ctx) {
       <div class="card-row row-wrap"><div class="card-title">${esc(isNew ? '新區域' : region.name)}</div><span>${tags.join(' ')}</span></div>
       <div class="form-grid-2">
         <div class="field"><label class="field-label" for="rg-name-${k}">區域名稱（最多 12 字）</label><input class="input" id="rg-name-${k}" data-f="name" maxlength="12" value="${esc(region.name || '')}"></div>
-        <div class="field"><label class="field-label" for="rg-sup-${k}">督導</label>${supSel}</div>
+        <div class="field"><label class="field-label" for="rg-sup-${k}">負責人（督導或區經理）</label>${supSel}</div>
       </div>
       <div class="field"><span class="field-label">包含的門市</span>${boxes}</div>
       ${isNew ? '' : `<div class="checkbox-row"><input type="checkbox" id="rg-off-${k}" data-f="inactive"${region.active ? '' : ' checked'}><label for="rg-off-${k}">停用這個區域</label></div>`}
