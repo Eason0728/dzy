@@ -1867,14 +1867,23 @@ function clockDailyApply_(today) {
   });
 }
 
-/** 打卡單位在職者沒有 home 對照（confirmed）、也沒有進行中的 add 單 */
+// 2026-11-04 Eason：「總監以上都是免打卡」——主要職稱是這幾個的人不列「沒有主店打卡編號」（只影響提醒、篩選、補建按鈕，不停用既有打卡帳號）
+var CLK_NO_CLOCK_TITLES = ['hm', 'odir', 'rdd', 'ceo', 'gm', 'chair'];
+
+/** 打卡單位在職者沒有 home 對照（confirmed）、也沒有進行中的 add 單；免打卡職稱不算 */
 function clkNoHomeMap_(staffAll, maps, jobs, todayText) {
   return staffAll.filter(function (s) {
     var status = clkStaffStatus_(s);
     if (status === 'disabled' || (s.last && s.last < todayText)) return false;
+    if (CLK_NO_CLOCK_TITLES.indexOf(stfStr_(s.values[STF_COL.title])) !== -1) return false;
     var store = clkStoreOfUnit_(clkStaffUnit_(s));
     if (!store) return false;
-    var hasHome = maps.some(function (m) { return m.emp_no === s.emp && m.store_code === store.store_code && m.state === 'confirmed' && m.role === 'home'; });
+    // 個人例外（StoreOps.gs STORE_NOT_SUPPORT_EX）指定的打卡店也算主店：例 DZY027 在央廚打卡、薪水算總部
+    var exStores = (typeof STORE_NOT_SUPPORT_EX !== 'undefined' && STORE_NOT_SUPPORT_EX[s.emp]) || [];
+    var hasHome = maps.some(function (m) {
+      if (m.emp_no !== s.emp || m.state !== 'confirmed') return false;
+      return (m.store_code === store.store_code && m.role === 'home') || exStores.indexOf(m.store_code) !== -1;
+    });
     if (hasHome) return false;
     return !jobs.some(function (j) { return j.kind === 'add' && j.emp_no === s.emp && j.store_code === store.store_code && CLK_OPEN_STATES.indexOf(j.state) !== -1; });
   });
