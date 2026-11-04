@@ -40,7 +40,9 @@ export const READ_ACTIONS = {
     // 薪酬管理差異清單（2026-10-28）：依薪酬門市列同仁名單，純讀取；帶入／停用走 payroll_master_set（已在 WRITE_ACTIONS.payroll）
     'payrollStaffRoster',
     // AI 小幫手管理（2026-11-02，docs/ai-helper/spec.md §8）：純讀取；aihSetup／aihKbSave／aihPendingSet／aihPauseSet 不列（寫入，試跑會攔）
-    'aihKbList', 'aihKbHist', 'aihPendingList', 'aihUsage'],
+    'aihKbList', 'aihKbHist', 'aihPendingList', 'aihUsage',
+    // 問答紀錄清單（2026-11-05）：純讀取
+    'aihLogList'],
   audit: ['getAll'],
   dorm: ['rooms', 'list', 'contract', 'handover'],
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）

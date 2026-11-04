@@ -266,19 +266,19 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
 (() => {
   const app = scene();
   const { sb } = app;
-  const calls = [['aihKbList', {}], ['aihKbSave', { question: 'q', answer: 'a' }], ['aihKbImport', {}], ['aihKbHist', {}], ['aihPendingList', {}], ['aihPendingSet', { id: 'x', status: 'ignored' }], ['aihUsage', {}], ['aihPauseSet', { paused: true }]];
+  const calls = [['aihKbList', {}], ['aihKbSave', { question: 'q', answer: 'a' }], ['aihKbImport', {}], ['aihKbHist', {}], ['aihPendingList', {}], ['aihPendingSet', { id: 'x', status: 'ignored' }], ['aihUsage', {}], ['aihLogList', {}], ['aihPauseSet', { paused: true }]];
   for (const [who, tok] of [['同仁', app.aTok], ['會計', app.accTok]]) {
-    ok(calls.every(([a, p]) => { const r = post(sb, a, p, tok); return r.ok === false && r.error === 'forbidden'; }), '權限 ' + who + ' 呼叫 8 支管理 action 全部 forbidden', calls.map(([a, p]) => post(sb, a, p, tok).error));
+    ok(calls.every(([a, p]) => { const r = post(sb, a, p, tok); return r.ok === false && r.error === 'forbidden'; }), '權限 ' + who + ' 呼叫 9 支管理 action 全部 forbidden', calls.map(([a, p]) => post(sb, a, p, tok).error));
   }
   ok(calls.every(([a, p]) => post(sb, a, p, '').ok === false), '權限 沒 token 全部拒絕');
   ok(post(sb, 'aihKbList', {}, app.admin).ok && post(sb, 'aihKbList', {}, app.helperTok).ok, '權限 admin（*）與持 platform.aihelp 的角色可用');
   ok(sb.PERM_GRANTABLE.indexOf('platform.aihelp') === sb.PERM_GRANTABLE.length - 1 && sb.PERM_LOCKED.indexOf('platform.aihelp') !== -1, '權限 platform.aihelp 進 PERM_GRANTABLE（最後一碼）與 PERM_LOCKED');
   ok(sb.permName_('platform.aihelp') === 'AI 小幫手管理', '權限 中文名「AI 小幫手管理」');
   ok(sb.usrRoleIsSuper_ && sb.usrRoleIsSuper_('helper') === true, '權限 含鎖碼的角色屬高權限（只有 admin 能指派）');
-  const names = ['aihSetup', 'aihKbList', 'aihKbSave', 'aihKbImport', 'aihKbHist', 'aihPendingList', 'aihPendingSet', 'aihUsage', 'aihPauseSet'];
-  ok(names.every((n) => CODE_GS.indexOf("'" + n + "'") !== -1 && CODE_GS.indexOf("case '" + n + "':") !== -1), '權限 9 支管理 action 都在 Code.gs 白名單與分派');
-  const rd = ['aihKbList', 'aihKbHist', 'aihPendingList', 'aihUsage'];
-  ok(rd.every((n) => READ_ACTIONS.platform.indexOf(n) !== -1) && ['aihSetup', 'aihKbSave', 'aihKbImport', 'aihPendingSet', 'aihPauseSet'].every((n) => READ_ACTIONS.platform.indexOf(n) === -1), '權限 dryrun.js READ_ACTIONS：4 支讀取在、5 支寫入不在（試跑會攔）');
+  const names = ['aihSetup', 'aihKbList', 'aihKbSave', 'aihKbImport', 'aihKbHist', 'aihPendingList', 'aihPendingSet', 'aihUsage', 'aihLogList', 'aihPauseSet'];
+  ok(names.every((n) => CODE_GS.indexOf("'" + n + "'") !== -1 && CODE_GS.indexOf("case '" + n + "':") !== -1), '權限 10 支管理 action 都在 Code.gs 白名單與分派');
+  const rd = ['aihKbList', 'aihKbHist', 'aihPendingList', 'aihUsage', 'aihLogList'];
+  ok(rd.every((n) => READ_ACTIONS.platform.indexOf(n) !== -1) && ['aihSetup', 'aihKbSave', 'aihKbImport', 'aihPendingSet', 'aihPauseSet'].every((n) => READ_ACTIONS.platform.indexOf(n) === -1), '權限 dryrun.js READ_ACTIONS：5 支讀取在、5 支寫入不在（試跑會攔）');
 })();
 
 // ============================================================
@@ -542,6 +542,47 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
 })();
 
 // ============================================================
+// 問答紀錄清單 aihLogList（2026-11-05）：月份、新的在前、分頁、不回 uid／費用
+// ============================================================
+(() => {
+  const app = scene();
+  const { sb } = app;
+  const adm = app.admin;
+  ok(post(sb, 'aihLogList', { month: '2026-11' }, adm).data.total === 0 && post(sb, 'aihLogList', {}, adm).data.month === '2026-11', 'LL 空表 total 0；沒給月份＝台北本月（沙盒 2026-11-02）');
+  const rows = [
+    logRow({ id: LOGID(1), ts: '2026-11-01T01:00:00Z', q: '第一題', kind: 'answered', m: 'me', v: 'profile' }),
+    logRow({ id: LOGID(2), ts: '2026-11-01T02:00:00Z', q: '第二題', kind: 'unknown', answer: '這題我還不會', kb_ids: '' }),
+    logRow({ id: LOGID(3), ts: '2026-11-02T01:00:00Z', q: '同時間 A', answer: 'x'.repeat(1800) }),
+    logRow({ id: LOGID(4), ts: '2026-11-02T01:00:00Z', q: '同時間 B <b>粗</b>' }),
+    logRow({ id: LOGID(5), ts: '2026-10-31T15:59:59Z', q: '十月的' }),     // 台北 10/31 23:59:59
+    logRow({ id: LOGID(6), ts: '2026-11-30T16:30:00Z', q: '十二月的' })    // 台北 12/01
+  ];
+  rows.forEach((l) => { if (!sb.aihLogAppend_(l).ok) throw new Error('log 寫入失敗'); });
+  sb.aihFeedback_('u900', LOGID(1), false);
+  const r = post(sb, 'aihLogList', { month: '2026-11' }, adm);
+  ok(r.ok && r.data.total === 4 && eq(r.data.items.map((x) => x.id), [LOGID(4), LOGID(3), LOGID(2), LOGID(1)]) && r.data.next === '', 'LL 11 月 4 筆、新的在前（同時間依 id 由大到小）、沒有下一頁', r.data.items && r.data.items.map((x) => x.id));
+  const keys = r.data.items.map((x) => Object.keys(x).sort().join(','));
+  ok(keys.every((k) => k === 'answer,feedback,id,kb_ids,kind,m,q,ts,v'), 'LL 每筆只回 id ts m v q kind answer kb_ids feedback（不回 uid、conv、tok、usd）', keys[0]);
+  ok(!JSON.stringify(r.data).includes('u900'), 'LL 回應裡沒有 uid');
+  const one = r.data.items.find((x) => x.id === LOGID(1));
+  ok(one.feedback === 'down' && one.m === 'me' && one.v === 'profile' && one.kind === 'answered' && one.kb_ids === 'kb0001' && one.ts === '2026-11-01T01:00:00.000Z', 'LL 欄位：👎、頁面、kind、kb_ids、ts（ISO）', one);
+  ok(r.data.items.find((x) => x.id === LOGID(3)).answer.length === 1800 && r.data.items.find((x) => x.id === LOGID(4)).q === '同時間 B <b>粗</b>', 'LL answer 回全文、q 原樣（純文字由前端處理）');
+  const p1 = post(sb, 'aihLogList', { month: '2026-11', limit: 3 }, adm);
+  ok(p1.data.items.length === 3 && p1.data.total === 4 && p1.data.next === Date.parse('2026-11-01T02:00:00Z') + ':' + LOGID(2), 'LL limit 3 → 3 筆＋next', p1.data.next);
+  const p2 = post(sb, 'aihLogList', { month: '2026-11', limit: 3, before: p1.data.next }, adm);
+  ok(eq(p2.data.items.map((x) => x.id), [LOGID(1)]) && p2.data.next === '', 'LL 帶 next 拿到剩下 1 筆、沒有下一頁', p2.data);
+  const q1 = post(sb, 'aihLogList', { month: '2026-11', limit: 1 }, adm);
+  const q2 = post(sb, 'aihLogList', { month: '2026-11', limit: 1, before: q1.data.next }, adm);
+  ok(q1.data.items[0].id === LOGID(4) && q2.data.items[0].id === LOGID(3), 'LL 同一毫秒的兩筆分頁不漏不重', [q1.data.next, q2.data.items.map((x) => x.id)]);
+  ok(post(sb, 'aihLogList', { month: '2026-10' }, adm).data.items[0].q === '十月的' && post(sb, 'aihLogList', { month: '2026-12' }, adm).data.items[0].q === '十二月的', 'LL 月份以台北時間算');
+  ok(['2026-13', '2026/11', 'x'].every((m) => post(sb, 'aihLogList', { month: m }, adm).error === 'bad_request'), 'LL 月份格式錯 → bad_request');
+  ok([0, 201, 1.5, 'abc', -1].every((n) => post(sb, 'aihLogList', { month: '2026-11', limit: n }, adm).error === 'bad_request') && post(sb, 'aihLogList', { month: '2026-11', limit: 200 }, adm).ok, 'LL limit 只收 1–200 的整數');
+  ok(['abc', '123', ':aih_x', '1:'].every((b) => post(sb, 'aihLogList', { month: '2026-11', before: b }, adm).error === 'bad_request'), 'LL before 格式錯 → bad_request');
+  ok(post(sb, 'aihLogList', { month: '2026-11' }, app.aTok).error === 'forbidden' && post(sb, 'aihLogList', { month: '2026-11' }, app.accTok).error === 'forbidden' && post(sb, 'aihLogList', {}, '').ok === false, 'LL 沒有 platform.aihelp → forbidden、沒 token 拒絕');
+  ok(post(sb, 'aihLogList', { month: '2026-11' }, app.helperTok).data.total === 4, 'LL 持 platform.aihelp 的角色可讀');
+})();
+
+// ============================================================
 // T1-3 aiHelpAuthorize_：staff／系統帳／停用帳號、鍵白名單
 // ============================================================
 (() => {
@@ -792,7 +833,7 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   ok(NODE_FNS.length === 9 && NODE_FNS.every((n) => CODE_GS.indexOf(n) === -1), '5 Code.gs 全文不出現 node 專用 9 支函式的名字', NODE_FNS.filter((n) => CODE_GS.indexOf(n) !== -1));
   const { sb } = load(freshSeed(HASHER));
   ok(NODE_FNS.every((n) => typeof sb[n] === 'function'), '5 9 支都是 sandbox 全域函式（node 可直接呼叫）');
-  ok(!sb.CODE_ALLOWED_ACTIONS.some((a) => NODE_FNS.indexOf(a) !== -1) && sb.CODE_ALLOWED_ACTIONS.filter((a) => /^aih/.test(a)).length === 9, '5 白名單裡沒有 9 支；aih* 管理 action 剛好 9 支（含 aihKbImport）');
+  ok(!sb.CODE_ALLOWED_ACTIONS.some((a) => NODE_FNS.indexOf(a) !== -1) && sb.CODE_ALLOWED_ACTIONS.filter((a) => /^aih/.test(a)).length === 10, '5 白名單裡沒有 9 支；aih* 管理 action 剛好 10 支（含 aihKbImport、aihLogList）');
   // doPost 打得到 7 支名字也一定被拒
   const adm = (() => { const a = load(freshSeed(HASHER)); a.sb.setupStaff(); return [a, adminToken(a.sb)]; })();
   ok(NODE_FNS.every((n) => post(adm[0].sb, n, { token: adm[1] }, adm[1]).error === '不支援的操作'), '5 用 doPost 打這 9 個名字 → 不支援的操作');

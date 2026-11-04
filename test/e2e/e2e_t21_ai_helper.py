@@ -10,7 +10,8 @@
   ⑤ 管理頁：待回答 AI 擬答 → 上架 → 待回答消失 → 再問答得出；略過；知識庫搜尋／編輯／下架／歷史回到舊版本
   ⑥ 暫停按鈕、初始化按鈕、匯入初始知識庫；試跑模式寫入鈕鎖住
   ⑦ 375 寬與 320 寬無橫向捲軸、側欄全螢幕
-截圖（1280 與 375 側欄打開）存到 AIH_SHOT_DIR（沒給就用暫存資料夾，不動 repo 裡的 shots）。
+  ⑧ 用量頁「問答紀錄」：新的在前、頁面名稱對照、結果與 👎、問題純文字（含 <img onerror> 不執行）、看全文、再顯示更多、換月份重讀
+截圖（1280 與 375 側欄打開、用量頁問答紀錄 1280 與 375）存到 AIH_SHOT_DIR（沒給就用暫存資料夾，不動 repo 裡的 shots）。
 """
 import json
 import os
@@ -113,6 +114,43 @@ class Mock21(MockBackend):
             return {'ok': True, 'data': {'question': p['q'], 'answer': 'AI 擬答：請找人資開權限。', 'who': '人資', 'm': p['m'], 'v': p['v']}}
         return {'ok': False, 'code': 'bad_input', 'error': 'x'}
 
+    # ---- 問答紀錄（假資料 60 題，11 月；10 月 1 題）----
+    LOG_QS = ['怎麼改密碼', '加班要找誰核', '年終獎金怎麼算', '<img src=x onerror="window.__xss=1">這是什麼', '請假單送出後在哪裡看', '盤點抽查怎麼填']
+
+    def fake_logs(self):
+        if getattr(self, '_logs', None) is None:
+            pages = [('me', 'profile'), ('approvals', 'mine'), ('', ''), ('ai-help', 'usage'), ('approvals', 'submit'), ('audit-stock', 'fill')]
+            out = []
+            for i in range(60):
+                day, minute = 2 - (i // 40), 59 - (i % 40)
+                m, v = pages[i % len(pages)]
+                kind = 'unknown' if i % 5 == 2 else 'answered'
+                ans = '這題我還不會' if kind == 'unknown' else ('到「我的資料」按「修改密碼」。' + '先輸入舊密碼，再輸入兩次新密碼，最後按儲存；忘記舊密碼請用 LINE 重設。' * (3 if i == 0 else 1))
+                out.append({'id': 'aih_202611%02d10%02d00_%04x' % (day, minute, i), 'ts': '2026-11-%02dT02:%02d:00.000Z' % (day, minute), 'm': m, 'v': v,
+                            'q': self.LOG_QS[i % len(self.LOG_QS)] + ('' if i < 6 else '（第 %d 題）' % (i + 1)), 'kind': kind, 'answer': ans,
+                            'kb_ids': 'kb0001' if kind == 'answered' else '', 'feedback': 'down' if i in (1, 7) else ('up' if i == 4 else '')})
+            out.append({'id': 'aih_20261015100000_aaaa', 'ts': '2026-10-15T02:00:00.000Z', 'm': '', 'v': '', 'q': '十月的問題', 'kind': 'answered', 'answer': '十月', 'kb_ids': '', 'feedback': ''})
+            self._logs = out
+        return self._logs
+
+    def log_list(self, p):
+        # 瀏覽器帶的是真實本月：第一次問的月份＝11 月那 60 題，其他月份＝10 月那 1 題（不寫死今天）
+        month = p.get('month') or ''
+        if getattr(self, 'log_month', None) is None:
+            self.log_month = month
+        want = '2026-11' if month == self.log_month else '2026-10'
+        rows = [x for x in self.fake_logs() if x['ts'][:7] == want]
+        rows.sort(key=lambda x: (x['ts'], x['id']), reverse=True)
+        total = len(rows)
+        if p.get('before'):
+            ms, _, bid = p['before'].partition(':')
+            idx = next((i for i, x in enumerate(rows) if x['id'] == bid), None)
+            rows = rows[idx + 1:] if idx is not None else []
+        lim = int(p.get('limit') or 50)
+        page = rows[:lim]
+        nxt = ('0:' + page[-1]['id']) if len(rows) > lim else ''
+        return {'ok': True, 'data': {'month': month, 'total': total, 'items': page, 'next': nxt}}
+
     # ---- 平台 aih* action ----
     def platform_action(self, action, body):
         if not action.startswith('aih'):
@@ -130,6 +168,8 @@ class Mock21(MockBackend):
         if action == 'aihUsage':
             return {'ok': True, 'data': {'month': p.get('month') or '2026-11', 'count': 12, 'answered_ratio': 0.75, 'down_ratio': 0.0833,
                                          'by_day': [{'day': '2026-11-01', 'count': 5}, {'day': '2026-11-02', 'count': 7}], 'paused': self.paused}}
+        if action == 'aihLogList':
+            return self.log_list(p)
         if action == 'aihPauseSet':
             self.paused = bool(p.get('paused'))
             return {'ok': True, 'data': {'paused': self.paused, 'changed': True}}
@@ -446,6 +486,55 @@ def main():
             check('12' in ut and '75%' in ut and '8.3%' in ut and 'US$ 1.23' in ut and 'US$ 28.00' in ut, '⑤ 用量：題數 12、答得出來 75%%、👎 8.3%%、花費 US$ 1.23／28.00：%s' % ut.replace('\n', ' ')[:140])
             check(pg.locator('[data-role="usage-day"]').count() == 2, '⑤ 每日題數 2 天')
             pg.context.close()
+
+            # ====== ⑧ 用量頁「問答紀錄」 ======
+            for width, height in ((1280, 900), (375, 812)):
+                pg = new_page(width=width, height=height)
+                login(pg, 'admin')
+                pg.goto(base + '/index.html#/ai-help/usage')
+                pg.wait_for_selector('[data-role="log-item"]', timeout=8000)
+                if width == 1280:
+                    items = pg.locator('[data-role="log-item"]')
+                    check(items.count() == 50, '⑧ 第一頁 50 題（共 %d）' % items.count())
+                    cnt = pg.locator('[data-role="log-count"]').inner_text()
+                    check(cnt == '共 60 題，顯示 50 題（新的在前）', '⑧ 題數說明：%s' % cnt)
+                    ids = pg.eval_on_selector_all('[data-role="log-item"]', 'els => els.map(e => e.getAttribute("data-id"))')
+                    check(ids[0] == 'aih_20261102105900_0000' and ids == sorted(ids, reverse=True), '⑧ 新的排最前：%s' % ids[:2])
+                    first = items.nth(0)
+                    check(first.locator('[data-role="log-time"]').inner_text() == '11-02 10:59', '⑧ 時間以台北時間顯示：%s' % first.locator('[data-role="log-time"]').inner_text())
+                    check(first.locator('[data-role="log-page"]').inner_text() == '我的資料・個人資料', '⑧ 頁面名稱用中文對照：%s' % first.locator('[data-role="log-page"]').inner_text())
+                    check(items.nth(2).locator('[data-role="log-page"]').inner_text() == '通用（不限頁面）', '⑧ m 空＝通用')
+                    check(first.locator('[data-role="log-kind"]').inner_text() == '答得出來' and items.nth(2).locator('[data-role="log-kind"]').inner_text() == '沒答出來', '⑧ 結果：答得出來／沒答出來')
+                    check(items.nth(1).locator('[data-role="log-down"]').count() == 1 and first.locator('[data-role="log-down"]').count() == 0 and items.nth(4).locator('[data-role="log-up"]').count() == 1, '⑧ 👎／👍 標示')
+                    xq = items.nth(3).locator('[data-role="log-q"]').inner_text()
+                    check(items.nth(1).locator('[data-role="log-page"]').inner_text() == '表單簽核・我的單', '⑧ 頁面名稱：%s' % items.nth(1).locator('[data-role="log-page"]').inner_text())
+                    pg.evaluate('() => document.querySelector(\'[data-role="usage-day"]\').scrollIntoView({block: "start"})')
+                    pg.wait_for_timeout(300)
+                    pg.screenshot(path=os.path.join(out_dir, 'usage-log-1280.png'))
+                    check(xq.startswith('<img src=x onerror=') and pg.evaluate('() => window.__xss === undefined') and items.nth(3).locator('img').count() == 0, '⑧ 問題當純文字（<img onerror> 原樣顯示、不執行）')
+                    a = first.locator('[data-role="log-a"]')
+                    short = a.inner_text()
+                    check(short.endswith('…') and len(short) == 81, '⑧ 回答截短 80 字＋…（%d 字）' % len(short))
+                    first.locator('[data-act="log-toggle"]').click()
+                    check(len(a.inner_text()) > 100 and not a.inner_text().endswith('…') and first.locator('[data-act="log-toggle"]').inner_text() == '收起', '⑧ 看全文 → 顯示整段、按鈕變「收起」')
+                    calls = [c for c in mock.admin_calls if c[0] == 'aihLogList']
+                    check(calls and re.match(r'^\d{4}-\d{2}$', calls[-1][1].get('month', '')) and calls[-1][1].get('limit') == 50 and 'before' not in calls[-1][1], '⑧ aihLogList 帶 {month, limit:50}：%s' % (calls[-1][1] if calls else None))
+                    pg.click('[data-act="log-more"]')
+                    pg.wait_for_function('() => document.querySelectorAll(\'[data-role="log-item"]\').length === 60', timeout=8000)
+                    calls = [c for c in mock.admin_calls if c[0] == 'aihLogList']
+                    check(calls[-1][1].get('before') == '0:' + ids[-1], '⑧ 再顯示更多 帶 before＝上一頁的 next')
+                    check(pg.locator('[data-act="log-more"]').is_hidden() and pg.locator('[data-role="log-count"]').inner_text() == '共 60 題，顯示 60 題（新的在前）', '⑧ 全部顯示完 → 「再顯示更多」消失')
+                    ids2 = pg.eval_on_selector_all('[data-role="log-item"]', 'els => els.map(e => e.getAttribute("data-id"))')
+                    check(len(set(ids2)) == 60, '⑧ 分頁不重複')
+                    pg.select_option('[data-role="usage-month"]', index=1)
+                    pg.wait_for_function('() => document.querySelectorAll(\'[data-role="log-item"]\').length === 1', timeout=8000)
+                    check(pg.locator('[data-role="log-q"]').inner_text() == '十月的問題', '⑧ 換月份 → 重讀那個月')
+                else:
+                    over = pg.evaluate('() => document.documentElement.scrollWidth - document.documentElement.clientWidth')
+                    check(over <= 0, '⑧ 375 寬：問答紀錄無橫向捲軸（多出 %s px）' % over)
+                    pg.locator('[data-role="log-card"]').scroll_into_view_if_needed()
+                    pg.screenshot(path=os.path.join(out_dir, 'usage-log-375.png'))
+                pg.context.close()
 
             # ====== ⑥ 暫停／初始化／匯入／試跑 ======
             pg = new_page()

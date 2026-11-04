@@ -123,6 +123,7 @@ const STYLE = `
 .aim-day span:first-child{flex:none;width:92px;color:var(--muted)}
 .aim-day .aim-bar{flex:1 1 auto;margin:0}
 .aim-note{color:var(--muted);font-size:13px}
+.aim-more{padding:2px 10px;font-size:13px;min-height:0}
 @media (max-width:640px){.aim-act .btn{flex:1 1 auto}}
 `;
 
