@@ -1,44 +1,17 @@
 /**
- * modules/pnl/bridge.js — 損益網頁（iframe）與管理系統之間的轉接（純函式，node 測試直接 import）
- *
- * 損益網頁嵌入模式不拿任何金鑰、也拿不到管理系統的登入 token：它把 {type:'dzy-pnl-call', v:1, id, action, body}
- * postMessage 給父頁（targetOrigin 寫死管理系統網址），父頁（本模組）驗過來源後用 ctx.api.call('pnl', …) 走代轉，
- * 再把結果還原成損益網頁原本的 {ok, data}／{ok:false, error, message} 形狀，回 {type:'dzy-pnl-result', v:1, id, result}。
- * 損益那邊的對應程式：mala-pnl-auto gas/shell.html「dzy-embed」段。
+ * modules/pnl/bridge.js — 損益試算與損益後端之間的契約小工具（原生化 P3 起不再嵌 iframe，名稱沿用）
+ *   PNL_ACTIONS：允許代轉的 action（必須與 platform/dryrun.js READ_ACTIONS.pnl＋WRITE_ACTIONS.pnl、
+ *                Auth.gs PROXY_READ/WRITE_ACTIONS.pnl、損益後端 gas/dzyProxy.js DZY_PROXY_ACTIONS_ 一致，test 比對）
+ *   toPageResult：ctx.api.call 的結果 → {ok, data}｜{ok:false, error, message}
+ *   PNL_PAGES、currentMonth、buildAlerts：分頁表、本月、首頁提醒
  */
 'use strict';
 
-export const PNL_ORIGIN = 'https://mala-pnl.github.io';
-// 本機開發：管理系統跑在 localhost 時，嵌損益網頁的本機版（mala-pnl-auto tools/dev-embed-server.js，預設 8912）
-export const DEV_PNL_ORIGIN = 'http://localhost:8912';
-
-/** 允許代轉的 action（必須與 platform/dryrun.js READ_ACTIONS.pnl＋WRITE_ACTIONS.pnl 一致，test 比對） */
+/** 允許代轉的 action（P2 起加 getJob 與五個維護動作，見 ~/dzy/docs/pnl-native/plan.md C4、C7） */
 export const PNL_ACTIONS = ['getMonth', 'getTrend', 'getTrendMulti', 'getSettings', 'exportEntries', 'getAttachment',
   'addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
   'refreshConnectors', 'refreshFixed', 'loadGroupUnits',
   'getJob', 'adminSelfCheck', 'adminSyncSeed', 'adminApplyS01Connectors', 'adminCreateLastMonthDraft', 'adminLoadStoreSeedS01'];
-
-const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
-
-/** 目前環境下損益網頁的 origin 與網址 */
-export function pnlTarget(hostname) {
-  const dev = hostname === 'localhost' || hostname === '127.0.0.1';
-  const origin = dev ? DEV_PNL_ORIGIN : PNL_ORIGIN;
-  return { origin, url: origin + '/?embed=dzy' };
-}
-
-/** 驗證一則來自損益網頁的呼叫；不合格回 null（直接忽略，不回覆） */
-export function parseCall(data) {
-  if (!data || typeof data !== 'object' || data.type !== 'dzy-pnl-call' || data.v !== 1) return null;
-  if (typeof data.id !== 'string' || !ID_RE.test(data.id)) return null;
-  if (typeof data.action !== 'string' || PNL_ACTIONS.indexOf(data.action) === -1) return null;
-  const body = data.body === undefined || data.body === null ? {} : data.body;
-  if (typeof body !== 'object' || Array.isArray(body)) return null;
-  const payload = Object.assign({}, body);
-  // 這幾個欄位只能由 mini／平台決定，瀏覽器送來的一律丟掉
-  ['action', 'token', 'key', 'operator', 'level', 'inner'].forEach((k) => { delete payload[k]; });
-  return { id: data.id, action: data.action, payload };
-}
 
 /**
  * ctx.api.call 的結果 → 損益網頁的形狀。
@@ -65,18 +38,6 @@ export const PNL_PAGES = [
   ['dashboard', '儀表板'], ['pending', '待補'], ['food', '食材'], ['labor', '人事'], ['controllable', '可控'],
   ['uncontrollable', '不可控'], ['revenue', '營業收入'], ['import', '匯入'], ['settings', '設定']
 ];
-
-/** 管理系統換分頁 → 通知損益網頁切換；不認得的分頁一律回儀表板 */
-export function navMessage(viewId) {
-  const ok = PNL_PAGES.some((x) => x[0] === viewId);
-  return { type: 'dzy-pnl-nav', v: 1, p: ok ? viewId : 'dashboard' };
-}
-
-/** 損益頁回報「我現在在哪一頁」（dzy-pnl-at）；不認得的回 null */
-export function atPage(data) {
-  if (!data || typeof data !== 'object' || data.type !== 'dzy-pnl-at' || data.v !== 1 || typeof data.p !== 'string') return null;
-  return PNL_PAGES.some((x) => x[0] === data.p) ? data.p : null;
-}
 
 /** 本月（台北時間）'YYYY-MM' */
 export function currentMonth(now) {
