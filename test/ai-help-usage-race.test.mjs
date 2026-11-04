@@ -66,6 +66,32 @@ ok(btn2.hidden === false && btn2.textContent === '重新讀取' && card2.find('l
 btn2.listeners.click[0]();
 await flush();
 ok(pending.filter((x) => x.action === 'aihLogList' && x.p.month === thisMonth).length === 2, '按「重新讀取」再打一次');
+const l3 = pending.filter((x) => x.action === 'aihLogList' && x.p.month === thisMonth);
+l3[1].res({ ok: true, data: { month: thisMonth, total: 1, names_ok: false, items: [{ id: 'aih_y', ts: '2026-11-02T02:00:00Z', m: '', v: '', q: '', kind: 'answered', answer: '', feedback: '' }], next: '' } });
+await flush();
+ok(card2.find('log-q').textContent === '（暫時不顯示）' && card2.find('log-err').textContent.includes('同仁名單暫時讀不到'), '名單讀不到（names_ok:false）→ 問題顯示「暫時不顯示」＋說明');
+
+// A→B→A（2026-11-05 Codex 審查第 3 條）：另開一個畫面；第一個 A 最晚回來也不畫
+{
+  const q = [];
+  const api2 = { call(ns, action, p) { return new Promise((res) => q.push({ action, p, res })); } };
+  const r2 = el('div');
+  mountUsage(r2, { api: api2 }, { client });
+  const s2 = r2.kids[0].kids[0];
+  await flush();
+  const A = s2.kids[0].value, B = s2.kids[1].value;
+  s2.value = B; s2.listeners.change[0](); await flush();
+  s2.value = A; s2.listeners.change[0](); await flush();
+  const us = q.filter((x) => x.action === 'aihUsage');
+  ok(us.length === 3 && us[0].p.month === A && us[1].p.month === B && us[2].p.month === A, 'A→B→A 三個 aihUsage 都在路上', us.map((x) => x.p.month));
+  const mk = (m, n) => ({ ok: true, data: { month: m, count: n, answered_ratio: 1, down_ratio: 0, by_day: [], paused: false } });
+  us[2].res(mk(A, 7)); await flush();
+  us[1].res(mk(B, 3)); await flush();
+  us[0].res(mk(A, 555)); await flush();
+  ok(r2.kids[1].find('stat-題數').textContent === '7', 'A→B→A：第一個 A 晚回來不蓋掉最新 A', r2.kids[1].find('stat-題數').textContent);
+  const ls = q.filter((x) => x.action === 'aihLogList');
+  ok(ls.length === 1 && ls[0].p.month === A, '問答紀錄只打最新那次一次', ls.map((x) => x.p.month));
+}
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

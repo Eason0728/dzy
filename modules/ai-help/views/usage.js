@@ -40,6 +40,7 @@ export function mountUsage(el, ctx, shared) {
   const client = (shared && shared.client) || getClient();
   const ms = months();
   let month = ms[0];
+  let gen = 0;   // 每次 load() 加一；只有最新那次的回應能畫（A→B→A 時第一個 A 晚回來也不畫）
   const sel = h('select', { class: 'input', 'data-role': 'usage-month', 'aria-label': '月份', style: 'max-width:200px' }, ms.map((m) => h('option', { value: m }, m)));
   const body = h('div', { 'data-role': 'usage-body' });
   el.appendChild(h('div', { class: 'aim-filter' }, [sel]));
@@ -52,10 +53,11 @@ export function mountUsage(el, ctx, shared) {
 
   async function load() {
     const forMonth = month;
+    const my = ++gen;
     clear(body);
     body.appendChild(h('p', { class: 'aim-note' }, '載入中…'));
     const [u, money] = await Promise.all([ctx.api.call('platform', 'aihUsage', { month }), client.usage()]);
-    if (!alive || forMonth !== month) return;   // 換月份時舊請求晚回來：不畫
+    if (!alive || my !== gen) return;   // 換月份時舊請求晚回來：不畫
     clear(body);
     if (!u || !u.ok) {
       body.appendChild(h('div', { class: 'card' }, [h('p', null, u && u.error === 'not_inited' ? '小幫手還沒初始化。請系統管理者按上方的「初始化小幫手」。' : errText(u))]));
@@ -84,11 +86,11 @@ export function mountUsage(el, ctx, shared) {
       h('span', null, x.day), h('div', { class: 'aim-bar' }, [h('i', { style: 'width:' + Math.round((x.count || 0) / max * 100) + '%' })]), h('span', null, String(x.count))
     ])));
     body.appendChild(card);
-    body.appendChild(logCard(forMonth));
+    body.appendChild(logCard(forMonth, my));
   }
 
   /** 問答紀錄：先畫卡片，再讀第一頁；「再顯示更多」帶上一頁回的 next */
-  function logCard(forMonth) {
+  function logCard(forMonth, my) {
     const box = h('div', { class: 'card', 'data-role': 'log-card' }, [h('div', { class: 'card-title' }, '問答紀錄')]);
     const note = h('p', { class: 'aim-note', 'data-role': 'log-count' }, '載入中…');
     const list = h('div', { 'data-role': 'log-list' });
@@ -104,7 +106,7 @@ export function mountUsage(el, ctx, shared) {
       const payload = { month: forMonth, limit: LOG_PAGE };
       if (next) payload.before = next;
       const [r, pages] = await Promise.all([ctx.api.call('platform', 'aihLogList', payload), loadPages()]);
-      if (!alive || forMonth !== month) return;
+      if (!alive || my !== gen) return;
       more.disabled = false;
       if (!r || !r.ok) {
         if (!shown) note.textContent = '';
@@ -115,7 +117,9 @@ export function mountUsage(el, ctx, shared) {
       }
       const d = r.data || {};
       const items = Array.isArray(d.items) ? d.items : [];
-      items.forEach((it) => list.appendChild(row(it, pages)));
+      const hidden = d.names_ok === false;
+      if (hidden) err.textContent = '同仁名單暫時讀不到，這頁的問題與回答先不顯示（避免露出姓名），請稍後重新整理。';
+      items.forEach((it) => list.appendChild(row(it, pages, hidden)));
       shown += items.length;
       more.textContent = '再顯示更多';
       next = typeof d.next === 'string' ? d.next : '';
@@ -127,7 +131,7 @@ export function mountUsage(el, ctx, shared) {
     return box;
   }
 
-  function row(it, pages) {
+  function row(it, pages, hidden) {
     const box = h('div', { class: 'aim-item', 'data-role': 'log-item', 'data-id': it.id });
     const down = it.feedback === 'down';
     box.appendChild(h('div', { class: 'aim-meta' }, [
@@ -139,7 +143,7 @@ export function mountUsage(el, ctx, shared) {
       it.feedback === 'up' ? ' ' : null,
       it.feedback === 'up' ? h('span', { class: 'aim-chip', 'data-role': 'log-up', title: '同仁按了 👍' }, '👍') : null
     ]));
-    box.appendChild(h('div', { class: 'aim-q', 'data-role': 'log-q' }, it.q || '（沒有問題內容）'));
+    box.appendChild(h('div', { class: 'aim-q', 'data-role': 'log-q' }, it.q || (hidden ? '（暫時不顯示）' : '（沒有問題內容）')));
     const ans = String(it.answer || '');
     if (ans) {
       const long = ans.length > ANSWER_SHORT;
