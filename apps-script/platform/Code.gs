@@ -71,7 +71,7 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'inspSetup', 'inspMe', 'inspList', 'inspGet', 'inspSubmit', 'inspVoid', 'inspBankGet', 'inspBankSave',
   // 2026-11-02：AI 小幫手管理（AiHelp.gs；docs/ai-helper/spec.md §8）。寫入由 AiHelp.gs aihWithLock_ 自己上鎖，不列 MUTATING_ACTIONS。
   // ⚠ 給 Mac mini node 路由用的全域函式（AiHelp.gs 內結尾底線那 8 支）刻意不在這裡，也不可加進來（test/ai-help.mock.test.mjs 會比對 Code.gs 全文）
-  'aihSetup', 'aihKbList', 'aihKbSave', 'aihKbImport', 'aihKbHist', 'aihPendingList', 'aihPendingSet', 'aihUsage', 'aihPauseSet'];
+  'aihSetup', 'aihKbList', 'aihKbSave', 'aihKbImport', 'aihKbHist', 'aihPendingList', 'aihPendingSet', 'aihUsage', 'aihLogList', 'aihPauseSet'];
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -326,6 +326,7 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'aihPendingList': return handleAihPendingList_(token, payload);
     case 'aihPendingSet': return handleAihPendingSet_(token, payload);
     case 'aihUsage': return handleAihUsage_(token, payload);
+    case 'aihLogList': return handleAihLogList_(token, payload);
     case 'aihPauseSet': return handleAihPauseSet_(token, payload);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆

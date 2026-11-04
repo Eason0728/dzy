@@ -3,7 +3,7 @@
  * Phase 1：資料表、管理頁 action、給 Mac mini node 路由用的全域函式。AI 呼叫在 node（.gs 不能連外）。
  *
  * 一、管理頁 action（Code.gs 白名單＋分派；一律要 platform.aihelp＝鎖碼，第一個月只有 role admin；aihSetup 只限 role admin）
- *    aihSetup、aihKbList、aihKbSave、aihKbImport、aihKbHist、aihPendingList、aihPendingSet、aihUsage、aihPauseSet
+ *    aihSetup、aihKbList、aihKbSave、aihKbImport、aihKbHist、aihPendingList、aihPendingSet、aihUsage、aihLogList、aihPauseSet
  *    回應形狀照 Eval.gs：成功 {ok:true,data}；失敗 {ok:false, error:'<代碼>', message:'<中文>'}（代碼：unauthorized／forbidden／bad_request／not_found／conflict／busy／not_inited）。
  * 二、node 專用全域函式（⚠ 8 支，不准進 Code.gs 的白名單與分派；測試比對 Code.gs 全文）：
  *    aiHelpAuthorize_(token)、aihKbVisible_(uid)、aihLogAppend_(row)、aihPendingAdd_(row)、aihFeedback_(uid, id, good)、aihPurge_(nowMs)、aihConvGet_(uid, conv)、aihDigest_(nowMs)
@@ -472,6 +472,68 @@ function handleAihUsage_(token, payload) {
     month: month, count: count, answered_ratio: ratio(answered), down_ratio: ratio(down),
     by_day: Object.keys(byDay).sort().map(function (d) { return { day: d, count: byDay[d] }; }), paused: aihPaused_()
   } };
+}
+
+/**
+ * 問答紀錄清單（2026-11-05 Eason：用量頁看得到同仁問了什麼）。payload {month:'YYYY-MM'（台北；沒給＝本月）, limit?:1–200（預設 50）, before?:上一頁回的 next}
+ * → {month, total, items:[{id, ts, m, v, q, kind, answer, kb_ids, feedback}], next}；新的排最前（ts 由新到舊，同時間再依 id 由大到小）。
+ * 刻意不回 uid、conv、tok_in、tok_out、usd（誰問的、費用不在這裡）。q 是 node 寫 log 前已遮罩的文字（手機、身分證、email、DZY 編號、在職同仁姓名）。
+ * answer 回 log 裡的全文（寫入時已截到 AIH_MAX.logAnswer），前端截短顯示、點開看全文；回之前把在職同仁完整姓名遮成 [同仁]
+ *（node 寫 log 時 answer 只遮手機／身分證／email／DZY 編號，沒遮姓名；名單讀不到就不回 answer，fail closed）。
+ * next＝最後一筆的「毫秒:id」，沒有下一頁為空字串；before 格式不對 → bad_request。
+ */
+var AIH_LOG_LIST_LIMIT = { def: 50, max: 200 };
+/** 姓名遮罩（同 Mac mini aihelp.js maskNames）：單趟掃描、長名優先、純字串比對 → [同仁] */
+function aihMaskNames_(text, names) {
+  var str = String(text === undefined || text === null ? '' : text);
+  var list = (names || []).filter(function (n) { return typeof n === 'string' && n; }).sort(function (a, b) { return b.length - a.length; });
+  if (!list.length) return str;
+  var out = '', i = 0;
+  while (i < str.length) {
+    var hit = '';
+    for (var k = 0; k < list.length; k++) { if (str.substr(i, list[k].length) === list[k]) { hit = list[k]; break; } }
+    if (hit) { out += '[同仁]'; i += hit.length; } else { out += str.charAt(i); i += 1; }
+  }
+  return out;
+}
+function handleAihLogList_(token, payload) {
+  var c = aihEnter_(token, false);
+  if (!c.ok) return c;
+  if (!aihReady_()) return aihNotInited_();
+  payload = payload || {};
+  var month = aihStr_(payload.month) || aihTaipeiMonth_(aihNow_());
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return aihFail_('bad_request', '月份格式錯誤');
+  var rawLimit = payload.limit;
+  if (rawLimit !== undefined && rawLimit !== null && rawLimit !== '' && typeof rawLimit !== 'number' && !(typeof rawLimit === 'string' && /^\s*\d+\s*$/.test(rawLimit))) {
+    return aihFail_('bad_request', '筆數要在 1 到 ' + AIH_LOG_LIST_LIMIT.max + ' 之間');
+  }
+  var limit = rawLimit === undefined || rawLimit === null || rawLimit === '' ? AIH_LOG_LIST_LIMIT.def : Number(rawLimit);
+  if (!(limit >= 1 && limit <= AIH_LOG_LIST_LIMIT.max && Math.floor(limit) === limit)) return aihFail_('bad_request', '筆數要在 1 到 ' + AIH_LOG_LIST_LIMIT.max + ' 之間');
+  var before = aihStr_(payload.before), bMs = NaN, bId = '';
+  if (before) {
+    var mm = /^(\d{1,15}):(\S{1,64})$/.exec(before);
+    if (!mm) return aihFail_('bad_request', '分頁位置格式錯誤');
+    bMs = Number(mm[1]); bId = mm[2];
+  }
+  var rows = [];
+  aihRows_('log').forEach(function (r) {
+    var ms = aihParseTs_(r.ts);
+    if (isNaN(ms) || aihTaipeiMonth_(ms) !== month) return;
+    rows.push({ ms: ms, id: aihStr_(r.id), r: r });
+  });
+  var newer = function (a, b) { return a.ms !== b.ms ? a.ms > b.ms : a.id > b.id; };   // a 比 b 新
+  rows.sort(function (a, b) { return newer(a, b) ? -1 : (newer(b, a) ? 1 : 0); });
+  var total = rows.length;
+  if (before) rows = rows.filter(function (x) { return newer({ ms: bMs, id: bId }, x); });
+  var page = rows.slice(0, limit);
+  var sn = page.length ? aihStaffNames_() : { ok: true, names: [] };
+  var items = page.map(function (x) {
+    var r = x.r;
+    return { id: x.id, ts: aihIso_(x.ms), m: aihStr_(r.m), v: aihStr_(r.v), q: aihStr_(r.q), kind: aihStr_(r.kind),
+      answer: sn.ok ? aihMaskNames_(aihStr_(r.answer), sn.names) : '', kb_ids: aihStr_(r.kb_ids), feedback: aihStr_(r.feedback) };
+  });
+  var last = page[page.length - 1];
+  return { ok: true, data: { month: month, total: total, items: items, next: rows.length > limit && last ? last.ms + ':' + last.id : '' } };
 }
 
 /**
