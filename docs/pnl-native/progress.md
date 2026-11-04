@@ -25,7 +25,7 @@
 | 損益後端入口 | 讀 gas/api.js | doPost：health、posPush、purchasePush、expensePush、dzyProxy、login、registerWithInvite＋26 支 token action | 原生版只走 dzyProxy＋機器推送；login／邀請碼／登出等可退場 | 帳號體系改由管理系統決定，影子帳號機制可簡化 |
 | 觸發器 | setup.js:890-934、tableCache.js:219 | monthlyDraft_ 每月1號06:00、dailyRefresh_ 每日06:30、onChange 換代、onOpen 選單 | 選單 7 項（初始化、重設通行碼、自我檢查、載入光復、同步科目×2、套連接器）要有替代入口 | 選單功能移到設定頁或 mini 指令 |
 | 對外呼叫 | monthlyDraft.js:248,655、laborEstimate.js:230 | 通知匣（網址寫死）、連接器 URL／金鑰存「連接器」分頁 | 連接器三個：現金帳（mini 8795）、調撥（mini transfer 8800）、薪資（GAS） | 搬上 mini 後現金帳／調撥可走本機 127.0.0.1 |
-| 打進損益的上游 | grep AKfycbzRpEDK 等 | ①mala-fortune push_pnl_pos.py:63（網址寫死，每天 05:15＋1–3 號上月）②~/mala-purchase server/.env PNL_PUSH_URL ③dzy-platform .env PROXY_URL_PNL（代轉＋apv.js 每 15 分 expensePush）④守門 pnlMonthlyWatch PNL_HEALTH_URL 寫死（mala-fortune/tools/gas-watchdog 與 mala-gas/schedule-watchdog Code.js:576） | 切換時 4 處改網址，金鑰值不變 | 切換步驟要含這 4 處＋舊端 FROZEN |
+| 打進損益的上游 | grep 舊端部署 ID（AKfyc…）等 | ①mala-fortune push_pnl_pos.py:63（網址寫死，每天 05:15＋1–3 號上月）②~/mala-purchase server/.env PNL_PUSH_URL ③dzy-platform .env PROXY_URL_PNL（代轉＋apv.js 每 15 分 expensePush）④守門 pnlMonthlyWatch PNL_HEALTH_URL 寫死（mala-fortune/tools/gas-watchdog 與 mala-gas/schedule-watchdog Code.js:576） | 切換時 4 處改網址，金鑰值不變 | 切換步驟要含這 4 處＋舊端 FROZEN |
 | 管理系統前端呼叫路徑 | 讀 dzy/platform/api.js、modules/cashbook | ctx.api.call(ns, action) → platform /proxy → proxy-hook 帶操作人 → 上游 | 原生模組照 cashbook 寫法 | modules/pnl 改寫為 views/*，不再 iframe |
 | 資料量 | Drive 連接器 get_file_metadata 光復試算表 | Requested entity was not found（連接器帳號無權限，表在 madesiaosinla） | **未確認** | 搬遷工具要先 dry-run 數列數；需 Eason 或 madesiaosinla 身分匯出 |
 | 線上狀態 | curl health | active_stores 11、missing 10（2026-10 草稿缺 10 家） | S10–S30 啟用後 10 月沒有草稿 | 另回報 Eason，非本案 |
