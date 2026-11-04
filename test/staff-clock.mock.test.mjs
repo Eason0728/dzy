@@ -1940,6 +1940,24 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(row(a).no_home === true && row(c).no_home === false && row(dd).no_home === false, 'ADDH ★staffList 每列帶 no_home，與 no_home_map 同一套判斷', [row(a).no_home, row(c).no_home]);
   ok(post(sb, 'staffUnitList', { unit: 'mzt-hq' }, tok).data.people.find((p) => p.emp_no === a).no_home === true, 'ADDH staffUnitList 也帶 no_home');
 
+  // 2026-11-04 免打卡：總監以上（hm/odir/rdd/ceo/gm/chair）不列；個人例外打卡店（STORE_NOT_SUPPORT_EX）的 confirmed 對照算主店
+  post(sb, 'staffImport', { names: ['免打卡總監庚', '免打卡執行長辛', '例外央廚壬', '例外沒對照癸'] }, tok);
+  const g = E('免打卡總監庚'), h = E('免打卡執行長辛'), x = E('例外央廚壬'), y = E('例外沒對照癸');
+  setUnit(g, { brand: 'mzt', unit: 'mzt-hq', title: 'odir' });
+  setUnit(h, { brand: 'dzy', unit: 'dzy-hq', dept: 'mgmt', title: 'ceo' });
+  setUnit(x, { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' });
+  setUnit(y, { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' });
+  giveMap(app, x, 'cf', 'X1', 'support');
+  giveMap(app, y, 'cf', 'Y1', 'support');
+  sb.STORE_NOT_SUPPORT_EX = { [x]: ['cf'] };
+  const nh2 = post(sb, 'clockAlerts', {}, tok).data.no_home_map;
+  ok(nh2.indexOf(g) === -1 && nh2.indexOf(h) === -1, 'NOCLK ★總監、執行長沒有打卡對照也不列', nh2);
+  ok(nh2.indexOf(a) !== -1, 'NOCLK 一般辦公室同仁照列', nh2);
+  ok(nh2.indexOf(x) === -1, 'NOCLK ★個人例外：央廚已有 confirmed 對照＝算主店', nh2);
+  ok(nh2.indexOf(y) !== -1, 'NOCLK 沒有例外的同樣情況照列（例外只對指定的人）', nh2);
+  ok(row(g).no_home === false && row(x).no_home === false && row(y).no_home === true, 'NOCLK staffList no_home 同一套', [row(g).no_home, row(x).no_home, row(y).no_home]);
+  delete sb.STORE_NOT_SUPPORT_EX;
+
   const jobsBefore = jobs(app).length;
   // 店長被擋
   const byMgr = post(sb, 'clockAddHome', { emp_no: b }, mgr.token);
