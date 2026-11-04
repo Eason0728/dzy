@@ -504,6 +504,15 @@ function setup() {
     ok(self.some((x) => x.clock === 'mztgf' && x.emp_id === 'MZTGF222' && x.home_clock === 'hq'), '7-2h ★例外帳號進 self、帶 home_clock hq', self);
     ok(self.every((x) => x.clock === 'hq' ? x.home_clock === undefined : x.home_clock === 'hq'), '7-2h hq 帳號沒有 home_clock', self);
     ok((app.ident('DZY231').self || []).every((x) => x.clock === 'hq' && x.home_clock === undefined), '7-2h 沒例外的人 self 只有 hq'); }
+  // 7-2i 選單跟 self 同一套（2026-11-03）：例外帳號只有門市對照、沒有 hq 對照 → 仍有排班管理；拿掉例外就沒有
+  { const d = sheets.staff_clock._data, keep = d.slice();   // 原地改（mock 的 getRange 綁著同一個陣列）
+    d.splice(0, d.length, ...keep.filter((r) => !(r[0] === 'DZY222' && r[1] === 'hq')));
+    ok(!d.some((r) => r[0] === 'DZY222' && r[1] === 'hq') && d.some((r) => r[0] === 'DZY222' && r[1] === 'mztgf'), '7-2i 前提：只剩門市對照');
+    const row222 = sheets.staff._data.find((r) => r[0] === 'DZY222');
+    ok(sb.storeSchedGate_(row222) === true, '7-2i ★例外帳號只有門市對照：仍有排班管理');
+    const ex = sb.STORE_NOT_SUPPORT_EX.DZY222; delete sb.STORE_NOT_SUPPORT_EX.DZY222;
+    ok(sb.storeSchedGate_(row222) === false, '7-2i 沒有例外、也沒有 hq 對照 → 沒有排班管理');
+    sb.STORE_NOT_SUPPORT_EX.DZY222 = ex; d.splice(0, d.length, ...keep); }
   // 7-2e 試點沒含總部時：例外帳號的打卡店在試點，人資主管仍核得到（2026-10-29 審查低 3）
   app.props.STORE_SSO_UNITS = PILOT.split(',').filter((u) => u !== 'dzy-hq').join(','); sb.permActingReset_();
   ok(has(app.H('DZY220'), 'mztgf:DZY222') && has(app.R('DZY220'), 'mztgf:DZY222') && !has(app.H('DZY231'), 'mztgf:DZY222'), '7-2e ★試點沒含總部：例外帳號人資主管仍核得到、店長仍沒有');

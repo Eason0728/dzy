@@ -1142,7 +1142,10 @@ function storeSchedGate_(values) {
   if (dir.units.length || dir.hqShift) return true;
   var u = stfReadOrg_().unit[stfStr_(values[STF_COL.unit])];   // 總部／品牌辦公室同仁（單位階梯 hq／office）
   if (!(u && u.active && STORE_SCHED_GATE_LADDERS.indexOf(u.ladder || 'store') !== -1)) return false;
-  return storeHasSelfClock_(stfNormEmp_(values[STF_COL.emp_no]));   // 還要有 hq 打卡對照（跟 ident.self／storeSelfClocks_ 同一套判斷），沒有對照的人營運系統沒有入口
+  // 還要有 hq 打卡對照（跟 ident.self／storeSelfClocks_ 同一套判斷），沒有對照的人營運系統沒有入口；
+  // 個人例外的總部同仁，例外那家的對照也算（2026-11-03：例外同仁只有央廚帳號、班在總部自填，選單原本被藏）
+  var emp = stfNormEmp_(values[STF_COL.emp_no]);
+  return storeHasSelfClock_(emp, u.ladder === 'hq' ? (STORE_NOT_SUPPORT_EX[emp] || []) : []);
 }
 
 /**
@@ -1176,12 +1179,13 @@ function storeSchedViewGate_(values) {
 }
 
 /** 本人有沒有 confirmed、roster_active 不是 FALSE 的總部（STORE_SELF_CLOCK）打卡對照；表沒建或讀失敗＝沒有 */
-function storeHasSelfClock_(emp) {
+function storeHasSelfClock_(emp, exClocks) {
   if (!emp) return false;
   try {
     if (!clkSheetsReady_()) return false;
     return clkMaps_().some(function (m) {
-      return m.emp_no === emp && m.state === 'confirmed' && m.roster_active !== 'FALSE' && m.store_code === STORE_SELF_CLOCK;
+      return m.emp_no === emp && m.state === 'confirmed' && m.roster_active !== 'FALSE' &&
+        (m.store_code === STORE_SELF_CLOCK || (exClocks || []).indexOf(stfStr_(m.store_code)) !== -1);
     });
   } catch (e) {
     return false;
