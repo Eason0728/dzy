@@ -444,7 +444,7 @@ function storeIsHqTarget_(t, org) {
 
 /**
  * 打卡端保護名單（給 Mac mini 同步員，經 clockUpperEmps_ 帶出；2026-10-29）：每店 → emp_id
- *   dept：總部同仁（hq 階梯）在門市／央廚的支援帳號——申請照原身分簽，打卡店值班核定頁不能審（REQ_DEPT_EMPS）。
+ *   dept：不在本人單位打卡的帳號（a.away：支援、品牌辦公室同仁在門市；2026-11-04 起不只總部同仁）——申請照原身分簽，打卡店值班核定頁不能審（REQ_DEPT_EMPS）。
  *   home：STORE_NOT_SUPPORT_EX 指定的人在指定店的帳號——不算支援，打卡店值班核定頁看不到、核不了（REQ_HOME_EMPS）。
  * home 不看推算與否（認領還在待確認的人也要擋）。回 { dept:{store:[…]}, home:{store:[…]} }。
  */
@@ -456,7 +456,7 @@ function storeClockGuardLists_(people, org, maps, storeUnits) {
     if ((STORE_NOT_SUPPORT_EX[stfStr_(m.emp_no)] || []).indexOf(stfStr_(m.store_code)) !== -1) add(home, m.store_code, stfStr_(m.emp_id));
   });
   storeAttAccounts_(people, org, null, maps || [], storeUnits || {}).forEach(function (a) {
-    if (a.support && storeIsHqTarget_(a.t, org)) add(dept, a.m.store_code, stfStr_(a.m.emp_id));
+    if (a.away) add(dept, a.m.store_code, stfStr_(a.m.emp_id));   // 2026-11-04：所有不在本人單位打卡的帳號，申請都回原單位上層
   });
   return { dept: dept, home: home };
 }
@@ -494,7 +494,9 @@ function storeAttAccounts_(people, org, home, maps, storeUnits) {
       if (support && t.inferred) { if (pilot === null) pilot = storePilotUnits_(); support = storeAnyIn_(units, pilot); }
       var a = { t: t, m: m, units: units, support: support,
                 ex: (STORE_NOT_SUPPORT_EX[stfStr_(t.emp)] || []).indexOf(stfStr_(m.store_code)) !== -1 };   // 個人例外（不算支援）
-      if (a.support) { a.homeUnit = stfStr_(t.unit); a.homeName = storeUnitLabel_(a.homeUnit, org); }
+      // 不在本人單位打卡（2026-11-04）：支援帳號，或品牌辦公室同仁在門市打卡——工時跟打卡店、申請回原單位；營運系統標「支援（原單位）」
+      a.away = !a.ex && !t.orphan && units.length > 0 && units.indexOf(stfStr_(t.unit)) === -1;
+      if (a.support || a.away) { a.homeUnit = stfStr_(t.unit); a.homeName = storeUnitLabel_(a.homeUnit, org); }
       // 個人例外的帳號：姓名旁標歸屬（總部同仁標「總部」），總部同仁另給 homeClock＝hq，營運系統在總部那組放捷徑卡（2026-11-01 Eason 選 A）
       if (a.ex && !t.orphan && !t.inferred) {
         var hqT = storeIsHqTarget_(t, org);
@@ -553,6 +555,22 @@ function storeSupportApprovers_(units, people, org, rctx, excludeDuty, excludeEm
 }
 
 /**
+ * 打卡單位的店長層（2026-11-04 工時／忘刷單依打卡單位核）：units 任一單位的在職店長／廠長（STORE_SUP_L1，store 階梯）或兼任店長，回 {emp: true}。
+ * 本人也算（店長核自己的工時與忘刷單）；只認 status=active、身分有效（storeOrgOf_）、有同仁編號的人。
+ */
+function storeClockHeads_(units, people, org) {
+  var out = {};
+  (people || []).forEach(function (p) {
+    if (stfStr_(p.status) !== 'active' || !stfStr_(p.emp)) return;
+    var o = storeOrgOf_(p, org);
+    if (!o) return;
+    var head = o.ladder === 'store' && STORE_SUP_L1.indexOf(stfStr_(p.title)) !== -1 && units.indexOf(stfStr_(p.unit)) !== -1;
+    if (head || (p.acting_units || []).some(function (u) { return units.indexOf(u) !== -1; })) out[stfStr_(p.emp)] = true;
+  });
+  return out;
+}
+
+/**
  * 打卡帳號 → 契約的一筆 {clock, emp_id, sub, name}；同一份名單以 clock|emp_id 去重，最後依 clock、emp_id 排序。
  * 支援帳號多三個選填欄位 support:true、home_unit（本人單位代碼）、home_unit_name（例「麻的小辛辣 新竹光復」），營運系統在名字旁標「支援（…）」；非支援帳號形狀不變。
  * 個人例外（STORE_NOT_SUPPORT_EX）帳號多 home_tag（例「總部」）；總部同仁再多 home_clock＝'hq'（營運系統總部那組的捷徑卡用）。
@@ -562,7 +580,7 @@ function storeAttListAdd_(list, a) {
   if (list.seen[k]) return;
   list.seen[k] = true;
   var row = { clock: a.m.store_code, emp_id: a.m.emp_id, sub: a.t.emp, name: a.t.name };
-  if (a.support) { row.support = true; row.home_unit = a.homeUnit || ''; row.home_unit_name = a.homeName || ''; }
+  if (a.support || a.away) { row.support = true; row.home_unit = a.homeUnit || ''; row.home_unit_name = a.homeName || ''; }
   if (a.homeTag) { row.home_tag = a.homeTag; if (a.homeClock) row.home_clock = a.homeClock; }
   list.rows.push(row);
 }
@@ -599,45 +617,39 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
   var hrsT = empSet(storeAttTargets_(me, flags, people, org, home, 'hours', rctx));
   var reqT = empSet(storeAttTargets_(me, flags, people, org, home, 'req', rctx));
   var myEmp = stfStr_(me.emp), myUnit = stfStr_(me.unit);
-  var apprCache = {};
+  var headCache = {};
   storeAttAccounts_(people, org, home, maps, storeUnits).forEach(function (a) {
     var t = a.t;
     var self = !!myEmp && myEmp === stfStr_(t.emp);
     var needH = !t.orphan && !!attNeedOf_(t, org, 'hours');
     var viewable = needH && !self;   // 只看名單的共同條件（同 storeAttViewTargets_）
-    if (!a.support) {
-      // 個人例外的帳號：打卡店在試點也算（試點沒含他的部門時，人資主管仍核得到；2026-10-29 審查低 3）
-      var pOk = storeAnyIn_(t.pilotUnits || [t.unit], pilot) || (a.ex && storeAnyIn_(a.units, pilot));
-      if (pOk && hrsT[t.emp]) storeAttListAdd_(L.hours, a);
-      // 品牌辦公室同仁兼任門市店長：他在兼任店的打卡帳號不算支援（照原身分由總監核），但本人也可核自己的工時
-      //   （2026-11-03 Eason 選「改程式」：比照 10-30 兼任店長可核自己在兼任店的工時；申請照舊不能核自己，總監照舊也核得到）
-      else if (self && needH && storeAnyIn_(a.units, pilot) && a.units.some(function (u) { return storeActingHas_(me, u); })) storeAttListAdd_(L.hours, a);
-      if (pOk && reqT[t.emp]) storeAttListAdd_(L.req, a);
-      if (pOk && viewable && viewUnits.indexOf(stfStr_(t.unit)) !== -1) storeAttListAdd_(L.view, a);
-    } else if (self && storeAnyIn_(a.units, pilot) && needH && a.units.some(function (u) { return storeActingHas_(me, u); })) {
-      storeAttListAdd_(L.hours, a);   // 兼任店長核自己在兼任店的工時（2026-10-30 Eason 選 A）
-    } else if (storeAnyIn_(a.units, pilot) && !self) {
-      // 被核者本人兼任這家店：先把他剔出候選再找層（快取鍵帶他的編號）
-      var selfEx = a.units.some(function (u) { return storeActingHas_(t, u); }) ? stfStr_(t.emp) : '';
-      var key = a.units.join(',') + (selfEx ? '|x' + selfEx : '');
-      if (!apprCache[key]) apprCache[key] = storeSupportApprovers_(a.units, people, org, rctx, false, selfEx);
-      var dutyT = storeIsDuty_(t);
-      var keyR = dutyT ? key + '|duty' : key;   // 值班主管本人的申請（req）：打卡店單位的值班主管不核，往上找
-      if (!apprCache[keyR]) apprCache[keyR] = storeSupportApprovers_(a.units, people, org, rctx, true, selfEx);
-      var base = !!flags.admin || !!flags.hrHead;
-      var extra = !!flags.attExtra && !!myUnit && a.units.indexOf(myUnit) !== -1;
-      var extraBlockR = dutyT && a.units.some(function (u) { return storeDutyHas_(me, u); });   // 值班主管的申請：打卡店單位的值班主管（含 att.extra 例外）不核
-      var apprH = base || extra || (!!myEmp && !!apprCache[key][myEmp]);
-      // 2026-10-29 Eason：總部同仁到門市支援，工時給該店主管核（店長才知道上下班時間），請假／加班／忘打卡等申請照原身分（部門主管、人資主管）簽
-      var reqByHome = storeIsHqTarget_(t, org);
-      var apprR = reqByHome ? !!reqT[t.emp] : (base || (extra && !extraBlockR) || (!!myEmp && !!apprCache[keyR][myEmp]));
-      if (apprH || apprR) {
-        if (apprH && needH) storeAttListAdd_(L.hours, a);
-        if (apprR && !t.orphan && attNeedOf_(t, org, 'req')) storeAttListAdd_(L.req, a);
-        if (!apprH && viewable && origView && hrsT[t.emp]) storeAttListAdd_(L.view, a);   // 原單位主管：簽申請之外，工時只看
-      } else if (viewable && ((origView && (hrsT[t.emp] || reqT[t.emp])) || storeAnyIn_(a.units, viewUnits))) {
-        storeAttListAdd_(L.view, a);
-      }
+    // 2026-11-04 Eason：在門市／央廚打卡（打卡店有 store 階梯單位）＝工時與忘刷單一律由打卡單位的店長／廠長／兼任店長核（薪資跟打卡門市請款），
+    //   不管本人職稱；店長本人也核自己的。總部打卡、個人例外（STORE_NOT_SUPPORT_EX）照原身分（attApproverOf_ hours）。
+    //   加班單、假單、出差單一律照本人原單位的上層（reqT＝attApproverOf_ req），不看在哪裡打卡。忘刷單跟工時名單走（營運系統依申請種類分）。
+    var pClock = storeAnyIn_(a.units, pilot);
+    // 推算不出的人（orphan）照舊只給人資主管／admin；打卡店不在試點時，非支援帳號（推算者、品牌辦公室同仁）照原身分（同 10-30 對抗驗證：不讓帳號從所有人名單消失）
+    var byClock = a.units.length > 0 && !a.ex && !t.orphan && (pClock || a.support);
+    var pHome = storeAnyIn_(t.pilotUnits || [t.unit], pilot) || (a.ex && pClock);   // 個人例外的帳號：打卡店在試點也算（2026-10-29 審查低 3）
+    var apprH;
+    if (byClock) {
+      // 多單位共用的打卡店：在本人單位打卡只看本人單位的店長（不讓同店別單位店長核），不在本人單位才看打卡店全部單位
+      var hu = a.away ? a.units : [stfStr_(t.unit)];
+      var key = hu.join(',');
+      if (!headCache[key]) headCache[key] = storeClockHeads_(hu, people, org);
+      var extra = !!flags.attExtra && !!myUnit && (a.away ? a.units : [stfStr_(t.unit)]).indexOf(myUnit) !== -1 && !self;
+      apprH = pClock && needH && (((flags.admin || flags.hrHead) && !self) || extra || (!!myEmp && !!headCache[key][myEmp]));
+    } else {
+      apprH = pHome && !!hrsT[t.emp];   // 同 10-26 前：人資主管／admin 也看得到不推算的人（hrsT 已含）
+    }
+    if (apprH) storeAttListAdd_(L.hours, a);
+    // 申請資料存在打卡店那邊：門市／央廚打卡要打卡店在試點才列（營運系統才讀得到），總部打卡與個人例外看本人
+    var pAcct = byClock ? pClock : pHome;
+    if (pAcct && reqT[t.emp] && !t.orphan && attNeedOf_(t, org, 'req')) storeAttListAdd_(L.req, a);
+    if (viewable && pAcct) {
+      // 督導／總監只看：在本人單位打卡看本人單位、不在本人單位看打卡店單位（同舊規則）；
+      // 原本照身分能核工時、改規則後核不到這個帳號的人（例：督導到門市打卡時的總監、支援同仁的原單位店長）→ 只看
+      var viewHit = a.away ? storeAnyIn_(a.units, viewUnits) : viewUnits.indexOf(stfStr_(t.unit)) !== -1;
+      if (viewHit || (!apprH && origView && hrsT[t.emp])) storeAttListAdd_(L.view, a);
     }
     // 指定門市只看考勤（att.view@<單位>）：打卡店單位＝該單位（且在試點），支援與否都算
     if (viewable && exViewUnits.length && !L.hours.seen[a.m.store_code + '|' + a.m.emp_id]) {
@@ -660,28 +672,21 @@ function storeUpperGaps_(people, org, rctx, maps, storeUnits) {
   var out = [];
   var acct = {};
   storeAttAccounts_(people, org, null, maps || [], storeUnits || {}).forEach(function (a) {
-    if (a.support) (acct[a.t.emp] = acct[a.t.emp] || []).push(a);
+    if (a.away) (acct[a.t.emp] = acct[a.t.emp] || []).push(a);
   });
   people.forEach(function (t) {
     if (!storeIsDuty_(t) || stfStr_(t.status) !== 'active' || !stfStr_(t.emp)) return;
     var needR = attNeedOf_(t, org, 'req');
     if (!needR || needR.kind === 'hr_only') return;   // 人資核的部門：表上本來就沒人，不算缺上層（Fable 審查低 4）
-    var has = people.some(function (ap) { return attApproverOf_(ap, t, org, 'req', rctx); });
-    var gap = !has;
-    if (!gap) {
-      (acct[t.emp] || []).forEach(function (a) {
-        if (storeIsHqTarget_(t, org)) return;   // 總部同仁的支援帳號：申請照原身分，上面 has 已算過
-        var ap = storeSupportApprovers_(a.units, people, org, rctx, true, a.units.some(function (u) { return storeActingHas_(t, u); }) ? t.emp : '');
-        if (!Object.keys(ap).length) gap = true;
-      });
-    }
+    // 2026-11-04：申請一律照本人原單位的上層（不看打卡店），所以只看表上有沒有人
+    var gap = !people.some(function (ap) { return attApproverOf_(ap, t, org, 'req', rctx); });
     if (gap) out.push({ emp: t.emp, name: stfStr_(t.name), unit: stfStr_(t.unit) });
   });
-  // 總部同仁（非值班主管）有門市支援帳號、申請照原身分，但部門那條表上已沒有在職核定人（例：部門主管停用）→ 也提醒（2026-10-29 審查低 2）
+  // 不在本人單位打卡的同仁（非值班主管）：申請照原身分，但原單位那條表上已沒有在職核定人（例：部門主管停用）→ 也提醒（2026-10-29 審查低 2；2026-11-04 擴大到全部）
   var listed = {}; out.forEach(function (x) { listed[x.emp] = true; });
   people.forEach(function (t) {
     if (listed[t.emp] || storeIsDuty_(t) || stfStr_(t.status) !== 'active' || !stfStr_(t.emp)) return;
-    if (!(acct[t.emp] || []).length || !storeIsHqTarget_(t, org)) return;
+    if (!(acct[t.emp] || []).length) return;   // 2026-11-04：不只總部同仁，不在本人單位打卡的都算
     var needR = attNeedOf_(t, org, 'req');
     if (!needR || needR.kind === 'hr_only') return;
     if (!people.some(function (ap) { return attApproverOf_(ap, t, org, 'req', rctx); })) out.push({ emp: t.emp, name: stfStr_(t.name), unit: stfStr_(t.unit) });
@@ -702,6 +707,7 @@ function storeHoursGaps_(people, org, rctx, maps, storeUnits) {
   // att.extra（額外考勤核定，只走個別例外）持有人：在職、身分有效，核「被核者單位＝自己單位」（支援帳號看打卡店單位），不核自己（對抗驗證 2026-10-30）
   var extraEmps = typeof permAttExtraEmps_ === 'function' ? permAttExtraEmps_() : {};
   var extraHolders = people.filter(function (p) { return extraEmps[stfStr_(p.emp).toUpperCase()] && stfStr_(p.status) === 'active' && !!storeOrgOf_(p, org); });
+  var pilotG = storePilotUnits_();
   var extraCovers = function (units, selfEmp) { return extraHolders.some(function (h) { return stfStr_(h.emp) !== selfEmp && units.indexOf(stfStr_(h.unit)) !== -1; }); };
   people.forEach(function (t) {
     if (stfStr_(t.status) !== 'active' || !stfStr_(t.emp)) return;
@@ -712,9 +718,10 @@ function storeHoursGaps_(people, org, rctx, maps, storeUnits) {
     if (!list.length) return;
     var gap = false;
     list.forEach(function (a) {
-      if (a.support) {
-        var selfEx = a.units.some(function (u) { return storeActingHas_(t, u); }) ? stfStr_(t.emp) : '';
-        if (!Object.keys(storeSupportApprovers_(a.units, people, org, rctx, false, selfEx)).length && !extraCovers(a.units, stfStr_(t.emp))) gap = true;
+      if (a.units.length && !a.ex && !a.t.orphan && (a.support || storeAnyIn_(a.units, pilotG))) {   // 同 storeAttLists_ 的 byClock
+        // 2026-11-04：在門市／央廚打卡＝打卡單位的店長／廠長／兼任店長核（本人是店長也算有人）
+        var hu = a.away ? a.units : [stfStr_(t.unit)];
+        if (!Object.keys(storeClockHeads_(hu, people, org)).length && !extraCovers(hu, stfStr_(t.emp))) gap = true;
       } else if (!people.some(function (ap) { return attApproverOf_(ap, t, org, 'hours', rctx); }) && !extraCovers([stfStr_(t.unit)], stfStr_(t.emp))) gap = true;
     });
     if (gap) out.push({ emp: t.emp, name: stfStr_(t.name), unit: stfStr_(t.unit) });
