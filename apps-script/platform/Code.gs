@@ -40,6 +40,8 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'clockAddMztMc202610', 'clockAddMztMcRollback202610',
   // 2026-11-01：墨竹亭內湖瑞光啟用＋加進打卡對照 clock_stores（第八家打卡店 MZTRG；Staff.gs 第 16、17 段）
   'orgEnableMztRg202611', 'orgEnableMztRgRollback202611', 'clockAddMztRg202611', 'clockAddMztRgRollback202611',
+  // 2026-11-04：墨竹亭台中文心啟用＋加進打卡對照 clock_stores（第九家打卡店 MZTWX；Staff.gs 第 18、19 段）
+  'orgEnableMztWx202611', 'orgEnableMztWxRollback202611', 'clockAddMztWx202611', 'clockAddMztWxRollback202611',
   'orgDisableOps202610', 'orgDisableOpsRollback202610',
   // 2026-10-16：公告專區自動登入電子佈告欄（StaffClock.gs SSO 節）
   'ssoTicket', 'svcSsoRedeem',
@@ -129,7 +131,7 @@ function dispatch_(e) {
     staffCreateByUnit: 1, staffLeave: 1, staffLeaveCancel: 1, staffRename: 1, staffReinstate: 1,
     clockMapBuild: 1, clockMapDecide: 1, clockCandidateCreate: 1, clockCandidateDismiss: 1,
     clockOutboxRetry: 1, clockOutboxCancel: 1, clockSetHome: 1, clockOldHomeDecide: 1, clockLink: 1, clockAddHome: 1,
-    orgUpgrade2026: 1, orgRollback2026: 1, orgUpgrade202610: 1, orgRollback202610: 1, orgRename202610: 1, orgRenameRollback202610: 1, orgAddBranddev202610: 1, orgAddBranddevRollback202610: 1, orgEnableMztMc202610: 1, orgEnableMztMcRollback202610: 1, clockAddMztMc202610: 1, clockAddMztMcRollback202610: 1, orgEnableMztRg202611: 1, orgEnableMztRgRollback202611: 1, clockAddMztRg202611: 1, clockAddMztRgRollback202611: 1, orgDisableOps202610: 1, orgDisableOpsRollback202610: 1,
+    orgUpgrade2026: 1, orgRollback2026: 1, orgUpgrade202610: 1, orgRollback202610: 1, orgRename202610: 1, orgRenameRollback202610: 1, orgAddBranddev202610: 1, orgAddBranddevRollback202610: 1, orgEnableMztMc202610: 1, orgEnableMztMcRollback202610: 1, clockAddMztMc202610: 1, clockAddMztMcRollback202610: 1, orgEnableMztRg202611: 1, orgEnableMztRgRollback202611: 1, clockAddMztRg202611: 1, clockAddMztRgRollback202611: 1, orgEnableMztWx202611: 1, orgEnableMztWxRollback202611: 1, clockAddMztWx202611: 1, clockAddMztWxRollback202611: 1, orgDisableOps202610: 1, orgDisableOpsRollback202610: 1,
     permInit: 1, permMapSave: 1, permExSave: 1, permExRevoke: 1, permStoreSave: 1, permAuditSeen: 1,
     apvSetup: 1, apvThresholdSave: 1, apvSubmit: 1, apvResubmit: 1, apvWithdraw: 1, apvDecide: 1, apvSign: 1, apvHandle: 1, apvReassign: 1, apvVoid: 1,
     regionSave: 1, regionSwitch: 1, lineRevoke: 1 };
@@ -238,6 +240,10 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'orgEnableMztRgRollback202611': return handleOrgEnableMztRgRollback202611_(token, payload);
     case 'clockAddMztRg202611': return handleClockAddMztRg202611_(token, payload);
     case 'clockAddMztRgRollback202611': return handleClockAddMztRgRollback202611_(token, payload);
+    case 'orgEnableMztWx202611': return handleOrgEnableMztWx202611_(token, payload);
+    case 'orgEnableMztWxRollback202611': return handleOrgEnableMztWxRollback202611_(token, payload);
+    case 'clockAddMztWx202611': return handleClockAddMztWx202611_(token, payload);
+    case 'clockAddMztWxRollback202611': return handleClockAddMztWxRollback202611_(token, payload);
     case 'orgDisableOps202610': return handleOrgDisableOps202610_(token, payload);
     case 'orgDisableOpsRollback202610': return handleOrgDisableOpsRollback202610_(token, payload);
     case 'permInit': return handlePermInit_(token);
