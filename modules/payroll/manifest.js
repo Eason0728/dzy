@@ -27,7 +27,8 @@ export default {
     { id: 'emp', name: '員工設定', requires: ['payroll.write'] },
     { id: 'cfg', name: '參數設定', requires: ['payroll.write'] },
     { id: 'slip', name: '薪資單', requires: ['payroll.write'] },
-    { id: 'export', name: '匯出', requires: ['payroll.write'] }
+    { id: 'export', name: '匯出', requires: ['payroll.write'] },
+    { id: 'oplog', name: '操作紀錄', requires: ['payroll.write'] }   // 定案／解鎖／設定變更的紀錄（2026-11-04，唯讀；範圍由薪資後端依負責門市裁切）
   ],
   entry: () => import('./index.js')
 };
