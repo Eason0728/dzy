@@ -1759,5 +1759,110 @@ function noBranddev(app) { const d = app.sheets.org._data; for (let i = d.length
   ok(!/READ_ACTIONS[^\n]*clockAddMztRg/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '23 不在任何讀取清單');
 })();
 
+// ── 第 24 節（2026-11-04）：重新啟用墨竹亭台中文心 orgEnableMztWx202611／orgEnableMztWxRollback202611 ──
+(() => {
+  const en = (app, payload, t) => post(app.sb, 'orgEnableMztWx202611', payload || {}, t === undefined ? app.tok : t);
+  const rb = (app, t) => post(app.sb, 'orgEnableMztWxRollback202611', {}, t === undefined ? app.tok : t);
+  const wxRows = (app) => app.sheets.org._data.filter((r) => r[0] === 'unit' && r[1] === 'mzt-wx');
+  const isOn = (app) => String(wxRows(app)[0][7]).toUpperCase() === 'TRUE';
+  const app = freshNew();
+  ok(wxRows(app).length === 1 && !isOn(app), '24 前提：mzt-wx 存在且停用');
+  ok(en(app, { dryrun: true }, app.hrTok).ok === false && rb(app, app.hrTok).ok === false && en(app, {}, app.hrTok).ok === false, '24 ★非 admin（人資）預覽／執行／退回都被擋');
+  ok(en(app, { dryrun: true }, '').ok === false, '24 無 token 被擋');
+  const before = sheetDump(app);
+  const dr = en(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true && dr.data.action === 'reactivate' && dr.data.unit.code === 'mzt-wx' && sheetDump(app) === before, '24 dryrun 預覽重新啟用、零寫入', dr);
+  const orgB = JSON.stringify(orgRows(app));
+  const run = en(app, {});
+  ok(run.ok && run.data.dryrun === false && run.data.action === 'reactivate' && wxRows(app).length === 1 && isOn(app), '24 執行：同一列改為啟用', run);
+  const strip = (rows) => JSON.stringify(rows.map((r) => r.map((v, i) => (i === 7 ? '' : v))));
+  ok(strip(JSON.parse(orgB)) === strip(orgRows(app)), '24 ★只改啟用那一格（其他格逐格相同）');
+  ok(app.sb.stfReadOrg_().unit['mzt-wx'].active === true, '24 讀組織：mzt-wx 啟用');
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_enable_mztwx_2611').length === 1, '24 staff_log 一筆');
+  const again = en(app, {});
+  ok(again.ok && again.data.action === 'skip' && rowsOf(app, 'staff_log').filter((r) => r.event === 'org_enable_mztwx_2611').length === 1, '24 重跑冪等：略過、不重複紀錄', again);
+  // 啟用後同仁可選、店長可建
+  const sm = mk(app, '文心店長', { brand: 'mzt', unit: 'mzt-wx', title: 'sm' });
+  ok(staffOf(app, sm.emp).unit === 'mzt-wx', '24 同仁可掛墨竹亭台中文心（店長）');
+  // 退回：有人 → 拒絕只列 emp_no
+  const rbNo = rb(app);
+  ok(rbNo.ok === false && rbNo.data.members.join() === sm.emp && JSON.stringify(rbNo.data).indexOf('文心店長') === -1 && isOn(app), '24 ★退回：有人在店 → 拒絕、只列 emp_no、不動', rbNo);
+  setStaff(app, sm.emp, 'unit', 'mzt-gf');
+  const pend = submitOnly(app, '文心待審', { brand: 'mzt', unit: 'mzt-wx', title: 'pt' });
+  const rbP = rb(app);
+  ok(rbP.ok === false && rbP.data.members.join() === pend.emp, '24 ★退回：送出待審 p_unit＝mzt-wx 也拒絕', rbP);
+  setStaff(app, pend.emp, 'status', 'disabled');
+  const r2 = rb(app);
+  ok(r2.ok && r2.data.action === 'deactivate' && wxRows(app).length === 1 && !isOn(app), '24 停用的人不擋：退回成功、列還在', r2);
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'org_enable_mztwx_2611_rollback').length === 1, '24 退回有 staff_log');
+  ok(rb(app).data.action === 'skip', '24 退回重跑冪等');
+  ok(en(app, {}).data.action === 'reactivate' && isOn(app), '24 退回後再啟用');
+  // 沒有列 → 新增在墨竹亭最後
+  const app2 = freshNew();
+  const d2 = app2.sheets.org._data; for (let i = d2.length - 1; i >= 1; i--) if (d2[i][0] === 'unit' && d2[i][1] === 'mzt-wx') d2.splice(i, 1);
+  const mzMax = Math.max(...d2.filter((r) => r[0] === 'unit' && r[3] === 'mzt').map((r) => Number(r[6])));
+  const a2 = en(app2, {});
+  ok(a2.ok && a2.data.action === 'add' && wxRows(app2).length === 1 && wxRows(app2)[0].slice(0, 8).join('|') === `unit|mzt-wx|台中文心|mzt|store||${mzMax + 1}|TRUE`, '24 沒有列：新增一列（order＝墨竹亭最大＋1）', a2);
+  // 衝突：名稱或品牌不同 → 拒絕、不動
+  const app3 = freshNew();
+  wxRows(app3)[0][2] = '別的名字';
+  const snap3 = JSON.stringify(orgRows(app3));
+  const c1 = en(app3, {});
+  ok(c1.ok === false && c1.data.bad.length === 1 && JSON.stringify(orgRows(app3)) === snap3 && rb(app3).ok === false, '24 ★衝突（名稱不同）：啟用與退回都拒絕、org 不動', c1);
+  // Code.gs 登錄、dryrun
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/'orgEnableMztWx202611', 'orgEnableMztWxRollback202611'/.test(src) && /orgEnableMztWx202611: 1, orgEnableMztWxRollback202611: 1/.test(src) && /case 'orgEnableMztWx202611'/.test(src) && /case 'orgEnableMztWxRollback202611'/.test(src), '24 兩個 action 在白名單、寫入鎖、分派表');
+  ok(!/READ_ACTIONS[^\n]*orgEnableMztWx/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '24 不在任何讀取清單');
+})();
+
+// ── 第 25 節（2026-11-04）：墨竹亭台中文心加進打卡對照 clockAddMztWx202611／clockAddMztWxRollback202611 ──
+(() => {
+  const en = (app, payload, t) => post(app.sb, 'clockAddMztWx202611', payload || {}, t === undefined ? app.tok : t);
+  const rb = (app, t) => post(app.sb, 'clockAddMztWxRollback202611', {}, t === undefined ? app.tok : t);
+  const cs = (app) => app.sheets.clock_stores._data;
+  const rg = (app) => cs(app).filter((r) => String(r[0]) === 'mztwx');
+  const asProd = (app) => { const d = cs(app); for (let i = d.length - 1; i >= 1; i--) if (String(d[i][0]) === 'mztwx') d.splice(i, 1); };   // 正式表＝只有原本六家
+  const app = freshNew();
+  ok(app.sheets.clock_stores && rg(app).length === 1, '25 前提：新建的表預設就有 mztwx（CLK_DEFAULT_STORES 第七列）');
+  asProd(app);
+  ok(rg(app).length === 0, '25 前提：模擬正式表沒有 mztwx');
+  ok(en(app, { dryrun: true }, app.hrTok).ok === false && en(app, {}, app.hrTok).ok === false && rb(app, app.hrTok).ok === false, '25 ★非 admin（人資）預覽／執行／退回都被擋');
+  ok(en(app, { dryrun: true }, '').ok === false, '25 無 token 被擋');
+  const before = sheetDump(app);
+  const dr = en(app, { dryrun: true });
+  ok(dr.ok && dr.data.dryrun === true && dr.data.action === 'add' && dr.data.store.unit === 'mzt-wx' && sheetDump(app) === before, '25 dryrun 預覽新增、零寫入', dr);
+  const others = JSON.stringify(cs(app));
+  const run = en(app, {});
+  ok(run.ok && run.data.action === 'add' && rg(app).length === 1 && rg(app)[0].slice(0, 5).join('|') === 'mztwx|墨竹亭 台中文心|mzt-wx|TRUE|MZTWX', '25 執行：新增一列 mztwx／mzt-wx／MZTWX', run);
+  ok(JSON.stringify(cs(app).filter((r) => String(r[0]) !== 'mztwx')) === others, '25 ★其他店的列逐格不動');
+  ok(app.sb.clkStoreOfUnit_('mzt-wx') && app.sb.clkStoreOfUnit_('mzt-wx').store_code === 'mztwx' && app.sb.clkUnitConflict_() === '', '25 單位 mzt-wx 對到打卡店 mztwx、沒有單位衝突');
+  ok(rowsOf(app, 'staff_log').filter((r) => r.event === 'clock_add_mztwx_2611').length === 1, '25 staff_log 一筆');
+  const again = en(app, {});
+  ok(again.ok && again.data.action === 'skip' && rg(app).length === 1 && rowsOf(app, 'staff_log').filter((r) => r.event === 'clock_add_mztwx_2611').length === 1, '25 重跑冪等：略過、不重複', again);
+  const r1 = rb(app);
+  ok(r1.ok && r1.data.action === 'deactivate' && rg(app).length === 1 && String(rg(app)[0][3]).toUpperCase() === 'FALSE', '25 退回：enabled 改 FALSE、列還在', r1);
+  ok(rb(app).data.action === 'skip', '25 退回重跑冪等');
+  const re = en(app, {});
+  ok(re.ok && re.data.action === 'reactivate' && String(rg(app)[0][3]).toUpperCase() === 'TRUE', '25 退回後再加入＝重新啟用', re);
+  // 已有確認的打卡對照 → 退回拒絕
+  app.sheets.staff_clock._data.push(['DZY999', 'mztwx', 'MZTWX01', 'home', 'confirmed', 'build', 'TRUE', '', '', '', '', '', '', '', '', '']);
+  const rbNo = rb(app);
+  ok(rbNo.ok === false && rbNo.data.maps === 1 && String(rg(app)[0][3]).toUpperCase() === 'TRUE', '25 ★已有同仁打卡對照：退回拒絕、不動', rbNo);
+  // 衝突：mztwx 列名稱或單位被改過 → 拒絕
+  const app2 = freshNew();
+  rg(app2)[0][1] = '別的店名';
+  const snap2 = JSON.stringify(cs(app2));
+  const c1 = en(app2, {});
+  ok(c1.ok === false && c1.data.bad.length === 1 && JSON.stringify(cs(app2)) === snap2 && rb(app2).ok === false, '25 ★衝突（店名被改過）：加入與退回都拒絕、不動', c1);
+  // 別的店的 unit_code 已含 mzt-wx → 加入拒絕
+  const app3 = freshNew(); asProd(app3);
+  const gfRow = cs(app3).find((r) => String(r[0]) === 'mztgf'); gfRow[2] = 'mzt-gf,mzt-wx';
+  const c3 = en(app3, {});
+  ok(c3.ok === false && rg(app3).length === 0, '25 ★別店 unit_code 已含 mzt-wx：拒絕、不新增', c3);
+  const src = fs.readFileSync(path.join(DIR, 'Code.gs'), 'utf8');
+  ok(/'clockAddMztWx202611', 'clockAddMztWxRollback202611'/.test(src) && /clockAddMztWx202611: 1, clockAddMztWxRollback202611: 1/.test(src) && /case 'clockAddMztWx202611'/.test(src) && /case 'clockAddMztWxRollback202611'/.test(src), '25 兩個 action 在 Code.gs 白名單、寫入表、分派');
+  ok(!/READ_ACTIONS[^\n]*clockAddMztWx/.test(fs.readFileSync(path.join(DIR, '..', '..', 'platform', 'dryrun.js'), 'utf8')), '25 不在任何讀取清單');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
