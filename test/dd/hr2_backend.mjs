@@ -494,6 +494,15 @@ function oracle(W) {
     for (const L of layers) { const hit = cand.filter(L); if (hit.length) { hit.forEach((c) => { out[c.emp] = true; }); return out; } }
     return out;
   };
+  const clockHeads = (hu) => {
+    const out = {};
+    activePeople.forEach((p) => {
+      if (!p.emp || !identityOk(W, p)) return;
+      if ((unit(p.unit).ladder === 'store' && ['sm', 'fm'].indexOf(p.title) !== -1 && hu.indexOf(p.unit) !== -1) || inter(actingOf(p), hu)) out[p.emp] = true;
+    });
+    return out;
+  };
+  O.clockHeads = clockHeads;
   const isSupport = (t, store, units) => {
     if (t.orphan) return false;   // 2026-10-30 Eason 照推薦：推算者（inferred，單位＝主店推算出來的）到非主店打卡也算支援、由打卡店主管核；orphan 照舊不算
     if (t.inferred && !units.some((u) => W.pilot.indexOf(u) !== -1)) return false;   // 推算者只有打卡店在試點才走支援規則（對抗驗證）
@@ -529,27 +538,24 @@ function oracle(W) {
         const needH = !t.orphan && !!need(t, 'hours');
         const viewable = needH && !self;
         const k = key(a);
-        if (!support) {
-          const pOk = inter(t.pilotUnits, W.pilot);
-          if (pOk && hrsT[t.emp]) H.add(k);
-          if (pOk && reqT[t.emp]) R.add(k);
-          if (pOk && viewable && viewUnits.indexOf(t.unit) !== -1) V.add(k);
-        } else if (inter(units, W.pilot) && !self) {
-          const selfEx = inter(units, t.acting) ? t.emp : '';
-          const apprH = supportApprovers(units, false, selfEx);
-          const apprR = supportApprovers(units, isDuty(t), selfEx);
-          const base = flags.admin || flags.hrHead;
-          const extra = flags.attExtra && !!me.unit && units.indexOf(me.unit) !== -1;
-          const extraBlockR = isDuty(t) && inter(myDuty, units);
-          const canH = base || extra || (!!me.emp && !!apprH[me.emp]);
-          const reqByHome = unit(t.unit) && unit(t.unit).ladder === 'hq';
-          const canR = reqByHome ? !!reqT[t.emp] : (base || (extra && !extraBlockR) || (!!me.emp && !!apprR[me.emp]));
-          if (canH || canR) {
-            if (canH && needH) H.add(k);
-            if (canR && !t.orphan && need(t, 'req')) R.add(k);
-            // 原單位主管「工時只看」：能簽申請的人已在 req_people 看得到這個帳號，只有「原本核得到工時」的人才另進 view
-            if (!canH && viewable && hrsT[t.emp]) V.add(k);
-          } else if (viewable && (hrsT[t.emp] || reqT[t.emp] || inter(units, viewUnits))) V.add(k);
+        // 2026-11-04 Eason：在門市／央廚打卡（打卡店有 store 單位、打卡店在試點或是支援帳號）＝工時與忘刷單只給打卡單位的店長／廠長／兼任店長（店長含自己）；
+        //   在本人單位打卡只看本人單位、不在本人單位看打卡店全部單位；人資主管／admin（不含自己）、att.extra（同單位、不含自己）照舊。
+        //   加班／請假／出差一律照本人原單位上層（reqT）。總部打卡、orphan、非試點店的非支援帳號照原身分。
+        const pClock = inter(units, W.pilot), pHome = inter(t.pilotUnits, W.pilot);
+        const byClock = units.length > 0 && !t.orphan && (pClock || support);
+        const away = !t.orphan && units.length > 0 && units.indexOf(t.unit) === -1;
+        let canH;
+        if (byClock) {
+          const hu = away ? units : [t.unit];
+          const heads = clockHeads(hu);
+          canH = pClock && needH && (((flags.admin || flags.hrHead) && !self) || (flags.attExtra && !!me.unit && hu.indexOf(me.unit) !== -1 && !self) || (!!me.emp && !!heads[me.emp]));
+        } else canH = pHome && !!hrsT[t.emp];
+        const pAcct = byClock ? pClock : pHome;
+        if (canH) H.add(k);
+        if (pAcct && reqT[t.emp] && !t.orphan && need(t, 'req')) R.add(k);
+        if (viewable && pAcct) {
+          const viewHit = away ? inter(units, viewUnits) : viewUnits.indexOf(t.unit) !== -1;
+          if (viewHit || (!canH && hrsT[t.emp])) V.add(k);
         }
         if (viewable && exViewUnits.length && !H.has(k)) {
           if (units.some((u) => exViewUnits.indexOf(u) !== -1 && W.pilot.indexOf(u) !== -1)) V.add(k);
@@ -605,24 +611,14 @@ function oracle(W) {
       if (!isDuty(p)) return;
       const nd = need(t, 'req');
       if (!nd || nd.kind === 'hr_only') return;
-      let gap = !W.people.some((ap) => approver(Object.assign({}, ap), t, 'req'));
-      if (!gap) {
-        const te = eff(p);
-        liveAcct.filter((a) => a.emp === p.emp).forEach((a) => {
-          const units = storeUnits[a.store] || [];
-          if (!te || !isSupport(te, a.store, units)) return;
-          if (unit(p.unit).ladder === 'hq') return;
-          const ap = supportApprovers(units, true, inter(units, te.acting) ? p.emp : '');
-          if (!Object.keys(ap).length) gap = true;
-        });
-      }
-      if (gap) out.push(p.emp);
+      // 2026-11-04：申請一律照本人原單位上層，只看表上有沒有人
+      if (!W.people.some((ap) => approver(Object.assign({}, ap), t, 'req'))) out.push(p.emp);
     });
     // 總部同仁（非值班主管）有打卡帳號、申請照原身分（部門總監核），但表上已沒有在職核定人 → 也列（StoreOps.gs 0c44636，2026-10-29 審查低 2）
     activePeople.forEach((p) => {
-      if (out.includes(p.emp) || isDuty(p) || unit(p.unit).ladder !== 'hq') return;
-      const te = eff(p);   // 後端 acct 只收「支援」帳號（storeAttAccounts_ a.support），總部自己的 hq 打卡不算
-      if (!te || !liveAcct.some((a) => a.emp === p.emp && isSupport(te, a.store, storeUnits[a.store] || []))) return;
+      if (out.includes(p.emp) || isDuty(p)) return;
+      const te = eff(p);   // 2026-11-04：不在本人單位打卡的帳號（後端 a.away）都算，不只總部同仁
+      if (!te || te.orphan || !liveAcct.some((a) => { const u = storeUnits[a.store] || []; return a.emp === p.emp && u.length > 0 && u.indexOf(te.unit) === -1; })) return;
       const t = Object.assign({}, p, { duty_units: dutyOf(p), acting: actingOf(p) });
       const nd = need(t, 'req');
       if (!nd || nd.kind === 'hr_only') return;
@@ -647,8 +643,9 @@ function oracle(W) {
       const extraCovers = (units) => W.people.some((h) => h.emp !== p.emp && h.status === 'active' && identityOk(W, h) && permsOf(h).indexOf('att.extra') !== -1 && units.indexOf(h.unit) !== -1);
       accts.forEach((a) => {
         const units = storeUnits[a.store] || [];
-        if (te && isSupport(te, a.store, units)) {
-          if (!Object.keys(supportApprovers(units, false, inter(units, te.acting) ? p.emp : '')).length && !extraCovers(units)) gap = true;
+        if (te && !te.orphan && units.length && (inter(units, W.pilot) || isSupport(te, a.store, units))) {
+          const hu = units.indexOf(te.unit) === -1 ? units : [te.unit];   // 2026-11-04：打卡單位的店長／廠長／兼任店長
+          if (!Object.keys(clockHeads(hu)).length && !extraCovers(hu)) gap = true;
         } else if (!W.people.some((ap) => approver(Object.assign({}, ap), t, 'hours')) && !extraCovers([t.unit])) gap = true;
       });
       if (gap) out.push(p.emp);
@@ -736,10 +733,9 @@ function run() {
     const nd = t && !t.orphan ? O.need(t, 'hours') : null;
     if (!t || t.orphan || t.inferred || !nd || nd.kind === 'hr_only' || nd.kind === 'mgmt') return;   // 推算的人照舊只給推算店店長（att-support §1：不套支援規則）
     // 品牌辦公室／總部同仁到門市打卡不算支援（att-support §5）：工時照原身分由辦公室總監／部門總監核，店長不核 → 辦公室沒總監時只剩人資，是規格、不是漏洞
-    const tu = unitOf(W, t.unit);
-    if (tu && tu.ladder !== 'store') return;
-    // 門市人：店裡有在職店長／廠長或兼任者卻沒人核 → 不合理
+    // 2026-11-04：在門市／央廚打卡一律由打卡單位店長核（不管本人職稱）；總部打卡（沒有 store 單位）照原身分，那邊沒人是規格
     const store = x.clock; const units = O.storeUnits[store] || [];
+    if (!units.length) return;
     // 非支援帳號：只有「本人單位」的在職店長／廠長（身分有效）或兼任本單位的人；支援帳號：打卡店任一單位的店長／兼任者
     const support = units.length && units.indexOf(t.unit) === -1;
     const headUnits = support ? units : [t.unit];
@@ -861,10 +857,10 @@ function run() {
         const okRow = (owner && owner.unit === p.unit) || units.indexOf(p.unit) !== -1 || (O.eff(owner) && O.eff(owner).inferred && O.eff(owner).unit === p.unit);
         ok(okRow, `${p.emp}（店長 ${p.unit}）核到別店的帳號 ${x.clock}:${x.sub}`, x);
         // 品牌辦公室／總部同仁到本店打卡：工時可核（總部）／不可核（辦公室）；申請一律不是店長核
-        if (owner && unitLadder(owner.unit) === 'office') ok(false, `${p.emp}（店長）核到品牌辦公室同仁 ${x.sub} 的帳號（att-support §5：店長不核也不看）`, x);
       });
+      // 2026-11-04：品牌辦公室同仁在本店打卡，店長核工時、申請一律不是店長簽
+      g.att.req_people.forEach((x) => { const owner = byEmp[x.sub]; if (owner && unitLadder(owner.unit) === 'office') ok(false, `${p.emp}（店長）核到品牌辦公室同仁 ${x.sub} 的申請（應由總監簽）`, x); });
       g.att.req_people.forEach((x) => { const owner = byEmp[x.sub]; if (owner && unitLadder(owner.unit) === 'hq') ok(false, `${p.emp}（店長）核到總部同仁 ${x.sub} 的申請（應照原身分簽）`, x); });
-      g.att.view_people.forEach((x) => { const owner = byEmp[x.sub]; if (owner && unitLadder(owner.unit) === 'office') ok(false, `${p.emp}（店長）看到品牌辦公室同仁 ${x.sub}`, x); });
     }
     // 財務部同仁只有人資主管／admin／同單位 att.extra 能核
     g.att.people.concat(g.att.req_people).forEach((x) => {

@@ -336,7 +336,7 @@ function setup() {
   ok(!R.some((x) => x.indexOf(':DZY201') !== -1), '3 ★自己的申請照舊不能核（含六張犁帳號）', R);
   ok(!H.some((x) => /DZY23[012]/.test(x) && x.indexOf('mztlzl:') !== 0), '3 不核別店');
   // 他自己照原身分：辦公室總監核他的工時（兩個帳號）
-  ok(has(app.H('DZY210'), 'hq:DZY201') && has(app.H('DZY210'), 'mztlzl:DZY201'), '3 ★兼任者本人的工時照原身分由辦公室總監核（含六張犁帳號；總監照舊核得到）');
+  ok(has(app.H('DZY210'), 'hq:DZY201') && !has(app.H('DZY210'), 'mztlzl:DZY201'), '3 ★兼任者本人：總部帳號工時照原身分由辦公室總監核；六張犁帳號的工時跟打卡店（兼任者自己，2026-11-04）');
   // 值班主管：兼任者與 DZY204 都是六張犁值班主管
   app.setDuty('DZY201', 'mztlzl', 'TRUE');
   app.setDuty('DZY204', 'mztlzl', 'TRUE');
@@ -348,7 +348,7 @@ function setup() {
   // 兼任者本人的申請：照原身分（辦公室總監），值班規則不改變
   ok(has(app.R('DZY210'), 'mztlzl:DZY201') || has(app.R('DZY210'), 'hq:DZY201'), '3 兼任者本人的申請由辦公室總監核');
   // 支援：光復計時到六張犁打卡 → 兼任者核；光復店長只看
-  ok(has(app.H('DZY201'), 'mztlzl:DZY230') && has(app.R('DZY201'), 'mztlzl:DZY230'), '3 ★支援到六張犁的帳號由兼任者核（Q2 A）');
+  ok(has(app.H('DZY201'), 'mztlzl:DZY230') && !has(app.R('DZY201'), 'mztlzl:DZY230') && has(app.R('DZY231'), 'mztlzl:DZY230'), '3 ★支援到六張犁的帳號：工時由兼任者核，申請回光復店長（2026-11-04）');
   ok(!has(app.H('DZY231'), 'mztlzl:DZY230') && has(app.V('DZY231'), 'mztlzl:DZY230'), '3 原單位店長對支援帳號只看');
   ok(has(app.H('DZY231'), 'mztgf:DZY230'), '3 光復本店帳號照舊光復店長核');
   // 營運系統：units_managed、選單
@@ -545,7 +545,7 @@ function setup() {
   sheets.staff_clock._data.push(['DZY232', 'mztlzl', 'MZTLZL232', 'staff', 'confirmed', 'created', 'TRUE', '', 'tester', '', '']);
   app.ex(app.tok.DZY220, 'DZY232', 'store.sm@mzt-lzl');
   ok(has(app.H('DZY232'), 'mztlzl:DZY232') && !has(app.R('DZY232'), 'mztlzl:DZY232'), '8-1 ★兼任者自己的支援帳號：工時可以自己核、申請不行（2026-10-30 Eason 選 A）');
-  ok(has(app.H('DZY206'), 'mztlzl:DZY232') && has(app.R('DZY206'), 'mztlzl:DZY232'), '8-1 ★兼任者自己的支援帳號往下一層（區經理）核，不會沒人核', app.H('DZY206'));
+  ok(!has(app.H('DZY206'), 'mztlzl:DZY232') && !has(app.R('DZY206'), 'mztlzl:DZY232'), '8-1 ★2026-11-04：區經理不補核；兼任者自己核工時，申請照本人原單位（金山）上層', app.H('DZY206'));
   // 8-2 財務同仁是值班主管 → 不該出現在「找不到上層」提醒（人資主管本來就核）
   const clk = sheets.staff_clock._data.find((r) => r[0] === 'DZY222' && r[1] === 'hq');
   while (clk.length < 16) clk.push(''); clk[15] = 'TRUE';

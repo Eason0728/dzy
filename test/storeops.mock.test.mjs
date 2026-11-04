@@ -1186,9 +1186,10 @@ function noDirSched(id) {
   {
     const maps = MAPS.concat([M('DZY308', 'mztgf', 'MG08'), M('DZY317', 'gf', 'GF17')]);
     const s303 = run('DZY303', { maps }), s309 = run('DZY309', { maps }), s301 = run('DZY301', { maps }), s316 = run('DZY316', { maps });
-    ok(s303.h.indexOf('mztgf:MG08') === -1 && s303.r.indexOf('mztgf:MG08') === -1 && s303.v.indexOf('mztgf:MG08') === -1, '9a ★督導在墨光打卡：墨光店長不核也不看', s303);
-    ok(s309.h.indexOf('mztgf:MG08') !== -1 && s309.r.indexOf('mztgf:MG08') !== -1, '9a ★督導在墨光打卡：照原規則由墨竹亭總監核（工時與申請）', s309);
-    ok(s301.h.indexOf('gf:GF17') === -1 && s316.h.indexOf('gf:GF17') !== -1, '9a ★小辛辣行政在光復打卡：光復店長不核、小辛辣總監核', { s301: s301.h, s316: s316.h });
+    // 2026-11-04 Eason：在門市打卡一律由打卡單位店長核工時（忘刷單跟工時），加班／請假／出差照本人原單位上層
+    ok(s303.h.indexOf('mztgf:MG08') !== -1 && s303.r.indexOf('mztgf:MG08') === -1, '9a ★督導在墨光打卡：墨光店長核工時、不核申請（2026-11-04）', s303);
+    ok(s309.h.indexOf('mztgf:MG08') === -1 && s309.r.indexOf('mztgf:MG08') !== -1 && s309.v.indexOf('mztgf:MG08') !== -1, '9a ★督導在墨光打卡：墨竹亭總監簽申請、工時只看（2026-11-04）', s309);
+    ok(s301.h.indexOf('gf:GF17') !== -1 && s316.h.indexOf('gf:GF17') === -1 && s316.r.indexOf('gf:GF17') !== -1, '9a ★小辛辣行政在光復打卡：光復店長核工時、小辛辣總監簽申請（2026-11-04）', { s301: s301.h, s316: s316 });
   }
   const ac = sb.storeAttAccounts_(BASE, org, null, MAPS.concat([Object.assign(M('DZY301', 'mztgf', 'MGX'), { state: 'pending' }), Object.assign(M('DZY301', 'mztjs', 'MJX'), { roster_active: 'FALSE' })]), SU);
   ok(!ac.some((a) => a.m.emp_id === 'MGX' || a.m.emp_id === 'MJX'), '9a 帳號只算 confirmed、roster_active 不是 FALSE');
@@ -1197,47 +1198,42 @@ function noDirSched(id) {
   // 9b. 支援帳號由打卡店主管核（工時＋申請）、原單位主管只看
   const s301 = run('DZY301');
   g('9b 辛光店長 工時：自己、本店計時、到本店支援的資訊同仁（總部同仁到門市也一樣，5A）；不含本店計時在墨光的帳號', s301.h, ['gf:GF01', 'gf:GF02', 'gf:GF13']);
-  g('9b 辛光店長 申請：本店計時（不含自己）；資訊同仁在本店的帳號申請照原身分，不歸店長（2026-10-29 Eason）', s301.r, ['gf:GF02']);
+  g('9b 辛光店長 申請：本店計時（不含自己）的全部帳號（含在墨光支援的那個，2026-11-04 申請回原單位）；資訊同仁在本店的帳號申請照原身分', s301.r, ['gf:GF02', 'mztgf:MG02']);
   g('9b ★原單位主管只看（4B）：辛光店長看得到本店計時在墨光的帳號，只看不核', s301.v, ['mztgf:MG02']);
   const s303 = run('DZY303');
   g('9b 墨光店長 工時：自己、本店計時、到墨光支援的辛光計時與央廚計時；不含自己在金山的支援帳號', s303.h, ['mztgf:MG02', 'mztgf:MG03', 'mztgf:MG04', 'mztgf:MG12', 'mztgf:MG18']);
-  g('9b 墨光店長 申請：同上但不含自己', s303.r, ['mztgf:MG02', 'mztgf:MG04', 'mztgf:MG12', 'mztgf:MG18']);
+  g('9b 墨光店長 申請：只有本店同仁（含在六張犁支援的帳號）；到墨光支援的人申請回原單位（2026-11-04）', s303.r, ['mztgf:MG04', 'mztgf:MG18', 'mztlzl:ML04']);
   g('9b 墨光店長 只看：本店計時在六張犁的支援帳號；自己的支援帳號不列', s303.v, ['mztlzl:ML04']);
   const s305 = run('DZY305');
   g('9b ★店長去別店支援：金山店長核墨光店長在金山的工時', s305.h, ['mztjs:MJ03', 'mztjs:MJ05', 'mztjs:MJ06']);
-  g('9b ★店長去別店支援：申請也由金山店長核（2A）；店長本人與區經理的申請照舊不歸他', s305.r, ['mztjs:MJ03']);
+  g('9b ★店長去別店支援：申請不歸金山店長（2026-11-04 回原單位上層）；店長本人與區經理的申請照舊不歸他', s305.r, []);
   g('9b 區經理：第一層有店長就不輪到區經理；自己店店長的申請照舊', [run('DZY306').h, run('DZY306').r, run('DZY306').v], [[], ['mztjs:MJ05'], []]);
   g('9b ★總部同仁去門市：資訊總監核總部帳號；門市那個帳號工時只看、申請照原身分由他簽（2026-10-29 Eason）', [run('DZY314').h, run('DZY314').r, run('DZY314').v], [['hq:H13'], ['gf:GF13', 'hq:H13'], ['gf:GF13']]);
   g('9b 一般同仁沒有名單', [run('DZY302').h, run('DZY302').r, run('DZY302').v], [[], [], []]);
 
-  // 9c. 打卡店沒有店長時往上找（3A）：六張犁沒有店長／區經理
+  // 9c. 2026-11-04 Eason：工時與忘刷單只給打卡單位的店長／廠長／兼任店長（不再往上找區經理、督導、總監）；店長空著就只剩人資主管／admin／att.extra
+  //   加班、請假、出差單照本人原單位上層。六張犁沒有店長：墨光計時在六張犁的帳號 ML04 工時沒人核，申請由墨光店長簽
   const s309 = run('DZY309');
-  ok(has(s309.h, 'mztlzl:ML04') && has(s309.r, 'mztlzl:ML04'), '9c 第 4 層：店長、區經理都沒有、區域開關關 → 品牌總監核（工時＋申請）', s309);
-  ok(!has(run('DZY308').h, 'mztlzl:ML04') && !has(run('DZY308').r, 'mztlzl:ML04'), '9c 區域開關關：督導不核支援帳號（跳過第 3 層）');
+  ok(!has(s309.h, 'mztlzl:ML04') && !has(s309.r, 'mztlzl:ML04'), '9c ★打卡店沒有店長：品牌總監不補核工時（2026-11-04）', s309);
+  ok(has(s303.r, 'mztlzl:ML04') && !has(s303.h, 'mztlzl:ML04'), '9c 那個帳號的申請由本人原單位店長（墨光）簽，工時他不核', s303);
   const idx = { byStore: { 'mzt-lzl': 'r1' }, byRegion: { r1: { code: 'r1', stores: ['mzt-lzl'], supervisorEmp: 'DZY308' } }, bySupervisor: { DZY308: ['r1'] } };
   const on = { on: true, idx };
-  g('9c 第 3 層：區域開關開、負責那區的督導 → 督導核（工時＋申請）', [run('DZY308', { rctx: on }).h, run('DZY308', { rctx: on }).r], [['mztlzl:ML04'], ['mztlzl:ML04']]);
-  ok(!has(run('DZY309', { rctx: on }).h, 'mztlzl:ML04') && !has(run('DZY309', { rctx: on }).r, 'mztlzl:ML04'), '9c 第 3 層有人 → 總監不核');
-  const noSup = { on: true, idx: { byStore: { 'mzt-lzl': 'r1' }, byRegion: { r1: { code: 'r1', stores: ['mzt-lzl'], supervisorEmp: '' } }, bySupervisor: {} } };
-  ok(has(run('DZY309', { rctx: noSup }).h, 'mztlzl:ML04') && !has(run('DZY308', { rctx: noSup }).h, 'mztlzl:ML04'), '9c 區沒督導（或沒劃區）→ 跳過第 3 層，總監核');
-  const otherReg = { on: true, idx: { byStore: { 'mzt-lzl': 'r2' }, byRegion: { r2: { code: 'r2', stores: ['mzt-lzl'], supervisorEmp: 'DZY399' } }, bySupervisor: { DZY399: ['r2'] } } };
-  ok(!has(run('DZY308', { rctx: otherReg }).h, 'mztlzl:ML04') && has(run('DZY309', { rctx: otherReg }).h, 'mztlzl:ML04'), '9c 那區的督導是別人且不在職（不在 people）→ 本督導不核；第 3 層沒人 → 總監核');
+  ok(!has(run('DZY308', { rctx: on }).h, 'mztlzl:ML04') && !has(run('DZY308', { rctx: on }).r, 'mztlzl:ML04'), '9c 區域開關開：負責那區的督導也不核工時（2026-11-04）');
   const plusAm = BASE.concat([P('DZY320', '六張犁區經理', 'mzt-lzl', '', 'am')]);
-  g('9c 第 2 層：沒有店長、有區經理 → 區經理核（工時＋申請）', [run('DZY320', { people: plusAm }).h, run('DZY320', { people: plusAm }).r], [['mztlzl:ML04'], ['mztlzl:ML04']]);
-  ok(!has(run('DZY309', { people: plusAm }).h, 'mztlzl:ML04'), '9c 第 2 層有人 → 總監不核');
+  ok(!has(run('DZY320', { people: plusAm }).h, 'mztlzl:ML04') && !has(run('DZY320', { people: plusAm }).r, 'mztlzl:ML04'), '9c 區經理不算店長，不核（2026-11-04）');
   const plusSm = plusAm.concat([P('DZY321', '六張犁店長', 'mzt-lzl', '', 'sm')]);
-  ok(has(run('DZY321', { people: plusSm }).h, 'mztlzl:ML04') && !has(run('DZY320', { people: plusSm }).h, 'mztlzl:ML04') && !has(run('DZY320', { people: plusSm }).r, 'mztlzl:ML04'), '9c 第 1 層：有店長 → 只有店長核（區經理不核支援帳號）');
+  ok(has(run('DZY321', { people: plusSm }).h, 'mztlzl:ML04') && !has(run('DZY321', { people: plusSm }).r, 'mztlzl:ML04') && !has(run('DZY320', { people: plusSm }).h, 'mztlzl:ML04'), '9c 有店長 → 只有店長核工時，申請照原單位');
   const offSm = plusSm.map((p) => (p.emp === 'DZY321' ? Object.assign({}, p, { status: 'disabled' }) : p));
-  ok(has(run('DZY320', { people: offSm }).h, 'mztlzl:ML04'), '9c 店長已停用 → 不算有人，往下一層（區經理）');
-  // 央廚：廠長 → 廚藝總監；沒有就只剩人資主管／admin（央廚沒有督導、總監這兩層）
+  ok(!has(run('DZY320', { people: offSm }).h, 'mztlzl:ML04') && !has(run('DZY321', { people: offSm }).h, 'mztlzl:ML04'), '9c 店長已停用 → 沒人核（區經理不補）');
+  const actLzl = BASE.map((p) => (p.emp === 'DZY308' ? Object.assign({}, p, { acting_units: ['mzt-lzl'] }) : p));
+  ok(has(run('DZY308', { people: actLzl }).h, 'mztlzl:ML04') && !has(run('DZY308', { people: actLzl }).r, 'mztlzl:ML04'), '9c ★兼任店長（不管主要職稱）核兼任店的工時，申請照原單位');
+  // 央廚：只有廠長（或兼任）核；廚藝總監不補
   const ckMaps = MAPS.concat([M('DZY302', 'cf', 'CF02')]);
-  ok(has(run('DZY310', { maps: ckMaps }).h, 'cf:CF02') && has(run('DZY310', { maps: ckMaps }).r, 'cf:CF02') && !has(run('DZY311', { maps: ckMaps }).h, 'cf:CF02'), '9c 門市同仁去央廚：廠長核（工時＋申請），廚藝總監不核');
+  ok(has(run('DZY310', { maps: ckMaps }).h, 'cf:CF02') && !has(run('DZY310', { maps: ckMaps }).r, 'cf:CF02') && has(run('DZY301', { maps: ckMaps }).r, 'cf:CF02') && !has(run('DZY311', { maps: ckMaps }).h, 'cf:CF02'), '9c 門市同仁去央廚：廠長核工時、申請回辛光店長，廚藝總監不核');
   const noFm = BASE.filter((p) => p.emp !== 'DZY310');
-  ok(has(run('DZY311', { people: noFm, maps: ckMaps }).h, 'cf:CF02') && has(run('DZY311', { people: noFm, maps: ckMaps }).r, 'cf:CF02'), '9c 央廚沒有廠長 → 廚藝總監核');
-  const noCk = noFm.filter((p) => p.emp !== 'DZY311');
-  ok(!has(run('DZY309', { people: noCk, maps: ckMaps }).h, 'cf:CF02') && !has(run('DZY316', { people: noCk, maps: ckMaps }).h, 'cf:CF02') && has(run('DZY315', { people: noCk, maps: ckMaps, flags: { hrHead: true } }).h, 'cf:CF02'), '9c 央廚兩層都沒人 → 品牌總監不補，只剩人資主管');
-  g('9c 央廚同仁去門市：墨光店長核（工時＋申請）', [has(s303.h, 'mztgf:MG12'), has(s303.r, 'mztgf:MG12'), has(run('DZY310').h, 'mztgf:MG12')], [true, true, false]);
-  ok(has(run('DZY310').v, 'mztgf:MG12'), '9c 央廚同仁去門市：廠長（原單位）只看');
+  ok(!has(run('DZY311', { people: noFm, maps: ckMaps }).h, 'cf:CF02') && has(run('DZY315', { people: noFm, maps: ckMaps, flags: { hrHead: true } }).h, 'cf:CF02'), '9c 央廚沒有廠長 → 只剩人資主管（廚藝總監不補）');
+  g('9c 央廚同仁去門市：墨光店長核工時、申請回廠長', [has(s303.h, 'mztgf:MG12'), has(s303.r, 'mztgf:MG12'), has(run('DZY310').h, 'mztgf:MG12'), has(run('DZY310').r, 'mztgf:MG12')], [true, false, false, true]);
+  ok(has(run('DZY310').v, 'mztgf:MG12'), '9c 央廚同仁去門市：廠長（原單位）工時只看');
 
   // 9d. 多單位的店：每一層把店的所有單位合起來看
   const su2 = Object.assign({}, SU, { mztlzl: ['mzt-lzl', 'mzt-js'] });
@@ -1269,22 +1265,22 @@ function noDirSched(id) {
   // 督導（要考勤的職稱）在六張犁打卡，自己又是六張犁那區的第 3 層 → 不能核自己；同一層沒有別人 → 這個帳號只剩人資主管／admin
   const osvMaps = MAPS.concat([M('DZY308', 'mztlzl', 'ML08')]);
   const o308 = run('DZY308', { maps: osvMaps, rctx: on });
-  ok(!has(o308.h, 'mztlzl:ML08') && !has(o308.r, 'mztlzl:ML08') && !has(o308.v, 'mztlzl:ML08') && has(o308.h, 'mztlzl:ML04'), '9g ★督導是自己支援帳號那層的核定人 → 仍不能核自己（同店別人照核）', o308);
-  ok(has(run('DZY315', { maps: osvMaps, rctx: on, flags: { hrHead: true } }).h, 'mztlzl:ML08') && has(run('DZY309', { maps: osvMaps, rctx: on }).h, 'mztlzl:ML08') && has(run('DZY309', { maps: osvMaps, rctx: on }).h, 'hq:H08'), '9g 那個帳號由人資主管核；2026-10-26 起督導在門市打卡不算支援 → 辦公室總監照原規則核（含總部帳號）');
+  ok(!has(o308.h, 'mztlzl:ML08') && !has(o308.r, 'mztlzl:ML08') && !has(o308.v, 'mztlzl:ML08') && !has(o308.h, 'mztlzl:ML04'), '9g ★督導不核自己、也不核負責區門市的工時（2026-11-04 只給店長）', o308);
+  ok(has(run('DZY315', { maps: osvMaps, rctx: on, flags: { hrHead: true } }).h, 'mztlzl:ML08') && !has(run('DZY309', { maps: osvMaps, rctx: on }).h, 'mztlzl:ML08') && has(run('DZY309', { maps: osvMaps, rctx: on }).r, 'mztlzl:ML08') && has(run('DZY309', { maps: osvMaps, rctx: on }).h, 'hq:H08'), '9g 督導在門市打卡：工時給打卡店（六張犁沒店長＝人資主管）、申請由辦公室總監簽；總部帳號照舊總監核');
   const odirClock = MAPS.concat([M('DZY309', 'mztlzl', 'ML09')]);
   ok(!has(run('DZY309', { maps: odirClock }).h, 'mztlzl:ML09') && !has(run('DZY309', { maps: odirClock }).v, 'mztlzl:ML09'), '9g 責任制職稱就算有門市打卡帳號也不列（不用核）、總監是第 4 層也不核自己');
 
   // 9h. att.extra：支援帳號看「打卡店單位＝我的單位」
   const ex = run('DZY318', { flags: { attExtra: true } });
   g('9h att.extra 工時：同單位的人（照舊）＋到本店支援的帳號；不含本人', ex.h, ['mztgf:MG02', 'mztgf:MG03', 'mztgf:MG04', 'mztgf:MG12']);
-  g('9h att.extra 申請：同上', ex.r, ['mztgf:MG02', 'mztgf:MG03', 'mztgf:MG04', 'mztgf:MG12']);
+  g('9h att.extra 申請：同單位的人（含他們在別店支援的帳號）；到本店支援的人申請回原單位（2026-11-04）', ex.r, ['mztgf:MG03', 'mztgf:MG04', 'mztjs:MJ03', 'mztlzl:ML04']);
   g('9h att.extra 只看：同單位的人在別店的支援帳號', ex.v, ['mztjs:MJ03', 'mztlzl:ML04']);
 
   // 9i. 督導／總監只看（REGIONS_ON）：看打卡店單位
   const mzStores = sb.attViewUnitsOf_(BASE.find((p) => p.emp === 'DZY309'), org, null);
   const v309 = run('DZY309', { opt: { viewUnits: mzStores } });
   ok(has(v309.v, 'mztgf:MG02') && has(v309.v, 'mztgf:MG03') && has(v309.v, 'mztjs:MJ03'), '9i ★墨竹亭總監：看得到小辛辣同仁在墨竹亭的支援帳號（依打卡店）', v309.v);
-  ok(!has(v309.v, 'mztlzl:ML04') && has(v309.h, 'mztlzl:ML04'), '9i 總監自己是第 4 層核定人的帳號只在核定名單');
+  ok(has(v309.v, 'mztlzl:ML04') && !has(v309.h, 'mztlzl:ML04'), '9i 總監不再補核沒店長的門市工時（2026-11-04），改成只看');
   const v316 = run('DZY316', { opt: { viewUnits: ['mala-gf'] } });
   g('9i ★小辛辣總監：只看辛光這家店的帳號（含資訊同仁支援），不再看到小辛辣同仁在墨竹亭的打卡', v316.v, ['gf:GF01', 'gf:GF02', 'gf:GF13']);
   ok(eq(v316.h, ['hq:H17']), '9i 品牌辦公室行政在總部打卡（hq）→ 照舊由總監核', v316.h);
@@ -1335,9 +1331,9 @@ function noDirSched(id) {
   const K = (s, k) => app.ident(s).att[k].map((x) => x.clock + ':' + x.emp_id);
   const g = (label, got, want) => ok(eq(got, want), label, { got, want });
   g('9k ident 墨光店長 people：多了辛光計時在墨光的帳號', K('DZY333', 'people'), ['mztgf:MZTGF332', 'mztgf:MZTGF333', 'mztgf:MZTGF334']);
-  g('9k ident 墨光店長 req_people', K('DZY333', 'req_people'), ['mztgf:MZTGF332', 'mztgf:MZTGF334']);
-  g('9k ident 辛光店長：本店兩人＋資訊同仁在本店（申請不歸店長）；辛光計時在墨光的帳號只看', [K('DZY331', 'people'), K('DZY331', 'req_people'), K('DZY331', 'view_people')],
-    [['gf:GF331', 'gf:GF332', 'gf:GF338'], ['gf:GF332'], ['mztgf:MZTGF332']]);
+  g('9k ident 墨光店長 req_people：只有本店計時（支援來的辛光計時申請回辛光，2026-11-04）', K('DZY333', 'req_people'), ['mztgf:MZTGF334']);
+  g('9k ident 辛光店長：工時本店兩人＋資訊同仁在本店；申請含辛光計時在墨光的帳號；那個帳號工時只看', [K('DZY331', 'people'), K('DZY331', 'req_people'), K('DZY331', 'view_people')],
+    [['gf:GF331', 'gf:GF332', 'gf:GF338'], ['gf:GF332', 'mztgf:MZTGF332'], ['mztgf:MZTGF332']]);
   g('9k ident 資訊總監：總部帳號照核、門市帳號工時只看、申請照原身分由他簽', [K('DZY339', 'people'), K('DZY339', 'req_people'), K('DZY339', 'view_people')], [['hq:HQ338'], ['gf:GF338', 'hq:HQ338'], ['gf:GF338']]);
   const vp = app.ident('DZY331').att;
   const SUPK = ['clock', 'emp_id', 'sub', 'name', 'support', 'home_unit', 'home_unit_name'];
@@ -1348,7 +1344,7 @@ function noDirSched(id) {
   const sup = (s, k, ck, id) => app.ident(s).att[k].find((x) => x.clock === ck && x.emp_id === id);
   ok(eq(sup('DZY333', 'people', 'mztgf', 'MZTGF332'), { clock: 'mztgf', emp_id: 'MZTGF332', sub: 'DZY332', name: '辛光計時', support: true, home_unit: 'mala-gf', home_unit_name: '麻的小辛辣 新竹光復' }),
     '9k2 ★墨光店長核的辛光計時（支援）：support:true、home_unit mala-gf、home_unit_name「麻的小辛辣 新竹光復」', sup('DZY333', 'people', 'mztgf', 'MZTGF332'));
-  ok(eq(sup('DZY333', 'req_people', 'mztgf', 'MZTGF332'), sup('DZY333', 'people', 'mztgf', 'MZTGF332')), '9k2 申請名單同一筆、同樣帶標示');
+  ok(eq(sup('DZY331', 'req_people', 'mztgf', 'MZTGF332'), sup('DZY333', 'people', 'mztgf', 'MZTGF332')), '9k2 原單位店長的申請名單同一筆、同樣帶標示');
   ok(sup('DZY331', 'view_people', 'mztgf', 'MZTGF332').home_unit_name === '麻的小辛辣 新竹光復' && sup('DZY331', 'view_people', 'mztgf', 'MZTGF332').support === true, '9k2 原單位主管只看的那筆也帶標示');
   const it338 = sup('DZY331', 'people', 'gf', 'GF338');
   ok(it338.support === true && it338.home_unit === 'dzy-hq' && typeof it338.home_unit_name === 'string' && it338.home_unit_name.length > 0 && it338.home_unit_name.indexOf('dzy-hq') === -1, '9k2 總部同仁到門市：home_unit dzy-hq、名稱是中文（不是代碼）', it338);
@@ -1600,11 +1596,11 @@ function noDirSched(id) {
     const s401 = run('DZY401');
     ok(s401.h.indexOf('mztgf:MG07') !== -1 && s401.r.indexOf('mztgf:MG07') === -1, '13g ★值班支援帳號：墨光值班店長核工時、但申請不核（hours 不變）', s401);
     const s404 = run('DZY404');
-    ok(s404.r.indexOf('mztgf:MG07') !== -1, '13g ★值班支援帳號的申請：同店第一、二層都是值班主管 → 往上到墨竹亭總監', s404);
+    ok(s404.r.indexOf('mztgf:MG07') === -1, '13g ★值班支援帳號的申請：回本人原單位（辛光）的上層，打卡店的總監不簽（2026-11-04）', s404);
     // 同一個支援計時若「不是」值班主管 → 店長照舊核（對照組）
     const noDuty = BASE.map((x) => (x.emp === 'DZY407' ? Object.assign({}, x, { duty_units: [] }) : x));
     const s401b = run('DZY401', { people: noDuty });
-    ok(s401b.r.indexOf('mztgf:MG07') !== -1, '13g 對照：非值班主管的支援帳號，店長照舊核申請', s401b);
+    ok(s401b.r.indexOf('mztgf:MG07') === -1 && s401b.h.indexOf('mztgf:MG07') !== -1, '13g 對照：非值班主管的支援帳號，打卡店店長核工時、申請回原單位（2026-11-04）', s401b);
     // 人資主管看得到
     const hr = sb.storeAttLists_({ emp: 'DZY999', status: 'active', unit: 'dzy-hq', dept: 'hr', title: 'hm' }, { hrHead: true }, BASE, org, null, MAPS, SU, null, ALL, {});
     ok(keys(hr.req_people).indexOf('mztgf:MG07') !== -1, '13g 人資主管仍可核值班支援帳號的申請');
@@ -1624,14 +1620,14 @@ function noDirSched(id) {
     const ALL = ['ck', 'dzy-hq', 'mala-gf', 'mala-hq', 'mzt-gf', 'mzt-hq', 'mzt-js', 'mzt-lzl'];
     const lst = (me, flags) => sb.storeAttLists_(me, flags, people, org, null, MAPS2, sb.storeClockUnits_(), null, ALL, {}).req_people.map((x) => x.clock + ':' + x.emp_id);
     ok(lst(extraMe, { attExtra: true }).indexOf('mztgf:MG07') === -1, '13g2 ★支援帳號：att.extra 的值班主管不核');
-    ok(lst(extraOk, { attExtra: true }).indexOf('mztgf:MG07') !== -1, '13g2 支援帳號：att.extra 非值班仍可核');
+    ok(lst(extraOk, { attExtra: true }).indexOf('mztgf:MG07') === -1, '13g2 支援帳號的申請回原單位：打卡店的 att.extra 也不簽（2026-11-04）');
     // 打卡店店長（非值班）也不核值班主管的支援帳號（店長層整層跳過）
     const smNon = D('DZY422', '非值班店長', 'mzt-gf', 'sm', []);
     const ppl2 = BASE.filter((x) => x.emp !== 'DZY401' && x.emp !== 'DZY402').concat([smNon]);
     const l2 = sb.storeAttLists_(smNon, {}, ppl2, org, null, MAPS2, sb.storeClockUnits_(), null, ALL, {}).req_people.map((x) => x.clock + ':' + x.emp_id);
     ok(l2.indexOf('mztgf:MG07') === -1, '13g2 ★值班主管的支援帳號：打卡店店長（非值班）不核（L1 跳過）', l2);
     const l3 = sb.storeAttLists_(P.DZY404, {}, ppl2, org, null, MAPS2, sb.storeClockUnits_(), null, ALL, {}).req_people.map((x) => x.clock + ':' + x.emp_id);
-    ok(l3.indexOf('mztgf:MG07') !== -1, '13g2 往上由總監核', l3);
+    ok(l3.indexOf('mztgf:MG07') === -1, '13g2 打卡店的總監也不簽（申請回原單位，2026-11-04）', l3);
   }
 
   // 13h. storeUpperGaps_：找不到上層
