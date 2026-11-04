@@ -192,3 +192,10 @@ ask／feedback／draft 順序改為：Origin → body 大小 → **驗 token** �
 - 月額度不持久化「已撞頂」旗標，一律即時以「已結算＋有效預扣」判斷。rid 結果寫狀態檔保留 10 分鐘（含已扣款的失敗）；前端失敗後的「重試」沿用同一 rid。
 - AI 錯誤回 `fallback`：本人可見、未過期的知識題原文最多 3 題（目前頁優先）。
 - **已決**：問題自由文字中的在職同仁完整姓名遮成 [同仁]（Eason 2026-11-03 選 A）；§12.10-1 維持（Eason 選 A）。姓名名單由 `aihStaffNames_` 提供（status active、長度 2～6、無空白），node 快取 10 分鐘、長名優先字串替換；取名單失敗照常回答但不遮姓名，只記錯誤碼。知識庫內容不遮。
+
+### 12.13 用量頁「問答紀錄」（2026-11-05 Eason；本節優先於前文的 action 支數）
+- 新增讀取 action `aihLogList {month, limit?, before?}`（管理 action 變 **10 支**：讀 aihKbList、aihKbHist、aihPendingList、aihUsage、aihLogList）。權限同 aihUsage（`aihEnter_`，platform.aihelp）；列在 Code.gs 白名單＋分派、`platform/dryrun.js` READ_ACTIONS、minikit `app.json` readActions。
+- 回 `{month, total, items:[{id, ts, m, v, q, kind, answer, kb_ids, feedback}], next}`：所選月份（台北）ts 新→舊、同毫秒 id 大→小；limit 預設 50、最多 200（數字或純數字字串）；`next`＝最後一筆「毫秒:id」，沒有下一頁為空。**不回 uid、conv、tok_in、tok_out、usd**。
+- 個資：q 是 node 寫 log 前已遮罩的文字（手機、身分證、email、DZY 編號、在職同仁完整姓名，§12.6 與 2026-11-03 決定；姓名遮罩 2026-11-02 19:38 起、早於上線）。answer 寫 log 時只遮前四類，**aihLogList 回之前再遮在職同仁姓名**（`aihMaskNames_`，演算法同 node maskNames）；同仁名單讀不到就不回 answer。已知：帳號類問題的回答可能引用「問的人」自己的單位／職稱（§12.10-3 me 欄），持 platform.aihelp 的人（鎖碼）看得到。
+- 前端 `modules/ai-help/views/usage.js`：每日題數下面「問答紀錄」卡（時間、頁面中文名 pageLabel、問題、答得出來／沒答出來、👎／👍），回答截 80 字可「看全文」，「再顯示更多」帶 before；第一頁讀不到顯示「重新讀取」；換月份時舊請求晚回來不畫。純文字一律 h()。
+- 測試：`test/ai-help.mock.test.mjs` LL／LL2、`test/ai-help-usage-race.test.mjs`、e2e ㉑ ⑧；minikit `test/apps/aihelp.test.js` 整合（真 .gs 問三題後清單裡是遮罩後文字）。

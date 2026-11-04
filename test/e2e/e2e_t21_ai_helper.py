@@ -14,6 +14,7 @@
 截圖（1280 與 375 側欄打開、用量頁問答紀錄 1280 與 375）存到 AIH_SHOT_DIR（沒給就用暫存資料夾，不動 repo 裡的 shots）。
 """
 import json
+from datetime import datetime
 import os
 import re
 import sys
@@ -142,13 +143,13 @@ class Mock21(MockBackend):
         rows = [x for x in self.fake_logs() if x['ts'][:7] == want]
         rows.sort(key=lambda x: (x['ts'], x['id']), reverse=True)
         total = len(rows)
-        if p.get('before'):
+        key = lambda x: (int(datetime.fromisoformat(x['ts'].replace('Z', '+00:00')).timestamp() * 1000), x['id'])
+        if p.get('before'):   # 同真後端：游標＝「毫秒:id」，取比它舊的
             ms, _, bid = p['before'].partition(':')
-            idx = next((i for i, x in enumerate(rows) if x['id'] == bid), None)
-            rows = rows[idx + 1:] if idx is not None else []
+            rows = [x for x in rows if key(x) < (int(ms), bid)]
         lim = int(p.get('limit') or 50)
         page = rows[:lim]
-        nxt = ('0:' + page[-1]['id']) if len(rows) > lim else ''
+        nxt = ('%d:%s' % key(page[-1])) if len(rows) > lim else ''
         return {'ok': True, 'data': {'month': month, 'total': total, 'items': page, 'next': nxt}}
 
     # ---- 平台 aih* action ----
@@ -522,7 +523,7 @@ def main():
                     pg.click('[data-act="log-more"]')
                     pg.wait_for_function('() => document.querySelectorAll(\'[data-role="log-item"]\').length === 60', timeout=8000)
                     calls = [c for c in mock.admin_calls if c[0] == 'aihLogList']
-                    check(calls[-1][1].get('before') == '0:' + ids[-1], '⑧ 再顯示更多 帶 before＝上一頁的 next')
+                    check(calls[-1][1].get('before', '').endswith(':' + ids[-1]), '⑧ 再顯示更多 帶 before＝上一頁的 next')
                     check(pg.locator('[data-act="log-more"]').is_hidden() and pg.locator('[data-role="log-count"]').inner_text() == '共 60 題，顯示 60 題（新的在前）', '⑧ 全部顯示完 → 「再顯示更多」消失')
                     ids2 = pg.eval_on_selector_all('[data-role="log-item"]', 'els => els.map(e => e.getAttribute("data-id"))')
                     check(len(set(ids2)) == 60, '⑧ 分頁不重複')

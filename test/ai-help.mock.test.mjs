@@ -580,6 +580,38 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   ok(['abc', '123', ':aih_x', '1:'].every((b) => post(sb, 'aihLogList', { month: '2026-11', before: b }, adm).error === 'bad_request'), 'LL before 格式錯 → bad_request');
   ok(post(sb, 'aihLogList', { month: '2026-11' }, app.aTok).error === 'forbidden' && post(sb, 'aihLogList', { month: '2026-11' }, app.accTok).error === 'forbidden' && post(sb, 'aihLogList', {}, '').ok === false, 'LL 沒有 platform.aihelp → forbidden、沒 token 拒絕');
   ok(post(sb, 'aihLogList', { month: '2026-11' }, app.helperTok).data.total === 4, 'LL 持 platform.aihelp 的角色可讀');
+  ok([true, [5], '0x10', '1e1', { n: 1 }].every((n) => post(sb, 'aihLogList', { month: '2026-11', limit: n }, adm).error === 'bad_request') && post(sb, 'aihLogList', { month: '2026-11', limit: ' 3 ' }, adm).data.items.length === 3, 'LL limit 只收數字或純數字字串');
+  // answer 回之前遮在職同仁姓名（node 寫 log 時 answer 沒遮姓名）；離職的不遮；名單讀不到就不回 answer
+  const mk = (emp, name, status) => { const r = new Array(24).fill(''); r[0] = emp; r[2] = name; r[3] = status; return r; };
+  app.sheets.staff._data.push(mk('S91', '王假名', 'active'), mk('S92', '歐陽假名乙', 'active'), mk('S93', '李離職', 'disabled'));
+  sb.aihLogAppend_(logRow({ id: LOGID(7), ts: '2026-11-02T03:00:00Z', q: '[同仁] 怎麼排班', answer: '請找王假名或歐陽假名乙，李離職已經不在' }));
+  const nm = post(sb, 'aihLogList', { month: '2026-11', limit: 1 }, adm).data.items[0];
+  ok(nm.id === LOGID(7) && nm.answer === '請找[同仁]或[同仁]，李離職已經不在', 'LL answer 遮在職同仁完整姓名（長名優先）、離職不遮', nm.answer);
+  const saved = sb.aihStaffNames_;
+  sb.aihStaffNames_ = () => ({ ok: false, code: 'staff_read_failed' });
+  const nf = post(sb, 'aihLogList', { month: '2026-11', limit: 1 }, adm);
+  sb.aihStaffNames_ = saved;
+  ok(nf.ok && nf.data.items[0].answer === '' && nf.data.items[0].q === '[同仁] 怎麼排班', 'LL 同仁名單讀不到 → answer 不回（fail closed），其他照回', nf.data.items[0]);
+})();
+
+// aihLogList：ts 是 Date 物件、數字、沒時區字串（假試算表可能這樣存）也能排進月份；游標指向已刪除的列照樣往下接
+(() => {
+  const app = scene();
+  const { sb } = app;
+  const adm = app.admin;
+  sb.aihLogAppend_(logRow({ id: LOGID(1), ts: '2026-11-01T01:00:00Z', q: 'A' }));
+  sb.aihLogAppend_(logRow({ id: LOGID(2), ts: '2026-11-01T02:00:00Z', q: 'B' }));
+  sb.aihLogAppend_(logRow({ id: LOGID(3), ts: '2026-11-01T03:00:00Z', q: 'C' }));
+  const data = app.sheets.aih_log._data;
+  data[1][1] = new Date('2026-11-01T01:00:00Z');                // Date
+  data[2][1] = Date.parse('2026-11-01T02:00:00Z');               // 數字
+  data[3][1] = '2026-11-01 11:00:00';                            // 沒時區＝台北 → 03:00Z
+  const r = post(sb, 'aihLogList', { month: '2026-11' }, adm);
+  ok(r.ok && eq(r.data.items.map((x) => x.q), ['C', 'B', 'A']) && r.data.items[0].ts === '2026-11-01T03:00:00.000Z', 'LL2 ts 為 Date／數字／沒時區字串都能排序、回 ISO', r.data.items && r.data.items.map((x) => [x.q, x.ts]));
+  const p1 = post(sb, 'aihLogList', { month: '2026-11', limit: 1 }, adm);
+  data.splice(3, 1);                                             // 第一頁最後一筆（C）被清掉
+  const p2 = post(sb, 'aihLogList', { month: '2026-11', limit: 1, before: p1.data.next }, adm);
+  ok(p2.ok && p2.data.items[0].q === 'B' && p2.data.total === 2, 'LL2 游標那筆被刪了照樣接下一筆', p2.data);
 })();
 
 // ============================================================

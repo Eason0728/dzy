@@ -51,10 +51,11 @@ export function mountUsage(el, ctx, shared) {
   }
 
   async function load() {
+    const forMonth = month;
     clear(body);
     body.appendChild(h('p', { class: 'aim-note' }, '載入中…'));
     const [u, money] = await Promise.all([ctx.api.call('platform', 'aihUsage', { month }), client.usage()]);
-    if (!alive) return;
+    if (!alive || forMonth !== month) return;   // 換月份時舊請求晚回來：不畫
     clear(body);
     if (!u || !u.ok) {
       body.appendChild(h('div', { class: 'card' }, [h('p', null, u && u.error === 'not_inited' ? '小幫手還沒初始化。請系統管理者按上方的「初始化小幫手」。' : errText(u))]));
@@ -83,7 +84,7 @@ export function mountUsage(el, ctx, shared) {
       h('span', null, x.day), h('div', { class: 'aim-bar' }, [h('i', { style: 'width:' + Math.round((x.count || 0) / max * 100) + '%' })]), h('span', null, String(x.count))
     ])));
     body.appendChild(card);
-    body.appendChild(logCard(month));
+    body.appendChild(logCard(forMonth));
   }
 
   /** 問答紀錄：先畫卡片，再讀第一頁；「再顯示更多」帶上一頁回的 next */
@@ -108,15 +109,17 @@ export function mountUsage(el, ctx, shared) {
       if (!r || !r.ok) {
         if (!shown) note.textContent = '';
         err.textContent = '問答紀錄讀不到：' + errText(r);
-        more.hidden = !next;
+        more.textContent = shown ? '再顯示更多' : '重新讀取';
+        more.hidden = false;
         return;
       }
       const d = r.data || {};
       const items = Array.isArray(d.items) ? d.items : [];
       items.forEach((it) => list.appendChild(row(it, pages)));
       shown += items.length;
+      more.textContent = '再顯示更多';
       next = typeof d.next === 'string' ? d.next : '';
-      note.textContent = d.total ? '共 ' + d.total + ' 題，顯示 ' + shown + ' 題（新的在前）' : '這個月沒有問答紀錄。';
+      note.textContent = d.total ? '共 ' + Math.max(d.total, shown) + ' 題，顯示 ' + shown + ' 題（新的在前）' : (shown ? '顯示 ' + shown + ' 題（新的在前）' : '這個月沒有問答紀錄。');
       more.hidden = !next;
     }
     more.addEventListener('click', page);
@@ -128,7 +131,7 @@ export function mountUsage(el, ctx, shared) {
     const box = h('div', { class: 'aim-item', 'data-role': 'log-item', 'data-id': it.id });
     const down = it.feedback === 'down';
     box.appendChild(h('div', { class: 'aim-meta' }, [
-      h('span', { 'data-role': 'log-time' }, taipeiTime(it.ts)), '　·　',
+      h('span', { 'data-role': 'log-time', style: 'white-space:nowrap' }, taipeiTime(it.ts)), '　·　',
       h('span', { 'data-role': 'log-page' }, pageLabel(pages, it.m, it.v)), '　·　',
       h('span', { class: 'aim-chip' + (it.kind === 'answered' ? '' : ' is-paused'), 'data-role': 'log-kind' }, KIND_ZH[it.kind] || it.kind || '—'),
       down ? ' ' : null,
@@ -136,7 +139,7 @@ export function mountUsage(el, ctx, shared) {
       it.feedback === 'up' ? ' ' : null,
       it.feedback === 'up' ? h('span', { class: 'aim-chip', 'data-role': 'log-up', title: '同仁按了 👍' }, '👍') : null
     ]));
-    box.appendChild(h('div', { class: 'aim-q', 'data-role': 'log-q' }, it.q || '（問題內容已清除）'));
+    box.appendChild(h('div', { class: 'aim-q', 'data-role': 'log-q' }, it.q || '（沒有問題內容）'));
     const ans = String(it.answer || '');
     if (ans) {
       const long = ans.length > ANSWER_SHORT;

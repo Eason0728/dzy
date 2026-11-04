@@ -478,10 +478,24 @@ function handleAihUsage_(token, payload) {
  * 問答紀錄清單（2026-11-05 Eason：用量頁看得到同仁問了什麼）。payload {month:'YYYY-MM'（台北；沒給＝本月）, limit?:1–200（預設 50）, before?:上一頁回的 next}
  * → {month, total, items:[{id, ts, m, v, q, kind, answer, kb_ids, feedback}], next}；新的排最前（ts 由新到舊，同時間再依 id 由大到小）。
  * 刻意不回 uid、conv、tok_in、tok_out、usd（誰問的、費用不在這裡）。q 是 node 寫 log 前已遮罩的文字（手機、身分證、email、DZY 編號、在職同仁姓名）。
- * answer 回 log 裡的全文（寫入時已截到 AIH_MAX.logAnswer），前端截短顯示、點開看全文。
+ * answer 回 log 裡的全文（寫入時已截到 AIH_MAX.logAnswer），前端截短顯示、點開看全文；回之前把在職同仁完整姓名遮成 [同仁]
+ *（node 寫 log 時 answer 只遮手機／身分證／email／DZY 編號，沒遮姓名；名單讀不到就不回 answer，fail closed）。
  * next＝最後一筆的「毫秒:id」，沒有下一頁為空字串；before 格式不對 → bad_request。
  */
 var AIH_LOG_LIST_LIMIT = { def: 50, max: 200 };
+/** 姓名遮罩（同 Mac mini aihelp.js maskNames）：單趟掃描、長名優先、純字串比對 → [同仁] */
+function aihMaskNames_(text, names) {
+  var str = String(text === undefined || text === null ? '' : text);
+  var list = (names || []).filter(function (n) { return typeof n === 'string' && n; }).sort(function (a, b) { return b.length - a.length; });
+  if (!list.length) return str;
+  var out = '', i = 0;
+  while (i < str.length) {
+    var hit = '';
+    for (var k = 0; k < list.length; k++) { if (str.substr(i, list[k].length) === list[k]) { hit = list[k]; break; } }
+    if (hit) { out += '[同仁]'; i += hit.length; } else { out += str.charAt(i); i += 1; }
+  }
+  return out;
+}
 function handleAihLogList_(token, payload) {
   var c = aihEnter_(token, false);
   if (!c.ok) return c;
@@ -489,7 +503,11 @@ function handleAihLogList_(token, payload) {
   payload = payload || {};
   var month = aihStr_(payload.month) || aihTaipeiMonth_(aihNow_());
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return aihFail_('bad_request', '月份格式錯誤');
-  var limit = payload.limit === undefined || payload.limit === null || payload.limit === '' ? AIH_LOG_LIST_LIMIT.def : Number(payload.limit);
+  var rawLimit = payload.limit;
+  if (rawLimit !== undefined && rawLimit !== null && rawLimit !== '' && typeof rawLimit !== 'number' && !(typeof rawLimit === 'string' && /^\s*\d+\s*$/.test(rawLimit))) {
+    return aihFail_('bad_request', '筆數要在 1 到 ' + AIH_LOG_LIST_LIMIT.max + ' 之間');
+  }
+  var limit = rawLimit === undefined || rawLimit === null || rawLimit === '' ? AIH_LOG_LIST_LIMIT.def : Number(rawLimit);
   if (!(limit >= 1 && limit <= AIH_LOG_LIST_LIMIT.max && Math.floor(limit) === limit)) return aihFail_('bad_request', '筆數要在 1 到 ' + AIH_LOG_LIST_LIMIT.max + ' 之間');
   var before = aihStr_(payload.before), bMs = NaN, bId = '';
   if (before) {
@@ -508,10 +526,11 @@ function handleAihLogList_(token, payload) {
   var total = rows.length;
   if (before) rows = rows.filter(function (x) { return newer({ ms: bMs, id: bId }, x); });
   var page = rows.slice(0, limit);
+  var sn = page.length ? aihStaffNames_() : { ok: true, names: [] };
   var items = page.map(function (x) {
     var r = x.r;
     return { id: x.id, ts: aihIso_(x.ms), m: aihStr_(r.m), v: aihStr_(r.v), q: aihStr_(r.q), kind: aihStr_(r.kind),
-      answer: aihStr_(r.answer), kb_ids: aihStr_(r.kb_ids), feedback: aihStr_(r.feedback) };
+      answer: sn.ok ? aihMaskNames_(aihStr_(r.answer), sn.names) : '', kb_ids: aihStr_(r.kb_ids), feedback: aihStr_(r.feedback) };
   });
   var last = page[page.length - 1];
   return { ok: true, data: { month: month, total: total, items: items, next: rows.length > limit && last ? last.ms + ':' + last.id : '' } };
