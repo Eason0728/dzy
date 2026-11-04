@@ -539,7 +539,7 @@ def main():
         pg.set_viewport_size({'width': 1280, 'height': 820})
 
         # ───────────────────────── ⑤ 薪酬管理：分頁、bridge 轉接、scope、集團總覽只給 admin ─────────────────────────
-        PAGES = [('dash', '儀表板'), ('group', '集團總覽'), ('run', '薪資計算'), ('att', '出勤資料'), ('bonus', '獎金計算'), ('punch', '打卡紀錄'), ('attexp', '出勤紀錄表'), ('emp', '員工設定'), ('cfg', '參數設定'), ('slip', '薪資單'), ('export', '匯出')]
+        PAGES = [('dash', '儀表板'), ('group', '集團總覽'), ('run', '薪資計算'), ('att', '出勤資料'), ('bonus', '獎金計算'), ('punch', '打卡紀錄'), ('attexp', '出勤紀錄表'), ('emp', '員工設定'), ('cfg', '參數設定'), ('slip', '薪資單'), ('export', '匯出'), ('oplog', '操作紀錄')]
         for user in ('fin', 'admin'):
             pgp = new_page()
             login(pgp, user)
