@@ -202,8 +202,9 @@ async function openReinstate(env, p) {
   const pv = await callBusy(ctx, mod, 'staffReinstate', { emp_no: p.emp_no, preview: true });
   if (!pv || !pv.ok) { ctx.ui.toast((pv && pv.error) || '無法復職', 'danger'); return false; }
   const maps = pv.data.maps || [];
-  const rows = maps.map((m, i) => `<div class="checkbox-row"><input type="checkbox" id="rs-${i}" data-store="${esc(m.store_code)}" checked>
-      <label for="rs-${i}">${esc(m.store_name || m.store_code)}　${esc(m.emp_id)}（${m.role === 'home' ? '主店' : '支援'}${m.roster_active === false ? '・打卡已停' : ''}）</label></div>`).join('');
+  // cross_brand：小辛辣與墨竹亭不能互相支援（2026-11-06），那家不給勾
+  const rows = maps.map((m, i) => `<div class="checkbox-row"><input type="checkbox" id="rs-${i}" data-store="${esc(m.store_code)}"${m.cross_brand ? ' disabled' : ' checked'}>
+      <label for="rs-${i}">${esc(m.store_name || m.store_code)}　${esc(m.emp_id)}（${m.role === 'home' ? '主店' : '支援'}${m.roster_active === false ? '・打卡已停' : ''}${m.cross_brand ? '・跨品牌，不能恢復' : ''}）</label></div>`).join('');
   const body = domOf(`<p>要恢復 ${esc(p.emp_no)} ${esc(p.name)} 的帳號。勾選要一起恢復打卡的店：</p>
     ${rows || '<p class="text-muted">他沒有已確認的打卡對照，只會恢復帳號。</p>'}`);
   const v = await ctx.ui.dialog({ title: `復職 ${p.emp_no}`, body, actions: [CANCEL, { label: '復職', value: 'ok', variant: 'primary' }] });

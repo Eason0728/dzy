@@ -2285,5 +2285,57 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(!/clockLineRemind_/.test(fs.readFileSync(path.join(__dirname, '../apps-script/platform/Code.gs'), 'utf8')), 'LR clockLineRemind_ 不在 Code.gs 分派表');
 })();
 
+// ============================================================
+// XB 禁止跨品牌開打卡帳號（2026-11-06 Eason：小辛辣↔墨竹亭不行；央廚、總部兩邊都可以）
+// ============================================================
+(() => {
+  const app = fresh();
+  const { sb, tok } = app;
+  // 墨竹亭光復同仁：7A 到小辛辣光復被擋，到墨竹亭金山、央廚、總部照舊
+  const m = claimApprove(app, '跨牌甲', 'xb-a-pw-0001', MZT_GF('pt'));
+  giveMap(app, m.emp, 'mztgf', 'XA1', 'home');
+  const chk = (store, src, eid) => sb.clockAutoSupportCheck_({ store_code: store, src_store: src, src_emp_id: eid }).data;
+  ok(chk('gf', 'mztgf', 'XA1').allowed === false && chk('gf', 'mztgf', 'XA1').reason === 'cross_brand', 'XB ★墨竹亭同仁 7A 到小辛辣光復 → cross_brand', chk('gf', 'mztgf', 'XA1'));
+  ok(chk('mztjs', 'mztgf', 'XA1').allowed === true, 'XB 同品牌別家照舊可以');
+  ok(chk('cf', 'mztgf', 'XA1').allowed === true && chk('hq', 'mztgf', 'XA1').allowed === true, 'XB ★到央廚、總部打卡店不擋');
+  const rec = sb.clockAutoSupportRecord_({ store_code: 'gf', src_store: 'mztgf', src_emp_id: 'XA1', emp_id: 'XG1' }, nowT(0));
+  ok(rec.ok === false && rec.code === 'not_allowed' && !maps(app).some((x) => x.emp_id === 'XG1'), 'XB ★寫對照前再把關也擋（不寫 staff_clock）', rec);
+  // 小辛辣光復同仁：反過來也擋
+  const x = claimApprove(app, '跨牌乙', 'xb-b-pw-0001', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
+  giveMap(app, x.emp, 'gf', 'XB1', 'home');
+  ok(chk('mztjs', 'gf', 'XB1').reason === 'cross_brand' && chk('cf', 'gf', 'XB1').allowed === true, 'XB ★小辛辣同仁到墨竹亭 → 擋；到央廚 → 可以');
+  // 央廚同仁：兩個品牌都可以
+  const c = claimApprove(app, '央廚丙', 'xb-c-pw-0001', { brand: 'ck', unit: 'ck', title: 'pt' });
+  giveMap(app, c.emp, 'cf', 'XC1', 'home');
+  ok(chk('gf', 'cf', 'XC1').allowed === true && chk('mztjs', 'cf', 'XC1').allowed === true, 'XB ★央廚同仁到兩個品牌門市都可以', [chk('gf', 'cf', 'XC1'), chk('mztjs', 'cf', 'XC1')]);
+  // 總部同仁：兩個品牌都可以
+  const h = claimApprove(app, '總部丁', 'xb-d-pw-0001', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
+  giveMap(app, h.emp, 'hq', 'XD1', 'home');
+  ok(chk('gf', 'hq', 'XD1').allowed === true && chk('mztjs', 'hq', 'XD1').allowed === true, 'XB ★總部同仁到兩個品牌門市都可以', [chk('gf', 'hq', 'XD1'), chk('mztjs', 'hq', 'XD1')]);
+  // 品牌看主要單位，不看已綁那家：墨竹亭同仁先在央廚有帳號，用央廚帳號 7A 到小辛辣 → 仍擋
+  giveMap(app, m.emp, 'cf', 'XA2', 'support');
+  ok(chk('gf', 'cf', 'XA2').reason === 'cross_brand', 'XB ★品牌看同仁主要單位（從央廚帳號出發也擋）');
+  // 每日同步撿到跨品牌的 LINE 自動帳號（打卡端還沒擋的舊版）→ 列異常＋補償停用，不寫對照
+  sb.clockRosterApply_('gf', [rosterRow('XG2', '跨牌甲', { src_store: 'mztgf', src_emp_id: 'XA1' })], undefined, nowT(1));
+  ok(!maps(app).some((y) => y.emp_id === 'XG2' && y.state === 'confirmed'), 'XB 每日同步遇到跨品牌的自動帳號 → 不寫生效對照', maps(app).filter((y) => y.emp_id === 'XG2'));
+
+  // 復職：跨品牌的舊對照預覽標 cross_brand、勾了就拒
+  const r = claimApprove(app, '跨牌復', 'xb-r-pw-0001', MZT_GF('pt'));
+  giveMap(app, r.emp, 'mztgf', 'XR1', 'home'); giveMap(app, r.emp, 'gf', 'XR2', 'support');
+  post(sb, 'staffLeave', { emp_no: r.emp, last_day: dayT(-1) }, tok);
+  sb.clockDailyApply_(dayT(0));
+  const pv = post(sb, 'staffReinstate', { emp_no: r.emp, preview: true }, tok);
+  const by = Object.fromEntries((pv.data && pv.data.maps || []).map((y) => [y.store_code, y]));
+  ok(pv.ok && by.gf && by.gf.cross_brand === true && by.mztgf && by.mztgf.cross_brand === false, 'XB ★復職預覽：跨品牌那家標 cross_brand', pv);
+  const bad = post(sb, 'staffReinstate', { emp_no: r.emp, stores: ['mztgf', 'gf'] }, tok);
+  ok(bad.ok === false && bad.code === 'cross_brand' && /不能在/.test(bad.error) && staffOf(app, r.emp).status === 'disabled', 'XB ★復職勾跨品牌那家 → 整筆拒、不先復職', bad);
+  const good = post(sb, 'staffReinstate', { emp_no: r.emp, stores: ['mztgf'] }, tok);
+  ok(good.ok && good.data.job_ids.length === 1, 'XB 只勾同品牌那家 → 照常復職', good);
+
+  // 新增同仁／主店建帳號只會開在本人單位那家（不會跨品牌），照舊
+  const nc = post(sb, 'staffCreateByUnit', { name: '跨牌新', unit: 'mala-gf', title: 'pt', phone: '0911000111', hire_date: dayT(0) }, tok);
+  ok(nc.ok && nc.data.store_code === 'gf', 'XB 新增同仁開在本人單位那家', nc);
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);

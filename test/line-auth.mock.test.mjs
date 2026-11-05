@@ -350,8 +350,9 @@ const fulltext = (app) => sheetText(app) + '\n' + JSON.stringify(app.props);
   // 新出現的支援列也帶 LINE 欄
   const a3 = fresh();
   const hq = mkUnclaimed(a3, '名冊乙');
-  bind(a3, hq, '', { store: 'mztgf', eid: 'M1', h: '', kid: '', bound: '', okAt: '' });
-  const ap5 = J(a3.sb.clockRosterApply_('gf', [r({ emp_id: 'G9', name: '名冊乙', src_store: 'mztgf', src_emp_id: 'M1', line_h: hv, line_kid: KID, line_bound_at: iso(NOW - 8 * DAY), line_ok_at: iso(NOW - DAY) })], [], new Date(NOW)));
+  // 來源用央廚（2026-11-06 起墨竹亭帳號不能自動加到小辛辣光復＝跨品牌，見 staff-clock XB）
+  bind(a3, hq, '', { store: 'cf', eid: 'M1', h: '', kid: '', bound: '', okAt: '' });
+  const ap5 = J(a3.sb.clockRosterApply_('gf', [r({ emp_id: 'G9', name: '名冊乙', src_store: 'cf', src_emp_id: 'M1', line_h: hv, line_kid: KID, line_bound_at: iso(NOW - 8 * DAY), line_ok_at: iso(NOW - DAY) })], [], new Date(NOW)));
   const nm = mapRow(a3, hq, 'gf');
   ok(ap5.ok && ap5.data.created === 1 && nm && nm.line_h === hv && nm.line_ok_at === iso(NOW - DAY), '3m 自動支援新列也寫入四鍵', [ap5, nm]);
 })();
