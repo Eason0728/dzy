@@ -116,7 +116,8 @@ var CLK_MSG = {
   ADD_HOME_LEFT: '這位同仁離職日已過，不能建打卡帳號',
   ADD_HOME_NO_UNIT: '這位同仁還沒有單位，請先用「改資料」設定單位',
   ADD_HOME_HAS_MAP: '這位同仁在主店已經有生效的打卡編號，不用再建；要改主店請到打卡對照處理',
-  ADD_HOME_JOB_OPEN: '主店打卡帳號已經在建檔中，請等它完成'
+  ADD_HOME_JOB_OPEN: '主店打卡帳號已經在建檔中，請等它完成',
+  CROSS_BRAND: '小辛辣與墨竹亭的同仁不能互相支援打卡（央廚、總部兩邊都可以）'
 };
 
 // ============================================================
@@ -884,15 +885,22 @@ function handleStaffReinstate_(token, payload) {
   if (!s) return clkErr_('not_found', CLK_MSG.NOT_FOUND);
   if (clkStaffStatus_(s) !== 'disabled') return clkErr_('not_disabled', CLK_MSG.NOT_DISABLED);
   var maps = clkConfirmedOf_(clkMaps_(), s.emp);
+  var org = stfReadOrg_();
   var past = maps.map(function (m) {
     var st = clkStoreByCode_(m.store_code);
-    return { store_code: m.store_code, store_name: st ? st.store_name : '', emp_id: m.emp_id, role: m.role, roster_active: m.roster_active === 'TRUE' };
+    return { store_code: m.store_code, store_name: st ? st.store_name : '', emp_id: m.emp_id, role: m.role, roster_active: m.roster_active === 'TRUE',
+      cross_brand: !!clkCrossBrandMsg_(clkUnitBrand_(clkStaffUnit_(s), org), clkStoreBrand_(st, org), org) };
   });
   if (payload.preview === true) return { ok: true, data: { emp_no: s.emp, preview: true, maps: past } };
 
   var pick = Array.isArray(payload.stores) ? payload.stores.map(clkCode_) : [];
   var bad = pick.filter(function (c) { return !maps.some(function (m) { return m.store_code === c; }); });
   if (bad.length) return clkErr_('no_map', CLK_MSG.NO_MAP);
+  // 跨品牌的舊對照不准恢復（預覽照列，cross_brand 標起來讓畫面提示）
+  for (var ci = 0; ci < pick.length; ci++) {
+    var cmsg = clkCrossBrandMsg_(clkUnitBrand_(clkStaffUnit_(s), org), clkStoreBrand_(clkStoreByCode_(pick[ci]), org), org);
+    if (cmsg) return clkErr_('cross_brand', cmsg);
+  }
   var d = new Date();
   var res = clkEnableStaff_(s, a.user.id, 'reinstate', d);
   if (!res.ok) return res;
@@ -2084,6 +2092,30 @@ function clockCompensate_(store_code, emp_id, reason, emp_no, now) {
   });
 }
 
+// ---- 禁止跨品牌（2026-11-06 Eason：小辛辣同仁不可在墨竹亭門市打卡，反過來也是；央廚、總部兩邊都可以）----
+// 品牌看管理系統 org 單位對照（打卡端 LineHub lineHubCrossBrand_ 看薪資門市表 brand 欄，兩邊結果一致：gf＝小辛辣、mzt*＝墨竹亭、hq／cf 不屬於任何品牌）。
+
+/** 單位的品牌：只有門市（ladder store、品牌不是 ck）才有；品牌辦公室、總部、央廚、查不到 → ''（不擋） */
+function clkUnitBrand_(unit, org) {
+  var u = org && org.unit[stfStr_(unit)];
+  if (!u || u.ladder !== 'store' || !u.parent || u.parent === 'ck') return '';
+  return u.parent;
+}
+/** 打卡店的品牌：unit_code 每個單位都是同一品牌的門市才算；總部（多個辦公室單位）、央廚 → '' */
+function clkStoreBrand_(store, org) {
+  var us = clkUnitsOf_(store);
+  if (!us.length) return '';
+  var b = clkUnitBrand_(us[0], org);
+  for (var i = 1; i < us.length; i++) if (clkUnitBrand_(us[i], org) !== b) return '';
+  return b;
+}
+/** 品牌 a 的人到品牌 b 的店：兩邊都知道品牌而且不同 → 回說明字串；否則 ''（不擋） */
+function clkCrossBrandMsg_(a, b, org) {
+  if (!a || !b || a === b) return '';
+  var name = function (c) { return (org && org.brand[c] && org.brand[c].name) || c; };
+  return '這位同仁是' + name(a) + '的人，不能在' + name(b) + '的門市開打卡帳號；' + CLK_MSG.CROSS_BRAND;
+}
+
 // ---- 7A ----
 
 /**
@@ -2107,6 +2139,10 @@ function clockAutoSupportCheck_(params) {
   var s = clkStaffByEmp_(sm.emp_no);
   if (!s || clkStaffStatus_(s) === 'disabled') return no('staff_left');
   if (s.last) return no('leave_registered');
+  // 跨品牌：同仁品牌看他的主要單位；單位空白（還沒認領）才退回看他已綁那家店
+  var org = stfReadOrg_();
+  var who = clkStaffUnit_(s) ? clkUnitBrand_(clkStaffUnit_(s), org) : clkStoreBrand_(clkStoreByCode_(src), org);
+  if (clkCrossBrandMsg_(who, clkStoreBrand_(bs, org), org)) return no('cross_brand');
   var here = clkMapsOf_(maps, sm.emp_no).filter(function (m) { return m.store_code === b; });
   for (var i = 0; i < here.length; i++) {
     var m = here[i];
