@@ -350,7 +350,7 @@ var PROXY_READ_ACTIONS = {
   // 分讀寫只為了試跑模式能照常讀。⚠ payroll_month 在「該月沒有 run」時會自動試算並寫入（mala-payroll skill），仍列讀取＝試跑時翻月份照舊可用
   payroll: ['payroll_month', 'payroll_get', 'payroll_group', 'payroll_trend', 'payroll_inputs', 'payroll_punch',
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
-    'payroll_attendance_export', 'payroll_attach_get', 'payroll_audit_get'],   // payroll_attach_get（2026-10-30）：出勤紀錄表上已核准申請的證明，純讀取
+    'payroll_attendance_export', 'payroll_attach_get', 'payroll_audit_get', 'payroll_xmap_get'],   // payroll_attach_get（2026-10-30）：出勤紀錄表上已核准申請的證明，純讀取；payroll_xmap_get（2026-11-05）：打卡對照快照（除錯用）
   // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：與 platform/dryrun.js READ_ACTIONS.attendance 一致
   attendance: ['attAlerts'],
   // 收支管理（2026-10-24，Mac mini 現金帳伺服器的管理代轉通道）：只有 cashbook.write，讀寫都要它；分讀寫只為了試跑模式能照常讀
@@ -373,7 +373,8 @@ var PROXY_WRITE_ACTIONS = {
   dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign', 'handoverPdf'],
   // 薪酬頁（mala-clock-in/payroll.html）實際會呼叫的寫入 action；後端還有 payroll_migrate_store 等維運動作，刻意不列
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
-    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
+    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set',
+    'payroll_xmap_set', 'payroll_support_decide'],   // 2026-11-05 跨店支援自動帶入：存打卡對照快照、差異決定（support-auto spec §2、§7-4）
   // 收支管理：不含改通行碼（adminSave 帶 newStorePass／newAdminPass 由 mini 現金帳伺服器拒絕）
   cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock'],
   // 損益試算：「管」級動作另由 PROXY_PNL_ADMIN_ACTIONS 要求 pnl.admin，損益後端也依角色擋

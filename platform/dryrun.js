@@ -39,6 +39,8 @@ export const READ_ACTIONS = {
     'attUpperGaps',
     // 薪酬管理差異清單（2026-10-28）：依薪酬門市列同仁名單，純讀取；帶入／停用走 payroll_master_set（已在 WRITE_ACTIONS.payroll）
     'payrollStaffRoster',
+    // 跨店支援時數自動帶入（2026-11-05）：同仁 ↔ 各店打卡帳號對照，純讀取
+    'payrollXmap',
     // AI 小幫手管理（2026-11-02，docs/ai-helper/spec.md §8）：純讀取；aihSetup／aihKbSave／aihPendingSet／aihPauseSet 不列（寫入，試跑會攔）
     'aihKbList', 'aihKbHist', 'aihPendingList', 'aihUsage',
     // 問答紀錄清單（2026-11-05）：純讀取
@@ -48,7 +50,7 @@ export const READ_ACTIONS = {
   // 薪酬系統（2026-10-19）：必須與 Auth.gs PROXY_READ_ACTIONS.payroll 一致（test/proxy-authorize.test.mjs 比對）
   payroll: ['payroll_month', 'payroll_get', 'payroll_group', 'payroll_trend', 'payroll_inputs', 'payroll_punch',
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
-    'payroll_attendance_export', 'payroll_attach_get', 'payroll_audit_get'],   // payroll_attach_get（2026-10-30）：出勤紀錄表上已核准申請的證明，純讀取
+    'payroll_attendance_export', 'payroll_attach_get', 'payroll_audit_get', 'payroll_xmap_get'],   // payroll_attach_get（2026-10-30）：出勤紀錄表上已核准申請的證明，純讀取
   // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：必須與 Auth.gs PROXY_READ_ACTIONS.attendance 一致；只回件數的純讀取
   attendance: ['attAlerts'],
   // 收支管理（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.cashbook 一致（test/proxy-authorize.test.mjs 比對）
@@ -69,7 +71,8 @@ export const WRITE_ACTIONS = {
   audit: ['submitAudit', 'markRest', 'submitOpsAudit', 'addStore', 'setStoreStatus', 'renameStore'],
   dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign', 'handoverPdf'],
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
-    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set'],
+    'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set',
+    'payroll_xmap_set', 'payroll_support_decide'],
   cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock'],
   pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
     'refreshConnectors', 'refreshFixed', 'loadGroupUnits', 'adminSyncSeed', 'adminApplyS01Connectors', 'adminCreateLastMonthDraft', 'adminLoadStoreSeedS01'],

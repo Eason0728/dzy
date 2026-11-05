@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { parseCall, toPageResult, payrollTarget, PAYROLL_ORIGIN, PAYROLL_PAGES, navMessage } from '../modules/payroll/bridge.js';
+import { parseCall, toPageResult, payrollTarget, PAYROLL_ORIGIN, PAYROLL_PAGES, navMessage, routeOf } from '../modules/payroll/bridge.js';
 import manifest from '../modules/payroll/manifest.js';
 import { validateManifest } from '../platform/manifest-check.js';
 
@@ -64,5 +64,10 @@ t('分頁：manifest views＝PAYROLL_PAGES（順序、名稱），集團總覽�
 t('切換訊息：認得的分頁照送，其他一律回儀表板', () => {
   assert.deepEqual(navMessage('att'), { type: 'dzy-payroll-nav', v: 1, p: 'att' });
   for (const bad of [null, undefined, 'main', '', 'x;y', '__proto__']) assert.equal(navMessage(bad).p, 'dash');
+});
+t('改道：payroll_dzy_xmap → 平台 payrollXmap，payload 一律 {}（跨店支援自動帶入，2026-11-05）', () => {
+  const c = parseCall({ type: 'dzy-payroll-call', v: 1, id: 'x1', action: 'payroll_dzy_xmap', body: { store: 'CF', admin_key: 'K', emp_ids: ['CF01'] } });
+  assert.deepEqual(routeOf(c), { ns: 'platform', action: 'payrollXmap', payload: {} });
+  assert.equal(routeOf(parseCall({ type: 'dzy-payroll-call', v: 1, id: 'x2', action: 'payroll_xmap_get', body: {} })).ns, 'payroll');
 });
 console.log('全部通過 ' + n);

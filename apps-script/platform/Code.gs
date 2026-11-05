@@ -57,6 +57,8 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'attUpperGaps',
   // 2026-10-28：薪酬管理「差異清單＋一鍵帶入」（StaffClock.gs 末節）。純讀取，要 payroll.write；寫入仍由薪酬頁走 payroll_master_set
   'payrollStaffRoster',
+  // 2026-11-05：跨店支援時數自動帶入（mala-clock-in docs/support-auto/spec.md §2）。純讀取，要 payroll.write；同仁 ↔ 各店打卡帳號對照
+  'payrollXmap',
   // 2026-10-25：區域（督導負責區，Regions.gs；docs/regions/spec.md 第 9 節）。regionList／regionCheck 是讀取；regionSave／regionSwitch 寫入（上鎖）
   'regionList', 'regionSave', 'regionCheck', 'regionSwitch',
   // 2026-10-25：LINE 認身分的人資操作（LineAuth.gs；docs/line-auth/spec.md §3.2）。lineRevoke 寫入（上鎖）、lineAuthLog 讀取。
@@ -281,6 +283,7 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'svcStoreRoster': return handleSvcStoreRoster_(payload);
     case 'attUpperGaps': return handleAttUpperGaps_(token);
     case 'payrollStaffRoster': return handlePayrollStaffRoster_(token, payload);
+    case 'payrollXmap': return handlePayrollXmap_(token, payload);
     case 'regionList': return handleRegionList_(token);
     case 'regionSave': return handleRegionSave_(token, payload);
     case 'regionCheck': return handleRegionCheck_(token);

@@ -38,7 +38,11 @@ export function parseCall(data) {
 
 /** 薪酬頁要的「管理系統自己的資料」（2026-10-28 差異清單＋一鍵帶入）：這幾個 action 不送薪資後端，改打平台後端。
  *  只帶白名單欄位（門市代碼、本店主檔 emp_ids），其他一律丟掉。 */
-export const PLATFORM_ROUTES = { payroll_dzy_staff: { action: 'payrollStaffRoster', keys: ['store', 'emp_ids'] } };
+export const PLATFORM_ROUTES = {
+  payroll_dzy_staff: { action: 'payrollStaffRoster', keys: ['store', 'emp_ids'] },
+  // 跨店支援時數自動帶入（2026-11-05）：同仁 ↔ 各店打卡帳號對照，不帶任何欄位
+  payroll_dzy_xmap: { action: 'payrollXmap', keys: [] }
+};
 
 /** 一則呼叫該送哪裡：{ns, action, payload} */
 export function routeOf(call) {
