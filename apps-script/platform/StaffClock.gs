@@ -2715,7 +2715,8 @@ function handlePayrollStaffRoster_(token, payload) {
 /**
  * 組對照（純函式，測試直接呼叫）：
  *   staffAll＝clkStaffAll_()、maps＝clkMaps_()、stores＝clkStores_()、org＝stfReadOrg_()（目前未用，簽名比照 payStaffRosterBuild_）、
- *   today＝'yyyy-MM-dd'、scopeList＝null（admin，全部）或薪酬店代碼陣列（只回 pay_store 在清單內的列）
+ *   today＝'yyyy-MM-dd'、scopeList＝null（admin，全部）或薪酬店代碼陣列（pay_store 或 acct_store 在清單內就回：
+ *   負責打卡店的人要看得到「別店同仁在本店有打卡帳號」，才能提醒「在本店有打卡、沒有主檔」；仍只回六欄、不含姓名）
  * 回 rows：[{ emp_no, pay_store, acct_store, emp_id, state, not_support }]
  *   - state 只收 confirmed／suggested；pay_store＝同仁目前單位的薪酬門市（payStoreOfUnit_）；
  *     acct_store＝對照 store_code 在 clock_stores 的薪酬代碼（clkPayStoreOf_）；任一為空 → 不出
@@ -2745,7 +2746,7 @@ function payXmapBuild_(staffAll, maps, stores, org, today, scopeList) {
     var st = storeBy[m.store_code];
     var acct = st ? clkPayStoreOf_(st) : '';
     if (!pay || !acct) return;
-    if (Array.isArray(scopeList) && scopeList.indexOf(pay) === -1) return;
+    if (Array.isArray(scopeList) && scopeList.indexOf(pay) === -1 && scopeList.indexOf(acct) === -1) return;
     rows.push({ emp_no: m.emp_no, pay_store: pay, acct_store: acct, emp_id: m.emp_id, state: m.state,
       not_support: (exMap[m.emp_no] || []).indexOf(m.store_code) !== -1 });
   });
@@ -2759,7 +2760,7 @@ function payXmapBuild_(staffAll, maps, stores, org, today, scopeList) {
 
 /**
  * 讀取 action payrollXmap {}（payload 其他欄位一律忽略）：要 payroll.write；
- * admin（perms 有 *）回全部，否則只回 pay_store 在 payroll.store@ 負責門市清單內的列（同 payrollStaffRoster 的 scope 規則）。
+ * admin（perms 有 *）回全部，否則只回 pay_store 或 acct_store 在 payroll.store@ 負責門市清單內的列。
  * 回 { ok:true, data:{ rows:[…], generated_at:'<ISO>' } }
  */
 function handlePayrollXmap_(token, payload) {

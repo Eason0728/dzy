@@ -106,9 +106,16 @@ ok(JSON.stringify(build()) === JSON.stringify(all), '1q: 同一輸入結果相�
 ok(!sb.payXmapBuild_(staffAll, maps, stores, org, '2026-12-01', null).some((r) => r.emp_id === 'MZTJS31'), '1r: 下個月起，上月離職那位不出');
 // scope
 const sc = build(['SSLGF']);
-ok(sc.map((r) => r.emp_id).sort().join() === 'GF03,MZTJS12', '1s: scope [SSLGF] → 只回 pay_store=SSLGF 的列（含他在金山的帳號）', sc.map((r) => r.emp_id));
+ok(sc.map((r) => r.emp_id).sort().join() === 'GF03,MZTJS12', '1s: scope [SSLGF] → pay_store 或 acct_store＝SSLGF 的列（含他在金山的帳號；別店同仁在光復的 GF99 是 rejected 不出）', sc.map((r) => r.emp_id));
 ok(build([]).length === 0, '1t: scope 空陣列 → 一列都沒有');
-ok(build(['HQ', 'MZTJS']).every((r) => ['HQ', 'MZTJS'].includes(r.pay_store)) && build(['HQ', 'MZTJS']).length === 8, '1u: scope 兩家 → 只回這兩家');
+ok(build(['HQ', 'MZTJS']).every((r) => ['HQ', 'MZTJS'].includes(r.pay_store) || ['HQ', 'MZTJS'].includes(r.acct_store)) && build(['HQ', 'MZTJS']).length === 9, '1u: scope 兩家 → pay_store 或 acct_store 在這兩家才回');
+// 1v～1x（上線前審查 2026-11-05）：負責打卡店的人要看得到「別店同仁在本店有打卡帳號」（才能提醒在本店有打卡、沒有主檔）
+const js = build(['MZTJS']);
+const jsIds = js.map((r) => r.emp_id).sort().join();
+ok(jsIds === 'MZTGF07,MZTJS05,MZTJS12,MZTJS31,MZTJS32', '1v: scope [MZTJS] → 自己門市同仁的帳號＋別店同仁（光復 DZY005）在金山的帳號 MZTJS12', jsIds);
+const v12 = js.find((r) => r.emp_id === 'MZTJS12');
+ok(v12 && v12.pay_store === 'SSLGF' && v12.acct_store === 'MZTJS' && Object.keys(v12).sort().join() === 'acct_store,emp_id,emp_no,not_support,pay_store,state', '1w: 別店同仁那列仍只有六欄（看得到薪酬門市，看不到姓名）', v12);
+ok(!js.some((r) => r.pay_store !== 'MZTJS' && r.acct_store !== 'MZTJS') && !js.some((r) => r.emp_id === 'GF03'), '1x: pay_store、acct_store 都不在負責門市的列不回（DZY005 在光復本店的 GF03）');
 
 // ── 2. handler 守門 ──────────────────────────────────────
 sb.clkSheetsReady_ = () => true;
@@ -127,7 +134,13 @@ ok(typeof ra.data.generated_at === 'string' && !isNaN(Date.parse(ra.data.generat
 ok(Object.keys(ra.data).sort().join() === 'generated_at,rows', '2f: data 只有 rows、generated_at');
 perms = ['payroll.write', 'payroll.store@SSLGF'];
 const rs = sb.handlePayrollXmap_('good', {});
-ok(rs.ok && rs.data.rows.every((r) => r.pay_store === 'SSLGF') && rs.data.rows.length === 2, '2g: 非 admin 只回負責門市', rs.data && rs.data.rows);
+ok(rs.ok && rs.data.rows.every((r) => r.pay_store === 'SSLGF' || r.acct_store === 'SSLGF') && rs.data.rows.length === 2, '2g: 非 admin 只回負責門市', rs.data && rs.data.rows);
+perms = ['payroll.write', 'payroll.store@CF'];
+const rc = sb.handlePayrollXmap_('good', {});
+const rcIds = rc.data.rows.map((r) => r.emp_id).sort().join();
+ok(rc.ok && rcIds === 'CF10,CF27' && rc.data.rows.every((r) => r.pay_store === 'HQ' && r.acct_store === 'CF'), '2g2: 只負責 CF（沒人薪資歸 CF）→ 看得到總部同仁在央廚的帳號，看不到他們的總部帳號', rcIds);
+ok(!JSON.stringify(rc).includes('癸十') && !JSON.stringify(rc).includes('例外甲'), '2g3: 回應不含姓名');
+perms = ['payroll.write', 'payroll.store@SSLGF'];
 perms = ['payroll.write'];
 const rn = sb.handlePayrollXmap_('good', {});
 ok(rn.ok && rn.data.rows.length === 0, '2h: 非 admin 沒有任何負責門市 → 空清單（不是全部）', rn);
