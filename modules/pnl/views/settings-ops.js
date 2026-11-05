@@ -343,7 +343,6 @@ const maint = {
           });
           paint();
         }
-        const text = (d.month || '上月') + ' 草稿：' + lines.join('；');
         S.say('lastmonth', (d.month || '上月') + ' 草稿處理完成（共 ' + lines.length + ' 家）');
         S.toast('上月草稿處理完成', 'ok');
       });

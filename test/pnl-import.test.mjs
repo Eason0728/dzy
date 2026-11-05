@@ -171,6 +171,39 @@ t('readWorkbookBuf：HTML 表格（薪資系統的 .xls）utf-8 → 讀得出表
   const junk = Uint8Array.from([1, 2, 3, 4, 5]).buffer;
   assert.doesNotThrow(() => L.sheetToRows2D(X, L.readWorkbookBuf(X, junk, TPL)));
 });
+// Codex 審查（2026-11-05）：混店別掃全部非空列、非法日期 Date.UTC 往返核對（新舊兩邊一起改，這裡同時比對新舊輸出＋期望值）
+t('findStoreMismatch：混店檔（第一列光復、後面美村）要擋；同一店別多列不擋', () => {
+  const mixed = [HEADER, ['小辛辣-新竹光復店', 1, 'x', 100, day(1)], ['小辛辣-台中美村店', 2, 'x', 200, day(2)], ['', 3, 'x', 50, day(3)]];
+  same('findStoreMismatch', mixed, TPL, '新竹光復');
+  assert.equal(NEW.findStoreMismatch(mixed, TPL, '新竹光復'), '小辛辣-新竹光復店／小辛辣-台中美村店');
+  const twoNames = [HEADER, ['新竹光復', 1, 'x', 1, day(1)], ['小辛辣-新竹光復店', 2, 'x', 1, day(2)]];
+  same('findStoreMismatch', twoNames, TPL, '新竹光復');
+  assert.notEqual(NEW.findStoreMismatch(twoNames, TPL, '新竹光復'), null, 'distinct > 1 就擋');
+  const single = [HEADER, ['小辛辣-新竹光復店', 1, 'x', 1, day(1)], ['小辛辣-新竹光復店', 2, 'x', 1, day(2)]];
+  same('findStoreMismatch', single, TPL, '新竹光復');
+  assert.equal(NEW.findStoreMismatch(single, TPL, '新竹光復'), null);
+});
+t('cellToDayStr：不存在的日期（2/31、13 月、0 日、平年 2/29）回 null；閏年 2/29 照收', () => {
+  ['2026-02-31', '2026-13-01', '2026-02-00', '2026-02-29', '2026/04/31 10:00', '2028-02-29', '2026-02-28'].forEach((v) => same('cellToDayStr', v));
+  ['2026-02-31', '2026-13-01', '2026-02-00', '2026-02-29', '2026/04/31 10:00'].forEach((v) => assert.equal(NEW.cellToDayStr(v), null, v));
+  assert.equal(NEW.cellToDayStr('2028-02-29'), '2028-02-29');
+  const rows = [['日期', '類別', '金額'], ...Array.from({ length: 27 }, (_, i) => ['2026-02-' + String(i + 1).padStart(2, '0'), 'x', 10]), ['2026-02-31', 'x', 999]];
+  const tpl = { tpl_id: 'T09', name: 't', header_row: 1, date_col: '日期', amount_col: '金額', group_col: '類別', mapping: { '*': 'A001' } };
+  const agg = NEW.aggregateFiles([{ name: 'bad.xlsx', rows2D: rows }], tpl, '2026-02');
+  assert.equal(agg.skippedBadDate, 1); assert.equal(agg.matchedRowCount, 27); assert.equal(agg.sums.A001, 270);
+});
+t('canConfirmImport：多檔裡有讀不出／表頭錯的檔 → 不能確認（Codex 審查）', () => {
+  const tpl = { tpl_id: 'T09', name: 't', header_row: 1, date_col: '日期', amount_col: '金額', group_col: '類別', mapping: { '*': 'A001' } };
+  const good = [['日期', '類別', '金額'], ['2026-02-01', 'x', 100]];
+  const wrong = [['Date', 'Cat', 'Amt'], ['2026-02-02', 'x', 500]];
+  const base = { currentTplSaved: true, invalidCodes: [], skippedRows: [], existingUnknown: false };
+  const okAgg = NEW.aggregateFiles([{ name: 'good.xlsx', rows2D: good }], tpl, '2026-02');
+  assert.equal(L.canConfirmImport({ ...base, agg: okAgg, failedFiles: [] }), true);
+  assert.equal(L.canConfirmImport({ ...base, agg: okAgg, failedFiles: ['unreadable.xlsx'] }), false, '讀不出的檔');
+  const badAgg = NEW.aggregateFiles([{ name: 'good.xlsx', rows2D: good }, { name: 'wrong.xlsx', rows2D: wrong }], tpl, '2026-02');
+  assert.equal(badAgg.filesWithErrors.length, 1);
+  assert.equal(L.canConfirmImport({ ...base, agg: badAgg, failedFiles: [] }), false, '表頭錯的檔');
+});
 t('fmtInt', () => { assert.equal(L.fmtInt(1234567.4), '1,234,567'); assert.equal(L.fmtInt(-1234), '−1,234'); assert.equal(L.fmtInt(NaN), '—'); });
 
 console.log('\n' + n + ' 項通過');

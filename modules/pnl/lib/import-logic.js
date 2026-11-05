@@ -66,7 +66,14 @@ const root = {};
       // 進一步抓 YYYY-MM-DD——Fable 審查建議 #8：日期允許 `/` 當分隔符
       // （例如「2026/08/01」），不是只認 `-`，抓到後統一正規化成 `-`。
       var m = /^(\d{4})[-\/](\d{2})[-\/](\d{2})/.exec(s);
-      return m ? (m[1] + '-' + m[2] + '-' + m[3]) : null;
+      if (!m) return null;
+      // Codex 審查（2026-11-05）：只驗形狀會讓 2026-02-31、2026-13-01 這種
+      // 不存在的日期被計入金額、還掩蓋真正缺資料的那天。用 Date.UTC 往返
+      // 核對年月日，對不回來＝非法日期（回 null，計入 skippedBadDate）。
+      var yy = +m[1], mm = +m[2], dd = +m[3];
+      var dt = new Date(Date.UTC(yy, mm - 1, dd));
+      if (dt.getUTCFullYear() !== yy || dt.getUTCMonth() !== mm - 1 || dt.getUTCDate() !== dd) return null;
+      return m[1] + '-' + m[2] + '-' + m[3];
     }
     return null;
   }
@@ -395,11 +402,12 @@ const root = {};
   // ---- 店別欄檢查（Fable 審查建議 #7）：如果表頭裡剛好有一欄叫「店別」
   // （光復 POS 檔實測就有這欄，值像「小辛辣-新竹光復店」），檢查它跟目前
   // 選定的門市名稱是否對得上——用「互相包含子字串」比對（不要求完全相
-  // 等，因為 POS 的店別字串通常會多品牌／「店」字這種綴詞），第一列有值
-  // 的資料列對不上就整份標記，不逐列比對（同一個檔案理論上只會有一個
-  // 店別，逐列比對只是浪費、真的混雜多店資料是更嚴重的問題，這裡先抓
-  // 最常見的「選錯檔」情境）。表頭沒有「店別」欄就不檢查（不是每個範本
-  // 都有這欄，C5 沒有規定這是必要欄）。----------------------------------
+  // 等，因為 POS 的店別字串通常會多品牌／「店」字這種綴詞）。
+  // Codex 審查（2026-11-05）：改成掃全部非空列——原本只看第一列，混店檔
+  // （第一列光復、後面美村）會整份灌進所選門市。任何一列對不上、或出現
+  // 一種以上的店別字串（distinct > 1）就整份標記，回傳讀到的店別（多個用
+  // 「／」串接）。表頭沒有「店別」欄就不檢查（不是每個範本都有這欄，C5
+  // 沒有規定這是必要欄）。--------------------------------------------------
   var STORE_COLUMN_NAME_ = '店別';
   function findStoreMismatch(rows2D, template, expectedStoreName) {
     if (!expectedStoreName) return null;
@@ -408,16 +416,21 @@ const root = {};
     var header = rows2D[headerIdx];
     var storeIdx = colIndexOf(header, STORE_COLUMN_NAME_);
     if (storeIdx === -1) return null;
+    var distinct = [];
+    var anyMismatch = false;
     for (var r = headerIdx + 1; r < rows2D.length; r++) {
       var row = rows2D[r];
       if (!row) continue;
       var cell = row[storeIdx];
       if (cell === undefined || cell === null || String(cell).trim() === '') continue;
       var cellStr = String(cell).trim();
+      if (distinct.indexOf(cellStr) === -1) distinct.push(cellStr);
       var match = cellStr.indexOf(expectedStoreName) !== -1 || expectedStoreName.indexOf(cellStr) !== -1;
-      return match ? null : cellStr; // 回傳實際讀到的店別字串（null＝沒問題）
+      if (!match) anyMismatch = true;
     }
-    return null; // 整份檔案店別欄都是空的，不擋
+    if (!distinct.length) return null; // 整份檔案店別欄都是空的，不擋
+    if (!anyMismatch && distinct.length === 1) return null;
+    return distinct.join('／'); // 回傳實際讀到的店別字串（null＝沒問題）
   }
 
   // ---- 位元組簽章判斷「內容本來就是文字」（Fable 對 PR #30 第二輪審查
@@ -523,6 +536,16 @@ export const {
   findMissingColumns, parseAmountCell, aggregateFile, aggregateFiles, detectDuplicateFiles, findStoreMismatch,
   buildEntries, dateRangeOf, buildNote
 } = ImportLogic;
+
+/**
+ * 「確認匯入」能不能按（新版獨有，原本寫在 views/import.js renderPreview 內）。
+ * Codex 審查（2026-11-05）：多檔裡有讀不出的檔（failedFiles）或表頭對不起來的檔（filesWithErrors）時一律不能確認——
+ * 整月取代會把壞檔涵蓋的資料無聲清成 0。要匯入就先把壞檔移除、重新選檔。
+ */
+export function canConfirmImport({ agg, currentTplSaved, invalidCodes, skippedRows, existingUnknown, failedFiles }) {
+  return agg.matchedRowCount > 0 && !!currentTplSaved && invalidCodes.length === 0 && skippedRows.length === 0 && !existingUnknown
+    && (failedFiles || []).length === 0 && (agg.filesWithErrors || []).length === 0;
+}
 
 /** 整數千分位（照 gas/import.html fmtInt） */
 export function fmtInt(n) {
