@@ -1768,6 +1768,37 @@ function clockUpperEmps_() {
   return out;
 }
 
+/**
+ * LINE 打卡提醒開通管理系統（2026-11-06 Eason）：同步員每 15 分鐘取這份，推到光復打卡機器人（line_hub_dzy_remind_put）。
+ * 只列在職、還沒開通的同仁：unclaimed／rejected → 'open'（請按第一次使用）；pending → 'wait'（已送出，等主管審核）。
+ * 人要有 confirmed 打卡對照、對照上有 line_h（每晚 00:10 同步寫入）；對不上的不列（Eason 定：不提醒，等人資補對照）。
+ * 離職日已到的不列。同一個 line_h 對到兩個以上同仁 → 都不列（寧可不提醒也不催錯人）。
+ * 回 { ok, items:[{ h, emp, st }] }。全域函式、不進 Code.gs 分派表（只給同步員用）。
+ */
+function clockLineRemind_() {
+  var today = clkTodayOf_(new Date());
+  var want = {};
+  clkStaffAll_().forEach(function (s) {
+    var st = clkStaffStatus_(s);
+    var k = st === 'unclaimed' || st === 'rejected' ? 'open' : st === 'pending' ? 'wait' : '';
+    if (!k || !s.emp || (s.last && s.last <= today)) return;
+    want[s.emp] = k;
+  });
+  var byH = {};
+  clkMaps_().forEach(function (m) {
+    var h = stfStr_(m.line_h).toLowerCase();
+    if (m.state !== 'confirmed' || m.roster_active === 'FALSE' || !/^[0-9a-f]{64}$/.test(h)) return;
+    (byH[h] = byH[h] || {})[m.emp_no] = true;
+  });
+  var items = [];
+  Object.keys(byH).forEach(function (h) {
+    var emps = Object.keys(byH[h]);
+    if (emps.length !== 1 || !want[emps[0]]) return;
+    items.push({ h: h, emp: emps[0], st: want[emps[0]] });
+  });
+  return { ok: true, items: items };
+}
+
 // ---- 每日 ----
 
 /**

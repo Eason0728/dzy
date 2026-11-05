@@ -2243,5 +2243,47 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(no.ok && mapOf(app, okp.emp, 'mztjs')[0].state === 'rejected', 'AS 總部發現錯了仍可按「不對」', no);
 })();
 
+// LINE 打卡提醒開通管理系統（2026-11-06）：clockLineRemind_
+(() => {
+  const app = fresh();
+  const { sb, tok } = app;
+  const H = (n) => String(n).repeat(64).slice(0, 64);
+  const withH = (emp, store, eid, h, extra) => { giveMap(app, emp, store, eid, 'home', extra); const r = app.sheets.staff_clock._data[app.sheets.staff_clock._data.length - 1]; r[11] = h; };
+  const imp = (name) => { post(sb, 'staffImport', { names: [name] }, tok); return post(sb, 'claimLookup', { name }).data.emp_no; };
+  const eOpen = imp('提醒未開');
+  withH(eOpen, 'mztgf', 'R1', H('a'));
+  withH(eOpen, 'mztjs', 'R1J', H('a'));                       // 同一人兩店同一個 LINE → 只列一次
+  const eWait = imp('提醒等審');
+  post(sb, 'claimSubmit', Object.assign({ name: '提醒等審', emp_no: eWait, password: 'pw-wait-0001' }, PROF(MZT_GF('pt'))));
+  withH(eWait, 'mztgf', 'R2', H('b'));
+  const eRej = imp('提醒退回');
+  post(sb, 'claimSubmit', Object.assign({ name: '提醒退回', emp_no: eRej, password: 'pw-rej-00001' }, PROF(MZT_GF('pt'))));
+  const rj = post(sb, 'staffReject', { emp_no: eRej, reason: '資料不對' }, tok);
+  withH(eRej, 'mztgf', 'R3', H('c'));
+  const eDone = claimApprove(app, '提醒已開', 'pw-done-0001', MZT_GF('pt')).emp;
+  withH(eDone, 'mztgf', 'R4', H('d'));
+  const eNoH = imp('提醒沒綁');
+  withH(eNoH, 'mztgf', 'R5', '');                             // 沒綁 LINE → 不列
+  const eSug = imp('提醒沒對');
+  withH(eSug, 'mztgf', 'R6', H('e'), { state: 'suggested' }); // 對照沒生效＝對不上 → 不列
+  const eOff = imp('提醒停帳');
+  withH(eOff, 'mztgf', 'R7', H('f'), { roster_active: 'FALSE' });
+  const eDup1 = imp('提醒同一'), eDup2 = imp('提醒同二');
+  withH(eDup1, 'mztgf', 'R8', H('1')); withH(eDup2, 'mztjs', 'R9', H('1'));   // 同一個 LINE 對到兩人 → 都不列
+  const r = sb.clockLineRemind_();
+  const by = Object.fromEntries(r.items.map((x) => [x.emp, x]));
+  ok(r.ok === true && rj.ok, 'LR clockLineRemind_ 回 ok（退回成功）', rj);
+  ok(by[eOpen] && by[eOpen].st === 'open' && by[eOpen].h === H('a') && r.items.filter((x) => x.emp === eOpen).length === 1, 'LR ★還沒開通 → open，同一個 LINE 兩店只列一次', r.items);
+  ok(by[eWait] && by[eWait].st === 'wait', 'LR ★已送出等審核 → wait', by[eWait]);
+  ok(by[eRej] && by[eRej].st === 'open', 'LR ★被退回 → open（要重新送）', by[eRej]);
+  ok(!by[eDone] && !by[eNoH] && !by[eSug] && !by[eOff] && !by[eDup1] && !by[eDup2], 'LR 已開通、沒綁 LINE、對照沒生效、名冊停用、同一 LINE 兩人 → 都不列', r.items);
+  ok(r.items.every((x) => /^[0-9a-f]{64}$/.test(x.h) && /^DZY\d{3,}$/.test(x.emp) && !('name' in x)), 'LR 只回雜湊、編號、狀態（沒有姓名）', r.items);
+  // 登記離職日已到 → 不列
+  const lv = post(sb, 'staffLeave', { emp_no: eOpen, last_day: '2020-01-01' }, tok);
+  ok(lv.ok, 'LR （登記離職日 2020-01-01）', lv);
+  ok(!sb.clockLineRemind_().items.some((x) => x.emp === eOpen), 'LR 離職日已到 → 不列', sb.clockLineRemind_().items);
+  ok(!/clockLineRemind_/.test(fs.readFileSync(path.join(__dirname, '../apps-script/platform/Code.gs'), 'utf8')), 'LR clockLineRemind_ 不在 Code.gs 分派表');
+})();
+
 console.log(`\n通過 ${passed}／${passed + failed}`);
 process.exit(failed ? 1 : 0);
