@@ -2724,7 +2724,12 @@ function handlePayrollStaffRoster_(token, payload) {
  *   - 最後上班日早於本月 1 號的離職同仁不出（本月才離職的照出，當月還要算薪）
  */
 function payXmapBuild_(staffAll, maps, stores, org, today, scopeList) {
-  var monthStart = stfStr_(today).slice(0, 7) + '-01';
+  // 離職同仁保留到離職月份的下個月底：上個月薪資通常次月初才算，對照不在就會漏帶他上個月的支援時數（薪資審查 GPT #4）
+  var monthStart = (function () {
+    var y = parseInt(stfStr_(today).slice(0, 4), 10), mo = parseInt(stfStr_(today).slice(5, 7), 10) - 1;
+    if (mo < 1) { mo = 12; y--; }
+    return y + '-' + ('0' + mo).slice(-2) + '-01';
+  })();
   var byEmp = {};
   (staffAll || []).forEach(function (s) { if (s.emp) byEmp[s.emp] = s; });
   var storeBy = {};

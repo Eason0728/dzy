@@ -53,7 +53,8 @@ const staffAll = [
   person('DZY009', '壬九', 'active', 'yiwu-hq', 'hs'),                // 一悟品牌辦公室：沒有薪酬門市 → 不出
   person('DZY010', '癸十', 'active', 'dzy-hq', 'hs'),                 // 總部、央廚有支援帳號
   person('DZY027', '例外甲', 'active', 'dzy-hq', 'hs'),               // STORE_NOT_SUPPORT_EX { DZY027: ['cf'] }
-  person('DZY030', '上月離職', 'active', 'mzt-js', 'pt', '2026-10-31'),
+  person('DZY030', '上月離職', 'active', 'mzt-js', 'pt', '2026-09-30'),
+  person('DZY034', '上月離職', 'active', 'mzt-js', 'pt', '2026-10-31'),
   person('DZY031', '本月離職', 'active', 'mzt-js', 'pt', '2026-11-02'),
   person('DZY032', '已停用', 'disabled', 'mzt-js', 'pt'),
   person('DZY033', '沒單位', 'unclaimed', '', '')
@@ -69,7 +70,7 @@ const maps = [
   ['DZY009', 'hq', 'HQ-09', 'home'],
   ['DZY010', 'hq', 'HQ-10', 'home'], ['DZY010', 'cf', 'CF10', 'support'],
   ['DZY027', 'hq', 'HQ-27', 'home'], ['DZY027', 'cf', 'CF27', 'support'],
-  ['DZY030', 'mztjs', 'MZTJS30', 'home'], ['DZY031', 'mztjs', 'MZTJS31', 'home'], ['DZY032', 'mztjs', 'MZTJS32', 'home'],
+  ['DZY030', 'mztjs', 'MZTJS30', 'home'], ['DZY031', 'mztjs', 'MZTJS31', 'home'], ['DZY032', 'mztjs', 'MZTJS32', 'home'], ['DZY034', 'mztjs', 'MZTJS34', 'home'],
   ['DZY033', 'mztjs', 'MZTJS33', 'home'],
   ['DZY999', 'mztjs', 'MZTJS99', 'home']                              // 同仁名單沒有這人 → 不出
 ].map(([emp_no, store_code, emp_id, role, state]) => ({ emp_no, store_code, emp_id, role, state: state || 'confirmed' }));
@@ -81,7 +82,7 @@ const keyOf = (r) => r.emp_no + '@' + r.emp_id;
 const all = build();
 const byId = Object.fromEntries(all.map((r) => [r.emp_id, r]));
 const ids = all.map((r) => r.emp_id).sort().join();
-ok(ids === 'CF10,CF27,GF03,HQ-10,HQ-27,MZTGF07,MZTJS05,MZTJS12,MZTJS31,MZTJS32', '1a: admin 全部列（預期十列）', ids);
+ok(ids === 'CF10,CF27,GF03,HQ-10,HQ-27,MZTGF07,MZTJS05,MZTJS12,MZTJS31,MZTJS32,MZTJS34', '1a: admin 全部列（預期十一列）', ids);
 ok(all.every((r) => r.state === 'confirmed' || r.state === 'suggested'), '1b: state 只有 confirmed／suggested');
 ok(!byId.GF99 && !byId.CF77, '1c: rejected、pending 不出');
 ok(byId.MZTGF07 && byId.MZTGF07.state === 'suggested' && byId.MZTGF07.acct_store === 'MZTGF', '1d: suggested 照出，acct_store 空白時退回預設 MZTGF', byId.MZTGF07);
@@ -92,7 +93,8 @@ ok(!byId.MZTJS99, '1g: 同仁名單沒有這人不出');
 ok(byId.CF27.not_support === true && byId['HQ-27'].not_support === false, '1h: 個人例外 DZY027 在央廚的帳號 not_support=true，總部帳號 false', [byId.CF27, byId['HQ-27']]);
 ok(byId.CF10.not_support === false && byId.CF10.pay_store === 'HQ' && byId.CF10.acct_store === 'CF', '1i: 一般總部同仁在央廚＝支援（not_support=false），pay_store HQ、acct_store CF', byId.CF10);
 ok(byId.MZTJS12.pay_store === 'SSLGF' && byId.MZTJS12.acct_store === 'MZTJS', '1j: 光復正職在金山的帳號：pay_store SSLGF、acct_store MZTJS', byId.MZTJS12);
-ok(!byId.MZTJS30, '1k: 最後上班日在上個月（10/31）→ 不出');
+ok(!byId.MZTJS30, '1k: 最後上班日在上上個月（9/30）→ 不出');
+ok(byId.MZTJS34, '1k2: 上個月（10/31）離職 → 照出（上個月薪資次月初才算，保留到離職月份的下個月底）');
 ok(byId.MZTJS31, '1l: 本月才離職（11/02，已過）→ 照出（當月還要算薪）');
 ok(byId.MZTJS32, '1m: 已停用但沒有最後上班日 → 照出（規則只排除上月以前離職）');
 const KEYS = 'acct_store,emp_id,emp_no,not_support,pay_store,state';
@@ -103,16 +105,17 @@ const sortKey = (r) => r.emp_no + '|' + r.acct_store + '|' + r.emp_id;
 ok(all.map(sortKey).join() === all.map(sortKey).slice().sort().join(), '1p: 依 emp_no、acct_store、emp_id 排序', all.map(keyOf));
 ok(JSON.stringify(build()) === JSON.stringify(all), '1q: 同一輸入結果相同');
 // 月初邊界：today＝12/01 時，11/02 離職的那位就不出
-ok(!sb.payXmapBuild_(staffAll, maps, stores, org, '2026-12-01', null).some((r) => r.emp_id === 'MZTJS31'), '1r: 下個月起，上月離職那位不出');
+ok(sb.payXmapBuild_(staffAll, maps, stores, org, '2026-12-01', null).some((r) => r.emp_id === 'MZTJS31'), '1r: 下個月（12/01）11/02 離職那位照出');
+ok(!sb.payXmapBuild_(staffAll, maps, stores, org, '2027-01-01', null).some((r) => r.emp_id === 'MZTJS31'), '1r2: 再下個月（跨年 2027-01-01）就不出');
 // scope
 const sc = build(['SSLGF']);
 ok(sc.map((r) => r.emp_id).sort().join() === 'GF03,MZTJS12', '1s: scope [SSLGF] → pay_store 或 acct_store＝SSLGF 的列（含他在金山的帳號；別店同仁在光復的 GF99 是 rejected 不出）', sc.map((r) => r.emp_id));
 ok(build([]).length === 0, '1t: scope 空陣列 → 一列都沒有');
-ok(build(['HQ', 'MZTJS']).every((r) => ['HQ', 'MZTJS'].includes(r.pay_store) || ['HQ', 'MZTJS'].includes(r.acct_store)) && build(['HQ', 'MZTJS']).length === 9, '1u: scope 兩家 → pay_store 或 acct_store 在這兩家才回');
+ok(build(['HQ', 'MZTJS']).every((r) => ['HQ', 'MZTJS'].includes(r.pay_store) || ['HQ', 'MZTJS'].includes(r.acct_store)) && build(['HQ', 'MZTJS']).length === 10, '1u: scope 兩家 → pay_store 或 acct_store 在這兩家才回');
 // 1v～1x（上線前審查 2026-11-05）：負責打卡店的人要看得到「別店同仁在本店有打卡帳號」（才能提醒在本店有打卡、沒有主檔）
 const js = build(['MZTJS']);
 const jsIds = js.map((r) => r.emp_id).sort().join();
-ok(jsIds === 'MZTGF07,MZTJS05,MZTJS12,MZTJS31,MZTJS32', '1v: scope [MZTJS] → 自己門市同仁的帳號＋別店同仁（光復 DZY005）在金山的帳號 MZTJS12', jsIds);
+ok(jsIds === 'MZTGF07,MZTJS05,MZTJS12,MZTJS31,MZTJS32,MZTJS34', '1v: scope [MZTJS] → 自己門市同仁的帳號＋別店同仁（光復 DZY005）在金山的帳號 MZTJS12', jsIds);
 const v12 = js.find((r) => r.emp_id === 'MZTJS12');
 ok(v12 && v12.pay_store === 'SSLGF' && v12.acct_store === 'MZTJS' && Object.keys(v12).sort().join() === 'acct_store,emp_id,emp_no,not_support,pay_store,state', '1w: 別店同仁那列仍只有六欄（看得到薪酬門市，看不到姓名）', v12);
 ok(!js.some((r) => r.pay_store !== 'MZTJS' && r.acct_store !== 'MZTJS') && !js.some((r) => r.emp_id === 'GF03'), '1x: pay_store、acct_store 都不在負責門市的列不回（DZY005 在光復本店的 GF03）');
