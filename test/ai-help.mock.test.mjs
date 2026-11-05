@@ -562,10 +562,10 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   const r = post(sb, 'aihLogList', { month: '2026-11' }, adm);
   ok(r.ok && r.data.total === 4 && eq(r.data.items.map((x) => x.id), [LOGID(4), LOGID(3), LOGID(2), LOGID(1)]) && r.data.next === '', 'LL 11 月 4 筆、新的在前（同時間依 id 由大到小）、沒有下一頁', r.data.items && r.data.items.map((x) => x.id));
   const keys = r.data.items.map((x) => Object.keys(x).sort().join(','));
-  ok(keys.every((k) => k === 'answer,feedback,id,kb_ids,kind,m,q,ts,v'), 'LL 每筆只回 id ts m v q kind answer kb_ids feedback（不回 uid、conv、tok、usd）', keys[0]);
+  ok(keys.every((k) => k === 'answer,feedback,id,kind,m,q,ts,v'), 'LL 每筆只回 id ts m v q kind answer feedback（不回 uid、conv、tok、usd、kb_ids）', keys[0]);
   ok(!JSON.stringify(r.data).includes('u900'), 'LL 回應裡沒有 uid');
   const one = r.data.items.find((x) => x.id === LOGID(1));
-  ok(one.feedback === 'down' && one.m === 'me' && one.v === 'profile' && one.kind === 'answered' && one.kb_ids === 'kb0001' && one.ts === '2026-11-01T01:00:00.000Z', 'LL 欄位：👎、頁面、kind、kb_ids、ts（ISO）', one);
+  ok(one.feedback === 'down' && one.m === 'me' && one.v === 'profile' && one.kind === 'answered' && !('kb_ids' in one) && one.ts === '2026-11-01T01:00:00.000Z', 'LL 欄位：👎、頁面、kind、ts（ISO）、沒有 kb_ids', one);
   ok(r.data.items.find((x) => x.id === LOGID(3)).answer.length === 1800 && r.data.items.find((x) => x.id === LOGID(4)).q === '同時間 B <b>粗</b>', 'LL answer 回全文、q 原樣（純文字由前端處理）');
   const p1 = post(sb, 'aihLogList', { month: '2026-11', limit: 3 }, adm);
   ok(p1.data.items.length === 3 && p1.data.total === 4 && p1.data.next === Date.parse('2026-11-01T02:00:00Z') + ':' + LOGID(2), 'LL limit 3 → 3 筆＋next', p1.data.next);
@@ -584,14 +584,15 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   // answer 回之前遮在職同仁姓名（node 寫 log 時 answer 沒遮姓名）；離職的不遮；名單讀不到就不回 answer
   const mk = (emp, name, status) => { const r = new Array(24).fill(''); r[0] = emp; r[2] = name; r[3] = status; return r; };
   app.sheets.staff._data.push(mk('S91', '王假名', 'active'), mk('S92', '歐陽假名乙', 'active'), mk('S93', '李離職', 'disabled'));
-  sb.aihLogAppend_(logRow({ id: LOGID(7), ts: '2026-11-02T03:00:00Z', q: '[同仁] 怎麼排班', answer: '請找王假名或歐陽假名乙，李離職已經不在' }));
+  sb.aihLogAppend_(logRow({ id: LOGID(7), ts: '2026-11-02T03:00:00Z', q: '王假名 怎麼排班', answer: '請找王假名或歐陽假名乙，李離職已經不在' }));
   const nm = post(sb, 'aihLogList', { month: '2026-11', limit: 1 }, adm).data.items[0];
   ok(nm.id === LOGID(7) && nm.answer === '請找[同仁]或[同仁]，李離職已經不在', 'LL answer 遮在職同仁完整姓名（長名優先）、離職不遮', nm.answer);
+  ok(nm.q === '[同仁] 怎麼排班', 'LL q 寫 log 時名單沒讀到、姓名沒遮 → 清單回之前再遮一次', nm.q);
   const saved = sb.aihStaffNames_;
   sb.aihStaffNames_ = () => ({ ok: false, code: 'staff_read_failed' });
   const nf = post(sb, 'aihLogList', { month: '2026-11', limit: 1 }, adm);
   sb.aihStaffNames_ = saved;
-  ok(nf.ok && nf.data.items[0].answer === '' && nf.data.items[0].q === '[同仁] 怎麼排班', 'LL 同仁名單讀不到 → answer 不回（fail closed），其他照回', nf.data.items[0]);
+  ok(nf.ok && nf.data.names_ok === false && nf.data.items[0].answer === '' && nf.data.items[0].q === '' && nf.data.items[0].kind === 'answered', 'LL 同仁名單讀不到 → q、answer 都不回、names_ok:false（fail closed），其他照回', nf.data);
 })();
 
 // aihLogList：ts 是 Date 物件、數字、沒時區字串（假試算表可能這樣存）也能排進月份；游標指向已刪除的列照樣往下接
