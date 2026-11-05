@@ -49,6 +49,14 @@ t('估算：人事（估）、淨利（含估算）、費用科目落到其 bloc
   assert.deepEqual(L.estimateNotes(r, [{ acc_id: 'X1', name: '房租' }]), ['人事估算：近三月平均', '食材估算：依營收比', '費用估算：房租：去年同月']);
   assert.deepEqual(L.estimatedBlocks({ blocks: {} }, []), {}); assert.equal(L.metricTitle(M('net'), {}), '稅後淨利');
 });
+t('Codex 審查：只有費用估算（estimates 非空但沒有 estimate_basis）→ 人事不標「估」', () => {
+  const accts = [{ acc_id: 'U01', name: '水電', block: '可控' }, { acc_id: 'L01', name: '薪資', block: '人事' }];
+  const costOnly = { estimates: { U01: 3000 }, cost_estimate_basis: { U01: { label: '近三月平均' } } };
+  const b = L.estimatedBlocks(costOnly, accts);
+  assert.deepEqual(b, { 可控: true });
+  assert.equal(L.metricTitle(M('labor'), b), '人事費用'); assert.equal(L.metricTitle(M('controllable'), b), '可控費用（估）');
+  assert.deepEqual(L.estimatedBlocks({ estimates: { L01: 5 }, estimate_basis: { label: '上月人事' } }, accts), { 人事: true });
+});
 t('品牌清單固定順序；顏色逐店分配，第 9 家起重複並畫虛線', () => {
   assert.deepEqual(L.brandOptions([{ brand: '小辛辣' }, { brand: '鼎兆元' }, { brand: '新品牌' }, {}]), ['鼎兆元', '小辛辣', '新品牌']);
   const ids = Array.from({ length: 10 }, (_, i) => 's' + i); const c = L.assignSeriesColors(ids);

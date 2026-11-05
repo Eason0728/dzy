@@ -272,7 +272,7 @@ const connectors = {
           <input class="input${urlInvalid || badNew ? ' is-invalid' : ''}" type="text" inputmode="url" name="pnl-connector-endpoint-${i}" autocomplete="off" data-lpignore="true" data-1p-ignore="true" spellcheck="false" data-f="newUrl" data-i="${i}" placeholder="留白＝不變更；填入完整新 URL（https://… 或本機 http://127.0.0.1:埠/路徑）" value="${esc(r.newUrl || '')}" aria-label="連接器 URL"></td>
         <td><span class="tag tag-ok">已設定</span>
           <input class="input pnl-secret" type="text" name="pnl-connector-secret-${i}" autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other" spellcheck="false" data-f="key" data-i="${i}" placeholder="留白＝不變更" value="${esc(r.key || '')}" aria-label="連接器金鑰"></td>
-        <td><select class="input" data-f="store_id" data-i="${i}" aria-label="連接器門市">${opt(esc, '', '（不限）', r.store_id || '')}${activeStores.map((s) => opt(esc, s.store_id, s.store_id, r.store_id || '')).join('')}${inactive ? opt(esc, r.store_id, r.store_id + '（已停用）', r.store_id) : ''}</select></td>
+        <td><select class="input" data-f="store_id" data-i="${i}" aria-label="連接器門市">${r.store_id ? '' : '<option value="" selected disabled>（請選門市）</option>'}${activeStores.map((s) => opt(esc, s.store_id, s.store_id, r.store_id || '')).join('')}${inactive ? opt(esc, r.store_id, r.store_id + '（已停用）', r.store_id) : ''}</select></td>
         <td><input type="checkbox" data-f="active" data-i="${i}"${r.active ? ' checked' : ''} aria-label="連接器啟用"></td>
         <td><button type="button" class="btn btn-danger" data-act="conn-del" data-i="${i}">移除</button></td></tr>
         <tr><td colspan="7">${mappingEditorHtml(S, r, i)}</td></tr>`;

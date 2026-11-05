@@ -327,6 +327,8 @@ export function validateConnectors(rows, originalNames) {
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (!r.name) return { error: '第 ' + (i + 1) + ' 列：名稱必填', badIndex: -1 };
+    // Codex 審查 #6（2026-11-05）：「不限」門市的連接器從來不會執行，後端改必填，這裡先擋
+    if (!r.store_id) return { error: r.name + '：要選門市（連接器一定綁一家店）', badIndex: -1 };
     r.newUrl = (r.newUrl || '').trim();
     if (r.newUrl && !isValidConnectorUrl(r.newUrl)) {
       return { error: r.name + '：URL 必須是 https:// 開頭的完整網址，或本機 http://127.0.0.1:埠/路徑（目前填的是「' + r.newUrl + '」，可能是瀏覽器自動填入）；只想改金鑰的話，URL 欄請留白', badIndex: i };

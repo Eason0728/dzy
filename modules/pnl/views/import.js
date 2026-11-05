@@ -11,7 +11,7 @@ import { currentMonth } from '../bridge.js';
 import { storeSelectHtml, monthSelectHtml, loadingHtml, noticeHtml, errorHtml } from './common.js';
 import { loadXlsx } from '../lib/load-xlsx.js';
 import {
-  ImportLogic, ACC_ID_DIRECT_KEY, fmtInt, sheetToRows2D, readWorkbookBuf
+  ImportLogic, ACC_ID_DIRECT_KEY, fmtInt, sheetToRows2D, readWorkbookBuf, canConfirmImport
 } from '../lib/import-logic.js';
 
 const STYLE = `
@@ -337,7 +337,8 @@ export function mountImport(el, ctx) {
 
     if (!currentTplSaved) parts.push('<div class="pnl-imp-warn" data-role="pnl-import-unsaved">目前套用的範本設定還沒存成範本，請先按「存成新範本」才能匯入。</div>');
 
-    const canConfirm = agg.matchedRowCount > 0 && currentTplSaved && invalidCodes.length === 0 && skippedRows.length === 0 && !existingUnknown;
+    const canConfirm = canConfirmImport({ agg, currentTplSaved, invalidCodes, skippedRows, existingUnknown, failedFiles });
+    if (failedFiles.length || agg.filesWithErrors.length) parts.push('<div class="text-muted" data-role="pnl-import-badfiles">有讀不出內容或表頭對不起來的檔案，「確認匯入」已停用：請把這些檔案移除後重新選檔（整月取代會把它們涵蓋的資料清成 0）。</div>');
     if (invalidCodes.length || skippedRows.length) parts.push('<div class="text-muted">有無法對應的科目代號或被略過的列，「確認匯入」已停用。</div>');
     if (agg.matchedRowCount === 0) parts.push('<div class="text-muted">沒有任何列對到任何科目，「確認匯入」已停用。</div>');
     parts.push(`<div><button type="button" class="btn btn-primary" data-act="import-confirm"${canConfirm ? '' : ' disabled'}>確認匯入</button></div>`);
@@ -349,6 +350,7 @@ export function mountImport(el, ctx) {
   async function confirmImport() {
     if (busy || !view) return;
     const { agg, month, incomplete, hasSkipped } = view;
+    if (failedFiles.length || agg.filesWithErrors.length) { toast('有讀不出或表頭錯的檔案，請移除後重新選檔', 'warn'); return; }
     if (incomplete || hasSkipped) {
       const msg = '這次匯入的資料' + (incomplete ? '不足整月' : '') + (incomplete && hasSkipped ? '、' : '') + (hasSkipped ? '有略過的列' : '')
         + '。\n\n確認匯入將整月取代既有匯入（同一個範本這個月份先前匯入的資料會被作廢），缺漏的部分會變成 0。確定要繼續嗎？';

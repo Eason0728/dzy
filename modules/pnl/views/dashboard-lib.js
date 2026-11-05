@@ -134,7 +134,8 @@ export function statusTextAll(data, nameOf) {
 export function estimatedBlocks(result, accounts) {
   const out = {};
   if (!result) return out;
-  if (result.estimates && Object.keys(result.estimates).length) out['人事'] = true;
+  // Codex 審查（2026-11-05）：後端把成本估算（水電等）也併進 result.estimates，非空≠有人事估算；人事專屬訊號是 estimate_basis
+  if (result.estimate_basis) out['人事'] = true;
   Object.keys(result.block_estimates || {}).forEach((b) => { out[b] = true; });
   Object.keys(result.cost_estimate_basis || {}).forEach((id) => {
     const acc = (accounts || []).find((a) => a.acc_id === id);

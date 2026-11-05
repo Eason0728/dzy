@@ -81,7 +81,8 @@ t('連接器 URL：https 或本機 http；金鑰沒改送 ***', () => {
   assert.equal(L.connectorPayload(rows)[0].key, 'K');
 });
 t('連接器驗證：新連接器要金鑰與 URL、壞 URL 回 badIndex', () => {
-  const r = { name: 'n', type: 'cashbook', newUrl: '', key: '' };
+  const r = { name: 'n', type: 'cashbook', newUrl: '', key: '', store_id: 'S01' };
+  assert.match(L.validateConnectors([{ ...r, store_id: '' }], { n: true }).error, /要選門市/, 'Codex #6：不限門市要擋');
   assert.match(L.validateConnectors([r], {}).error, /金鑰/);
   assert.match(L.validateConnectors([{ ...r, key: 'k' }], {}).error, /URL/);
   assert.equal(L.validateConnectors([r], { n: true }).error, '');
