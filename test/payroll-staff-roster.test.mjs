@@ -197,7 +197,7 @@ ok(JSON.stringify(toE.payload) === '{"store":"CF","emp_ids":["CF01","CF02"]}', '
 ok(!('emp_ids' in routeOf(parseCall({ type: 'dzy-payroll-call', v: 1, id: 'c1f', action: 'payroll_dzy_staff', body: { store: 'CF', emp_ids: 'CF01' } })).payload), '4a3: emp_ids 不是陣列就不帶');
 const c2 = parseCall({ type: 'dzy-payroll-call', v: 1, id: 'c2', action: 'payroll_master_get', body: { store: 'CF' } });
 ok(routeOf(c2).ns === 'payroll' && routeOf(c2).action === 'payroll_master_get', '4b: 其他照舊送薪資後端');
-ok(Object.keys(PLATFORM_ROUTES).join() === 'payroll_dzy_staff', '4c: 只有這一支改道');
+ok(Object.keys(PLATFORM_ROUTES).join() === 'payroll_dzy_staff,payroll_dzy_xmap', '4c: 只有這兩支改道（payroll_dzy_xmap 2026-11-05，見 payroll-xmap.test.mjs）');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

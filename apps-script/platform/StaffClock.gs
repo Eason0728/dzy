@@ -2705,3 +2705,70 @@ function handlePayrollStaffRoster_(token, payload) {
   data.unit_none = PAY_UNIT_NONE.slice();
   return { ok: true, data: data };
 }
+
+// ============================================================
+// 薪酬計算「跨店支援時數自動帶入」：同仁 ↔ 各店打卡帳號對照（2026-11-05；mala-clock-in docs/support-auto/spec.md §2、§7-7～9）
+// ============================================================
+// 薪酬頁（嵌入模式）經 bridge 的 payroll_dzy_xmap 改道到這支，拿到後由薪資後端 payroll_xmap_set 存快照。
+// 只回 emp_no／pay_store／acct_store／emp_id／state／not_support 六欄，不回姓名、手機、生日。
+
+/**
+ * 組對照（純函式，測試直接呼叫）：
+ *   staffAll＝clkStaffAll_()、maps＝clkMaps_()、stores＝clkStores_()、org＝stfReadOrg_()（目前未用，簽名比照 payStaffRosterBuild_）、
+ *   today＝'yyyy-MM-dd'、scopeList＝null（admin，全部）或薪酬店代碼陣列（只回 pay_store 在清單內的列）
+ * 回 rows：[{ emp_no, pay_store, acct_store, emp_id, state, not_support }]
+ *   - state 只收 confirmed／suggested；pay_store＝同仁目前單位的薪酬門市（payStoreOfUnit_）；
+ *     acct_store＝對照 store_code 在 clock_stores 的薪酬代碼（clkPayStoreOf_）；任一為空 → 不出
+ *   - not_support＝個人例外 STORE_NOT_SUPPORT_EX 指定的打卡店
+ *   - 最後上班日早於本月 1 號的離職同仁不出（本月才離職的照出，當月還要算薪）
+ */
+function payXmapBuild_(staffAll, maps, stores, org, today, scopeList) {
+  var monthStart = stfStr_(today).slice(0, 7) + '-01';
+  var byEmp = {};
+  (staffAll || []).forEach(function (s) { if (s.emp) byEmp[s.emp] = s; });
+  var storeBy = {};
+  (stores || []).forEach(function (st) { if (st.store_code && !storeBy[st.store_code]) storeBy[st.store_code] = st; });
+  var exMap = (typeof STORE_NOT_SUPPORT_EX !== 'undefined' && STORE_NOT_SUPPORT_EX) || {};
+  var payCache = {};
+  function payOf(s) {
+    if (!Object.prototype.hasOwnProperty.call(payCache, s.emp)) payCache[s.emp] = payStoreOfUnit_(clkStaffUnit_(s), stores);
+    return payCache[s.emp];
+  }
+  var rows = [];
+  (maps || []).forEach(function (m) {
+    if (m.state !== 'confirmed' && m.state !== 'suggested') return;
+    if (!m.emp_id) return;
+    var s = byEmp[m.emp_no];
+    if (!s) return;
+    if (payStaffState_(clkStaffStatus_(s), s.last, today) === 'left' && s.last && s.last < monthStart) return;
+    var pay = payOf(s);
+    var st = storeBy[m.store_code];
+    var acct = st ? clkPayStoreOf_(st) : '';
+    if (!pay || !acct) return;
+    if (Array.isArray(scopeList) && scopeList.indexOf(pay) === -1) return;
+    rows.push({ emp_no: m.emp_no, pay_store: pay, acct_store: acct, emp_id: m.emp_id, state: m.state,
+      not_support: (exMap[m.emp_no] || []).indexOf(m.store_code) !== -1 });
+  });
+  rows.sort(function (a, b) {
+    var ka = a.emp_no + '|' + a.acct_store + '|' + a.emp_id, kb = b.emp_no + '|' + b.acct_store + '|' + b.emp_id;
+    if (ka === kb) return 0;
+    return ka < kb ? -1 : 1;
+  });
+  return rows;
+}
+
+/**
+ * 讀取 action payrollXmap {}（payload 其他欄位一律忽略）：要 payroll.write；
+ * admin（perms 有 *）回全部，否則只回 pay_store 在 payroll.store@ 負責門市清單內的列（同 payrollStaffRoster 的 scope 規則）。
+ * 回 { ok:true, data:{ rows:[…], generated_at:'<ISO>' } }
+ */
+function handlePayrollXmap_(token, payload) {
+  var me = handleMe_(token);
+  if (!me.ok) return me;
+  if (!hasPerm_(me.data.perms, 'payroll.write')) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+  var scopeList = me.data.perms.indexOf('*') !== -1 ? null : permPayrollStoresOf_(me.data.perms);
+  if (!clkSheetsReady_()) return clkErr_('not_ready', '同仁名單還沒和打卡系統對照');
+  var now = new Date();
+  var rows = payXmapBuild_(clkStaffAll_(), clkMaps_(), clkStores_(), stfReadOrg_(), clkTodayOf_(now), scopeList);
+  return { ok: true, data: { rows: rows, generated_at: now.toISOString() } };
+}
