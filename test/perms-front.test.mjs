@@ -57,7 +57,7 @@ t('對照表 30 列（2026-11-02 加 AI 小幫手）、順序固定（2026-10-30
   assert.equal(rows[8].name, '改權限對照表');
   assert.equal(rows[9].name, '收支作廢');
   assert.equal(rows[10].name, '額外考勤核定');
-  assert.equal(rows[11].name, '薪酬管理');
+  assert.equal(rows[11].name, '薪酬計算');
   assert.equal(rows[12].name, '收支管理');
 });
 t('鎖住的兩列', () => {
