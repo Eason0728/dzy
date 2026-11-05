@@ -1,8 +1,8 @@
 /**
- * modules/pnl/manifest.js — 損益試算（2026-10-24，財務部門）：把門市自動損益網頁（mala-pnl.github.io，?embed=dzy）嵌進來。
+ * modules/pnl/manifest.js — 損益試算（2026-10-24，財務部門）。2026-11-05 起是原生四頁（docs/pnl-native/），不再嵌 mala-pnl.github.io。
  * 損益後端金鑰只放在 Mac mini 的 module_secrets（pnl/read、pnl/write），瀏覽器拿不到；每次讀寫都經平台代轉 /platform/proxy（ns pnl），
  * 由 proxyAuthorize_ 依 pnl.read／pnl.write／pnl.admin 放行並算出等級，損益後端用影子帳號沿用既有角色與可看門市規則。
- * 文件：docs/pnl-fin/requirements.md、spec.md。
+ * 文件：docs/pnl-native/（原生化）；嵌入期的 docs/pnl-fin/ 保留作歷史。
  */
 'use strict';
 

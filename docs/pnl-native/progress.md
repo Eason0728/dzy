@@ -64,12 +64,12 @@
 | 2026-11-03 | 階段關 P0 | T01–T03（dzy-minikit pnl-p0、mala-pnl-auto pnl-native-p0） | 第 1 輪 1 阻斷＋7 建議；第 2 輪可合併，#4 #7 收尾已修 | 2 | Eason0728/mala-pnl-auto#71 |
 | 2026-11-03 | 設計審 | requirements／spec／plan／task v1 | GPT 15 條（全標高）：11 條確定成立已改文件；4 條交 Fable 複核：04 不成立、01／03 部分成立（補切換日限制與 FROZEN 錯誤碼）、15 現行行為（寫明） | 1 | scratchpad design-review/gpt-result.md；Fable 複核回報 |
 
-## 落地清單
-- [ ] 1 排程上線：
-- [ ] 2 掛進監看：
-- [ ] 3 納入故障追蹤：
-- [ ] 4 登錄資源：
-- [ ] 5 建 skill 並登錄路由：
-- [ ] 6 寫一則記憶：
-- [ ] 7 進版控：
-- [ ] 8 回報未完成與等待事項：
+## 落地清單（2026-11-05 切換完成）
+- [x] 1 排程上線：mini jobs.js（每日 06:30 更新、每月 1 號草稿、排隊工作）隨 apps/pnl 上線；POS 推送 mala-fortune `pnl_pos_push` 05:15 已改指 mini（secret `PNL_EXEC_URL`）；觀察期一次性排程 MacBook `com.mala.pnlwatch` 08:30、mini `com.dzy.pnlwatch` 08:40（11/8 自拆）
+- [x] 2 掛進監看：排程守門 `PNL_HEALTH_URL` 指 mini（每月草稿檢查）；小系統伺服器健康與指揮台「損益試算伺服器」格見 Eason0728/mala-fortune#23（合併後要 clasp push 守門）
+- [x] 3 納入故障追蹤：失敗走通知匣（`pnlsys:`、觀察期 `pnlwatch:`／`pnlwatch-mini`）；退回 dzy-minikit apps/pnl/ROLLBACK.md
+- [x] 4 登錄資源：~/.claude/mala-ops/dispatch-resources.md 門市自動損益列、觀察期排程列
+- [x] 5 建 skill 並登錄路由：沿用 mala-pnl-auto，開頭加 mini 版要點；routing-full.md 補「損益試算原生畫面／損益 mini」
+- [x] 6 寫一則記憶：mala-pnl-auto-project.md（2026-11-05 切換）
+- [x] 7 進版控：dzy #97（原生畫面）、mala-pnl.github.io 搬家頁 95e4257、dzy-minikit#86（一鍵更新白名單）、~/.claude ae9683d
+- [ ] 8 回報未完成與等待事項：Codex 全面審查待 Eason 在 MacBook 執行（auto mode 擋送外部）；貨單、費用請款推送待第一筆真資料；10 月草稿要不要補建待 Eason；觀察期後刪預演匯出檔與 `.before-*` 備份
