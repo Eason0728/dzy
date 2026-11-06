@@ -382,7 +382,7 @@ class MockBackend:
             for r in self.staff:
                 if r['name'] == (p.get('name') or '').strip() and r['status'] == 'unclaimed':
                     return {'ok': True, 'data': {'emp_no': r['emp_no']}}
-            return {'ok': False, 'error': '名單上找不到這個名字，請找後台'}
+            return {'ok': False, 'error': '名單上找不到這個名字，請申請帳號', 'code': 'not_in_roster'}
         if action == 'claimSubmit':
             for r in self.staff:
                 if r['emp_no'] == p.get('emp_no') and r['status'] == 'unclaimed' and r['name'] == p.get('name'):

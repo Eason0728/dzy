@@ -230,7 +230,7 @@ const COL = (h) => HASHER.STF_HEADERS.indexOf(h);
   const { sb, sheets } = fresh();
   const tok = adminToken(sb);
   post(sb, 'staffImport', { names: FAKE_NAMES }, tok);
-  ok(post(sb, 'claimLookup', { name: '不存在' }).error === '名單上找不到這個名字，請找後台', 'A4 查無姓名');
+  ok(post(sb, 'claimLookup', { name: '不存在' }).error === '名單上找不到這個名字，請申請帳號', 'A4 查無姓名');
   const lk = post(sb, 'claimLookup', { name: ' 測試甲 ' });
   ok(lk.ok && lk.data.emp_no === 'DZY001' && Object.keys(lk.data).length === 1, 'A4 查到只回編號');
   ok(post(sb, 'login', { username: 'DZY001', password: 'whatever1' }).error === '這個編號還沒開通，請按「第一次使用」', 'A4 未認領登入回專屬訊息');

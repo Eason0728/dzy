@@ -12,6 +12,8 @@ import { loading } from '../ui.js';
 import { esc } from '../fmt.js';
 import { orgFieldsHtml, bindOrgFields, readOrgFields } from './org-fields.js';
 
+const NOT_IN_ROSTER_MSG = '名單上找不到這個名字，請申請帳號';
+
 export function renderClaim(card, opts) {
   stepName(card, opts);
 }
@@ -61,8 +63,9 @@ function stepName(card, opts) {
       btn.textContent = '查詢我的編號';
     }
     if (!lk.ok) {
-      showError(card, lk.error);
-      // 名冊查無（後端 code not_in_roster）：新進同仁可以自己送申請（docs/self-apply 第 4 節）
+      // 名冊查無（後端 code not_in_roster）：新進同仁可以自己送申請（docs/self-apply 第 4 節）；
+      // 提示字前端定死（2026-11-06 Eason：「請找後台」改「請申請帳號」），後端還是舊版也一樣
+      showError(card, lk.code === 'not_in_roster' ? NOT_IN_ROSTER_MSG : lk.error);
       if (lk.code === 'not_in_roster') showApplyLinks(card);
       return;
     }

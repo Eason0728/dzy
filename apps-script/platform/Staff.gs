@@ -67,7 +67,7 @@ var STF_MAX = { name: 30, emp_no: 16, phone: 20, birthday: 10, address: 100, org
 
 var STF_MSG = {
   NO_PERM: '沒有權限',
-  NOT_IN_ROSTER: '名單上找不到這個名字，請找後台',
+  NOT_IN_ROSTER: '名單上找不到這個名字，請申請帳號',
   ALREADY_CLAIMED: '這個名字已經開通，請用編號登入',
   NAME_AMBIGUOUS: '名單上有同名的人，請找後台',
   CLAIM_MISMATCH: '姓名與編號對不上，請重新輸入全名',
