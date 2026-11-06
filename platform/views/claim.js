@@ -60,10 +60,28 @@ function stepName(card, opts) {
       btn.disabled = false;
       btn.textContent = '查詢我的編號';
     }
-    if (!lk.ok) return showError(card, lk.error);
+    if (!lk.ok) {
+      showError(card, lk.error);
+      // 名冊查無（後端 code not_in_roster）：新進同仁可以自己送申請（docs/self-apply 第 4 節）
+      if (lk.code === 'not_in_roster') showApplyLinks(card);
+      return;
+    }
     if (!org.ok) return showError(card, org.error || '選項讀取失敗，請稍後再試');
     stepForm(card, opts, name, lk.data.emp_no, org.data);
   });
+}
+
+/** 查無名字時多兩個入口：申請帳號、查申請進度（已經有就不重複加） */
+function showApplyLinks(card) {
+  if (card.querySelector('[data-role="apply-links"]')) return;
+  const form = card.querySelector('[data-role="form"]');
+  const div = document.createElement('div');
+  div.className = 'stack';
+  div.setAttribute('data-role', 'apply-links');
+  div.innerHTML = `
+    <a class="btn btn-secondary btn-block" href="#/apply" data-role="to-apply">我是新進同仁，申請帳號</a>
+    <a class="btn btn-secondary btn-block" href="#/apply-status" data-role="to-apply-status">查申請進度</a>`;
+  form.insertAdjacentElement('afterend', div);
 }
 
 function stepForm(card, opts, name, empNo, org) {

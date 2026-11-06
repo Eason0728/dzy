@@ -969,8 +969,8 @@ function route() {
 
   const { moduleId, viewId, params } = parseHash(window.location.hash);
 
-  // claim／forgot 是登入前畫面的路由（login.js 管）；已登入還停在這兩個網址就當首頁，並把網址清掉
-  if (moduleId === 'claim' || moduleId === 'forgot') {
+  // claim／forgot／apply／apply-status 是登入前畫面的路由（login.js 管）；已登入還停在這些網址就當首頁，並把網址清掉
+  if (moduleId === 'claim' || moduleId === 'forgot' || moduleId === 'apply' || moduleId === 'apply-status') {
     try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) { /* 測試環境沒有 history */ }
     renderHome();
     return;

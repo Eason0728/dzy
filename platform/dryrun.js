@@ -15,6 +15,8 @@
 export const READ_ACTIONS = {
   platform: ['login', 'me', 'listUsers', 'listRoles', 'orgOptions', 'claimLookup',
     'myProfile', 'myUnit', 'staffList', 'unitPending',
+    // 新進同仁自行申請（2026-11-06，docs/self-apply）：查進度是純讀取（比照 claimLookup）；applySubmit／applyApprove／applyReject 不列（寫入，試跑會攔）
+    'applyStatus',
     // 員工名單統一（2026-10-13）：單位名單、打卡對照清單、首頁提醒是純讀取
     // clockJobStatus 刻意不列：查 link 單會從快取取走並刪掉一次性金鑰（有副作用）；試跑時新增／取連結本來就被攔，前端不輪詢
     'staffUnitList', 'clockMapList', 'clockAlerts',

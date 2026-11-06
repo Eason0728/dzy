@@ -21,6 +21,8 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'staffUnlockReset', 'staffEdit',
   // 2026-10-12：登出全部裝置、認領後主管審核（docs/personnel/spec.md §6.8／§6.9）
   'logout', 'unitPending', 'unitApprove', 'unitReject',
+  // 2026-11-06：新進同仁自行申請帳號（docs/self-apply/spec.md）；applySubmit／applyStatus 登入前不帶 token（同 claimLookup／claimSubmit）
+  'applySubmit', 'applyStatus', 'applyApprove', 'applyReject',
   // 2026-10-13：員工名單統一（StaffClock.gs，契約 docs/personnel/master-data/api.md）；內部函式（結尾底線）不在這裡
   'staffCreateByUnit', 'staffLeave', 'staffLeaveCancel', 'staffRename', 'staffReinstate', 'staffUnitList',
   'clockMapBuild', 'clockMapList', 'clockMapDecide', 'clockCandidateCreate', 'clockCandidateDismiss',
@@ -129,7 +131,7 @@ function dispatch_(e) {
   var MUTATING_ACTIONS = { saveUser: 1, setActive: 1, resetPassword: 1, changePassword: 1,
     claimSubmit: 1, forgotReset: 1, saveMyProfile: 1, staffImport: 1, staffAdd: 1, staffConfirm: 1,
     staffReject: 1, staffSetActive: 1, staffUnclaim: 1, staffUnlockReset: 1, staffEdit: 1,
-    logout: 1, unitApprove: 1, unitReject: 1,
+    logout: 1, unitApprove: 1, unitReject: 1, applySubmit: 1, applyApprove: 1, applyReject: 1,
     staffCreateByUnit: 1, staffLeave: 1, staffLeaveCancel: 1, staffRename: 1, staffReinstate: 1,
     clockMapBuild: 1, clockMapDecide: 1, clockCandidateCreate: 1, clockCandidateDismiss: 1,
     clockOutboxRetry: 1, clockOutboxCancel: 1, clockSetHome: 1, clockOldHomeDecide: 1, clockLink: 1, clockAddHome: 1,
@@ -204,6 +206,10 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'unitPending': return handleUnitPending_(token);
     case 'unitApprove': return handleUnitApprove_(token, payload);
     case 'unitReject': return handleUnitReject_(token, payload);
+    case 'applySubmit': return handleApplySubmit_(payload);
+    case 'applyStatus': return handleApplyStatus_(payload);
+    case 'applyApprove': return handleApplyApprove_(token, payload);
+    case 'applyReject': return handleApplyReject_(token, payload);
     case 'staffCreateByUnit': return handleStaffCreateByUnit_(token, payload);
     case 'staffLeave': return handleStaffLeave_(token, payload);
     case 'staffLeaveCancel': return handleStaffLeaveCancel_(token, payload);

@@ -619,7 +619,8 @@ function handleClaimLookup_(payload) {
     return { ok: false, error: allPending ? STF_MSG.CLAIM_PENDING : STF_MSG.ALREADY_CLAIMED };
   }
   stfCacheIncr_(missKey, STF_NAME_MISS_WINDOW);
-  return { ok: false, error: STF_MSG.NOT_IN_ROSTER };
+  // code：登入頁據此多顯示「我是新進同仁，申請帳號」（docs/self-apply 第 4 節）
+  return { ok: false, error: STF_MSG.NOT_IN_ROSTER, code: 'not_in_roster' };
 }
 
 /** 個資＋組織欄驗證（claimSubmit 與 saveMyProfile 共用）。回 {error} 或 {clean} */
@@ -1158,7 +1159,16 @@ function stfCanReviewRow_(rv, values) {
 
 function handleUnitPending_(token) {
   var rv = stfReviewer_(token);
-  if (!rv.ok) return rv;
+  // 新進同仁申請（docs/self-apply 第 3 節）：審核者是聯集（含「可新增同仁」staff.add@），沒有認領審核資格也可能有申請可審。
+  // 還沒有 staff_apply 分頁＝沒有申請，不多讀任何東西
+  var hasApply = stfApplySheetState_() === 'ok';
+  if (!rv.ok) {
+    if (rv.error !== STF_MSG.NOT_REVIEWER || !hasApply) return rv;
+    var actx = stfApplyReviewer_(token);
+    if (!actx.ok || !actx.a || !actx.a.units || !actx.a.units.length) return rv;
+    return { ok: true, data: { people: [], applies: stfApplyListFor_(actx), scope_name: actx.a.scope ? actx.a.scope.unit_name : '', all_units: false } };
+  }
+  var applies = hasApply ? stfApplyListFor_(stfApplyReviewer_(token)) : [];
   var people = stfAllRows_().filter(function (r) { return stfCanReviewRow_(rv, r.values); }).map(function (r) {
     var o = stfToObj_(r.values, rv.org, true);
     // 主管要核對本人：填的單位／部門／職稱、生日、手機、地址都給
@@ -1169,7 +1179,7 @@ function handleUnitPending_(token) {
       birthday: o.birthday, phone: o.phone, address: o.address, claimed_at: o.claimed_at
     };
   });
-  return { ok: true, data: { people: people, scope_name: rv.scope ? rv.scope.unit_name : '', all_units: rv.isHr } };
+  return { ok: true, data: { people: people, applies: applies, scope_name: rv.scope ? rv.scope.unit_name : '', all_units: rv.isHr } };
 }
 
 /**
@@ -1271,6 +1281,340 @@ function stfClearClaim_(v) {
   v[STF_COL.reset_fail] = 0;
   v[STF_COL.reset_lock_count] = 0;
   v[STF_COL.status] = 'unclaimed';
+}
+
+// ============================================================
+// 7c. 新進同仁自行申請帳號（docs/self-apply/spec.md，Eason 2026-11-06 1A 2A 3A 4B 5B；不做邀請碼）
+// ============================================================
+// 名冊查無的新人在登入頁送申請（applySubmit，不給編號、不寫 staff／users），另存 staff_apply；
+// 單位的審核者在「待審核」通過（applyApprove）當下才拿 stfMaxEmpNum_()+1、寫 users＋staff＋打卡 add 單。
+// 密碼只存 salt＋hash（核准時直接搬到 users 列、申請列清空）；退回清 salt／hash／生日／地址。不過期（Q4 B）。
+
+var STF_SHEET_APPLY = 'staff_apply';
+var STF_APPLY_HEADERS = ['apply_id', 'status', 'created_at', 'name', 'phone', 'birthday', 'address', 'brand', 'unit', 'dept',
+  'title', 'salt', 'hash', 'reviewed_by', 'reviewed_at', 'emp_no', 'reject_reason', 'hire_date'];
+var STF_APPLY_COL = {};
+STF_APPLY_HEADERS.forEach(function (h, i) { STF_APPLY_COL[h] = i; });
+var STF_APPLY_PENDING_MAX = 300;      // 全部待審申請數上限（洪水保險）
+var STF_APPLY_REASON_MAX = 100;
+var STF_APPLY_ID_RE = /^APL[0-9]{14}[0-9]{4}$/;
+var STF_APPLY_MSG = {
+  NAME_IN_ROSTER: '名單上已經有你的名字，請改用「第一次使用」認領',
+  NAME_CLASH_UNIT: '這個單位已經有同名同仁，請找主管',
+  ROSTER_FOR_REVIEWER: '名單上已經有同名、還沒認領的人：請退回這筆申請，請他改用「第一次使用」認領',
+  DUP_PENDING: '你已經送出申請，等主管審核中',
+  TOO_MANY_PENDING: '目前申請太多，請稍後再試或找主管',
+  NOT_FOUND: '找不到這筆申請',
+  NOT_PENDING: '這筆申請已經處理過了',
+  NOT_REVIEWER: '你不能審這筆申請',
+  HIRE_DATE: '請填到職日（YYYY-MM-DD，2000-01-01 到一年內）',
+  REASON_TOO_LONG: '退回原因最多 100 個字',
+  SHEET_BAD: '分頁「staff_apply」的表頭與程式不一致，停止寫入以免資料錯位',
+  NOT_READY: '系統還沒準備好，請找系統維護者'
+};
+
+/** 'ok'｜'nosheet'｜'mismatch'（表頭不一致：讀回空、寫入停） */
+function stfApplySheetState_() {
+  var sh = stfSheet_(STF_SHEET_APPLY);
+  if (!sh) return 'nosheet';
+  var head = sh.getRange(1, 1, 1, STF_APPLY_HEADERS.length).getValues()[0].map(function (v) { return String(v).trim(); });
+  return head.join('|') === STF_APPLY_HEADERS.join('|') ? 'ok' : 'mismatch';
+}
+/** 寫入前：沒有分頁就建（只補不覆蓋，表頭不一致就停，同 setupStaff 慣例）。回 null 或錯誤字串 */
+function stfApplyEnsure_() {
+  var st = stfApplySheetState_();
+  if (st === 'ok') return null;
+  if (st === 'mismatch') return STF_APPLY_MSG.SHEET_BAD;
+  try { stfEnsureSheet_(SpreadsheetApp.getActive(), STF_SHEET_APPLY, STF_APPLY_HEADERS, []); } catch (e) { return STF_APPLY_MSG.SHEET_BAD; }
+  return stfApplySheetState_() === 'ok' ? null : STF_APPLY_MSG.SHEET_BAD;
+}
+/** 全部申請列（讀取不建表：沒有分頁或表頭不對＝空） */
+function stfApplyRows_() {
+  if (stfApplySheetState_() !== 'ok') return [];
+  return stfReadRows_(STF_SHEET_APPLY, STF_APPLY_HEADERS.length).map(function (v, i) { return { row: i + 2, values: v }; });
+}
+function stfApplyGet_(r, f) {
+  var v = r.values[STF_APPLY_COL[f]];
+  if (f === 'phone') return stfPhone_(v);
+  if (f === 'birthday' || f === 'hire_date') return stfDate_(v);
+  return stfStr_(v);
+}
+function stfApplyNorm_(n) { return typeof clkNormName_ === 'function' ? clkNormName_(n) : stfStr_(n); }
+function stfApplyNewId_(rows) {
+  var used = {};
+  rows.forEach(function (r) { used[stfApplyGet_(r, 'apply_id')] = true; });
+  var stamp = stfNowText_().replace(/\D/g, '').slice(0, 14);
+  for (var i = 0; i < 50; i++) {
+    var id = 'APL' + stamp + String(10000 + Math.floor(Math.random() * 10000)).slice(-4);
+    if (!used[id]) return id;
+  }
+  return 'APL' + stamp + String(rows.length % 10000 + 10000).slice(-4);
+}
+
+/**
+ * 姓名衝突（submit 與 approve 共用）：名冊有同名 unclaimed → 'roster'（導回認領，避免一人兩號）；
+ * 同單位已有同名非停用同仁 → 'unit'（clkNameClash_ 的單位條件）；否則 null。姓名比對去掉空白（同 clkNormName_）。
+ */
+function stfApplyNameClash_(name, unit) {
+  var n = stfApplyNorm_(name);
+  var rows = stfAllRows_();
+  var roster = rows.some(function (r) {
+    return stfApplyNorm_(r.values[STF_COL.name]) === n && stfStr_(r.values[STF_COL.status]) === 'unclaimed';
+  });
+  if (roster) return 'roster';
+  var clash = rows.some(function (r) {
+    var st = stfStr_(r.values[STF_COL.status]);
+    return stfApplyNorm_(r.values[STF_COL.name]) === n && st !== 'disabled' && stfStr_(r.values[STF_COL.unit]) === unit;
+  });
+  return clash ? 'unit' : null;
+}
+function stfApplyClashErr_(kind, forReviewer) {
+  if (kind === 'roster') return { ok: false, error: forReviewer ? STF_APPLY_MSG.ROSTER_FOR_REVIEWER : STF_APPLY_MSG.NAME_IN_ROSTER, code: 'name_in_roster' };
+  return { ok: false, error: STF_APPLY_MSG.NAME_CLASH_UNIT, code: 'duplicate_name' };
+}
+
+/** applySubmit（登入前，不帶 token）：驗證沿用認領；全域桶 apply（格式錯不計）；寫一列 pending，不回 apply_id */
+function handleApplySubmit_(payload) {
+  payload = payload || {};
+  // 1. 長度與格式（全部在碰全域額度之前；格式錯不計）
+  if (stfTooLong_(payload.name, STF_MAX.name)) return { ok: false, error: STF_MSG.NAME_TOO_LONG };
+  if (stfTooLong_(payload.password, STF_MAX.password)) return { ok: false, error: STF_MSG.PW_TOO_LONG };
+  if (stfTooLong_(payload.phone, STF_MAX.phone)) return { ok: false, error: '手機要是 09 開頭的 10 碼數字' };
+  if (stfTooLong_(payload.birthday, STF_MAX.birthday)) return { ok: false, error: '生日格式要是 YYYY-MM-DD' };
+  if (stfTooLong_(payload.address, STF_MAX.address)) return { ok: false, error: '居住地址請填 5～100 個字' };
+  if (STF_ORG_FIELDS.some(function (f) { return stfTooLong_(payload[f], STF_MAX.org); })) return { ok: false, error: '請選擇品牌' };
+  var name = stfStr_(payload.name);
+  if (!name) return { ok: false, error: '請輸入全名' };
+  // 核准後姓名會進打卡名冊：上限跟店長新增同仁一樣（CLK_NAME_MAX 20 字），開頭不能是公式符號
+  var nameMax = typeof CLK_NAME_MAX === 'number' ? CLK_NAME_MAX : STF_MAX.name;
+  if (name.length > nameMax) return { ok: false, error: '姓名最多 ' + nameMax + ' 個字' };
+  if (/^[=+\-@]/.test(name)) return { ok: false, error: STF_MSG_NAME_START };
+  var password = payload.password === undefined || payload.password === null ? '' : String(payload.password);
+  var pwErr = stfValidatePassword_(password, '');
+  if (pwErr) return { ok: false, error: pwErr };   // 還沒有編號：「不能跟編號一樣」這條自然成立（DZY### 只有 6 碼，已被 8 碼下限擋掉）
+  var org = stfReadOrg_();
+  var res = stfCleanProfile_(payload, org, true);   // 組織四欄（單位必須 active、職稱合單位）＋手機、地址、生日；單位不限（Q5 B）
+  if (res.error) return { ok: false, error: res.error };
+  var c = res.clean;
+  // 2. 全域限流（格式對的才計）
+  if (stfGlobalFlood_('apply')) return { ok: false, error: STF_MSG.TOO_MANY };
+  // 3. 擋
+  var clash = stfApplyNameClash_(name, c.unit);
+  if (clash) return stfApplyClashErr_(clash);
+  var bad = stfApplyEnsure_();
+  if (bad) return { ok: false, error: bad };
+  var rows = stfApplyRows_();
+  var pend = rows.filter(function (r) { return stfApplyGet_(r, 'status') === 'pending'; });
+  var nn = stfApplyNorm_(name);
+  var dup = pend.some(function (r) {
+    return stfApplyGet_(r, 'phone') === c.phone || (stfApplyNorm_(stfApplyGet_(r, 'name')) === nn && stfApplyGet_(r, 'unit') === c.unit);
+  });
+  if (dup) return { ok: false, error: STF_APPLY_MSG.DUP_PENDING, code: 'dup_pending' };
+  if (pend.length >= STF_APPLY_PENDING_MAX) return { ok: false, error: STF_APPLY_MSG.TOO_MANY_PENDING, code: 'too_many' };
+  // 4. 寫一列 pending（純文字）；密碼只存 salt＋hash
+  var salt = Utilities.getUuid();
+  var v = [];
+  STF_APPLY_HEADERS.forEach(function () { v.push(''); });
+  v[STF_APPLY_COL.apply_id] = stfApplyNewId_(rows);
+  v[STF_APPLY_COL.status] = 'pending';
+  v[STF_APPLY_COL.created_at] = stfNowText_();
+  v[STF_APPLY_COL.name] = name;
+  v[STF_APPLY_COL.phone] = c.phone;
+  v[STF_APPLY_COL.birthday] = c.birthday;
+  v[STF_APPLY_COL.address] = authSafeCell_(c.address);
+  v[STF_APPLY_COL.brand] = c.brand;
+  v[STF_APPLY_COL.unit] = c.unit;
+  v[STF_APPLY_COL.dept] = c.dept;
+  v[STF_APPLY_COL.title] = c.title;
+  v[STF_APPLY_COL.salt] = salt;
+  v[STF_APPLY_COL.hash] = hashPassword_(password, salt);
+  stfAppendRow_(STF_SHEET_APPLY, v, STF_APPLY_HEADERS.length);
+  return { ok: true, data: { pending: true } };
+}
+
+/** applyStatus（登入前）：姓名＋手機查最新一筆申請；全域桶 applystatus；同姓名查無 5 次／10 分鐘 */
+function handleApplyStatus_(payload) {
+  payload = payload || {};
+  if (stfTooLong_(payload.name, STF_MAX.name) || stfTooLong_(payload.phone, STF_MAX.phone)) return { ok: false, error: '請輸入全名和手機' };
+  var name = stfStr_(payload.name);
+  var phone = stfPhone_(payload.phone);
+  if (!name) return { ok: false, error: '請輸入全名' };
+  if (stfValidatePhone_(phone)) return { ok: false, error: '手機要是 09 開頭的 10 碼數字' };
+  if (stfGlobalFlood_('applystatus')) return { ok: false, error: STF_MSG.TOO_MANY };
+  var missKey = 'stf_amiss_' + name;
+  if (stfCacheGet_(missKey) >= STF_NAME_MISS_LIMIT) return { ok: false, error: STF_MSG.TOO_MANY };
+  var nn = stfApplyNorm_(name);
+  var hit = null;
+  stfApplyRows_().forEach(function (r) {
+    if (stfApplyNorm_(stfApplyGet_(r, 'name')) === nn && stfApplyGet_(r, 'phone') === phone) hit = r;   // 列依時間追加：最後一筆＝最新
+  });
+  if (!hit) {
+    stfCacheIncr_(missKey, STF_NAME_MISS_WINDOW);
+    return { ok: true, data: { status: 'none' } };
+  }
+  var st = stfApplyGet_(hit, 'status');
+  if (st === 'approved') return { ok: true, data: { status: 'approved', emp_no: stfApplyGet_(hit, 'emp_no') } };
+  if (st === 'rejected') return { ok: true, data: { status: 'rejected', reason: stfApplyGet_(hit, 'reject_reason') } };
+  return { ok: true, data: { status: 'pending' } };
+}
+
+/**
+ * 審核者（Q2 A＋Q5 B，取聯集）：回 {ok, user, isHr, isAdmin, scope, a, org, rctx, by}。
+ *   isHr：人資（platform.staff）或 admin；scope：認領審核範圍（stfReviewScope_）；a：新增同仁守門（clkActor_，含兼任店長、staff.add@）。
+ * 三者都沒有也回 ok（清單就是空的）；能不能審哪一筆一律由 stfApplyCanReview_ 決定。
+ */
+function stfApplyReviewer_(token) {
+  var me = handleMe_(token);
+  if (!me.ok) return me;
+  var org = stfReadOrg_();
+  var isAdmin = stfActorIsAdmin_(me.data.user);
+  var isHr = isAdmin || hasPerm_(me.data.perms, 'platform.staff');
+  var scope = null;
+  var self = hasPerm_(me.data.perms, 'platform.self') ? stfFindByUserId_(me.data.user.id) : null;
+  if (self) scope = stfReviewScope_(self.values, org);
+  var a = (!isHr && self && typeof clkActor_ === 'function') ? clkActor_(token) : null;
+  if (a && !a.ok) a = null;
+  var rctx = (!isHr && typeof regionCtx_ === 'function') ? regionCtx_() : null;
+  return { ok: true, user: me.data.user, isHr: isHr, isAdmin: isAdmin, scope: scope, a: a, org: org, rctx: rctx };
+}
+
+/**
+ * 這位審核者能不能審這筆申請（清單、核准、退回共用）。titleOverride＝核准時改後的職稱（再驗一次）。
+ * 1. 人資／admin；2. 新增同仁守門管得到該單位、且職稱職級不高於自己（clkRankFor_）；
+ * 3. 該單位該職稱的認領審核者（stfReviewNeed_＋stfScopeMeets_，帶區域）。
+ */
+function stfApplyCanReview_(ctx, r, titleOverride) {
+  if (!ctx || !ctx.ok) return false;
+  if (ctx.isHr) return true;
+  var unit = stfApplyGet_(r, 'unit');
+  var dept = stfApplyGet_(r, 'dept');
+  var title = titleOverride || stfApplyGet_(r, 'title');
+  var t = ctx.org.title[title];
+  if (ctx.a && ctx.a.units && t && typeof clkRankFor_ === 'function') {
+    var rank = clkRankFor_(ctx.a, unit);
+    if (rank > 0 && t.rank <= rank && stfTitleFitsUnit_(ctx.org, title, unit)) return true;
+  }
+  if (ctx.scope) {
+    var need = stfReviewNeed_(ctx.org, unit, dept, title);
+    if (need && stfScopeMeets_(ctx.scope, need, ctx.rctx)) return true;
+  }
+  return false;
+}
+
+/** 待審核清單用：不回生日、地址、salt、hash */
+function stfApplyListFor_(ctx) {
+  if (!ctx || !ctx.ok) return [];
+  var nm = function (kind, code) { return code && ctx.org[kind][code] ? ctx.org[kind][code].name : ''; };
+  return stfApplyRows_().filter(function (r) {
+    return stfApplyGet_(r, 'status') === 'pending' && stfApplyCanReview_(ctx, r);
+  }).map(function (r) {
+    return {
+      apply_id: stfApplyGet_(r, 'apply_id'), name: stfApplyGet_(r, 'name'), phone: stfApplyGet_(r, 'phone'),
+      brand: stfApplyGet_(r, 'brand'), unit: stfApplyGet_(r, 'unit'), unit_name: nm('unit', stfApplyGet_(r, 'unit')),
+      dept: stfApplyGet_(r, 'dept'), dept_name: nm('dept', stfApplyGet_(r, 'dept')),
+      title: stfApplyGet_(r, 'title'), title_name: nm('title', stfApplyGet_(r, 'title')), created_at: stfApplyGet_(r, 'created_at')
+    };
+  });
+}
+
+/** 審核單筆共用：審核者、apply_id 格式、找列、要是 pending */
+function stfApplyTarget_(token, payload) {
+  if (stfTooLong_(payload && payload.apply_id, 30)) return { ok: false, error: STF_APPLY_MSG.NOT_FOUND, code: 'not_found' };
+  var id = stfStr_(payload && payload.apply_id);
+  if (!STF_APPLY_ID_RE.test(id)) return { ok: false, error: STF_APPLY_MSG.NOT_FOUND, code: 'not_found' };
+  var ctx = stfApplyReviewer_(token);
+  if (!ctx.ok) return ctx;
+  var hit = null;
+  stfApplyRows_().forEach(function (r) { if (stfApplyGet_(r, 'apply_id') === id) hit = r; });
+  if (!hit) return { ok: false, error: STF_APPLY_MSG.NOT_FOUND, code: 'not_found' };
+  if (stfApplyGet_(hit, 'status') !== 'pending') return { ok: false, error: STF_APPLY_MSG.NOT_PENDING, code: 'not_pending' };
+  return { ok: true, ctx: ctx, hit: hit };
+}
+
+/** 只改申請列的幾格（不整列覆寫） */
+function stfApplySet_(row, fields) {
+  var sh = stfSheet_(STF_SHEET_APPLY);
+  Object.keys(fields).forEach(function (f) {
+    var rg = sh.getRange(row, STF_APPLY_COL[f] + 1, 1, 1);
+    rg.setNumberFormat('@');
+    rg.setValue(fields[f]);
+  });
+}
+
+/** applyApprove {apply_id, title?, hire_date}（寫入）：拿最新編號、寫 users＋staff＋打卡 add 單＋staff_log */
+function handleApplyApprove_(token, payload) {
+  payload = payload || {};
+  if (stfTooLong_(payload.title, STF_MAX.org) || stfTooLong_(payload.hire_date, STF_MAX.birthday)) return { ok: false, error: '資料格式不對', code: 'bad_input' };
+  if (typeof clkNewStaffRows_ !== 'function' || typeof clkReady_ !== 'function') return { ok: false, error: STF_APPLY_MSG.NOT_READY };
+  var t = stfApplyTarget_(token, payload);
+  if (!t.ok) return t;
+  var ctx = t.ctx, hit = t.hit, org = ctx.org;
+  var ready = clkReady_();
+  if (!ready.ok) return ready;
+  var o = { brand: stfApplyGet_(hit, 'brand'), unit: stfApplyGet_(hit, 'unit'), dept: stfApplyGet_(hit, 'dept'),
+    title: stfStr_(payload.title) || stfApplyGet_(hit, 'title') };
+  // 2. 職稱可改（Q3 A）但要合單位；單位、部門照申請（填錯就退回）。核准當下整組再驗一次（org 可能在送出後被停用）
+  var orgErr = stfValidateOrg_(org, o);
+  if (orgErr) return { ok: false, error: orgErr, code: 'bad_input' };
+  if (!stfApplyCanReview_(ctx, hit, o.title)) return { ok: false, error: STF_APPLY_MSG.NOT_REVIEWER, code: 'no_perm' };
+  var hire = stfStr_(payload.hire_date);
+  var d = new Date();
+  var today = clkTodayOf_(d);
+  if (!clkValidYmd_(hire) || hire < '2000-01-01' || hire > clkAddDays_(today, CLK_LEAVE_FWD_DAYS)) return { ok: false, error: STF_APPLY_MSG.HIRE_DATE, code: 'bad_input' };
+  // 3. 再查一次姓名衝突（送出後可能有人被匯入或新增）
+  var name = stfApplyGet_(hit, 'name');
+  var clash = stfApplyNameClash_(name, o.unit);
+  if (clash) return stfApplyClashErr_(clash, true);
+  // 4. 編號＝最大號＋1（含停用、離職，不回收）；staff、users 都不能已有
+  var n = stfMaxEmpNum_() + 1;
+  if (n > 999) return { ok: false, error: STF_MSG.FULL, code: 'full' };
+  var empNo = stfEmpOf_(n);
+  if (stfFindByEmp_(empNo) || findUsrRowByUsername_(empNo)) return { ok: false, error: CLK_MSG.EMP_CONFLICT, code: 'emp_conflict' };
+  var nowText = clkNowText_(d);
+  var rows = clkNewStaffRows_(empNo, name, o, hire, stfApplyGet_(hit, 'phone'), nowText);
+  rows.user[USR_COL.salt] = stfApplyGet_(hit, 'salt');
+  rows.user[USR_COL.hash] = stfApplyGet_(hit, 'hash');
+  rows.staff[STF_COL.status] = 'active';
+  rows.staff[STF_COL.birthday] = stfApplyGet_(hit, 'birthday');
+  rows.staff[STF_COL.address] = authSafeCell_(stfApplyGet_(hit, 'address'));
+  rows.staff[STF_COL.claimed_at] = stfApplyGet_(hit, 'created_at');
+  rows.staff[STF_COL.confirmed_at] = nowText;
+  if (!rows.user[USR_COL.salt] || !rows.user[USR_COL.hash]) return { ok: false, error: STF_APPLY_MSG.NOT_PENDING, code: 'not_pending' };
+  // 5. 非 admin 造出含鎖碼身分 → perm_admin_only
+  var lockBlock = typeof permNewRowBlock_ === 'function' ? permNewRowBlock_(ctx.isAdmin, rows.staff.slice(0, STF_COL_COUNT)) : null;
+  if (lockBlock) return lockBlock;
+  // 6. 同一支呼叫內寫完（Code.gs 寫入鎖）：users → staff → 打卡待辦單 → log → 申請列
+  var store = typeof clkStoreOfUnit_ === 'function' ? clkStoreOfUnit_(o.unit) : null;
+  var by = ctx.a && typeof clkActorLabel_ === 'function' ? clkActorLabel_(ctx.a) : String(ctx.user.id);
+  stfAppendBlock_(USR_SHEET_USERS, [rows.user], USR_COL_COUNT, false);
+  stfAppendBlock_(STF_SHEET, [rows.staff], STF_COL_COUNT + CLK_STAFF_EXTRA.length, true);
+  var jobId = null;
+  if (store) {
+    var job = clkEnqueue_({ kind: 'add', emp_no: empNo, store_code: store.store_code, name: name,
+      expect: { emp_no: empNo, store_code: store.store_code, name: name, by: by, uid: String(ctx.user.id) } }, d, clkUsedIds_(clkJobs_()));
+    jobId = job.job_id;
+  }
+  stfLog_(empNo, 'apply_approve', ctx.user.id, stfApplyGet_(hit, 'apply_id') + (jobId ? '；待辦單 ' + jobId : '；無打卡'));
+  // 7. 申請列：approved＋編號＋審核者，清 salt／hash
+  stfApplySet_(hit.row, { status: 'approved', emp_no: empNo, title: o.title, hire_date: hire, reviewed_by: String(ctx.user.id),
+    reviewed_at: nowText, salt: '', hash: '' });
+  return { ok: true, data: { emp_no: empNo, name: name, job_id: jobId, unit: o.unit } };
+}
+
+/** applyReject {apply_id, reason}（寫入）：原因必填 1–100 字；作廢、清生日／地址／密碼，不產生編號 */
+function handleApplyReject_(token, payload) {
+  payload = payload || {};
+  if (stfTooLong_(payload.reason, 400)) return { ok: false, error: STF_APPLY_MSG.REASON_TOO_LONG };
+  var reason = stfStr_(payload.reason);
+  if (!reason) return { ok: false, error: STF_MSG.REASON_REQUIRED };
+  if (reason.length > STF_APPLY_REASON_MAX) return { ok: false, error: STF_APPLY_MSG.REASON_TOO_LONG };
+  var t = stfApplyTarget_(token, payload);
+  if (!t.ok) return t;
+  if (!stfApplyCanReview_(t.ctx, t.hit)) return { ok: false, error: STF_APPLY_MSG.NOT_REVIEWER, code: 'no_perm' };
+  stfApplySet_(t.hit.row, { status: 'rejected', reject_reason: authSafeCell_(reason), reviewed_by: String(t.ctx.user.id),
+    reviewed_at: stfNowText_(), salt: '', hash: '', birthday: '', address: '' });
+  stfLog_('', 'apply_reject', t.ctx.user.id, stfApplyGet_(t.hit, 'apply_id'));
+  return { ok: true, data: { apply_id: stfApplyGet_(t.hit, 'apply_id') } };
 }
 
 // ============================================================
