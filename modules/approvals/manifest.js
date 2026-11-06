@@ -16,6 +16,7 @@ export default {
   name: '表單簽核',
   desc: '費用請款、人事異動簽核',
   icon: 'approvals',
+  work: 'money',               // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘（2026-10-21 Eason：不用最新狀態沒關係；登出管理系統時一起卸載）
   requires: ['platform.login'],
   views: [

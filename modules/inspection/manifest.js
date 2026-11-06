@@ -15,6 +15,7 @@ export default {
   name: '營運巡檢',
   desc: '到店巡檢評分、缺失拍照、報告',
   icon: 'inspection',
+  work: 'store',               // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   dept: 'ops',
   keepAlive: 30 * 60 * 1000,   // 切走保留 30 分鐘（填到一半去看別的不會不見；草稿另存本機）
   requires: ANY,

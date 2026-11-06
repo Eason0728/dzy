@@ -11,6 +11,7 @@ export default {
   name: '考勤管理',
   desc: '出勤核定、請假加班審核',
   icon: 'attendance',
+  work: 'people',              // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（2026-10-20 Eason；登出管理系統時一起卸載）
   dept: 'hr',
   requires: ['platform.att'],

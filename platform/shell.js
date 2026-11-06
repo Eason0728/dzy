@@ -42,7 +42,7 @@ import { setDryRunNotifier } from './dryrun.js';
 import * as ui from './ui.js';
 import * as fmt from './fmt.js';
 import { loadManifests } from './registry.js';
-import { DEPARTMENTS } from './config.js';
+import { DEPARTMENTS, WORK_GROUPS } from './config.js';
 import { reportManifest } from './manifest-check.js';
 import { render as renderLogin } from './views/login.js';
 import { sanitizeTabs, pickDynamicView, alertViewId } from './tabs.js';
@@ -86,6 +86,18 @@ let currentMountUnmount = null;
 let currentCtx = null;
 /** 動態分頁（platform/tabs.js）：模組 id → 該模組最近一次交來的分頁 */
 const dynTabs = {};
+
+/** 手機版（≤860px，2026-11-06）：上方一行頁名、底部四格。電腦版由 CSS 藏起來。 */
+let mBarEl = null;
+let mTitleEl = null;
+let mBackEl = null;
+let mTabsEl = null;
+/** 目前在哪個殼頁面（home／apps／todo／account）；模組畫面時為 null */
+let currentShellPage = null;
+/** 最近一次的殼頁面：模組頁的「‹」回這裡 */
+let lastShellPage = 'home';
+/** 各模組 badge()／alerts() 的最近一次結果：moduleId → {items, badge, failed}（首頁與「待處理」共用） */
+const alertCache = {};
 
 // ============================================================
 // 小工具：DOM 建構（不用 innerHTML 塞結構——需要能被查、能被點的節點一律用
@@ -399,9 +411,15 @@ async function loadHomeGroup(manifest, isStale) {
 
   const hasAlerts = typeof body.alerts === 'function';
   const [badgeRaw, alertsRaw] = await Promise.all([run('badge'), run('alerts')]);
-  if (isStale()) return;
 
   const value = typeof badgeRaw === 'number' && Number.isFinite(badgeRaw) ? badgeRaw : null;
+  // 手機首頁與「待處理」讀這份（不論使用者是否已切走，結果都留著）
+  const cleaned = hasAlerts ? cleanAlerts(alertsRaw) : null;
+  if (auth.getUser()) {
+    alertCache[manifest.id] = { items: cleaned === undefined ? null : cleaned, badge: value, failed: cleaned === undefined };
+    onAlertsChanged();
+  }
+  if (isStale()) return;
   if (value !== null) {
     const badgeEl = findDescendant(
       viewContentEl,
@@ -413,8 +431,7 @@ async function loadHomeGroup(manifest, isStale) {
   }
 
   if (hasAlerts) {
-    const items = cleanAlerts(alertsRaw);
-    fillGroup(manifest, items === undefined ? null : items, value, items === undefined);
+    fillGroup(manifest, cleaned === undefined ? null : cleaned, value, cleaned === undefined);
   } else {
     fillGroup(manifest, null, value, false);
   }
@@ -591,6 +608,7 @@ function renderTopNav() {
   pageTitleEl.textContent = currentModule ? currentModule.name : '待辦與異常';
   pageSubEl.textContent = [user.name, roleLabel(user)].filter(Boolean).join('・');
   loadNavTitle(user);
+  renderMobileBar();
 }
 
 /** 側邊欄模組名稱右側的待辦件數（與首頁卡片同一個 badge() 結果；0／沒數字不顯示）。 */
@@ -640,7 +658,11 @@ function renderHomeCards() {
   clearView();
   const tok = ++homeToken;
   const isStale = () => tok !== homeToken || currentModule !== null;
-  const wrap = el('div', { class: 'todo-groups', 'aria-live': 'polite' });
+  // 手機（≤860px）：先畫「今天要處理的事＋常用」，電腦版卡片接在後面、由 CSS 藏起來（.d-only，資料與 e2e 共用）。
+  // 電腦版不畫手機區塊：藏起來的那份排在前面，用文字找元素時會先找到看不見的（2026-11-06 e2e 踩過）。
+  const mobile = isMobileWidth();
+  if (mobile) viewContentEl.appendChild(renderMobileHome());
+  const wrap = el('div', { class: mobile ? 'todo-groups d-only' : 'todo-groups', 'aria-live': 'polite' });
   viewContentEl.appendChild(wrap);
   for (const m of permittedModules) {
     const firstView = m.views.find(isViewPermitted);
@@ -710,6 +732,17 @@ function onViewNavClick(e) {
 }
 
 function onViewContentClick(e) {
+  const act = findAncestorWithAttr(e.target, 'data-m-act');
+  if (act) {
+    onMobileAct(act.getAttribute('data-m-act'));
+    return;
+  }
+  const tile = findAncestorWithAttr(e.target, 'data-role', 'm-tile');
+  if (tile) {
+    const t = tile.getAttribute('data-target');
+    if (t) navigateTo(t);
+    return;
+  }
   const row = findAncestorWithAttr(e.target, 'data-role', 'alert-row');
   if (row) {
     const t = row.getAttribute('data-target');
@@ -721,6 +754,328 @@ function onViewContentClick(e) {
   const target = card.getAttribute('data-target');
   if (target) navigateTo(target);
 }
+
+// ============================================================
+// 手機版（≤860px，2026-11-06 Eason：底部四格「首頁／功能／待處理／我」、首頁只列要處理的事、
+// 功能照工作分類、每頁右上角「?」問小幫手）。電腦版側邊欄與首頁卡片不動：
+// 上方列與底部四格由 CSS 只在手機寬度顯示（.m-bar、.m-tabs）；首頁手機區塊只在手機寬度畫（isMobileWidth）。
+// ============================================================
+
+const SHELL_PAGES = { home: '首頁', apps: '功能', todo: '待處理', account: '我' };
+const MOBILE_MQ = '(max-width: 860px)';
+
+function isMobileWidth() {
+  try { return !!(window.matchMedia && window.matchMedia(MOBILE_MQ).matches); } catch (e) { return false; }
+}
+/** 首頁停著時跨過 860px（轉橫、拉視窗）→ 重畫成另一種首頁 */
+function watchMobileWidth() {
+  try {
+    const mq = window.matchMedia && window.matchMedia(MOBILE_MQ);
+    if (!mq) return;
+    const onChange = () => { if (currentShellPage === 'home' && !currentModule && auth.getUser()) renderHomeCards(); };
+    if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onChange);
+    else if (typeof mq.addListener === 'function') mq.addListener(onChange);
+  } catch (e) { /* 沒有 matchMedia（測試環境）＝當電腦版 */ }
+}
+const TODO_LEVELS = [
+  { level: 'error', name: '要緊' },
+  { level: 'warn', name: '待處理' },
+  { level: 'info', name: '提醒' }
+];
+/** 手機首頁最多列幾件，其餘收成「還有 N 件 → 看全部」 */
+const HOME_TODO_MAX = 6;
+const RECENT_MAX = 6;
+/** 底部四格圖示（固定字串，不含任何使用者資料） */
+const TAB_ICONS = {
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
+  apps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  todo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>',
+  account: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>'
+};
+
+/** 全部模組的提醒攤平成一條清單（照 permittedModules 順序）；沒實作 alerts() 但 badge>0 的算一筆「N 件待處理」 */
+function collectTodos() {
+  const items = [];
+  let loading = 0;
+  let failed = 0;
+  for (const m of permittedModules) {
+    const c = alertCache[m.id];
+    if (!c) { loading++; continue; }
+    if (c.failed) { failed++; continue; }
+    if (c.items) {
+      for (const it of c.items) items.push({ m, level: it.level, text: it.text, target: alertTarget(m, it) || moduleHomeTarget(m) });
+    } else if (typeof c.badge === 'number' && c.badge > 0) {
+      items.push({ m, level: 'warn', text: `${c.badge} 件待處理`, target: moduleHomeTarget(m) });
+    }
+  }
+  return { items, loading, failed };
+}
+
+/** 模組磚右上角的數字：要緊＋待處理的件數（提醒不算） */
+function tileCount(m) {
+  const c = alertCache[m.id];
+  if (!c || c.failed) return 0;
+  if (c.items) return c.items.filter((it) => it.level !== 'info').length;
+  return typeof c.badge === 'number' && c.badge > 0 ? c.badge : 0;
+}
+
+function todoRow(t) {
+  return el('div', {
+    class: `m-row lv-${t.level}`,
+    'data-role': 'alert-row',
+    'data-target': t.target || null,
+    role: t.target ? 'link' : null,
+    tabindex: t.target ? '0' : null
+  }, [
+    el('img', { class: 'm-ic', src: `assets/icons/${t.m.icon}.png`, alt: '' }),
+    el('span', { class: 'm-tx' }, [el('span', { class: 'm-t', text: t.text }), el('small', { text: t.m.name })]),
+    t.target ? el('span', { class: 'go', 'aria-hidden': 'true', text: '›' }) : null
+  ]);
+}
+
+/** 依 box 上的 data-max（0＝不限）、data-levels 畫清單；首頁與「待處理」共用 */
+function fillTodoBox(box) {
+  const max = Number(box.getAttribute('data-max')) || 0;
+  const levels = String(box.getAttribute('data-levels') || '').split(',');
+  const { items, loading, failed } = collectTodos();
+  const list = items.filter((t) => levels.includes(t.level));
+  clearChildren(box);
+  if (!list.length) {
+    box.appendChild(el('div', { class: loading ? 'm-empty' : 'm-empty ok', text: loading ? '讀取中…' : '目前沒有你要處理的事' }));
+  } else {
+    let shown = 0;
+    for (const g of TODO_LEVELS) {
+      const rows = list.filter((t) => t.level === g.level);
+      const take = max ? rows.slice(0, Math.max(0, max - shown)) : rows;
+      if (!take.length) continue;
+      shown += take.length;
+      box.appendChild(el('div', { class: `m-grp lv-${g.level}`, text: g.name }));
+      box.appendChild(el('div', { class: 'm-list' }, take.map(todoRow)));
+    }
+    if (list.length > shown) {
+      box.appendChild(el('button', { type: 'button', class: 'm-more', 'data-m-act': 'tab-todo', text: `還有 ${list.length - shown} 件 → 看全部` }));
+    }
+    if (loading) box.appendChild(el('div', { class: 'm-note', text: `還有 ${loading} 個功能讀取中…` }));
+  }
+  if (failed) box.appendChild(el('div', { class: 'm-note', text: `${failed} 個功能暫時讀不到` }));
+}
+
+function moduleTile(m) {
+  const n = tileCount(m);
+  return el('button', {
+    type: 'button',
+    class: 'm-tile',
+    'data-role': 'm-tile',
+    'data-module': m.id,
+    'data-target': moduleHomeTarget(m) || '#/home'
+  }, [
+    n ? el('i', { class: 'badge', text: String(n), 'aria-label': `${n} 件待處理` }) : null,
+    el('img', { src: `assets/icons/${m.icon}.png`, alt: '' }),
+    el('span', { text: m.name })
+  ]);
+}
+
+/** 「常用」＝最近開過的功能（本機、依帳號分開），不足六個用權限清單前面的補 */
+function recentKey() {
+  const u = auth.getUser();
+  return u && u.id ? `dzy.u.${u.id}.m_recent` : null;
+}
+function readRecent() {
+  try {
+    const k = recentKey();
+    const v = k ? JSON.parse(window.localStorage.getItem(k) || '[]') : [];
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch (e) { return []; }
+}
+function pushRecent(id) {
+  try {
+    const k = recentKey();
+    if (k) window.localStorage.setItem(k, JSON.stringify([id].concat(readRecent().filter((x) => x !== id)).slice(0, 12)));
+  } catch (e) { /* 私密瀏覽／被鎖：常用就用預設順序 */ }
+}
+function recentModules() {
+  const list = readRecent().map((id) => permittedModules.find((m) => m.id === id)).filter(Boolean);
+  for (const m of permittedModules) {
+    if (list.length >= RECENT_MAX) break;
+    if (!list.includes(m)) list.push(m);
+  }
+  return list.slice(0, RECENT_MAX);
+}
+
+let appsQuery = '';
+function fillGrid(box) {
+  clearChildren(box);
+  if (box.getAttribute('data-kind') === 'recent') {
+    box.appendChild(el('div', { class: 'm-grid' }, recentModules().map(moduleTile)));
+    return;
+  }
+  const q = appsQuery.trim();
+  const mods = permittedModules.filter((m) => !q || m.name.includes(q) || String(m.desc || '').includes(q));
+  const groups = WORK_GROUPS.map((g) => ({ name: g.name, mods: mods.filter((m) => m.work === g.id) }));
+  const other = mods.filter((m) => !WORK_GROUPS.some((g) => g.id === m.work));
+  if (other.length) groups.push({ name: '其他', mods: other });
+  for (const g of groups) {
+    if (!g.mods.length) continue;
+    const n = g.mods.filter((m) => tileCount(m) > 0).length;
+    box.appendChild(el('div', { class: 'm-grp' }, [
+      el('span', { text: g.name }),
+      n ? el('i', { class: 'badge', text: `${n} 件` }) : null
+    ]));
+    box.appendChild(el('div', { class: 'm-grid' }, g.mods.map(moduleTile)));
+  }
+  if (!mods.length) box.appendChild(el('div', { class: 'm-note', text: `找不到「${q}」，試試「考勤」「排班」「盤點」` }));
+}
+
+/** 某個模組的提醒回來了：更新底部「待處理」數字、畫面上的清單與功能磚 */
+function onAlertsChanged() {
+  if (mTabsEl) {
+    const n = collectTodos().items.filter((t) => t.level !== 'info').length;
+    const b = findDescendant(mTabsEl, (x) => x.getAttribute && x.getAttribute('data-role') === 'm-todo-badge');
+    if (b) {
+      b.textContent = n ? String(n) : '';
+      if (n) b.removeAttribute('hidden'); else b.setAttribute('hidden', '');
+    }
+  }
+  if (!viewContentEl) return;
+  const box = findDescendant(viewContentEl, (x) => x.getAttribute && x.getAttribute('data-role') === 'm-todo');
+  if (box) fillTodoBox(box);
+  const grid = findDescendant(viewContentEl, (x) => x.getAttribute && x.getAttribute('data-role') === 'm-grid');
+  if (grid) fillGrid(grid);
+}
+
+/** 「功能」「待處理」頁直接進來時（沒先經過首頁）也要有數字：重讀全部模組的提醒 */
+function refreshAlerts() {
+  for (const m of permittedModules) loadHomeGroup(m, () => true);
+}
+
+function renderMobileHome() {
+  const box = el('div', { class: 'm-todo', 'data-role': 'm-todo', 'data-max': String(HOME_TODO_MAX), 'data-levels': 'error,warn' });
+  fillTodoBox(box);
+  const grid = el('div', { 'data-role': 'm-grid', 'data-kind': 'recent' });
+  fillGrid(grid);
+  return el('div', { class: 'm-page m-home m-only' }, [
+    el('h2', { class: 'm-h', text: '你要處理的事' }), box,
+    el('h2', { class: 'm-h', text: '常用' }), grid
+  ]);
+}
+
+function renderAppsPage() {
+  const input = el('input', { type: 'search', class: 'input m-search', id: 'm-apps-q', placeholder: '搜尋功能，例如「排班」', 'aria-label': '搜尋功能', autocomplete: 'off' });
+  input.value = appsQuery;
+  const grid = el('div', { 'data-role': 'm-grid', 'data-kind': 'apps' });
+  input.addEventListener('input', () => { appsQuery = input.value; fillGrid(grid); });
+  fillGrid(grid);
+  viewContentEl.appendChild(el('div', { class: 'm-page' }, [input, grid]));
+  refreshAlerts();
+}
+
+function renderTodoPage() {
+  const box = el('div', { class: 'm-todo', 'data-role': 'm-todo', 'data-max': '0', 'data-levels': 'error,warn,info' });
+  fillTodoBox(box);
+  viewContentEl.appendChild(el('div', { class: 'm-page' }, [box]));
+  refreshAlerts();
+}
+
+function accountRow(label, attrs, danger) {
+  return el('button', Object.assign({ type: 'button', class: danger ? 'm-row danger' : 'm-row' }, attrs), [
+    el('span', { class: 'm-tx' }, [el('span', { class: 'm-t', text: label })]),
+    danger ? null : el('span', { class: 'go', 'aria-hidden': 'true', text: '›' })
+  ]);
+}
+
+function renderAccountPage() {
+  const user = auth.getUser() || {};
+  const parts = [el('div', { class: 'm-me' }, [
+    el('div', { class: 'av', 'aria-hidden': 'true', text: String(user.name || '').slice(0, 1) }),
+    el('div', { class: 'm-tx' }, [el('b', { text: user.name || '' }), el('small', { text: roleLabel(user) })])
+  ])];
+  // manifest.accountMenu 的模組（我的資料）：有權限的分頁逐列放進來
+  for (const m of permittedModules.filter((x) => x.accountMenu)) {
+    const rows = m.views.filter(isViewPermitted).map((v) => accountRow(v.name, { 'data-role': 'm-tile', 'data-target': `#/${m.id}/${v.id}` }));
+    if (!rows.length) continue;
+    parts.push(el('div', { class: 'm-grp', text: m.name }));
+    parts.push(el('div', { class: 'm-list' }, rows));
+  }
+  parts.push(el('div', { class: 'm-grp', text: '帳號' }));
+  parts.push(el('div', { class: 'm-list' }, [
+    accountRow('修改密碼', { 'data-m-act': 'password' }),
+    accountRow('問小幫手', { 'data-m-act': 'help' }),
+    accountRow('畫面怪怪的？重新整理', { 'data-m-act': 'reload' }),
+    accountRow('登出', { 'data-m-act': 'logout' }, true)
+  ]));
+  viewContentEl.appendChild(el('div', { class: 'm-page' }, parts));
+}
+
+/** 殼頁面（功能／待處理／我）；首頁另走 renderHome（要同時畫電腦版卡片） */
+async function renderShellPage(id) {
+  await teardownCurrent();
+  currentShellPage = id;
+  lastShellPage = id;
+  renderTopNav();
+  clearChildren(viewNavEl);
+  clearView();
+  if (id === 'apps') renderAppsPage();
+  else if (id === 'todo') renderTodoPage();
+  else renderAccountPage();
+}
+
+function renderMobileBar() {
+  if (!mBarEl) return;
+  const inModule = !!currentModule;
+  mTitleEl.textContent = inModule ? currentModule.name : (SHELL_PAGES[currentShellPage] || '首頁');
+  if (inModule) mBackEl.removeAttribute('hidden'); else mBackEl.setAttribute('hidden', '');
+  mBarEl.setAttribute('data-page', inModule ? 'module' : (currentShellPage || 'home'));
+  const active = inModule ? lastShellPage : currentShellPage;
+  for (const b of mTabsEl.children) {
+    const on = b.getAttribute('data-m-tab') === active;
+    b.className = on ? 'is-active' : '';
+    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  }
+}
+
+function openHelper() {
+  const fab = typeof document.querySelector === 'function' ? document.querySelector('[data-role="aih-fab"]') : null;
+  if (fab) fab.click();
+  else ui.toast('小幫手目前沒有開放', 'warn');
+}
+
+function onMobileAct(a) {
+  if (a === 'back') navigateTo(`#/${lastShellPage}`);
+  else if (a === 'help') openHelper();
+  else if (a === 'password') openChangePassword();
+  else if (a === 'logout') doLogout();
+  else if (a === 'reload') { try { window.location.reload(); } catch (e) { /* ignore */ } }
+  else if (a.startsWith('tab-')) navigateTo(`#/${a.slice(4)}`);
+}
+
+function onMobileChromeClick(e) {
+  const b = findAncestorWithAttr(e.target, 'data-m-act');
+  if (b) onMobileAct(b.getAttribute('data-m-act'));
+}
+
+function buildMobileChrome() {
+  mBackEl = el('button', { type: 'button', class: 'm-back', 'data-m-act': 'back', 'aria-label': '返回', text: '‹', hidden: '' });
+  mTitleEl = el('div', { class: 'm-title' });
+  mBarEl = el('header', { class: 'm-bar', 'data-role': 'm-bar' }, [
+    mBackEl,
+    el('span', { class: 'brand-logo m-logo', 'aria-hidden': 'true', text: '鼎兆元' }),
+    mTitleEl,
+    el('button', { type: 'button', class: 'm-help', 'data-m-act': 'help', 'aria-label': '問小幫手', title: '問小幫手', text: '?' })
+  ]);
+  mTabsEl = el('nav', { class: 'm-tabs', 'data-role': 'm-tabs', 'aria-label': '主選單' }, Object.keys(SHELL_PAGES).map((id) => {
+    const ic = el('span', { class: 'ic', 'aria-hidden': 'true' });
+    ic.innerHTML = TAB_ICONS[id];
+    return el('button', { type: 'button', 'data-m-act': `tab-${id}`, 'data-m-tab': id }, [
+      ic,
+      el('span', { class: 'lb', text: SHELL_PAGES[id] }),
+      id === 'todo' ? el('i', { class: 'badge', 'data-role': 'm-todo-badge', hidden: '' }) : null
+    ]);
+  }));
+  mBarEl.addEventListener('click', onMobileChromeClick);
+  mTabsEl.addEventListener('click', onMobileChromeClick);
+  if (!mobileWatched) { mobileWatched = true; watchMobileWidth(); }
+}
+let mobileWatched = false;
 
 // ============================================================
 // AI 小幫手（右下角按鈕，docs/ai-helper/spec.md §2）：殼只負責「登入後掛上、登出卸下」，其餘全在 platform/helper/
@@ -781,8 +1136,9 @@ function ensureShellDom() {
   keepRootEl = el('div', { 'data-role': 'keep-root' });
   viewContentEl.appendChild(keepRootEl);
   const pageEl = el('div', { class: 'page' }, [viewContentEl]);
-  const mainEl = el('div', { class: 'app-main' }, [topbarEl, viewNavEl, pageEl]);
-  const shellEl = el('div', { class: 'app-shell' }, [navDesktopEl, mainEl]);
+  buildMobileChrome();
+  const mainEl = el('div', { class: 'app-main' }, [mBarEl, topbarEl, viewNavEl, pageEl]);
+  const shellEl = el('div', { class: 'app-shell' }, [navDesktopEl, mainEl, mTabsEl]);
 
   rootEl.appendChild(shellEl);
   mountHelperSafe(shellEl);
@@ -801,6 +1157,8 @@ function ensureShellDom() {
 
 async function renderHome() {
   await teardownCurrent();
+  currentShellPage = 'home';
+  lastShellPage = 'home';
   renderTopNav();
   clearChildren(viewNavEl);
   renderHomeCards();
@@ -808,6 +1166,8 @@ async function renderHome() {
 
 async function mountModuleView(manifest, view, params) {
   await teardownCurrent();
+  currentShellPage = null;
+  pushRecent(manifest.id);
   currentModule = manifest;
   currentView = view.id;
   renderTopNav();
@@ -979,6 +1339,11 @@ function route() {
     renderHome();
     return;
   }
+  // 手機版底部四格的殼頁面（電腦版網址打得到也能用）
+  if (moduleId === 'apps' || moduleId === 'todo' || moduleId === 'account') {
+    renderShellPage(moduleId);
+    return;
+  }
 
   const manifest = permittedModules.find((m) => m.id === moduleId);
   if (!manifest) {
@@ -1065,6 +1430,8 @@ async function doLogout(opts) {
   allManifests = [];
   permittedModules = [];
   for (const k of Object.keys(navBadgeCache)) delete navBadgeCache[k];
+  for (const k of Object.keys(alertCache)) delete alertCache[k];
+  appsQuery = '';
   deptOpenState.clear();
   window.location.hash = '';
   showLogin();

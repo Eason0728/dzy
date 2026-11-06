@@ -13,6 +13,7 @@ export default {
   name: '門市營運',
   desc: '貨單、現金收支、調撥、排班',
   icon: 'storeops',
+  work: 'store',               // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（2026-10-20 Eason；登出管理系統時一起卸載）
   dept: 'ops',
   requires: ['platform.storeops'],

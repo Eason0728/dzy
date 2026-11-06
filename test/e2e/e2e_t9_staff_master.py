@@ -267,7 +267,7 @@ def main():
                 pg.fill('#login-username', 'DZY010')
                 pg.fill('#login-password', 'e2e-lead-pw-10')
                 pg.click('[data-role="submit"]')
-                pg.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)  # 首頁載完才換網址，不然登入完成的導頁會蓋掉
+                pg.wait_for_selector('[data-role="module-card"], [data-role="m-todo"]', state='attached', timeout=10000)  # 首頁載完才換網址（手機版首頁是 m-todo），不然登入完成的導頁會蓋掉
                 return pg
 
             def add_person(pg, name, phone):

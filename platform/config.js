@@ -31,6 +31,18 @@ export const APP_NAME = '鼎兆元餐飲集團｜管理系統';
  * branddev 品牌發展＝org 部門 branddev 品牌發展部（2026-10-23 新增，第 17 節），一般總部部門，目前沒有模組。
  * 模組 manifest 填 dept 掛到該部門底下；沒填 dept（例如「我的資料」）排在首頁下面、不進部門。
  */
+/**
+ * 手機版「功能」頁的工作分類（2026-11-06 Eason：手機照工作分、電腦左側照部門分）。
+ * 模組 manifest 填 work 掛到該類；沒填的排在最後「其他」。順序＝由上到下。
+ */
+export const WORK_GROUPS = [
+  { id: 'people', name: '人：同仁、出勤、班表' },
+  { id: 'store', name: '店：營運、檢查' },
+  { id: 'money', name: '錢：單據、帳' },
+  { id: 'system', name: '系統設定' },
+  { id: 'self', name: '公告與我' }
+];
+
 export const DEPARTMENTS = [
   { id: 'ops', name: '營運部門' },
   { id: 'mgmt', name: '管理部門' },

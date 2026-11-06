@@ -65,7 +65,11 @@ def main():
             page2 = ctx2.new_page()
             mock.install(page2)
             login(page2, base, 'admin')
-            page2.wait_for_selector('[data-role="module-card"]')
+            # 2026-11-06 手機版改版：手機首頁＝「你要處理的事」＋底部四格，電腦版的模組卡片藏起來
+            page2.wait_for_selector('[data-role="m-tabs"]')
+            page2.wait_for_selector('[data-role="m-todo"]')
+            check(not page2.locator('[data-role="module-card"]').first.is_visible(), '375px：電腦版模組卡片藏起來')
+            check(not page2.locator('[data-role="nav-desktop"]').is_visible(), '375px：左側選單藏起來')
             no_hscroll = page2.evaluate('() => document.documentElement.scrollWidth <= 375')
             check(no_hscroll, '375px 寬無橫向捲動')
             page2.screenshot(path=os.path.join(SHOTS, 'home-375.png'), full_page=True)

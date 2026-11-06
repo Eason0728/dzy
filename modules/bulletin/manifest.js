@@ -14,6 +14,7 @@ export default {
   name: '公告專區',
   desc: '集團公告與簽名回條',
   icon: 'bulletin',
+  work: 'self',                // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（2026-10-20 Eason；登出管理系統時一起卸載）
   requires: ['platform.login'],
   views: [

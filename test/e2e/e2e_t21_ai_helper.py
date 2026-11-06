@@ -253,7 +253,7 @@ def main():
                 pg.fill('#login-username', user)
                 pg.fill('#login-password', USERS[user]['password'])
                 pg.click('[data-role="submit"]')
-                pg.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
+                pg.wait_for_selector('[data-role="module-card"], [data-role="m-todo"]', state='attached', timeout=10000)
 
             def ask(pg, text):
                 n = pg.locator('[data-role="aih-msg"][data-from="bot"]').count()
@@ -599,12 +599,14 @@ def main():
             for width, height in ((375, 812), (320, 640)):
                 pg = new_page(width=width, height=height)
                 login(pg, 'admin')
-                pg.wait_for_selector('[data-role="aih-fab"]')
+                # 2026-11-06 手機版：右下角浮動鈕收起，改由上方列右邊的「?」打開
+                pg.wait_for_selector('[data-role="aih-fab"]', state='attached')
+                check(pg.locator('[data-role="aih-fab"]').is_hidden(), '⑦ %d 寬：右下角浮動鈕收起' % width)
                 over = pg.evaluate('() => document.documentElement.scrollWidth - document.documentElement.clientWidth')
                 check(over <= 0, '⑦ %d 寬：首頁（含按鈕）沒有橫向捲軸（多出 %s px）' % (width, over))
-                fb = pg.evaluate("() => { const r = document.querySelector('[data-role=aih-fab]').getBoundingClientRect(); return {right: innerWidth - r.right, bottom: innerHeight - r.bottom, left: r.left}; }")
-                check(fb['left'] >= 0 and fb['right'] >= 0 and fb['bottom'] >= 0, '⑦ %d 寬：按鈕完整在畫面內：%s' % (width, fb))
-                pg.click('[data-role="aih-fab"]')
+                fb = pg.evaluate("() => { const r = document.querySelector('.m-bar .m-help').getBoundingClientRect(); return {right: innerWidth - r.right, top: r.top, left: r.left, w: r.width}; }")
+                check(fb['left'] >= 0 and fb['right'] >= 0 and fb['top'] >= 0 and fb['w'] > 0, '⑦ %d 寬：「?」完整在畫面內：%s' % (width, fb))
+                pg.click('.m-bar .m-help')
                 ask(pg, '怎麼改密碼')
                 geo = pg.evaluate("""() => { const r = document.querySelector('[data-role=aih-panel]').getBoundingClientRect();
                   return {l: r.left, t: r.top, w: r.width, h: r.height, iw: innerWidth, ih: innerHeight,

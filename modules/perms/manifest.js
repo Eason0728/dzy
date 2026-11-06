@@ -14,6 +14,7 @@ export default {
   name: '權限設定',
   desc: '依職稱給權限、個別例外',
   icon: 'users',
+  work: 'system',              // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   dept: 'it',
   requires: ['platform.permmap'],
   views: [

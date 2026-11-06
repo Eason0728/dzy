@@ -12,6 +12,7 @@ export default {
   name: '績效評核',
   desc: '每季互評、自評、成績與新人考核',
   icon: 'eval',
+  work: 'people',              // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   dept: 'hr',
   requires: ['platform.login'],
   views: [

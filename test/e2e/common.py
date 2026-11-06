@@ -596,6 +596,16 @@ def login(page, base, username):
     page.wait_for_selector('[data-role="view-content"]', state='attached', timeout=10000)
 
 
+def open_module(page, module_id):
+    """進某個模組（電腦版點首頁卡片組頭、手機版點「功能」頁的磚；2026-11-06 手機版沒有首頁卡片與側邊欄）。"""
+    if page.viewport_size and page.viewport_size['width'] <= 860:
+        page.wait_for_selector('[data-role="m-tabs"]', timeout=10000)
+        page.click('[data-m-tab="apps"]')
+        page.click('[data-role="m-tile"][data-module="%s"]' % module_id)
+    else:
+        page.click('[data-role="module-card"][data-module="%s"] .todo-head' % module_id)
+
+
 def new_page(pw, mock_backend, width=1280, height=800):
     browser = pw.chromium.launch()
     context = browser.new_context(viewport={'width': width, 'height': height})
