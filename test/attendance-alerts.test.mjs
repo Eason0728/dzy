@@ -16,9 +16,9 @@ function t(name, fn) { return Promise.resolve().then(fn).then(() => { n++; }, (e
 const items3 = [{ kind: 'approve', count: 3 }, { kind: 'request', count: 2 }, { kind: 'device', count: 1 }];
 
 await t('三項都有', () => assert.deepEqual(toAlerts({ items: items3, partial: false, pending: false }), [
-  { level: 'warn', text: '本月還有 3 天沒核定', view: 'approve' },
-  { level: 'warn', text: '2 筆加班請假申請待審', view: 'request' },
-  { level: 'warn', text: '1 支新手機等核准', view: 'device' }]));
+  { level: 'warn', text: '本月還有 3 天沒核定', view: 'approve', when: 'overdue' },
+  { level: 'warn', text: '2 筆加班請假申請待審', view: 'request', when: 'today' },
+  { level: 'warn', text: '1 支新手機等核准', view: 'device', when: 'today' }]));
 await t('零件數回空陣列', () => assert.deepEqual(toAlerts({ items: [{ kind: 'approve', count: 0 }], partial: false }), []));
 await t('items 空', () => assert.deepEqual(toAlerts({ items: [] }), []));
 await t('pending', () => assert.deepEqual(toAlerts({ items: [], pending: true }), [{ level: 'info', text: '出勤待辦統計中，稍後回首頁就會看到' }]));

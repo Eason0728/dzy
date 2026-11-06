@@ -54,7 +54,7 @@ export const READ_ACTIONS = {
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
     'payroll_attendance_export', 'payroll_attach_get', 'payroll_audit_get', 'payroll_xmap_get'],   // payroll_attach_get（2026-10-30）：出勤紀錄表上已核准申請的證明，純讀取
   // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：必須與 Auth.gs PROXY_READ_ACTIONS.attendance 一致；只回件數的純讀取
-  attendance: ['attAlerts'],
+  attendance: ['attAlerts', 'reqMine', 'reqDecided', 'reqPending'],   // 2026-11-06 手機「待處理」三支讀取
   // 收支管理（2026-10-24）：必須與 Auth.gs PROXY_READ_ACTIONS.cashbook 一致（test/proxy-authorize.test.mjs 比對）
   cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet'],
   // 排班管理首頁待辦（2026-10-24，hr-move-spec §5）：必須與 Auth.gs PROXY_READ_ACTIONS.schedule 一致；只回店名與期別的純讀取
@@ -76,6 +76,7 @@ export const WRITE_ACTIONS = {
     'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set',
     'payroll_xmap_set', 'payroll_support_decide'],
   cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock'],
+  attendance: ['reqDecide'],   // 2026-11-06 手機「待處理」清單直接核准／退回
   pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
     'refreshConnectors', 'refreshFixed', 'loadGroupUnits', 'adminSyncSeed', 'adminApplyS01Connectors', 'adminCreateLastMonthDraft', 'adminLoadStoreSeedS01'],
   transfer: ['buildMonthlyReport', 'adminUpdate']

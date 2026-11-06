@@ -219,6 +219,23 @@ class MockBackend:
             if getattr(self, pre + '_alerts_fail', False):
                 return 502, {'ok': False, 'error': 'UPSTREAM_DOWN'}
             return 200, getattr(self, pre + '_alerts', {'ok': True, 'data': {'items': [], 'partial': False, 'pending': False}})
+        # 手機「待處理」（2026-11-06，營運系統 mala-store-ops#101）：reqMine 只要登入；其他三支要 platform.att。
+        # 預設空清單；測試換 att_req = {'reqMine': [...], 'reqDecided': [...], 'reqPending': [...]}，核准結果記在 att_decides
+        if ns == 'attendance' and action in ('reqMine', 'reqDecided', 'reqPending', 'reqDecide'):
+            au = USERS.get((body.get('token') or '').replace('e2e-token-', ''))
+            if not body.get('token') or not au:
+                return 401, {'ok': False, 'error': '登入已失效', 'code': 'BAD_TOKEN'}
+            if action != 'reqMine' and '*' not in au['perms'] and 'platform.att' not in au['perms']:
+                return 403, {'ok': False, 'error': '沒有權限', 'code': 'FORBIDDEN'}
+            req = getattr(self, 'att_req', {})
+            if action == 'reqDecide':
+                pl = body.get('payload') or {}
+                if pl.get('decision') == 'reject' and not str(pl.get('reason') or '').strip():
+                    return 200, {'ok': True, 'data': {'ok': False, 'error': '退回要寫原因'}}
+                self.att_decides = getattr(self, 'att_decides', []) + [pl]
+                req['reqPending'] = [x for x in req.get('reqPending', []) if not (x['store'] == pl.get('store') and x['id'] == pl.get('id'))]
+                return 200, {'ok': True, 'data': {'store': pl.get('store'), 'id': pl.get('id'), 'decision': pl.get('decision'), 'status': 'approved' if pl.get('decision') == 'approve' else 'rejected'}}
+            return 200, {'ok': True, 'data': {'items': req.get(action, []), 'partial': False, 'asOf': ''}}
         if ns == 'pnl' and os.environ.get('PNL_RUNNER'):   # 損益試算原生化（P3）：轉給本機真的損益後端（pnl_mock.py）
             import pnl_mock
             return pnl_mock.proxy(self, body)

@@ -48,8 +48,10 @@ export default {
     const d = r.data;
     const out = [];
     if (d.evaluable && d.windowOpen && d.bankReady) {
-      if (!d.peerDone) out.push({ level: 'warn', text: '本季績效互評還沒填（每季第一個月 1～5 號）', view: 'fill' });
-      if (!d.selfDone) out.push({ level: 'warn', text: '本季自評還沒填', view: 'self' });
+      // 填寫期間＝每季第一個月 1～5 號 → 期限是這個月 5 號（手機「待處理」依它排已逾期／今天／這週）
+      const due = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 8) + '05';
+      if (!d.peerDone) out.push({ level: 'warn', text: '本季績效互評還沒填（每季第一個月 1～5 號）', view: 'fill', due });
+      if (!d.selfDone) out.push({ level: 'warn', text: '本季自評還沒填', view: 'self', due });
     }
     if (d.perms && d.perms.manage) {
       const n = await ctx.api.call('eval', 'evNewbieList', {});

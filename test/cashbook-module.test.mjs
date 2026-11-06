@@ -235,7 +235,7 @@ await t('alerts()：1–10 日列出上個月沒被會計鎖的店；文字「�
       return { ok: false, error: 'x' };
     });
     const out = await cashbook.alerts(ctx);
-    assert.deepEqual(out, [{ level: 'warn', text: '新竹光復 9 月還沒月結', view: 'lock', params: { store: 'gf', month: '2026-09' } }]);
+    assert.deepEqual(out, [{ level: 'warn', text: '新竹光復 9 月還沒月結', view: 'lock', params: { store: 'gf', month: '2026-09' }, due: '2026-10-10' }]);
     assert.ok(!ctx.calls.some((c) => c[1] === 'adminList' && c[2].store === 'mc'), '已被會計鎖的店不必再讀明細');
     assert.ok(ctx.calls.every((c) => c[0] === 'cashbook' && ['adminStores', 'adminLocks', 'adminList'].includes(c[1])), '提醒只用讀取動作');
 
@@ -252,7 +252,7 @@ await t('alerts()：1–10 日列出上個月沒被會計鎖的店；文字「�
       return p.store === 'gf' ? { ok: false, error: 'timeout' } : { ok: true, data: { rows: [{ status: '正常' }] } };
     });
     assert.deepEqual(await cashbook.alerts(partial), [
-      { level: 'warn', text: '台中美村 9 月還沒月結', view: 'lock', params: { store: 'mc', month: '2026-09' } },
+      { level: 'warn', text: '台中美村 9 月還沒月結', view: 'lock', params: { store: 'mc', month: '2026-09' }, due: '2026-10-10' },
       { level: 'info', text: '部分門市暫時讀不到，稍後再看' }
     ], '某店讀失敗：不斷言還沒月結，列「暫時讀不到」');
     const lockFail = fakeCtx((action, p) => action === 'adminStores' ? ST : action === 'adminLocks' ? (p.store === 'gf' ? { ok: false, error: 'x' } : { ok: true, data: { locks: [LOCK('2026-09', 'acct', '甲')] } }) : { ok: true, data: { rows: [{ status: '正常' }] } });

@@ -352,7 +352,8 @@ var PROXY_READ_ACTIONS = {
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
     'payroll_attendance_export', 'payroll_attach_get', 'payroll_audit_get', 'payroll_xmap_get'],   // payroll_attach_get（2026-10-30）：出勤紀錄表上已核准申請的證明，純讀取；payroll_xmap_get（2026-11-05）：打卡對照快照（除錯用）
   // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：與 platform/dryrun.js READ_ACTIONS.attendance 一致
-  attendance: ['attAlerts'],
+  // reqMine／reqDecided／reqPending（2026-11-06 手機「待處理」：我送出的、已處理、清單核准）：與 dryrun.js 一致
+  attendance: ['attAlerts', 'reqMine', 'reqDecided', 'reqPending'],
   // 收支管理（2026-10-24，Mac mini 現金帳伺服器的管理代轉通道）：只有 cashbook.write，讀寫都要它；分讀寫只為了試跑模式能照常讀
   cashbook: ['adminStores', 'adminList', 'adminLocks', 'adminGet'],
   // 排班管理首頁待辦（2026-10-24，營運系統 docs/autoschedule/hr-move-spec.md §5）：與 platform/dryrun.js READ_ACTIONS.schedule 一致
@@ -371,6 +372,8 @@ var PROXY_WRITE_ACTIONS = {
   audit: ['submitAudit', 'markRest', 'submitOpsAudit', 'addStore', 'setStoreStatus', 'renameStore'],
   // handoverPdf（2026-10-26）：只讀，但內容是同仁點交單（姓名、賠償、簽名），比照寫入要 dorm.write
   dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign', 'handoverPdf'],
+  // 手機「待處理」清單直接核准／退回加班請假申請（2026-11-06）：營運系統照考勤管理同一套名單判斷能不能核
+  attendance: ['reqDecide'],
   // 薪酬頁（mala-clock-in/payroll.html）實際會呼叫的寫入 action；後端還有 payroll_migrate_store 等維運動作，刻意不列
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
     'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set',
@@ -429,15 +432,18 @@ function proxyAuthorize_(token, ns, action) {
   // 用 attendance/read 服務金鑰；subject 由平台依登入身分決定（DZY 編號；admin 為 U:<id>），mini 代轉時覆寫瀏覽器送的 sub。
   // 不落入下面的通用 <ns>.read 與 staff 第二期分支。
   // 排班管理（ns schedule，action 只有 schedAlerts）同規則、用 schedule/read 金鑰，但只認 platform.sched（只給能排班的人；有 platform.att 沒有 sched → 403）。
+  // 2026-11-06 手機「待處理」：attendance 多 reqMine（自己送出的申請，任何同仁都可看自己的，不要 platform.att）、
+  // reqDecided／reqPending／reqDecide（要 platform.att；能核哪幾筆由營運系統依考勤名單判斷）。
   if (ns === 'attendance' || ns === 'schedule') {
-    var altCfg = { attendance: { action: 'attAlerts', perm: 'platform.att' }, schedule: { action: 'schedAlerts', perm: 'platform.sched' } }[ns];
-    if (isWrite || action !== altCfg.action || !hasPerm_(perms, altCfg.perm)) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
+    var altCfg = { attendance: { actions: ['attAlerts', 'reqDecided', 'reqPending', 'reqDecide'], perm: 'platform.att' }, schedule: { actions: ['schedAlerts'], perm: 'platform.sched' } }[ns];
+    var selfOnly = ns === 'attendance' && action === 'reqMine';
+    if (!selfOnly && (altCfg.actions.indexOf(action) === -1 || !hasPerm_(perms, altCfg.perm))) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
     var attSubject = storeSubForUser_(sess.user);
     if (!attSubject) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
     var attSecretRaw = byBackend[ns] && byBackend[ns]['read'];
     var attSecret = (attSecretRaw === undefined || attSecretRaw === null) ? '' : String(attSecretRaw).trim();
     if (!attSecret) return { ok: false, code: 'NO_SECRET', error: '這個系統尚未設定通行碼，請聯絡管理者' };
-    return { ok: true, secret: attSecret, filterNode: null, isWrite: false, subject: attSubject };
+    return { ok: true, secret: attSecret, filterNode: null, isWrite: isWrite, subject: attSubject };
   }
 
   // 第二期：role staff 且權限開關開（sess.auditScope 非 null）→ 依職稱／部門算出的稽核範圍決定；系統帳號與開關關走下面照舊的路徑

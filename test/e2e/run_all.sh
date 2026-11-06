@@ -28,6 +28,7 @@ TESTS=(
   e2e_t19_inspection.py
   e2e_t20_acting_switch.py
   e2e_t21_ai_helper.py
+  e2e_t23_mobile_todo.py
 )
 
 for i in "${!TESTS[@]}"; do

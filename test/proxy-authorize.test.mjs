@@ -604,6 +604,15 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   const pt = mkStaff(sb, boss, '考勤計時', { brand: 'mala', unit: 'mala-gf', title: 'pt' });
   ok(sb.proxyAuthorize_(pt.token, 'attendance', 'attAlerts').code === 'FORBIDDEN', '14g: 沒有 platform.att 的計時同仁 → FORBIDDEN');
   ok(sb.proxyAuthorize_(tokenOf(sb, 'acc1', PW.acc), 'attendance', 'attAlerts').code === 'FORBIDDEN', '14h: 會計（非 staff、無 platform.att）→ FORBIDDEN');
+  // 2026-11-06 手機「待處理」：reqMine 任何有 DZY 編號的同仁都可看自己的；reqDecided／reqPending／reqDecide 要 platform.att
+  const mine = sb.proxyAuthorize_(pt.token, 'attendance', 'reqMine');
+  ok(mine.ok === true && mine.isWrite === false && mine.subject === pt.emp, '14q: 計時同仁可讀自己送出的申請（reqMine，subject＝本人）', mine);
+  ok(sb.proxyAuthorize_(pt.token, 'attendance', 'reqPending').code === 'FORBIDDEN' && sb.proxyAuthorize_(pt.token, 'attendance', 'reqDecide').code === 'FORBIDDEN' && sb.proxyAuthorize_(pt.token, 'attendance', 'reqDecided').code === 'FORBIDDEN', '14r: 沒有 platform.att 不能讀待核、已處理，也不能核');
+  const dec = sb.proxyAuthorize_(sm.token, 'attendance', 'reqDecide');
+  ok(dec.ok === true && dec.isWrite === true && dec.subject === sm.emp, '14s: 店長可清單核准（寫入、subject＝本人）', dec);
+  ok(sb.proxyAuthorize_(sm.token, 'attendance', 'reqPending').ok === true && sb.proxyAuthorize_(sm.token, 'attendance', 'reqDecided').ok === true, '14t: 店長可讀待核與已處理');
+  ok(sb.proxyAuthorize_(tokenOf(sb, 'acc1', PW.acc), 'attendance', 'reqMine').code === 'FORBIDDEN', '14u: 沒有 DZY 編號的系統帳號讀不到 reqMine');
+  ok(JSON.stringify(sb.PROXY_WRITE_ACTIONS.attendance) === JSON.stringify(WRITE_ACTIONS.attendance), '14v: attendance 寫清單兩邊一致');
   // 即使有 attendance.read 之類的通用權限也不走通用邏輯
   sheets.roles.appendRow(['attrole', '假', 'attendance.read,attendance.write']);
   sheets.users.appendRow(['u090', 'attx', '假', 'attrole', '', 's9', H('fake-attx-pw-01', 's9'), 'TRUE', '', '', '']);

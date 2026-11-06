@@ -6,6 +6,7 @@
 
 import { createEmbed } from './embed.js';
 import { unwrap, toAlerts, toBadge, toGapAlert, toHoursGapAlert } from './alerts.js';
+import { mobileHooks } from './mobile.js';
 
 const embed = createEmbed({
   title: '考勤管理',
@@ -36,5 +37,7 @@ export default {
     if (out && gaps.length && !(data && data.pending === true)) gaps.forEach((g) => out.push(g));
     return out;
   },
-  async badge(ctx) { return toBadge(await fetchAlerts(ctx)); }
+  async badge(ctx) { return toBadge(await fetchAlerts(ctx)); },
+  // 手機「待處理」：我送出的、我核過的、可以直接核准（2026-11-06）
+  ...mobileHooks
 };

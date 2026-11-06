@@ -60,7 +60,8 @@ export default {
       else { liveByStore[s.code] = null; unreadable = true; }
     }));
     const out = storesToAlert(stores, locksByStore, month, liveByStore)
-      .map((s) => ({ level: 'warn', text: `${s.name || s.code} ${monthNum(month)} 月還沒月結`, view: 'lock', params: { store: s.code, month } }));
+      // 月結期限＝每月 10 號（只在 1～10 號提醒）；手機「待處理」依它排今天／這週
+      .map((s) => ({ level: 'warn', text: `${s.name || s.code} ${monthNum(month)} 月還沒月結`, view: 'lock', params: { store: s.code, month }, due: new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 8) + '10' }));
     if (unreadable) out.push({ level: 'info', text: '部分門市暫時讀不到，稍後再看' });   // level 要在殼的 ALERT_LEVELS（error/warn/info）裡；沒有 view → 殼不給連結
     return out;
   }

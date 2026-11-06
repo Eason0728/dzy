@@ -11,6 +11,8 @@ const TEXT = {
   device: (n) => `${n} 支新手機等核准`
 };
 const ORDER = ['approve', 'request', 'device'];
+/** 手機「待處理」分段（platform/todo.js）：沒核定的天都已過去＝已逾期；申請、新手機＝今天 */
+const WHEN = { approve: 'overdue', request: 'today', device: 'today' };
 
 /**
  * ctx.api.call('attendance', …) 的結果 → 上游 data。
@@ -41,7 +43,7 @@ export function toAlerts(data) {
   const out = [];
   for (const kind of ORDER) {
     const c = countOf(data.items, kind);
-    if (c > 0) out.push({ level: 'warn', text: TEXT[kind](c), view: kind });
+    if (c > 0) out.push({ level: 'warn', text: TEXT[kind](c), view: kind, when: WHEN[kind] });
   }
   if (data.partial === true) out.push({ level: 'warn', text: '部分門市暫時讀不到' });
   return out;

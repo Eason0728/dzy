@@ -268,8 +268,13 @@ def view_tabs(page):
 
 
 def enter_module(page, module):
-    page.wait_for_selector('[data-role="module-card"][data-module="%s"] .todo-head' % module, timeout=8000)
-    page.click('[data-role="module-card"][data-module="%s"] .todo-head' % module)
+    if page.viewport_size and page.viewport_size['width'] <= 860:
+        # 2026-11-06 手機版：首頁卡片藏起來，從「功能」頁的磚進
+        page.click('[data-m-tab="apps"]')
+        page.click('[data-role="m-tile"][data-module="%s"]' % module)
+    else:
+        page.wait_for_selector('[data-role="module-card"][data-module="%s"] .todo-head' % module, timeout=8000)
+        page.click('[data-role="module-card"][data-module="%s"] .todo-head' % module)
     page.wait_for_selector('[data-keep="%s"]' % module, state='attached', timeout=8000)
 
 
@@ -1140,7 +1145,7 @@ def run_lead(browser, mock):
     ctx, page = new_page(browser, mock, width=375)
     login(page, BASE, 'lead')
     code = DS.lead_store
-    page.wait_for_selector('[data-role="module-card"]', timeout=8000)
+    page.wait_for_selector('[data-role="module-card"]', state='attached', timeout=8000)   # 手機版卡片藏起來但仍在頁面上
     ids = [c.get_attribute('data-module') for c in page.locator('[data-role="module-card"]').all()]
     check('audit-stock' in ids and 'audit-ops' in ids and 'users' not in ids, '店長首頁有兩張稽核卡片、沒有人員管理：%s' % ids)
     page.wait_for_function("""() => { const l = document.querySelector('[data-role="alert-list"][data-module="audit-stock"]'); return l && !l.textContent.includes('讀取中'); }""", timeout=10000)
