@@ -18,7 +18,7 @@
  * 取得與送出（不自己呼叫 ctx.api），成功送出後 submit() 會自動 invalidate 快取。
  *
  * 角色判斷：舊版用 app.state.role === 'accountant' 決定要不要顯示「開始稽核」
- * 「標記輪休」兩個動作。舊系統只有 accountant／viewer 兩種角色，只有 accountant
+ * 「本月不抽查」兩個動作。舊系統只有 accountant／viewer 兩種角色，只有 accountant
  * 能寫入；新系統的權限碼對照（spec §4.2／§4.3）裡，也只有 accountant（與萬用字元
  * admin）持有 audit.write，其餘角色都沒有——與舊版行為等價，所以改用
  * ctx.can('audit.write') 判斷，而不是比對角色代號字串（角色代號本身不是 ctx 該給
@@ -28,6 +28,7 @@
 'use strict';
 
 import * as sharedApi from '../../audit-shared/api.js';
+import { currentMonth as currentYm } from './fill-submit.js';
 
 const YEARS = ['2026']; // 預留多年：之後只要加這個陣列（同舊版）
 
@@ -106,7 +107,7 @@ export function mountOverview(root, ctx) {
     yearSelect
   ]);
 
-  // ---- 骨架：會計限定的動作列（開始稽核／標記輪休）----
+  // ---- 骨架：會計限定的動作列（開始稽核／本月不抽查）----
   let startBtn = null;
   let markRestBtn = null;
   let actionsRow = null;
@@ -115,7 +116,7 @@ export function mountOverview(root, ctx) {
       type: 'button', id: 'btn-start-audit', class: 'btn btn-primary', text: '開始稽核'
     });
     markRestBtn = el('button', {
-      type: 'button', id: 'btn-mark-rest', class: 'btn btn-secondary', text: '標記輪休'
+      type: 'button', id: 'btn-mark-rest', class: 'btn btn-secondary', text: '本月不抽查'
     });
     actionsRow = el('div', { class: 'overview-actions card-row' }, [startBtn, markRestBtn]);
   }
@@ -130,7 +131,7 @@ export function mountOverview(root, ctx) {
   const gridCard = el('div', { class: 'card' },
     [cardTitle, toolbar].concat(actionsRow ? [actionsRow] : []).concat([tableWrap]));
 
-  // ---- 骨架：標記輪休表單（會計限定，預設隱藏；沿用舊版「行內卡片」而非浮層對話框）----
+  // ---- 骨架：本月不抽查表單（後端 action 與狀態值仍叫 markRest／輪休，2026-11-06 Eason 只改顯示名）（會計限定，預設隱藏；沿用舊版「行內卡片」而非浮層對話框）----
   let restDialogCard = null;
   let restStoreSelect = null;
   let restMonthSelect = null;
@@ -150,7 +151,8 @@ export function mountOverview(root, ctx) {
     });
 
     restDialogCard = el('div', { id: 'rest-dialog', class: 'card', hidden: 'true' }, [
-      el('div', { class: 'card-title', text: '標記輪休' }),
+      el('div', { class: 'card-title', text: '本月不抽查' }),
+      el('p', { class: 'field-hint', text: '標記後這家店這個月不算未盤點，首頁不再提醒。' }),
       el('div', { class: 'field' }, [
         el('label', { for: 'rest-store', class: 'field-label', text: '店別' }),
         restStoreSelect
@@ -209,7 +211,7 @@ export function mountOverview(root, ctx) {
         ctx.nav('report', { store: store.code, month });
       });
     } else if (rec && rec.status === '輪休') {
-      td.textContent = '輪休';
+      td.textContent = '不抽查';
     } else {
       td.textContent = '—';
     }
@@ -226,6 +228,8 @@ export function mountOverview(root, ctx) {
     cols.forEach((mm) => {
       restMonthSelect.appendChild(el('option', { value: mm, text: monthLabel(year + '-' + mm) }));
     });
+    const now = currentYm();
+    if (now.slice(0, 4) === year && cols.indexOf(now.slice(5)) >= 0) restMonthSelect.value = now.slice(5);
   }
 
   // ============================================================
@@ -278,6 +282,12 @@ export function mountOverview(root, ctx) {
     const storeCode = restStoreSelect.value;
     const mm = restMonthSelect.value;
     const month = year + '-' + mm;
+    const existing = recordMap[storeCode + '_' + month];
+    if (existing && existing.status === '已稽核') {
+      restErrorEl.textContent = '這家店這個月已經稽核過，不能改成不抽查';
+      restErrorEl.hidden = false;
+      return;
+    }
     restConfirmBtn.disabled = true;
     try {
       const res = await sharedApi.submit(ctx, 'markRest', { store: storeCode, month });
@@ -286,7 +296,7 @@ export function mountOverview(root, ctx) {
         restDialogCard.hidden = true;
         await loadData();
       } else {
-        restErrorEl.textContent = '標記輪休失敗，請重試';
+        restErrorEl.textContent = '標記不抽查失敗，請重試';
         restErrorEl.hidden = false;
       }
     } finally {

@@ -430,7 +430,7 @@ await at('單月報告：sxl-gf 2026-01（從總覽點格子進來，params 帶 
   unmount();
 });
 
-await at('單月報告：ck 2026-04 是輪休月份 → 顯示「本月輪休」，不畫抽查明細表', async () => {
+await at('單月報告：ck 2026-04 是輪休月份 → 顯示「本月不抽查」，不畫抽查明細表', async () => {
   resetAll();
   const root = new FakeElement('div');
   const { ctx, state } = makeFakeCtx({ params: { store: 'ck', month: '2026-04' } });
@@ -440,7 +440,7 @@ await at('單月報告：ck 2026-04 是輪休月份 → 顯示「本月輪休」
   await flush();
 
   const printArea = byClass(root, 'report-print-area');
-  assert.ok(deepText(printArea).includes('本月輪休'), '輪休月份應該顯示「本月輪休」：' + deepText(printArea));
+  assert.ok(deepText(printArea).includes('本月不抽查'), '輪休月份應該顯示「本月不抽查」：' + deepText(printArea));
   assert.equal(byClass(root, 'report-detail-table'), null, '輪休月份不該畫出抽查明細表');
 
   unmount();
@@ -502,7 +502,7 @@ await at('年度總表：切到年度總表、選 sxl-gf → 剛好 12 列；一
   unmount();
 });
 
-await at('年度總表：切到央廚，四月列應該顯示「輪休」', async () => {
+await at('年度總表：切到央廚，四月列應該顯示「不抽查」', async () => {
   resetAll();
   const root = new FakeElement('div');
   const { ctx, state } = makeFakeCtx({ params: { store: 'sxl-gf', month: '2026-01' } });
@@ -520,7 +520,7 @@ await at('年度總表：切到央廚，四月列應該顯示「輪休」', asyn
 
   const tbody = byTag(byClass(root, 'report-annual-table'), 'tbody');
   const aprilRow = tbody.children[3]; // 索引 3 = 四月
-  assert.ok(deepText(aprilRow).includes('輪休'), '央廚四月列應該顯示「輪休」：' + deepText(aprilRow));
+  assert.ok(deepText(aprilRow).includes('不抽查'), '央廚四月列應該顯示「不抽查」：' + deepText(aprilRow));
 
   unmount();
 });
@@ -791,7 +791,7 @@ await at('盤點抽查・我的門市：auditScope 多店 → 有店別下拉，
   await flush();
   assert.equal(rows().length, 2, '切到央廚後 2 筆歷史');
   assert.ok(deepText(byId(root, 'my-store-label')).includes('央廚'), '標籤換成央廚');
-  assert.ok(deepText(byId(root, 'my-rate')).includes('輪休'), '央廚最新一個月是輪休：' + deepText(byId(root, 'my-rate')));
+  assert.ok(deepText(byId(root, 'my-rate')).includes('不抽查'), '央廚最新一個月是輪休：' + deepText(byId(root, 'my-rate')));
   assert.ok(!deepText(root).includes('光復的鴨血'), '切到央廚後看不到光復的問題');
   fireChange(sel, 'sxl-gf');
   await flush();

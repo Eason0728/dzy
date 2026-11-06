@@ -327,7 +327,7 @@ export function mountReport(root, ctx, moduleState) {
 
     if (record.status === '輪休') {
       head.appendChild(el('p', { class: 'report-meta field-hint', text: '登記日期：' + (record.audit_date || '') }));
-      head.appendChild(el('p', { class: 'report-rest', text: '本月輪休' }));
+      head.appendChild(el('p', { class: 'report-rest', text: '本月不抽查' }));
       return wrap;
     }
 
@@ -393,7 +393,7 @@ export function mountReport(root, ctx, moduleState) {
       return el('tr', {}, [labelCell, el('td'), el('td'), el('td'), el('td'), el('td'), el('td'), el('td'), el('td')]);
     }
     if (record.status === '輪休') {
-      return el('tr', {}, [labelCell, el('td'), el('td', { text: '輪休' }), el('td'), el('td'), el('td'), el('td'), el('td'), el('td')]);
+      return el('tr', {}, [labelCell, el('td'), el('td', { text: '不抽查' }), el('td'), el('td'), el('td'), el('td'), el('td'), el('td')]);
     }
     return el('tr', {}, [
       labelCell,
