@@ -307,7 +307,7 @@ def expected_stock_grid(mock, codes=None):
         cells = []
         for m in range(1, 13):
             rec = mock.records.get('%s_2026-%02d' % (s['code'], m))
-            cells.append('%s%%' % rec['correct_rate'] if rec and rec['status'] == '已稽核' else ('輪休' if rec and rec['status'] == '輪休' else '—'))
+            cells.append('%s%%' % rec['correct_rate'] if rec and rec['status'] == '已稽核' else ('不抽查' if rec and rec['status'] == '輪休' else '—'))
         out.append([s['name'], cells])
     return out
 
@@ -366,7 +366,7 @@ def check_stock_report(page, mock, store, month, label):
         check(page.locator(root + ' .report-empty').inner_text() == '無稽核紀錄', '%s：沒有紀錄顯示「無稽核紀錄」' % label)
         return
     if rec['status'] == '輪休':
-        check(page.locator(root + ' .report-rest').inner_text() == '本月輪休', '%s：輪休月顯示「本月輪休」' % label)
+        check(page.locator(root + ' .report-rest').inner_text() == '本月不抽查', '%s：輪休月顯示「本月不抽查」' % label)
         return
     got_rate = page.locator(root + ' .report-rate .tag').inner_text()
     check(got_rate == '%s%%' % rec['correct_rate'], '%s：正確率 %s（預期 %s%%＝round(%s/%s*100)）' % (label, got_rate, rec['correct_rate'], rec['correct_count'], rec['sample_count']))
@@ -406,7 +406,7 @@ def check_annual(page, mock, store, label):
         if not rec:
             exp.append([[lab, '', '', '', '', '', '', ''], 0])
         elif rec['status'] == '輪休':
-            exp.append([[lab, '', '輪休', '', '', '', '', ''], 0])
+            exp.append([[lab, '', '不抽查', '', '', '', '', ''], 0])
         else:
             n_lines = len(rec['anomaly_text'].split('\n')) if rec['anomaly_text'] else 0
             exp.append([[lab, str(rec['sample_count']), str(rec['correct_count']), '%s%%' % rec['correct_rate'], rec['change_fund'],
@@ -749,6 +749,15 @@ def acct_mark_rest(page, mock):
     cm.click(page, '#rest-cancel', '取消標記輪休')
     check(not visible(page, '#rest-dialog'), '取消後表單隱藏')
     page.click('#btn-mark-rest')
+    done = [(c, m) for c in DS.store_codes for m in range(1, 13) if (mock.records.get('%s_2026-%02d' % (c, m)) or {}).get('status') == '已稽核']
+    if done:
+        dc, dm = RNG.choice(done)
+        n_writes = len(mock.writes)
+        select(page, '#rest-store', dc, '已稽核店別下拉')
+        select(page, '#rest-month', '%02d' % dm, '已稽核月份下拉')
+        page.click('#rest-confirm')
+        page.wait_for_selector('#rest-error:not([hidden])', timeout=4000)
+        check('已經稽核過' in page.locator('#rest-error').inner_text() and len(mock.writes) == n_writes, '已稽核的月份不能改成不抽查（不送出）')
     cands = [(c, m) for c in DS.store_codes for m in range(1, 13) if ('%s_2026-%02d' % (c, m)) not in mock.records]
     store, mm = RNG.choice(cands)
     select(page, '#rest-store', store, '輪休店別下拉')
@@ -756,7 +765,7 @@ def acct_mark_rest(page, mock):
     opts = texts(page, '#rest-month option')
     check(opts == [month_label('2026-%02d' % m) for m in range(1, 13)], '輪休月份選單＝一月～十二月')
     cm.click(page, '#rest-confirm', '確認標記輪休')
-    page.wait_for_function("([s, m]) => { const td = document.querySelector('[data-keep=\"audit-stock\"] td.grid-cell[data-store=\"' + s + '\"][data-month=\"' + m + '\"]'); return td && td.textContent.trim() === '輪休'; }",
+    page.wait_for_function("([s, m]) => { const td = document.querySelector('[data-keep=\"audit-stock\"] td.grid-cell[data-store=\"' + s + '\"][data-month=\"' + m + '\"]'); return td && td.textContent.trim() === '不抽查'; }",
                            arg=[store, '2026-%02d' % mm], timeout=8000)
     w = mock.writes[-1]
     check(w['action'] == 'markRest' and w['store'] == store and w['month'] == '2026-%02d' % mm, 'markRest 送出 {store, month}：%s' % {k: w[k] for k in ('action', 'store', 'month')})
@@ -1094,7 +1103,7 @@ def check_my_stock(page, mock, code, label):
     if not latest:
         check(rate_txt == '尚無稽核紀錄', '%s：沒有紀錄顯示尚無稽核紀錄' % label)
     elif latest['status'] == '輪休':
-        check(rate_txt == '%s 本月輪休' % latest['month'], '%s：最新一筆輪休 → 本月輪休' % label)
+        check(rate_txt == '%s 本月不抽查' % latest['month'], '%s：最新一筆輪休 → 本月不抽查' % label)
     else:
         check(rate_txt == '%s %d%%' % (latest['month'], latest['correct_rate']), '%s：本月合格率＝最新一筆 %s %d%%（實際「%s」）' % (label, latest['month'], latest['correct_rate'], rate_txt))
         anoms = [d for d in mock.details if d['record_key'] == latest['record_key'] and d['verdict'] == '異常']
@@ -1106,7 +1115,7 @@ def check_my_stock(page, mock, code, label):
     exp = []
     for r in sorted(recs, key=lambda r: r['month'], reverse=True):
         if r['status'] == '輪休':
-            exp.append([r['month'], '輪休', '—', '本月輪休'])
+            exp.append([r['month'], '不抽查', '—', '本月不抽查'])
         else:
             anoms = [d['item'] for d in mock.details if d['record_key'] == r['record_key'] and d['verdict'] == '異常']
             exp.append([r['month'], '已稽核', '%d%%' % r['correct_rate'], '、'.join(anoms) if anoms else '全部正確'])
