@@ -34,6 +34,8 @@ import { loading, toast } from '../ui.js';
 import { esc } from '../fmt.js';
 import { renderClaim } from './claim.js';
 import { renderForgot } from './forgot.js';
+import { renderApply } from './apply.js';
+import { renderApplyStatus } from './apply-status.js';
 import { lineLoginLinks } from './line-auth.js';
 
 /** 連續失敗幾次後，前端先擋一段冷卻時間才讓使用者再送出（純體驗節流，見檔頭說明） */
@@ -57,8 +59,8 @@ function pickHero() {
 }
 
 /**
- * 登入前三個畫面（登入／第一次使用／忘記密碼）共用同一個背景版型，由網址 hash 決定顯示哪一個
- * （#/claim、#/forgot；docs/personnel/spec.md §7.1）。重新整理會停在原畫面。
+ * 登入前畫面（登入／第一次使用／忘記密碼／新進同仁申請／查申請進度）共用同一個背景版型，由網址 hash 決定顯示哪一個
+ * （#/claim、#/forgot、#/apply、#/apply-status；docs/personnel/spec.md §7.1、docs/self-apply）。重新整理會停在原畫面。
  * shell.js 的 hashchange 監聽在未登入時一律不處理，所以這裡自己聽 hashchange。
  */
 let hashListener = null;
@@ -76,6 +78,9 @@ function currentMode() {
   const h = String(window.location.hash || '');
   if (h.startsWith('#/claim')) return 'claim';
   if (h.startsWith('#/forgot')) return 'forgot';
+  // 新進同仁自行申請（2026-11-06，docs/self-apply）：先比 apply-status 再比 apply
+  if (h.startsWith('#/apply-status')) return 'apply-status';
+  if (h.startsWith('#/apply')) return 'apply';
   return 'login';
 }
 
@@ -99,6 +104,8 @@ function renderMode(el, app) {
     if (empNo) setTimeout(() => { const u = el.querySelector('#login-username'); if (u) u.value = empNo; }, 0);
   };
   if (mode === 'claim') renderClaim(card, { onSuccess: done, onBack: back });
+  else if (mode === 'apply') renderApply(card, { onBack: back });
+  else if (mode === 'apply-status') renderApplyStatus(card, { onBack: back });
   else renderForgot(card, { onDone: back, onBack: back });
   return function unmount() {};
 }

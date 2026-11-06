@@ -5,23 +5,32 @@
  * 人資（platform.staff）看得到全部單位（單位還沒有主管帳號時的備援）。
  * 分頁只有 platform.review／platform.staff 看得到（manifest）；萬一沒資格仍打開，只顯示後端說明，不報錯。
  * 退回＝同仁的認領被撤回、個資清空，他要重新「第一次使用」；原因只留在後台紀錄，請當面告訴他。
+ * 2026-11-06：認領清單之外多一區「新進同仁申請」（applies.js；docs/self-apply）。
  */
 'use strict';
+
+import { createApplies } from './applies.js';
 
 export function mountReview(el, ctx) {
   const esc = ctx.fmt.esc;
   let alive = true;
   let people = [];
+  let applies = [];
+  let orgLoaded = false;
+  const ap = createApplies(ctx, () => load());
   el.innerHTML = '<div class="card"><p class="text-muted">讀取中…</p></div>';
 
   async function load() {
-    const res = await ctx.api.call('me', 'unitPending', {});
+    const [res, org] = await Promise.all([ctx.api.call('me', 'unitPending', {}),
+      orgLoaded ? Promise.resolve(null) : ctx.api.call('me', 'orgOptions', {})]);
     if (!alive) return;
+    if (org && org.ok) { ap.setOrg(org.data); orgLoaded = true; }
     if (!res || !res.ok) {
       el.innerHTML = `<div class="card"><p class="text-muted">${esc((res && res.error) || '讀不到待審核名單')}</p></div>`;
       return;
     }
     people = Array.isArray(res.data.people) ? res.data.people : [];
+    applies = Array.isArray(res.data.applies) ? res.data.applies : [];
     draw(res.data);
   }
 
@@ -47,7 +56,8 @@ export function mountReview(el, ctx) {
     el.innerHTML = `
       <div class="card"><div class="card-title">待審核${scope ? `｜${esc(scope)}` : ''}</div>
         <p class="text-muted">同仁第一次使用送出資料後，要你核對是本人、資料正確才通過；通過後他才能登入。</p></div>
-      ${cards || '<div class="card" data-role="review-empty"><p class="text-muted">目前沒有等你審核的同仁</p></div>'}`;
+      ${cards || (applies.length ? '' : '<div class="card" data-role="review-empty"><p class="text-muted">目前沒有等你審核的同仁</p></div>')}
+      ${ap.html(applies)}`;
   }
 
   function domOf(html) { const d = document.createElement('div'); d.innerHTML = html; return d; }
@@ -65,6 +75,7 @@ export function mountReview(el, ctx) {
   async function onClick(e) {
     const btn = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
     if (!btn) return;
+    if (String(btn.getAttribute('data-act')).indexOf('apply-') === 0) { await ap.onClick(e); return; }
     const p = people.find((x) => x.emp_no === btn.getAttribute('data-emp'));
     if (!p) return;
     const who = `${p.emp_no} ${p.name}`;
