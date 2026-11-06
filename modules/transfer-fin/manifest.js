@@ -12,6 +12,7 @@ export default {
   name: '調撥管理',
   desc: '調撥月報、品項記憶、卡關總覽',
   icon: 'transfer',
+  work: 'money',               // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（登出管理系統時一起卸載）
   dept: 'fin',
   requires: ['transfer.write'],

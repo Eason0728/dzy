@@ -11,6 +11,8 @@ export default {
   name: '我的資料',
   desc: '看狀態、改手機地址與職稱',
   icon: 'me',
+  work: 'self',                // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
+  accountMenu: true,          // 分頁列進手機「我」頁
   keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘（2026-10-21 Eason：不用最新狀態沒關係；登出管理系統時一起卸載）
   requires: ['platform.self'],
   views: [

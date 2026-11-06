@@ -12,6 +12,7 @@ export default {
   name: '排班管理',
   desc: '四週變形排班、鎖定後送 LINE 班表',
   icon: 'schedule',
+  work: 'people',              // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   keepAlive: 30 * 60 * 1000,   // 同考勤管理：切走後保留 30 分鐘不重載
   dept: 'hr',
   requires: ['platform.sched'],

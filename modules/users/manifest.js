@@ -18,6 +18,7 @@ export default {
   name: '人員管理',
   desc: '新增／停用帳號、重設密碼',
   icon: 'users',
+  work: 'system',              // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   dept: 'it',                    // 左側選單掛在哪個部門（platform/config.js DEPARTMENTS）
   requires: ['platform.users'],
   views: [

@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import AUDIT_SECRET, MockBackend, check, finish, login, start_server
+from common import AUDIT_SECRET, MockBackend, check, finish, login, open_module, start_server
 
 from playwright.sync_api import sync_playwright
 
@@ -153,7 +153,7 @@ def main():
             page2 = browser.new_context(viewport={'width': 375, 'height': 800}).new_page()
             mock.install(page2)
             login(page2, base, 'lead')
-            page2.click('[data-role="module-card"][data-module="audit-stock"] .todo-head')  # 卡片中間是提醒列（點了會進該列的分頁），進模組要點組頭
+            open_module(page2, 'audit-stock')  # 375 寬：功能頁的磚（電腦版才有首頁卡片）
             page2.wait_for_selector('[data-role="view-nav"] .nav-item')
             tabs2 = page2.locator('[data-role="view-nav"] .nav-item').all_inner_texts()
             check('門市管理' not in tabs2, '店長沒有「門市管理」分頁，實際：%s' % tabs2)

@@ -110,8 +110,12 @@ def main():
             # ④ 同仁登入成功、登出會打後端
             staff.fill('#login-password', 'e2e-staff-pw-1')
             staff.click('[data-role="submit"]')
-            staff.wait_for_selector('[data-role="module-card"]')
-            check(staff.locator('[data-role="module-card"]').count() == 4, '★通過後可登入，同仁只看得到「我的資料」「公告專區」「表單簽核」「績效評核」四個模組')
+            # 2026-11-06 手機版：首頁沒有模組卡片，模組在「功能」頁
+            staff.wait_for_selector('[data-role="m-todo"]')
+            staff.click('[data-m-tab="apps"]')
+            staff.wait_for_selector('[data-role="m-tile"]')
+            check(staff.locator('[data-role="m-tile"]').count() == 4, '★通過後可登入，同仁只看得到「我的資料」「公告專區」「表單簽核」「績效評核」四個模組')
+            staff.click('[data-m-tab="home"]')
             check(staff.evaluate('location.hash') in ('', '#/home'), '登入後網址不停在 #/claim')
             # 2026-10-26 側邊欄只顯示有權限的部門；績效評核（人人可填，Eason Q10 A＋10-26 確認「維持人資部門」）讓一般同仁只看到「人資部門 → 績效評核」
             depts = staff.locator('[data-role="nav-desktop"] .nav-dept')
@@ -120,7 +124,7 @@ def main():
             staff.wait_for_function("() => { const r = document.querySelector('[data-role=\"nav-desktop\"] .rl') || document.querySelector('.su-main .rl'); return r && r.textContent === '墨竹亭 計時同仁'; }", timeout=5000)
             check(True, '★2026-10-26 名字下方顯示品牌＋職稱「墨竹亭 計時同仁」（不是「員工」）')
             staff.goto(base + '/index.html#/claim')
-            staff.wait_for_selector('[data-role="module-card"]')
+            staff.wait_for_selector('[data-role="m-todo"]')
             check(staff.locator('.toast-warn:has-text("沒有權限")').count() == 0, '已登入打開 #/claim 不跳「沒有權限」')
             staff.screenshot(path=os.path.join(SHOTS, 'staff-home-375.png'), full_page=True)
             staff.goto(base + '/index.html#/me/profile')
@@ -130,7 +134,9 @@ def main():
             staff.fill('#me-phone', '0912000999')
             check(staff.is_visible('#me-curpw'), '改手機時出現「目前的密碼」欄')
             staff.fill('#me-phone', '0912000111')
-            staff.locator('[data-nav="__logout__"]:visible').first.click()
+            # 2026-11-06 手機版：登出在底部「我」頁
+            staff.click('[data-m-tab="account"]')
+            staff.click('[data-m-act="logout"]')
             staff.wait_for_selector('#login-username')
             check(getattr(mock, 'logouts', []) == ['e2e-token-DZY001'], '★按登出前端有送 logout（帶自己的 token）：%s' % getattr(mock, 'logouts', None))
             check(staff.evaluate("localStorage.getItem('dzy.token')") is None, '登出後本機 token 清掉')

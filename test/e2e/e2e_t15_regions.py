@@ -157,7 +157,7 @@ def main():
                 pg.fill('#login-username', user)
                 pg.fill('#login-password', USERS[user]['password'])
                 pg.click('[data-role="submit"]')
-                pg.wait_for_selector('[data-role="module-card"]', state='attached', timeout=10000)
+                pg.wait_for_selector('[data-role="module-card"], [data-role="m-todo"]', state='attached', timeout=10000)
                 if route:
                     pg.evaluate("(r) => { window.location.hash = r; }", route)
                 return pg

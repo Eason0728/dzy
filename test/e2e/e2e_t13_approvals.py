@@ -13,7 +13,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import MockBackend, SHOTS, check, finish, login, start_server
+from common import MockBackend, SHOTS, check, finish, login, open_module, start_server
 
 from playwright.sync_api import sync_playwright
 
@@ -229,9 +229,9 @@ def main():
             ld = lctx.new_page()
             mock.install(ld)
             login(ld, base, 'lead')
-            ld.wait_for_selector('[data-role="module-card"][data-module="approvals"]', timeout=10000)
+            ld.wait_for_selector('[data-role="m-todo"]', timeout=10000)
             shot(ld, 'home-375')
-            ld.click('[data-nav="approvals"]')
+            open_module(ld, 'approvals')
             ld.wait_for_selector('[data-role="view-nav"] .nav-item')
             tabs = [t.strip() for t in ld.locator('[data-role="view-nav"] .nav-item').all_inner_texts()]
             check(tabs == ['送單', '我的單', '待我簽', '待我辦', '全部單據'], '★店長看不到「核決權限」：%s' % tabs)

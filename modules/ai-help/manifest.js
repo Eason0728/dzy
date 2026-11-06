@@ -13,6 +13,7 @@ export default {
   name: '小幫手管理',
   desc: '待回答、知識庫、用量',
   icon: 'ai-help',
+  work: 'system',              // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   dept: 'it',
   requires: ['platform.aihelp'],
   views: [

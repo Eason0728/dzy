@@ -8,7 +8,7 @@
  * 一個模組寫錯 manifest 卻安靜地不出現在首頁，是最難查的那種 bug。
  */
 
-import { DEPARTMENTS } from './config.js';
+import { DEPARTMENTS, WORK_GROUPS } from './config.js';
 
 /** 模組代號／命名空間／後端代號／分頁代號共用的格式 */
 export const ID_RE = /^[a-z][a-z0-9-]{1,19}$/;
@@ -17,11 +17,13 @@ export const ID_RE = /^[a-z][a-z0-9-]{1,19}$/;
 export const PERM_RE = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*){1,2}$/;
 
 /** 平台登入前畫面用掉的路由字，不能當模組 id（2026-10-11，docs/personnel/spec.md §7.1） */
-export const RESERVED_IDS = ['claim', 'forgot', 'home'];
+// apps／todo／account：手機版底部四格的殼頁面（2026-11-06）
+export const RESERVED_IDS = ['claim', 'forgot', 'home', 'apps', 'todo', 'account'];
 
 const REQUIRED_KEYS = ['id', 'ns', 'backend', 'name', 'desc', 'icon', 'requires', 'views', 'entry'];
 // keepAlive（切走後保留畫面的毫秒數）、dynamicTabs（頁頂分頁由模組動態決定）是 shell.js 實際會讀的欄位（2026-10-25 審查 A-08）
-const KNOWN_KEYS = REQUIRED_KEYS.concat(['color', 'dept', 'keepAlive', 'dynamicTabs']);
+// work（手機功能頁的工作分類）、accountMenu（分頁列進手機「我」頁）：2026-11-06 手機版改版
+const KNOWN_KEYS = REQUIRED_KEYS.concat(['color', 'dept', 'keepAlive', 'dynamicTabs', 'work', 'accountMenu']);
 
 /**
  * @param {object} m 模組 manifest
@@ -52,6 +54,13 @@ export function validateManifest(m) {
   checkId(m.icon, 'icon', errors);
   if (m.dept !== undefined && !DEPARTMENTS.some((d) => d.id === m.dept)) {
     errors.push(`${at('dept')}「${m.dept}」不是已知部門代碼（${DEPARTMENTS.map((d) => d.id).join('、')}）`);
+  }
+
+  if (m.work !== undefined && !WORK_GROUPS.some((g) => g.id === m.work)) {
+    errors.push(`${at('work')}「${m.work}」不是已知工作分類（${WORK_GROUPS.map((g) => g.id).join('、')}）`);
+  }
+  if (m.accountMenu !== undefined && typeof m.accountMenu !== 'boolean') {
+    errors.push(`${at('accountMenu')} 必須是 true／false`);
   }
 
   checkText(m.name, 'name', 2, 8, errors);

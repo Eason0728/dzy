@@ -13,6 +13,7 @@ export default {
   name: '收支管理',
   desc: '各店現金收支、月結鎖定、匯出、科目',
   icon: 'cashbook',
+  work: 'money',               // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（同薪酬管理；登出管理系統時一起卸載）
   dept: 'fin',
   requires: ['cashbook.write'],
