@@ -42,19 +42,24 @@ export default {
    * 首頁「待辦與異常」：
    * - 單位主管（platform.review）有人等審核 → 「有 N 位同仁等你審核」（黃）。人資／admin（platform.staff）
    *   不在這裡提醒——「同仁名單」模組已經有「N 位同仁待確認開通」，避免同一件事出現兩列。
+   * - 新進同仁申請（2026-11-06）：單位主管、「可新增同仁」例外提醒「有 N 位新進同仁申請等你審核」（人資同上，不在首頁提醒）。
    * - 自己的資料：被退回（紅）、等確認（黃）、改了組織欄等確認（藍）；系統帳號沒有個人資料 → 空。
    */
   async alerts(ctx) {
     const reviewer = ctx.can('platform.review') && !ctx.can('platform.staff');
+    // 2026-11-06 新進同仁申請（docs/self-apply）：「可新增同仁」例外也要看到申請數（人資／admin 照舊不在首頁提醒，到「待審核」看）
+    const unitOnly = ctx.can('platform.unitstaff') && !ctx.can('platform.review') && !ctx.can('platform.staff');
     const [res, pend] = await Promise.all([
       ctx.api.call('me', 'myProfile', {}),
-      reviewer ? ctx.api.call('me', 'unitPending', {}) : Promise.resolve(null)
+      (reviewer || unitOnly) ? ctx.api.call('me', 'unitPending', {}) : Promise.resolve(null)
     ]);
     if (!res || !res.ok) return null;
     const out = [];
-    if (pend && pend.ok && pend.data && Array.isArray(pend.data.people) && pend.data.people.length) {
+    if (reviewer && pend && pend.ok && pend.data && Array.isArray(pend.data.people) && pend.data.people.length) {
       out.push({ level: 'warn', text: `有 ${pend.data.people.length} 位同仁等你審核`, view: 'review' });
     }
+    const nApply = pend && pend.ok && pend.data && Array.isArray(pend.data.applies) ? pend.data.applies.length : 0;
+    if (nApply) out.push({ level: 'warn', text: `有 ${nApply} 位新進同仁申請等你審核`, view: unitOnly ? 'team' : 'review' });
     // 員工名單統一 D5：店長看自己單位的打卡提醒（總部的同類提醒由「同仁名單」模組負責，這裡不重複）
     if ((ctx.can('platform.review') || ctx.can('platform.unitstaff')) && !ctx.can('platform.staff')) {
       try {
