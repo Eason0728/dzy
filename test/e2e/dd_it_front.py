@@ -991,7 +991,9 @@ def main():
             check(not any(c[1] == mock.acct['gen'] for c in mock.user_calls), '一般同仁改網址進四個後台頁都彈回首頁、沒打人員管理 API')
             check(gp.evaluate('() => document.documentElement.scrollWidth <= 375'), '手機 375 寬無橫向捲動')
             cm.scan(gp, 'home-gen-375', ['.side-user'])
-            gp.click('[data-nav="__password__"]')
+            # 2026-11-06 手機版：改密碼在底部「我」頁
+            gp.click('[data-m-tab="account"]')
+            gp.click('[data-m-act="password"]')
             gp.wait_for_selector('#pw-old')
             gp.fill('#pw-old', USERS[mock.acct['gen']]['password'])
             gpw = 'fake-gen-' + rand_hex(5)
@@ -1000,7 +1002,8 @@ def main():
             dlg(gp, '確定修改')
             check(toast(gp, '密碼已更新') and mock.pw_changes[-1]['who'] == mock.acct['gen'] and 'id' not in mock.pw_changes[-1], '一般同仁改密碼：身分只由 token 決定、payload 無 id')
             shot(gp, 'home-gen-375')
-            cm.click(gp, '[data-nav="__logout__"]', '一般同仁登出')
+            gp.click('[data-m-tab="account"]')   # 2026-11-06 手機版：登出在底部「我」頁
+            cm.click(gp, '[data-m-act="logout"]', '一般同仁登出')
             gp.wait_for_selector('#login-username')
             # 離線登出補送：模擬登出時後端沒回（pendingLogout）
             gp2 = new_page()

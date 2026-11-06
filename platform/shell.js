@@ -46,6 +46,7 @@ import { DEPARTMENTS, WORK_GROUPS } from './config.js';
 import { reportManifest } from './manifest-check.js';
 import { render as renderLogin } from './views/login.js';
 import { sanitizeTabs, pickDynamicView, alertViewId } from './tabs.js';
+import { TODO_GROUPS, groupOf, cleanWhen, taipeiToday } from './todo.js';
 
 /** spec §4.6：badge() 逾時上限 5 秒，逾時視同 null（不得讓首頁壞掉）。 */
 const BADGE_TIMEOUT_MS = 5000;
@@ -377,7 +378,8 @@ function cleanAlerts(raw) {
       level: ALERT_LEVELS.includes(it.level) ? it.level : 'info',
       text: it.text,
       view: typeof it.view === 'string' ? it.view : null,
-      params: it.params
+      params: it.params,
+      ...cleanWhen(it)
     }));
 }
 
@@ -541,6 +543,7 @@ function loadNavTitle(user) {
     const rl = findDescendant(sideUserEl, (n) => n.className === 'rl');
     if (rl) rl.textContent = navTitle.text;
     pageSubEl.textContent = [now.name, navTitle.text].filter(Boolean).join('・');
+    renderMobileBar();   // 「我」頁標題列的職稱跟著換
   }).catch(retryLater);
 }
 
@@ -777,11 +780,6 @@ function watchMobileWidth() {
     else if (typeof mq.addListener === 'function') mq.addListener(onChange);
   } catch (e) { /* 沒有 matchMedia（測試環境）＝當電腦版 */ }
 }
-const TODO_LEVELS = [
-  { level: 'error', name: '要緊' },
-  { level: 'warn', name: '待處理' },
-  { level: 'info', name: '提醒' }
-];
 /** 手機首頁最多列幾件，其餘收成「還有 N 件 → 看全部」 */
 const HOME_TODO_MAX = 6;
 const RECENT_MAX = 6;
@@ -798,14 +796,15 @@ function collectTodos() {
   const items = [];
   let loading = 0;
   let failed = 0;
+  const today = taipeiToday();
   for (const m of permittedModules) {
     const c = alertCache[m.id];
     if (!c) { loading++; continue; }
     if (c.failed) { failed++; continue; }
     if (c.items) {
-      for (const it of c.items) items.push({ m, level: it.level, text: it.text, target: alertTarget(m, it) || moduleHomeTarget(m) });
+      for (const it of c.items) items.push({ m, level: it.level, group: groupOf(it, today), text: it.text, target: alertTarget(m, it) || moduleHomeTarget(m) });
     } else if (typeof c.badge === 'number' && c.badge > 0) {
-      items.push({ m, level: 'warn', text: `${c.badge} 件待處理`, target: moduleHomeTarget(m) });
+      items.push({ m, level: 'warn', group: 'week', text: `${c.badge} 件待處理`, target: moduleHomeTarget(m) });
     }
   }
   return { items, loading, failed };
@@ -833,27 +832,31 @@ function todoRow(t) {
   ]);
 }
 
-/** 依 box 上的 data-max（0＝不限）、data-levels 畫清單；首頁與「待處理」共用 */
+/** 依 box 上的 data-max（0＝不限）、data-groups（已逾期／今天／這週／提醒）畫清單；首頁與「待處理」共用 */
 function fillTodoBox(box) {
   const max = Number(box.getAttribute('data-max')) || 0;
-  const levels = String(box.getAttribute('data-levels') || '').split(',');
+  const groups = String(box.getAttribute('data-groups') || '').split(',');
   const { items, loading, failed } = collectTodos();
-  const list = items.filter((t) => levels.includes(t.level));
+  const list = items.filter((t) => groups.includes(t.group));
+  // 不在這個清單的段（首頁的「提醒」不算）也數進「還有 N 件」
+  const rest = items.filter((t) => !groups.includes(t.group) && t.group !== 'info').length;
   clearChildren(box);
   if (!list.length) {
-    box.appendChild(el('div', { class: loading ? 'm-empty' : 'm-empty ok', text: loading ? '讀取中…' : '目前沒有你要處理的事' }));
+    box.appendChild(el('div', { class: loading ? 'm-empty' : 'm-empty ok', text: loading ? '讀取中…' : (rest ? '今天沒有要緊的事' : '目前沒有你要處理的事') }));
+    if (rest) box.appendChild(el('button', { type: 'button', class: 'm-more', 'data-m-act': 'tab-todo', text: `這週還有 ${rest} 件 → 看全部` }));
   } else {
     let shown = 0;
-    for (const g of TODO_LEVELS) {
-      const rows = list.filter((t) => t.level === g.level);
+    for (const g of TODO_GROUPS) {
+      const rows = list.filter((t) => t.group === g.id);
       const take = max ? rows.slice(0, Math.max(0, max - shown)) : rows;
       if (!take.length) continue;
       shown += take.length;
-      box.appendChild(el('div', { class: `m-grp lv-${g.level}`, text: g.name }));
+      box.appendChild(el('div', { class: `m-grp g-${g.id}`, text: g.name }));
       box.appendChild(el('div', { class: 'm-list' }, take.map(todoRow)));
     }
-    if (list.length > shown) {
-      box.appendChild(el('button', { type: 'button', class: 'm-more', 'data-m-act': 'tab-todo', text: `還有 ${list.length - shown} 件 → 看全部` }));
+    const more = list.length - shown + rest;
+    if (more > 0) {
+      box.appendChild(el('button', { type: 'button', class: 'm-more', 'data-m-act': 'tab-todo', text: `還有 ${more} 件 → 看全部` }));
     }
     if (loading) box.appendChild(el('div', { class: 'm-note', text: `還有 ${loading} 個功能讀取中…` }));
   }
@@ -929,7 +932,7 @@ function fillGrid(box) {
 /** 某個模組的提醒回來了：更新底部「待處理」數字、畫面上的清單與功能磚 */
 function onAlertsChanged() {
   if (mTabsEl) {
-    const n = collectTodos().items.filter((t) => t.level !== 'info').length;
+    const n = collectTodos().items.filter((t) => t.group !== 'info').length;
     const b = findDescendant(mTabsEl, (x) => x.getAttribute && x.getAttribute('data-role') === 'm-todo-badge');
     if (b) {
       b.textContent = n ? String(n) : '';
@@ -949,7 +952,7 @@ function refreshAlerts() {
 }
 
 function renderMobileHome() {
-  const box = el('div', { class: 'm-todo', 'data-role': 'm-todo', 'data-max': String(HOME_TODO_MAX), 'data-levels': 'error,warn' });
+  const box = el('div', { class: 'm-todo', 'data-role': 'm-todo', 'data-max': String(HOME_TODO_MAX), 'data-groups': 'overdue,today,week' });
   fillTodoBox(box);
   const grid = el('div', { 'data-role': 'm-grid', 'data-kind': 'recent' });
   fillGrid(grid);
@@ -969,10 +972,174 @@ function renderAppsPage() {
   refreshAlerts();
 }
 
+// ------------------------------------------------------------
+// 「待處理」三段（2026-11-06）：待我處理／我送出的／已處理。
+// 模組選填（docs/mobile-v2/spec.md，同 alerts() 的精神：判斷在模組裡，殼只畫）：
+//   mine(ctx)    → 我送出的 [{text, sub?, state:'wait'|'ok'|'no'|'off', stateText?, view?, params?}]
+//   decided(ctx) → 我處理過的（同形狀）
+//   quick(ctx)   → 可以在清單直接核准的 [{id, text, sub?, detail?}]；搭配 decide(ctx, id, 'approve'|'reject', reason) → {ok, error?}
+// ------------------------------------------------------------
+const TODO_SEGS = [['mine', '待我處理'], ['sent', '我送出的'], ['done', '已處理']];
+const ITEM_STATES = { wait: '處理中', ok: '已核准', no: '已退回', off: '已作廢' };
+let todoSeg = 'mine';
+let segToken = 0;
+
+/** 每個有權限、實作了 fnName 的模組各跑一次（8 秒逾時、拋錯當沒有）；回 [{m, body, items}] */
+async function runModuleHook(fnName) {
+  const out = await Promise.all(permittedModules.map(async (m) => {
+    let body;
+    try { body = (await m.entry()).default; } catch (e) { return null; }
+    if (!body || typeof body[fnName] !== 'function') return null;
+    let raw;
+    try { raw = await withTimeout(body[fnName](buildCtx(m, null, {})), 8000); } catch (e) { raw = null; }
+    return { m, body, items: Array.isArray(raw) ? raw : null };
+  }));
+  return out.filter(Boolean);
+}
+
+function cleanSegItem(m, it) {
+  if (!it || typeof it.text !== 'string' || !it.text) return null;
+  const state = Object.prototype.hasOwnProperty.call(ITEM_STATES, it.state) ? it.state : '';
+  const view = typeof it.view === 'string' ? it.view : null;
+  return {
+    m,
+    id: it.id === undefined || it.id === null ? '' : String(it.id),
+    text: it.text,
+    sub: typeof it.sub === 'string' ? it.sub : '',
+    detail: typeof it.detail === 'string' ? it.detail : '',
+    state,
+    stateText: typeof it.stateText === 'string' && it.stateText ? it.stateText : (ITEM_STATES[state] || ''),
+    target: view ? alertTarget(m, { view, params: it.params }) : null
+  };
+}
+
+function segRow(t) {
+  return el('div', {
+    class: 'm-row',
+    'data-role': 'alert-row',
+    'data-target': t.target || null,
+    role: t.target ? 'link' : null,
+    tabindex: t.target ? '0' : null
+  }, [
+    el('img', { class: 'm-ic', src: `assets/icons/${t.m.icon}.png`, alt: '' }),
+    el('span', { class: 'm-tx' }, [
+      el('span', { class: 'm-t', text: t.text }),
+      el('small', { text: [t.m.name, t.sub].filter(Boolean).join('・') }),
+      t.stateText ? el('span', { class: `m-st st-${t.state || 'wait'}`, text: t.stateText }) : null
+    ]),
+    t.target ? el('span', { class: 'go', 'aria-hidden': 'true', text: '›' }) : null
+  ]);
+}
+
+async function fillSegList(box, fnName, emptyText) {
+  const tok = ++segToken;
+  clearChildren(box);
+  box.appendChild(el('div', { class: 'm-empty', text: '讀取中…' }));
+  const res = await runModuleHook(fnName);
+  if (tok !== segToken || !box.parentNode) return;
+  clearChildren(box);
+  const rows = [];
+  let failed = 0;
+  for (const r of res) {
+    if (!r.items) { failed++; continue; }
+    for (const it of r.items) { const c = cleanSegItem(r.m, it); if (c) rows.push(c); }
+  }
+  if (rows.length) box.appendChild(el('div', { class: 'm-list' }, rows.map(segRow)));
+  else box.appendChild(el('div', { class: 'm-empty', text: emptyText }));
+  if (failed) box.appendChild(el('div', { class: 'm-note', text: `${failed} 個功能暫時讀不到` }));
+}
+
+/** 「可以直接核准」卡片：核准一按就送；退回要填原因 */
+async function fillQuick(box) {
+  const tok = ++segToken;
+  const res = await runModuleHook('quick');
+  if (tok !== segToken || !box.parentNode) return;
+  clearChildren(box);
+  const cards = [];
+  for (const r of res) {
+    if (!r.items || typeof r.body.decide !== 'function') continue;
+    for (const it of r.items) {
+      const c = cleanSegItem(r.m, it);
+      if (!c || !c.id) continue;
+      cards.push(quickCard(c, r.body, box));
+    }
+  }
+  if (!cards.length) return;
+  box.appendChild(el('div', { class: 'm-grp g-today', text: `可以直接核准（${cards.length}）` }));
+  for (const card of cards) box.appendChild(card);
+}
+
+function quickCard(c, body, box) {
+  const ok = el('button', { type: 'button', class: 'btn btn-ok', text: '核准' });
+  const no = el('button', { type: 'button', class: 'btn', text: '退回' });
+  const card = el('div', { class: 'm-card', 'data-role': 'quick-card', 'data-module': c.m.id, 'data-id': c.id }, [
+    el('div', { class: 'm-card-h' }, [el('img', { class: 'm-ic', src: `assets/icons/${c.m.icon}.png`, alt: '' }), el('b', { text: c.text })]),
+    c.sub ? el('small', { text: c.sub }) : null,
+    c.detail ? el('div', { class: 'm-card-d', text: c.detail }) : null,
+    el('div', { class: 'm-card-a' }, [ok, no])
+  ]);
+  const run = async (decision) => {
+    let reason = '';
+    if (decision === 'reject') {
+      const ta = el('textarea', { class: 'input', id: 'm-quick-reason', rows: '3', placeholder: '請寫退回原因（申請人會看到）' });
+      const v = await ui.dialog({ title: '退回原因', body: el('div', null, [ta]), actions: [{ label: '取消', value: null }, { label: '確定退回', value: 'go', variant: 'danger' }] });
+      if (v !== 'go') return;
+      reason = String(ta.value || '').trim();
+      if (!reason) { ui.toast('請寫退回原因', 'warn'); return; }
+    }
+    ok.disabled = true; no.disabled = true;
+    let r;
+    try { r = await body.decide(buildCtx(c.m, null, {}), c.id, decision, reason); } catch (e) { r = { ok: false, error: '送出失敗，請稍後再試' }; }
+    if (r && r.ok) {
+      ui.toast(decision === 'approve' ? '已核准' : '已退回', 'ok');
+      if (card.parentNode) card.parentNode.removeChild(card);
+      refreshAlerts();
+    } else {
+      ui.toast((r && r.error) || '送出失敗，請稍後再試', 'warn');
+      ok.disabled = false; no.disabled = false;
+    }
+  };
+  ok.addEventListener('click', () => run('approve'));
+  no.addEventListener('click', () => run('reject'));
+  return card;
+}
+
 function renderTodoPage() {
-  const box = el('div', { class: 'm-todo', 'data-role': 'm-todo', 'data-max': '0', 'data-levels': 'error,warn,info' });
+  const seg = el('div', { class: 'm-seg', role: 'tablist' }, TODO_SEGS.map(([id, name]) => el('button', {
+    type: 'button', role: 'tab', class: id === todoSeg ? 'on' : '', 'data-m-seg': id, 'aria-selected': id === todoSeg ? 'true' : 'false', text: name
+  })));
+  const body = el('div', { class: 'm-segbody' });
+  seg.addEventListener('click', (e) => {
+    const b = findAncestorWithAttr(e.target, 'data-m-seg');
+    if (!b) return;
+    todoSeg = b.getAttribute('data-m-seg');
+    for (const x of seg.children) { const on = x.getAttribute('data-m-seg') === todoSeg; x.className = on ? 'on' : ''; x.setAttribute('aria-selected', on ? 'true' : 'false'); }
+    fillTodoSeg(body);
+  });
+  viewContentEl.appendChild(el('div', { class: 'm-page' }, [seg, body]));
+  fillTodoSeg(body);
+}
+
+function fillTodoSeg(body) {
+  clearChildren(body);
+  if (todoSeg === 'sent') {
+    const box = el('div', { 'data-role': 'm-sent' });
+    body.appendChild(box);
+    fillSegList(box, 'mine', '最近沒有送出的單');
+    return;
+  }
+  if (todoSeg === 'done') {
+    const box = el('div', { 'data-role': 'm-done' });
+    body.appendChild(box);
+    fillSegList(box, 'decided', '最近 30 天沒有你核過的單');
+    return;
+  }
+  const quick = el('div', { 'data-role': 'm-quick' });
+  const box = el('div', { class: 'm-todo', 'data-role': 'm-todo', 'data-max': '0', 'data-groups': 'overdue,today,week,info' });
+  body.appendChild(quick);
+  body.appendChild(box);
   fillTodoBox(box);
-  viewContentEl.appendChild(el('div', { class: 'm-page' }, [box]));
+  fillQuick(quick);
   refreshAlerts();
 }
 
@@ -1022,7 +1189,16 @@ async function renderShellPage(id) {
 function renderMobileBar() {
   if (!mBarEl) return;
   const inModule = !!currentModule;
-  mTitleEl.textContent = inModule ? currentModule.name : (SHELL_PAGES[currentShellPage] || '首頁');
+  clearChildren(mTitleEl);
+  if (!inModule && currentShellPage === 'account') {
+    // 2026-11-06 Eason：「我」頁的標題列改成姓名＋職稱（小字）
+    const user = auth.getUser() || {};
+    mTitleEl.appendChild(el('span', { class: 'm-nm', text: user.name || SHELL_PAGES.account }));
+    const rl = roleLabel(user);
+    if (rl) mTitleEl.appendChild(el('small', { class: 'm-rl', text: rl }));
+  } else {
+    mTitleEl.textContent = inModule ? currentModule.name : (SHELL_PAGES[currentShellPage] || '首頁');
+  }
   if (inModule) mBackEl.removeAttribute('hidden'); else mBackEl.setAttribute('hidden', '');
   mBarEl.setAttribute('data-page', inModule ? 'module' : (currentShellPage || 'home'));
   const active = inModule ? lastShellPage : currentShellPage;
@@ -1432,6 +1608,7 @@ async function doLogout(opts) {
   for (const k of Object.keys(navBadgeCache)) delete navBadgeCache[k];
   for (const k of Object.keys(alertCache)) delete alertCache[k];
   appsQuery = '';
+  todoSeg = 'mine';
   deptOpenState.clear();
   window.location.hash = '';
   showLogin();

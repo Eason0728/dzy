@@ -1435,6 +1435,12 @@ textarea.input:disabled {
     flex: none;
   }
   .m-bar[data-page="module"] .m-logo { display: none; }
+  .m-bar .m-title .m-rl {
+    margin-left: 8px;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-normal);
+    color: var(--side-txt);
+  }
   .m-bar .m-back {
     background: none;
     border: 0;
@@ -1523,7 +1529,8 @@ textarea.input:disabled {
   color: var(--muted);
   margin: 12px 2px 6px;
 }
-.m-grp.lv-error { color: var(--danger); }
+.m-grp.g-overdue { color: var(--danger); }
+.m-grp.g-today { color: var(--ink); }
 .m-grp .badge { font-style: normal; }
 .m-list {
   background: var(--card);
@@ -1629,3 +1636,20 @@ textarea.input:disabled {
   font-weight: var(--fw-bold);
   text-align: center;
 }
+
+/* 「待處理」三段與「可以直接核准」卡片（2026-11-06） */
+.m-seg { display: flex; background: var(--line); border-radius: 10px; padding: 3px; gap: 3px; }
+.m-seg button { flex: 1; border: 0; background: none; font: inherit; font-size: var(--fs-sm); padding: 8px 0; border-radius: 8px; color: var(--muted); cursor: pointer; }
+.m-seg button.on { background: var(--card); color: var(--ink); font-weight: var(--fw-bold); box-shadow: var(--shadow); }
+.m-segbody { display: flex; flex-direction: column; gap: 6px; }
+.m-st { align-self: flex-start; margin-top: 4px; font-size: var(--fs-xs); font-weight: var(--fw-bold); border-radius: var(--radius-pill); padding: 1px 8px; background: var(--warn-light); color: var(--warn); }
+.m-st.st-ok { background: var(--ok-light); color: var(--ok); }
+.m-st.st-no { background: var(--danger-light); color: var(--danger); }
+.m-st.st-off { background: var(--bg); color: var(--muted); }
+.m-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.m-card-h { display: flex; align-items: center; gap: 10px; }
+.m-card-h .m-ic { width: 26px; height: 26px; border-radius: 7px; }
+.m-card small { color: var(--muted); }
+.m-card-d { font-size: var(--fs-sm); color: var(--ink); overflow-wrap: anywhere; }
+.m-card-a { display: flex; gap: 8px; margin-top: 8px; }
+.m-card-a .btn { flex: 1; min-height: 42px; }

@@ -56,6 +56,11 @@ DEFAULT_ROOTS = ['[data-role="view-content"]', '[data-role="view-nav"]', '.side-
 # 刻意不點、附理由（會列在報告裡，不算漏測）
 SKIP = {
     'a[data-role=line-reset]': '外網 liff.line.me 連結：只驗 href，不點（外網守門）',
+    # 2026-11-06 手機版殼的「我」頁與功能磚：殼本身的功能，e2e ㉓（e2e_t23_mobile_todo.py）與 ⑧ 驗過，不屬資訊部門這組
+    'button[data-role=m-tile]': '手機殼的功能磚：e2e ㉓／common.open_module 驗過',
+    'button「修改密碼›」': '手機殼「我」頁：改密碼對話框本組已從這顆進去驗（帶 data-m-act，掃描鍵不同）',
+    'button「問小幫手›」': '手機殼「我」頁：小幫手另由 e2e ㉑ 驗',
+    'button「畫面怪怪的？重新整理›」': '手機殼「我」頁：只是重新載入頁面',
 }
 
 
