@@ -899,6 +899,24 @@ function storeSelfClocks_(p, org) {
   return out;
 }
 
+/**
+ * 本人全部的打卡帳號（2026-11-06 Eason：一般同仁在手機「待處理 → 我送出的」也要看得到自己的考勤申請）。
+ * 只列已確認、名冊在職的對照 [{clock, emp_id}]；營運系統 reqMine 只拿它過濾「本人的單」，不給任何核定權限。
+ */
+function storeOwnClocks_(p) {
+  if (!p || !p.emp || !clkSheetsReady_()) return [];
+  var seen = {}, out = [];
+  clkMaps_().forEach(function (m) {
+    if (m.emp_no !== p.emp || m.state !== 'confirmed' || m.roster_active === 'FALSE') return;
+    var k = m.store_code + '|' + m.emp_id;
+    if (seen[k]) return;
+    seen[k] = true;
+    out.push({ clock: m.store_code, emp_id: m.emp_id });
+  });
+  out.sort(function (a, b) { var x = a.clock + '|' + a.emp_id, y = b.clock + '|' + b.emp_id; return x < y ? -1 : (x > y ? 1 : 0); });
+  return out;
+}
+
 /** 某位同仁現在的第二期權限（不看 PERMS_ON 開關；perm 表沒建＝沒有規則） */
 function storePermsOf_(p) {
   try {
@@ -1024,7 +1042,8 @@ function storeIdent_(sub) {
     att: { people: lists.people, req_people: lists.req_people, view_people: lists.view_people },   // people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）；view_people＝只看（督導／總監 REGIONS_ON='1'、原單位主管看支援帳號、att.view@<單位>；2026-10-25／26）
     self: storeSelfClocks_(p, org),   // 總部排班身分（2026-10-25）：只列 clock＝hq，不受試點限制
     sched_units: dirSched.units,          // 總監排班（2026-10-30）：odir＝本品牌試點內門市，其他＝[]
-    sched_hq_shift: dirSched.hqShift      // hm／odir 在職＝true（改總部班別清單）
+    sched_hq_shift: dirSched.hqShift,     // hm／odir 在職＝true（改總部班別清單）
+    own_clocks: storeOwnClocks_(p)        // 本人全部打卡帳號（2026-11-06）：只給「我送出的」過濾本人申請用，不給任何權限
   };
 }
 
