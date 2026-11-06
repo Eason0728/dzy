@@ -896,7 +896,33 @@ function pushRecent(id) {
     if (k) window.localStorage.setItem(k, JSON.stringify([id].concat(readRecent().filter((x) => x !== id)).slice(0, 12)));
   } catch (e) { /* 私密瀏覽／被鎖：常用就用預設順序 */ }
 }
+/** 自己排過的常用（2026-11-06 Eason 選 A：存在這支手機、依帳號分開）；沒排過回 null */
+function favKey() {
+  const u = auth.getUser();
+  return u && u.id ? `dzy.u.${u.id}.m_fav` : null;
+}
+function readFav() {
+  try {
+    const k = favKey();
+    const raw = k ? window.localStorage.getItem(k) : null;
+    if (raw === null || raw === undefined) return null;
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : null;
+  } catch (e) { return null; }
+}
+function writeFav(ids) {
+  try {
+    const k = favKey();
+    if (!k) return;
+    if (ids === null) window.localStorage.removeItem(k);
+    else window.localStorage.setItem(k, JSON.stringify(ids.slice(0, RECENT_MAX)));
+  } catch (e) { ui.toast('這支手機不能存設定（可能是私密瀏覽）', 'warn'); }
+}
+
 function recentModules() {
+  // 排過就照自己排的（權限被拿掉的功能自動略過）；沒排過照舊：最近開過的＋權限清單前面的補滿
+  const fav = readFav();
+  if (fav) return fav.map((id) => permittedModules.find((m) => m.id === id)).filter(Boolean).slice(0, RECENT_MAX);
   const list = readRecent().map((id) => permittedModules.find((m) => m.id === id)).filter(Boolean);
   for (const m of permittedModules) {
     if (list.length >= RECENT_MAX) break;
@@ -951,6 +977,59 @@ function refreshAlerts() {
   for (const m of permittedModules) loadHomeGroup(m, () => true);
 }
 
+/** 編輯常用：打勾放進常用（最多 6 個）、▲▼ 調順序；「恢復自動」＝回到最近用過的 */
+async function editFav() {
+  let picked = recentModules().map((m) => m.id);
+  const listEl = el('div', { class: 'm-fav-list', 'data-role': 'fav-list' });
+  const note = el('div', { class: 'm-note' });
+  const draw = () => {
+    clearChildren(listEl);
+    note.textContent = `已選 ${picked.length} 個，最多 ${RECENT_MAX} 個`;
+    const order = picked.map((id) => permittedModules.find((m) => m.id === id)).filter(Boolean)
+      .concat(permittedModules.filter((m) => !picked.includes(m.id)));
+    order.forEach((m) => {
+      const on = picked.includes(m.id);
+      const i = picked.indexOf(m.id);
+      const box = el('input', { type: 'checkbox', id: `fav-${m.id}`, 'data-fav': m.id });
+      box.checked = on;
+      if (!on && picked.length >= RECENT_MAX) box.disabled = true;
+      box.addEventListener('change', () => {
+        if (box.checked) { if (picked.length < RECENT_MAX) picked.push(m.id); }
+        else picked = picked.filter((x) => x !== m.id);
+        draw();
+      });
+      const mv = (d) => {
+        const j = i + d;
+        if (i < 0 || j < 0 || j >= picked.length) return;
+        [picked[i], picked[j]] = [picked[j], picked[i]];
+        draw();
+      };
+      const up = el('button', { type: 'button', class: 'm-mv', 'data-fav-up': m.id, 'aria-label': `${m.name} 往前`, text: '▲' });
+      const dn = el('button', { type: 'button', class: 'm-mv', 'data-fav-down': m.id, 'aria-label': `${m.name} 往後`, text: '▼' });
+      if (!on || i === 0) up.disabled = true;
+      if (!on || i === picked.length - 1) dn.disabled = true;
+      up.addEventListener('click', () => mv(-1));
+      dn.addEventListener('click', () => mv(1));
+      listEl.appendChild(el('div', { class: on ? 'm-fav-row on' : 'm-fav-row' }, [
+        box,
+        el('label', { for: `fav-${m.id}` }, [el('img', { class: 'm-ic', src: `assets/icons/${m.icon}.png`, alt: '' }), el('span', { text: m.name })]),
+        up, dn
+      ]));
+    });
+  };
+  draw();
+  const v = await ui.dialog({
+    title: '編輯常用',
+    body: el('div', null, [note, listEl]),
+    actions: [{ label: '恢復自動', value: 'reset' }, { label: '取消', value: null }, { label: '完成', value: 'save', variant: 'primary' }]
+  });
+  if (v === 'save') { writeFav(picked); ui.toast('常用已更新', 'ok'); }
+  else if (v === 'reset') { writeFav(null); ui.toast('常用改回自動（最近用過的）', 'ok'); }
+  else return;
+  const grid = viewContentEl && findDescendant(viewContentEl, (x) => x.getAttribute && x.getAttribute('data-role') === 'm-grid' && x.getAttribute('data-kind') === 'recent');
+  if (grid) fillGrid(grid);
+}
+
 function renderMobileHome() {
   const box = el('div', { class: 'm-todo', 'data-role': 'm-todo', 'data-max': String(HOME_TODO_MAX), 'data-groups': 'overdue,today,week' });
   fillTodoBox(box);
@@ -958,7 +1037,10 @@ function renderMobileHome() {
   fillGrid(grid);
   return el('div', { class: 'm-page m-home m-only' }, [
     el('h2', { class: 'm-h', text: '你要處理的事' }), box,
-    el('h2', { class: 'm-h', text: '常用' }), grid
+    el('div', { class: 'm-h-row' }, [
+      el('h2', { class: 'm-h', text: '常用' }),
+      el('button', { type: 'button', class: 'm-edit', 'data-m-act': 'fav-edit', text: '編輯' })
+    ]), grid
   ]);
 }
 
@@ -1221,6 +1303,7 @@ function onMobileAct(a) {
   else if (a === 'password') openChangePassword();
   else if (a === 'logout') doLogout();
   else if (a === 'reload') { try { window.location.reload(); } catch (e) { /* ignore */ } }
+  else if (a === 'fav-edit') editFav();
   else if (a.startsWith('tab-')) navigateTo(`#/${a.slice(4)}`);
 }
 

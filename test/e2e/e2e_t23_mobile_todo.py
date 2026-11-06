@@ -8,6 +8,7 @@
 ④ 已處理：列出你已核准／你已退回。
 ⑤ 「我」頁標題列＝姓名＋職稱（小字）。
 ⑥ 375 寬無橫向捲動；電腦版沒有手機首頁區塊。
+⑦ 首頁「常用」可以編輯：勾選、排序、重新整理還在、恢復自動。
 """
 import os
 import sys
@@ -91,6 +92,37 @@ def main():
             pg.click('[data-m-tab="account"]')
             pg.wait_for_selector('.m-bar .m-title .m-nm')
             check(pg.inner_text('.m-bar .m-title .m-nm') == '管理者' and pg.inner_text('.m-bar .m-title .m-rl') == '系統管理者', '⑤「我」頁標題＝姓名＋職稱')
+
+            # ⑦ 常用可以自己編輯（2026-11-06 Eason 選 A：存在這支手機）
+            pg.click('[data-m-tab="home"]')
+            pg.wait_for_selector('[data-role="m-grid"][data-kind="recent"] .m-tile')
+            pg.click('[data-m-act="fav-edit"]')
+            pg.wait_for_selector('[data-role="fav-list"]')
+            while pg.locator('[data-role="fav-list"] input[data-fav]:checked').count():   # 每勾一下清單會重畫，逐一取最新的
+                pg.locator('[data-role="fav-list"] input[data-fav]:checked').first.click()
+            pg.check('[data-role="fav-list"] input[data-fav="bulletin"]')
+            pg.check('[data-role="fav-list"] input[data-fav="attendance"]')
+            pg.check('[data-role="fav-list"] input[data-fav="approvals"]')
+            pg.click('[data-fav-up="approvals"]')
+            pg.click('[data-fav-up="approvals"]')
+            pg.screenshot(path=os.path.join(SHOTS, 'm-fav-edit-375.png'))
+            pg.click('.dialog .btn:has-text("完成")')
+            pg.wait_for_timeout(300)
+            order = pg.locator('[data-role="m-grid"][data-kind="recent"] .m-tile').evaluate_all('els => els.map(e => e.dataset.module)')
+            check(order == ['approvals', 'bulletin', 'attendance'], '⑦常用照自己勾的與排的順序：%s' % order)
+            pg.wait_for_timeout(4500)   # 等提示訊息消失再拍
+            pg.locator('[data-role="m-grid"][data-kind="recent"]').scroll_into_view_if_needed()
+            pg.screenshot(path=os.path.join(SHOTS, 'm-fav-home-375.png'))
+            pg.reload()
+            pg.wait_for_selector('[data-role="m-grid"][data-kind="recent"] .m-tile')
+            order2 = pg.locator('[data-role="m-grid"][data-kind="recent"] .m-tile').evaluate_all('els => els.map(e => e.dataset.module)')
+            check(order2 == order, '⑦重新整理後還在（存在這支手機）')
+            pg.click('[data-m-act="fav-edit"]')
+            pg.wait_for_selector('[data-role="fav-list"]')
+            check(pg.locator('[data-role="fav-list"] input[data-fav]:not(:checked):not(:disabled)').count() > 0, '⑦沒滿 6 個時其他功能可勾')
+            pg.click('.dialog .btn:has-text("恢復自動")')
+            pg.wait_for_timeout(300)
+            check(pg.locator('[data-role="m-grid"][data-kind="recent"] .m-tile').count() == 6, '⑦恢復自動：回到 6 個最近用過的')
 
             # ⑥
             check(pg.evaluate('document.documentElement.scrollWidth') <= 375, '⑥375 寬無橫向捲動')
