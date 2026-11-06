@@ -182,7 +182,7 @@ export function mountMy(root, ctx) {
 
       const issuesTd = el('td');
       if (isRest) {
-        issuesTd.appendChild(el('span', { class: 'field-hint', text: '本月輪休' }));
+        issuesTd.appendChild(el('span', { class: 'field-hint', text: '本月不抽查' }));
       } else if (!anomalies.length) {
         issuesTd.appendChild(el('span', { class: 'field-hint', text: '全部正確' }));
       } else {
@@ -191,7 +191,7 @@ export function mountMy(root, ctx) {
 
       historyBodyEl.appendChild(el('tr', { 'data-role': 'history-row', 'data-month': r.month }, [
         escEl(ctx, 'td', {}, r.month),
-        escEl(ctx, 'td', {}, r.status),
+        escEl(ctx, 'td', {}, isRest ? '不抽查' : r.status),
         rateTd,
         issuesTd
       ]));
@@ -267,9 +267,9 @@ export function mountMy(root, ctx) {
     }
 
     if (record.status === '輪休') {
-      rateEl.textContent = record.month + ' 本月輪休';
-      issuesListEl.appendChild(el('li', { class: 'field-hint', text: '本月輪休，無稽核資料' }));
-      trackListEl.appendChild(el('li', { class: 'field-hint', text: '本月輪休，無稽核資料' }));
+      rateEl.textContent = record.month + ' 本月不抽查';
+      issuesListEl.appendChild(el('li', { class: 'field-hint', text: '本月不抽查，無稽核資料' }));
+      trackListEl.appendChild(el('li', { class: 'field-hint', text: '本月不抽查，無稽核資料' }));
       return;
     }
 
