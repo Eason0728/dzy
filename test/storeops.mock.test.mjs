@@ -1117,7 +1117,11 @@ function noDirSched(id) {
   ok(eq(self('DZY001'), []), '7d 只有門市打卡、沒有 hq 對照 → []');
   ok(eq(self('DZY020'), [{ clock: 'hq', emp_id: 'H020', approval: false }, { clock: 'hq', emp_id: 'H020B', approval: false }]), '7d 人資主管（hm）approval false；多筆 hq 依 emp_id 排序、非 hq（gf）不列', self('DZY020'));
   ok(eq(self('U:u_admin01'), []), '7d admin 沒有同仁編號 → []');
-  ok(Array.isArray(app.ident('DZY023').self) && keysOf(app.ident('DZY023')).slice(-4).join() === 'att,self,sched_units,sched_hq_shift', '7d self 在 att 之後；2026-10-30 起 sched_units／sched_hq_shift 接在 self 之後（同契約 ident_director 欄位順序）');
+  ok(Array.isArray(app.ident('DZY023').self) && keysOf(app.ident('DZY023')).slice(-5).join() === 'att,self,sched_units,sched_hq_shift,own_clocks', '7d self 在 att 之後；2026-10-30 起 sched_units／sched_hq_shift 接在 self 之後；2026-11-06 own_clocks 排最後（同契約欄位順序）');
+  // 2026-11-06 own_clocks（契約 rules.own_clocks）：本人全部已確認、名冊在職的打卡對照，不論店、不受試點
+  ok(eq(app.ident('DZY020').own_clocks.map((x) => x.clock + '|' + x.emp_id).filter((k) => k.startsWith('hq|')), ['hq|H020', 'hq|H020B']), '7e own_clocks 依 clock|emp_id 排序列出本人對照', app.ident('DZY020').own_clocks);
+  ok(eq(app.ident('DZY015').own_clocks.filter((x) => x.clock === 'hq'), []), '7e roster_active＝FALSE 的對照不列');
+  ok(eq(app.ident('U:u_admin01').own_clocks, []), '7e admin 沒有同仁編號 → []');
   // 沒有任何同仁用打卡資料時（打卡分頁沒建）不炸
   const sbNoClk = world(BIG, { pilot: 'mala-gf' });
   ok(Array.isArray(sbNoClk.ident('DZY023').self), '7d 沒有任何對照列 → self 仍是陣列');
