@@ -14,7 +14,7 @@ import {
   METRICS, LEGEND_DEFAULT_MAX, safeNum, fmtInt, fmtPct1, sameStringSet, metricValue, deltaInfo, monthIsEmpty, countPending,
   statusText, statusTextAll, estimatedBlocks, estimateNotes, metricTitle, brandOptions, assignSeriesColors, visibleStoreIds,
   defaultHidden, sumMultiAt, chartGeometry, chartSvg, tooltipRows, buildStoreSeries, buildMultiSeries,
-  buildPnlCsvRows, buildEntriesCsvRows, buildCsv, withBom, csvFilename
+  buildPnlCsvRows, buildEntriesCsvRows, buildCsv, withBom, csvFilename, threeLinesHtml
 } from './dashboard-lib.js';
 
 const STYLE = `
@@ -40,6 +40,9 @@ const STYLE = `
 .pnl-pill[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:var(--ink-inverse)}
 .pnl-legend-item[aria-pressed=false]{opacity:.45;text-decoration:line-through}
 .pnl-note{margin:8px 0 0;font-size:13px;color:var(--muted)}
+.pnl-three-title{font-weight:600}
+.pnl-three-draft{margin-left:6px;padding:1px 8px;border-radius:999px;background:var(--line);color:var(--ink);font-size:12px;font-weight:400}
+.pnl-three-line{margin:0}
 .pnl-skel{display:block;border-radius:6px;background:var(--line);animation:pnl-pulse 1.2s ease-in-out infinite}
 .pnl-skel-v{height:28px;width:150px;margin-bottom:8px}.pnl-skel-l{height:12px;width:110px;margin-top:8px}.pnl-skel-c{height:168px;width:100%}
 @keyframes pnl-pulse{50%{opacity:.4}}
@@ -99,6 +102,7 @@ export function mountDashboard(el, ctx) {
     if (!options.length) { el.innerHTML = noticeHtml(esc, '尚未設定門市：請管理者到「設定 ▸ 門市」新增。', 'pnl-no-store'); return; }
     settle(options, ctx.params);
     el.innerHTML = `<style data-pnl="dashboard">${STYLE}</style>
+      <div data-role="pnl-three-lines-host"></div>
       <div class="card stack" data-role="pnl-dash-head">
         <div class="pnl-filters">${storeSelectHtml(esc, options, sel.store, 'pnl-dash-store')}${monthSelectHtml(esc, sel.month, nowMonth(), 'pnl-dash-month')}</div>
         <div class="pnl-bar" data-role="pnl-downloads">
@@ -111,6 +115,8 @@ export function mountDashboard(el, ctx) {
       <div data-role="pnl-dash-body"></div>`;
     load();
   }
+
+  function setThreeLines(tl) { const h = q('[data-role="pnl-three-lines-host"]'); if (h) h.innerHTML = threeLinesHtml(esc, tl); }
 
   function setBody(html) { const b = q('[data-role="pnl-dash-body"]'); if (b) b.innerHTML = html; return b; }
 
@@ -135,6 +141,7 @@ export function mountDashboard(el, ctx) {
 
   function skeleton() {
     setCsv(false);
+    setThreeLines(null);
     const status = q('[data-role="pnl-month-status"]'); if (status) status.textContent = '讀取中…';
     const hint = q('[data-role="pnl-pending-hint"]'); if (hint) { hint.hidden = true; hint.textContent = ''; }
     setBody(`<div data-role="pnl-skeleton" aria-busy="true">${METRICS.map((m) => `<div class="pnl-metric" data-metric="${m.key}">
@@ -185,6 +192,7 @@ export function mountDashboard(el, ctx) {
     const accounts = (settings && settings.accounts) || [];
 
     setCsv(true);
+    setThreeLines(data.three_lines);
     q('[data-role="pnl-month-status"]').textContent = isAll ? statusTextAll(data, nameOf) : statusText(data);
 
     // 本月待補 N 項

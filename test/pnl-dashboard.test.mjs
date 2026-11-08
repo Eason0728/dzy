@@ -138,4 +138,15 @@ t('明細 CSV：欄位、認列金額、作廢、金額壞／分攤月數壞狀�
   assert.deepEqual(rows[1], ['光復', '2026-08', 'A', '科目A', '1200.00', '3', '400.00', '手動', "'=x", 'u', 't', '否', '', '小辛辣']);
   assert.equal(rows[2][4], ''); assert.equal(rows[2][11], '是'); assert.equal(rows[2][12], '金額格式錯'); assert.equal(rows[3][12], '分攤月數格式錯（已當 1）'); assert.equal(rows[3][6], '10.00');
 });
+t('threeLinesHtml：沒帶資料不顯示；三行逐行輸出且跳脫；草稿標示含待補數；定稿沒有草稿標示', () => {
+  assert.equal(L.threeLinesHtml(esc, undefined), '');
+  assert.equal(L.threeLinesHtml(esc, null), '');
+  assert.equal(L.threeLinesHtml(esc, { lines: [] }), '');
+  const draft = L.threeLinesHtml(esc, { draft: true, pending_count: 2, lines: ['一<b>', '二', '三'] });
+  assert.equal((draft.match(/data-role="pnl-three-line"/g) || []).length, 3);
+  assert.ok(draft.includes('一&lt;b>') && !draft.includes('<b>'));
+  assert.match(draft, /data-role="pnl-three-draft">草稿（還有 2 項待補，數字會變動）/);
+  assert.match(L.threeLinesHtml(esc, { draft: true, pending_count: 0, lines: ['一'] }), /data-role="pnl-three-draft">草稿</);
+  assert.ok(!L.threeLinesHtml(esc, { draft: false, pending_count: 0, lines: ['一'] }).includes('草稿'));
+});
 console.log('\n' + n + ' 項通過');
