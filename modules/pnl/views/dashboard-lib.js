@@ -659,3 +659,17 @@ function buildEntriesCsvRows(entries, opts) {
 
 
 export { textCell, numCell, roundScaled, escapeCsvField, buildCsv, withBom, sanitizeFilenamePart, csvFilename, toFiniteOrNaN, effectiveSplitMonths, isBadSplitMonths, buildPnlCsvRows, estimateInfoByAcc, estimateSourceText, buildEntriesCsvRows, PNL_BLOCKS };
+
+/** 每月三行（文字由後端算好，只有光復的 getMonth 會帶 three_lines；沒帶就不顯示） */
+export function threeLinesHtml(esc, tl) {
+  if (!tl || !Array.isArray(tl.lines) || !tl.lines.length) return '';
+  let badge = '';
+  if (tl.draft) {
+    const n = safeNum(tl.pending_count);
+    badge = ` <span class="pnl-three-draft" data-role="pnl-three-draft">草稿${n > 0 ? '（還有 ' + n + ' 項待補，數字會變動）' : ''}</span>`;
+  }
+  return `<div class="card stack" data-role="pnl-three-lines">
+    <div class="pnl-three-title">每月三行${badge}</div>
+    ${tl.lines.map((l) => `<p class="pnl-three-line" data-role="pnl-three-line">${esc(l)}</p>`).join('')}
+  </div>`;
+}
