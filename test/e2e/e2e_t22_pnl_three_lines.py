@@ -20,6 +20,7 @@ KEY = 'test-dzy-key-0123456789abcdef'
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SHOT_DIR = os.environ.get('PNL_SHOT_DIR', '/tmp')
 HOST = KEEP + ' [data-role="pnl-three-lines-host"]'
+BAD_MSG = '本月有資料錯誤，請先到填資料頁修正後再定稿（科目：A099）'
 CARD = KEEP + ' [data-role="pnl-three-lines"]'
 LINES = KEEP + ' [data-role="pnl-three-line"]'
 DRAFT = KEEP + ' [data-role="pnl-three-draft"]'
@@ -43,6 +44,14 @@ def main():
         os.environ['PNL_RUNNER'] = 'http://127.0.0.1:%d/pnl/api' % BPORT
         httpd, base = start_server(PORT)
         mock = MockBackend(base)
+        orig_proxy = mock.proxy
+        mock.bad_finalize = False   # True：定稿回「資料有錯」（真後端的訊息；測畫面是否把這句給按定稿的人）
+
+        def hooked(body):
+            if mock.bad_finalize and body.get('action') == 'finalize':
+                return 200, {'ok': False, 'error': 'BAD_STATE', 'message': BAD_MSG}
+            return orig_proxy(body)
+        mock.proxy = hooked
         USERS['pnladm'] = {'password': 'e2e-pw', 'perms': ['platform.self', 'pnl.admin'], 'user': {'id': 'u-pnladm', 'name': '損益管理者', 'role': 'staff', 'node': ''}}
 
         exp = backend('getMonth', {'store_id': 'S01', 'month': '2026-08'})['data']
@@ -96,6 +105,19 @@ def main():
             check('2026-08' in opts, '月份清單前提')
             pick(pg, 'S01', '2026-08')
             check(pg.locator(LINES).count() == 3, '切回光復：三行重新出現')
+
+            mock.bad_finalize = True
+            pg.evaluate("location.hash = '#/pnl/food'")
+            pg.wait_for_selector(KEEP + ' [data-act="finalize"]', timeout=15000)
+            pg.click(KEEP + ' [data-act="finalize"]')
+            pg.wait_for_selector('.dialog')
+            pg.click('.dialog .btn-danger')
+            pg.wait_for_selector('.toast:has-text("本月有資料錯誤")', timeout=10000)
+            check(BAD_MSG in pg.locator('.toast').last.inner_text(), '資料有錯：按定稿的人看到完整錯誤訊息')
+            check(backend('getMonth', {'store_id': 'S01', 'month': '2026-08'})['data']['status'] == '草稿', '資料有錯：沒有定稿')
+            mock.bad_finalize = False
+            pg.evaluate("location.hash = '#/pnl/dashboard'")
+            pg.wait_for_selector(KEEP + ' [data-role="pnl-metric"]', timeout=20000)
 
             r = backend('finalize', {'store_id': 'S01', 'month': '2026-08', 'zero_confirm': exp['result']['pending'], 'client_id': 'e2e-three-lines-1'})
             check(r.get('ok') is True, '定稿（假資料）：%s' % json.dumps(r, ensure_ascii=False)[:160])
