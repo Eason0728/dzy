@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -98,19 +99,28 @@ def main():
 
             r = backend('finalize', {'store_id': 'S01', 'month': '2026-08', 'zero_confirm': exp['result']['pending'], 'client_id': 'e2e-three-lines-1'})
             check(r.get('ok') is True, '定稿（假資料）：%s' % json.dumps(r, ensure_ascii=False)[:160])
+            # 測試後端沒有通知匣密碼，定稿通知會立刻徹底失敗（NO_TOKEN）：等它落定，順便驗失敗提示看得到
+            final = None
+            for _ in range(40):
+                final = backend('getMonth', {'store_id': 'S01', 'month': '2026-08'})['data']['three_lines']
+                if len(final['lines']) == 4:
+                    break
+                time.sleep(0.25)
+            check(len(final['lines']) == 4, '定稿通知失敗：後端回第四行提示：%s' % final['lines'])
             pg.reload()
             pg.wait_for_selector('[data-role="module-card"], ' + KEEP, state='attached', timeout=10000)
             pg.evaluate("location.hash = '#/pnl/dashboard'")
             pg.wait_for_selector(KEEP + ' [data-role="pnl-metric"]', timeout=20000)
             pick(pg, 'S01', '2026-08')
-            check(pg.locator(LINES).count() == 3 and pg.locator(DRAFT).count() == 0, '定稿後：仍有三行、沒有草稿標示')
+            check(pg.locator(LINES).all_inner_texts() == final['lines'] and pg.locator(DRAFT).count() == 0, '定稿後：畫面與後端一致（含通知失敗提示）、沒有草稿標示')
+            check('定稿通知沒有送出' in pg.locator(LINES).nth(3).inner_text(), '定稿通知失敗：儀表板看得到提示')
             pg.screenshot(path=os.path.join(SHOT_DIR, 'pnl-three-lines-final.png'))
             pg.context.close()
 
             pg = new_page(375, 800)
             pick(pg, 'S01', '2026-08')
             sw = pg.evaluate('document.documentElement.scrollWidth')
-            check(pg.locator(LINES).count() == 3 and sw <= 376, '375 寬：三行顯示、沒有橫向捲動（scrollWidth=%d）' % sw)
+            check(pg.locator(LINES).count() == 4 and sw <= 376, '375 寬：三行與提示都顯示、沒有橫向捲動（scrollWidth=%d）' % sw)
             pg.screenshot(path=os.path.join(SHOT_DIR, 'pnl-three-lines-375.png'))
             pg.context.close()
             browser.close()
