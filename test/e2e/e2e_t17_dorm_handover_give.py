@@ -51,7 +51,7 @@ def draw_signature(page, sel):
 
 def run_handover(page, base, mock):
     """建單→(mock 設已簽)→開點交單→全部點選→簽名→送出；回傳點交 token。"""
-    page.wait_for_selector('[data-role="module-card"][data-module="dorm"] .todo-head, [data-role="m-tabs"]', timeout=8000)
+    page.wait_for_selector('[data-role="module-card"][data-module="dorm"] .todo-head:visible, [data-role="m-tabs"]:visible', timeout=8000)
     time.sleep(0.8)
     open_module(page, 'dorm')
     page.wait_for_selector('[data-role="view-nav"] .nav-item:has-text("建立合約")', timeout=8000)
