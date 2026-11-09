@@ -20,15 +20,15 @@ export default {
   views: [
     { id: 'dash', name: '儀表板', requires: ['payroll.write'] },
     { id: 'group', name: '集團總覽', requires: ['payroll.admin'] },   // 只有系統管理者（*）通過；財務同仁看不到（docs/payroll-scope/spec.md §7）
-    { id: 'run', name: '薪資計算', requires: ['payroll.write'] },
-    { id: 'att', name: '出勤資料', requires: ['payroll.write'] },
-    { id: 'bonus', name: '獎金計算', requires: ['payroll.write'] },
-    { id: 'punch', name: '打卡紀錄', requires: ['payroll.write'] },
+    { id: 'emp', name: '1 員工設定', requires: ['payroll.write'] },
+    { id: 'cfg', name: '2 參數設定', requires: ['payroll.write'] },
+    { id: 'punch', name: '3 打卡紀錄', requires: ['payroll.write'] },
+    { id: 'att', name: '4 出勤資料', requires: ['payroll.write'] },
+    { id: 'bonus', name: '5 獎金計算', requires: ['payroll.write'] },
+    { id: 'run', name: '6 薪資計算', requires: ['payroll.write'] },
+    { id: 'slip', name: '7 薪資單', requires: ['payroll.write'] },
+    { id: 'export', name: '8 匯出', requires: ['payroll.write'] },
     { id: 'attexp', name: '出勤紀錄表', requires: ['payroll.write'] },
-    { id: 'emp', name: '員工設定', requires: ['payroll.write'] },
-    { id: 'cfg', name: '參數設定', requires: ['payroll.write'] },
-    { id: 'slip', name: '薪資單', requires: ['payroll.write'] },
-    { id: 'export', name: '匯出', requires: ['payroll.write'] },
     { id: 'oplog', name: '操作紀錄', requires: ['payroll.write'] }   // 定案／解鎖／設定變更的紀錄（2026-11-04，唯讀；範圍由薪資後端依負責門市裁切）
   ],
   entry: () => import('./index.js')
