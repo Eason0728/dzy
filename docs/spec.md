@@ -267,6 +267,12 @@ ctx = {
   而且畫面只顯示「請求失敗」。訊息取用順序：`error` → `message` → 通用字。
 - **轉接只在平台 `api.js` 一處做**，模組內不得再判既有格式。
 
+**併請求 batchRead（2026-11-10，首頁少等；開關 `config.js HOME_FAST`／`?homefast=1`，預設關）**：
+- 後端 `batchRead {items:[{action,payload}]}`（1～20 筆）→ `{ok:true,data:{results:[…]}}`，results 一對一同序、每格就是該 action 單筆會回的東西；每筆用同一個 token、經 `dispatchAction_` 各自驗權限、各自 try/catch。
+- 只收白名單 `CODE_BATCH_READ_ACTIONS`（＝前端 `platform/dryrun.js BATCH_READ_ACTIONS`，逐字一致）：首頁 badge()／alerts() 會用到、純讀取、呼叫鏈內沒有 `UrlFetchApp`。白名單外、寫入、巢狀 batchRead 只讓那一筆回「不支援的操作」。
+- 前端 `api.js`：同一輪（約 80 毫秒）發出的白名單 platform 讀取併成一次；相同讀取去重；寫入與代轉 ns 永遠不併；整批失敗退回逐筆送並暫停併 5 分鐘。模組程式零改動。
+- 首頁「上次件數」（`platform/home-cache.js`，key `dzy.u.<user id>.home_badges`）只存 badge 數字，登出清除。
+
 ### 4.9 路由字串
 
 - 格式：`#/<moduleId>/<viewId>?<key>=<value>&...`

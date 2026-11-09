@@ -1666,3 +1666,14 @@ textarea.input:disabled {
 .m-fav-row .m-mv { width: 36px; height: 36px; flex: none; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); cursor: pointer; }
 .m-fav-row .m-mv:disabled { opacity: .3; cursor: default; }
 .m-fav-row:not(.on) .m-mv { visibility: hidden; }
+
+/* 首頁少等（2026-11-10）：「上次件數」還在等最新結果時用灰色、虛線外框，一看就知道是舊的、更新中 */
+.module-badge.stale,
+.nav-item .badge.stale,
+.m-tabs .badge.stale, .m-tile .badge.stale, .m-grp .badge.stale {
+  background: var(--line);
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--muted);
+  opacity: 0.75;
+}
+.module-badge.stale::after { content: ' 更新中'; font-size: var(--fs-xs); font-weight: normal; }

@@ -76,3 +76,41 @@ export const BACKENDS = {
   // 電子佈告欄前端網址（公告專區 iframe 來源與 postMessage 核對用；不是 API 後端，shell 不會對它發請求）
   bulletin: 'https://dzy-bulletin.github.io'
 };
+
+/**
+ * 首頁少等（2026-11-10）：總開關。false＝首頁行為與以前完全相同
+ * （不併請求、不讀不寫 localStorage 的上次件數）。
+ * 要先在正式網址自己試：網址加 ?homefast=1（記進 sessionStorage，關掉分頁就失效；?homefast=0 立刻關掉）。
+ * 本機 8862 埠（試用埠）一律開。確認沒問題後 Eason 才會把這裡改成 true。
+ */
+export const HOME_FAST = false;
+
+const HOME_FAST_KEY = 'dzy.homefast';   // sessionStorage：只存 '1'
+const HOME_FAST_LOCAL_PORT = '8862';
+
+/**
+ * 現在這個頁面要不要走「首頁少等」。純函式，讀不到 location／storage 一律回 false（往關的方向失敗）。
+ * @param {{hostname?:string,port?:string,search?:string}} [loc] 預設 window.location
+ * @param {{getItem:Function,setItem:Function,removeItem:Function}|null} [storage] 預設 window.sessionStorage（測試可注入）
+ */
+export function homeFastAllowed(loc, storage) {
+  if (HOME_FAST === true) return true;
+  const l = loc || (typeof location !== 'undefined' ? location : null);
+  if (!l) return false;
+  const host = String(l.hostname || '');
+  if ((host === 'localhost' || host === '127.0.0.1') && String(l.port || '') === HOME_FAST_LOCAL_PORT) return true;
+  let ss = storage;
+  if (ss === undefined) {
+    try { ss = (typeof sessionStorage !== 'undefined') ? sessionStorage : null; } catch (e) { ss = null; }
+  }
+  const m = /(?:^|[?&])homefast=([^&#]*)/.exec(String(l.search || ''));
+  if (m && m[1] === '1') {
+    try { if (ss) ss.setItem(HOME_FAST_KEY, '1'); } catch (e) { /* 存不了就只認這一次的網址 */ }
+    return true;
+  }
+  if (m && m[1] === '0') {
+    try { if (ss) ss.removeItem(HOME_FAST_KEY); } catch (e) { /* 忽略 */ }
+    return false;
+  }
+  try { return !!ss && ss.getItem(HOME_FAST_KEY) === '1'; } catch (e) { return false; }
+}

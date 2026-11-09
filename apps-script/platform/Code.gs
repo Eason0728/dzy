@@ -75,7 +75,18 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   'inspSetup', 'inspMe', 'inspList', 'inspGet', 'inspSubmit', 'inspVoid', 'inspBankGet', 'inspBankSave',
   // 2026-11-02：AI 小幫手管理（AiHelp.gs；docs/ai-helper/spec.md §8）。寫入由 AiHelp.gs aihWithLock_ 自己上鎖，不列 MUTATING_ACTIONS。
   // ⚠ 給 Mac mini node 路由用的全域函式（AiHelp.gs 內結尾底線那 8 支）刻意不在這裡，也不可加進來（test/ai-help.mock.test.mjs 會比對 Code.gs 全文）
-  'aihSetup', 'aihKbList', 'aihKbSave', 'aihKbImport', 'aihKbHist', 'aihPendingList', 'aihPendingSet', 'aihUsage', 'aihLogList', 'aihPauseSet'];
+  'aihSetup', 'aihKbList', 'aihKbSave', 'aihKbImport', 'aihKbHist', 'aihPendingList', 'aihPendingSet', 'aihUsage', 'aihLogList', 'aihPauseSet',
+  // 2026-11-10：首頁少等。一次讀多筆白名單內的純讀取（見下方 CODE_BATCH_READ_ACTIONS）；純讀取，不上鎖
+  'batchRead'];
+
+// batchRead 的白名單（2026-11-10，首頁少等）。必須與前端 platform/dryrun.js BATCH_READ_ACTIONS 逐字一致（test/batch-read.test.mjs 比對）。
+// 進來的條件，三條缺一不可：① 純讀取（不寫試算表、不在 dispatch_ 的 MUTATING_ACTIONS 內）② 首頁 badge()／alerts() 會用到
+// ③ 內部（含它呼叫到的所有函式）完全不呼叫 UrlFetchApp——會去問 Google 或外部的慢請求不准進來，免得拖住同一批的其他筆。
+// 不收：寫入、ssoTicket／svc* 這類有副作用或給機器用的、batchRead 自己（不准巢狀）。
+var CODE_BATCH_READ_ACTIONS = ['clockAlerts', 'regionList', 'apvTodo', 'permMapGet', 'permAuditList', 'permStoreGet',
+  'staffList', 'myProfile', 'unitPending', 'attUpperGaps', 'evMe', 'evNewbieList', 'aihPendingList'];
+var CODE_BATCH_MAX = 20;
+var CODE_BATCH_MSG_TOO_MANY = '一次最多讀取 20 筆';
 var CODE_MSG_BAD_REQUEST = '請求格式錯誤';
 var CODE_MSG_UNKNOWN_ACTION = '不支援的操作';
 var CODE_MSG_INTERNAL_ERROR = '系統忙碌中，請稍後再試';
@@ -337,10 +348,47 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'aihUsage': return handleAihUsage_(token, payload);
     case 'aihLogList': return handleAihLogList_(token, payload);
     case 'aihPauseSet': return handleAihPauseSet_(token, payload);
+    // 2026-11-10：首頁少等。每一筆都走本函式（dispatchAction_）、用同一個 token，各 handler 自己驗權限，與單筆呼叫完全同一條路
+    case 'batchRead': return handleBatchRead_(token, payload, ipHash);
     default:
       // 理論上到不了這裡（上面白名單已擋），留著防呆
       return { ok: false, error: CODE_MSG_UNKNOWN_ACTION };
   }
+}
+
+/**
+ * batchRead（2026-11-10，首頁少等）：payload {items:[{action, payload}]}，1～20 筆。
+ * 回 {ok:true, data:{results:[…]}}：results 與 items 一對一同序，每一格就是該 action 單筆呼叫會回的東西
+ * （{ok:true,data} 或 {ok:false,error,…}），前端可以原樣當單筆結果用。
+ * - 白名單（CODE_BATCH_READ_ACTIONS）外、寫入、巢狀 batchRead、格式不對：只有那一筆回錯，其他筆照常。
+ * - 每筆各自 try/catch：一筆拋例外只讓那一筆回通用錯誤，不影響其他筆。
+ * - 整批的結構不對（不是陣列、空的、超過 20 筆）才整個回錯。
+ */
+function handleBatchRead_(token, payload, ipHash) {
+  var items = payload && payload.items;
+  if (!Array.isArray(items) || items.length === 0) return { ok: false, error: CODE_MSG_BAD_REQUEST };
+  if (items.length > CODE_BATCH_MAX) return { ok: false, error: CODE_BATCH_MSG_TOO_MANY };
+  var results = [];
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (!it || typeof it !== 'object' || Array.isArray(it) || typeof it.action !== 'string' || !it.action) {
+      results.push({ ok: false, error: CODE_MSG_BAD_REQUEST });
+      continue;
+    }
+    // 白名單先擋；batchRead 不在白名單內，所以也不可能巢狀
+    if (CODE_BATCH_READ_ACTIONS.indexOf(it.action) === -1 || CODE_ALLOWED_ACTIONS.indexOf(it.action) === -1) {
+      results.push({ ok: false, error: CODE_MSG_UNKNOWN_ACTION });
+      continue;
+    }
+    var p = (it.payload && typeof it.payload === 'object' && !Array.isArray(it.payload)) ? it.payload : {};
+    try {
+      results.push(dispatchAction_(it.action, token, p, ipHash));
+    } catch (err) {
+      logInternalError_(err);
+      results.push({ ok: false, error: CODE_MSG_INTERNAL_ERROR });
+    }
+  }
+  return { ok: true, data: { results: results } };
 }
 
 /** 前端用 Content-Type: text/plain 送 JSON 字串（避開 CORS preflight）；body 不是合法 JSON 一律回 null */
