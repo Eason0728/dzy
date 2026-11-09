@@ -74,10 +74,12 @@ export function toPageResult(r) {
 }
 
 /** 薪酬頁的分頁（2026-10-20 Eason：要跟「薪酬管理」同一列，所以由管理系統的分頁列畫，薪酬頁自己的選單在嵌入時隱藏）。
- *  id＝薪酬頁 #nav button 的 data-p；順序＝薪酬頁原本側欄順序。manifest.js 的 views 要跟這裡一致（測試比對）。 */
+ *  id＝薪酬頁 #nav button 的 data-p；順序＝會計結算的先後，1～8 是步驟編號（2026-11-10 Eason）；第一個分頁要維持 dash（殼用 views[0] 判斷進不進得了模組）。manifest.js 的 views 要跟這裡一致（測試比對）。 */
 export const PAYROLL_PAGES = [
-  ['dash', '儀表板'], ['group', '集團總覽'], ['run', '薪資計算'], ['att', '出勤資料'], ['bonus', '獎金計算'],
-  ['punch', '打卡紀錄'], ['attexp', '出勤紀錄表'], ['emp', '員工設定'], ['cfg', '參數設定'], ['slip', '薪資單'], ['export', '匯出'], ['oplog', '操作紀錄']
+  ['dash', '儀表板'], ['group', '集團總覽'],
+  ['emp', '1 員工設定'], ['cfg', '2 參數設定'], ['punch', '3 打卡紀錄'], ['att', '4 出勤資料'],
+  ['bonus', '5 獎金計算'], ['run', '6 薪資計算'], ['slip', '7 薪資單'], ['export', '8 匯出'],
+  ['attexp', '出勤紀錄表'], ['oplog', '操作紀錄']
 ];
 
 /** 管理系統換分頁 → 通知薪酬頁切換的訊息；不認得的分頁一律回儀表板 */
