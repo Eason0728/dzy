@@ -57,6 +57,11 @@ await t('self 三種並列：門市提醒在前，順序 due、wait、missing', 
   assert.deepEqual(r.map((x) => x.view), ['board', 'self', 'approve', 'approve']);
   assert.deepEqual(r.map((x) => x.level), ['warn', 'warn', 'info', 'warn']);
 });
+await t('support：門市支援有變動，每家一列 warn、進 badge；壞資料略過', () => {
+  const d = { items: [], support: [{ code: 'MDJS', name: '金山店', periods: ['T01', 'T02'] }, null, 'x', { name: '空', periods: [] }] };
+  assert.deepEqual(toAlerts(d), [{ level: 'warn', text: '金山店 T01、T02 門市支援有變動', view: 'board' }]);
+  assert.equal(toBadge(d), 2);
+});
 await t('fixed：每家一列 warn，view fixedstaff；0 人、壞資料略過；不進 badge', () => {
   assert.deepEqual(toAlerts({ items: [], fixed: [{ code: 'CF', name: '中央廚房', missing: 3 }] }),
     [{ level: 'warn', text: '中央廚房 有 3 位同仁還沒設固定班別（平日班表空白）', view: 'fixedstaff' }]);

@@ -27,6 +27,8 @@ function fixedOf(data) {
   return l.filter((x) => x && typeof x === 'object' && countOf(x.missing) > 0).map((x) => ({ name: x.name || x.code || '央廚', missing: countOf(x.missing) }));
 }
 
+const supportOf = (data) => (Array.isArray(data.support) ? data.support.filter((x) => periodsOf(x).length) : []);
+
 /** 上游 data → alerts() 的陣列：每家一列；零件數回空陣列；形狀不對回 null */
 export function toAlerts(data) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.items)) return null;
@@ -36,6 +38,8 @@ export function toAlerts(data) {
     if (!ps.length) continue;
     out.push({ level: 'warn', text: `${(it && it.name) || (it && it.code) || '門市'} ${ps.join('、')} 班表還沒送到 LINE`, view: 'board' });
   }
+  // 門市互相支援排班（營運系統 2026-11-09）：data.support＝[{code,name,periods}]，這家店已鎖定的期別被原店改了支援的班
+  for (const it of supportOf(data)) out.push({ level: 'warn', text: `${it.name || it.code || '門市'} ${periodsOf(it).join('、')} 門市支援有變動`, view: 'board' });
   const me = selfOf(data);
   for (const m of me.due) out.push({ level: 'warn', text: m, view: 'self' });
   if (me.wait > 0) out.push({ level: 'info', text: `${me.wait} 位同仁的班表等你核准`, view: 'approve' });
@@ -44,8 +48,8 @@ export function toAlerts(data) {
   return out;
 }
 
-/** 上游 data → 側邊欄／卡片數字：還沒送到的期數合計＋等你核准的人數（self.wait）；形狀不對回 null */
+/** 上游 data → 側邊欄／卡片數字：還沒送到的期數合計＋門市支援有變動的期數＋等你核准的人數（self.wait）；形狀不對回 null */
 export function toBadge(data) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.items)) return null;
-  return data.items.reduce((sum, it) => sum + periodsOf(it).length, 0) + selfOf(data).wait;
+  return data.items.concat(supportOf(data)).reduce((sum, it) => sum + periodsOf(it).length, 0) + selfOf(data).wait;
 }
