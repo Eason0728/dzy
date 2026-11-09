@@ -69,7 +69,7 @@ export const READ_ACTIONS = {
 
 /**
  * 首頁少等（2026-11-10）：可併進一次 batchRead 的 platform 讀取。必須與 apps-script/platform/Code.gs CODE_BATCH_READ_ACTIONS 逐字一致
- * （test/batch-read.test.mjs 比對），且全部都在上面 READ_ACTIONS.platform 內。
+ * （test/batch-read.mock.test.mjs 比對），且全部都在上面 READ_ACTIONS.platform 內。
  * 進來的條件：首頁 badge()／alerts() 會用到、純讀取（不寫試算表）、後端內部不呼叫 UrlFetchApp（慢的外部請求不能拖住整批）。
  * ssoTicket／clockJobStatus 這類有副作用的、apvMine 這類首頁不用的，一律不收。
  */

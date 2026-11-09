@@ -16,7 +16,7 @@ globalThis.localStorage = new MemoryStorage();
 Object.defineProperty(globalThis, 'sessionStorage', { value: new MemoryStorage(), configurable: true, writable: true });
 
 import { login, logout, __setTransport } from '../platform/auth.js';
-import { call, __setHomeFast, __setTimeoutMs } from '../platform/api.js';
+import { call, __setHomeFast, __setTimeoutMs, beginHomeBatch } from '../platform/api.js';
 import { homeFastAllowed, HOME_FAST } from '../platform/config.js';
 import { BATCH_READ_ACTIONS } from '../platform/dryrun.js';
 import { __setDryRun } from '../platform/dryrun.js';
@@ -27,6 +27,9 @@ let failed = 0;
 function ok(cond, label, extra) {
   if (cond) { passed++; console.log('PASS: ' + label); } else { failed++; console.error('FAIL: ' + label + (extra !== undefined ? '\n  ' + JSON.stringify(extra) : '')); }
 }
+// 開關開 + 首頁載入期間（shell 呼叫 beginHomeBatch）才併請求
+let endHome = null;
+function fastOn() { __setHomeFast(true); endHome = beginHomeBatch(); }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const WAIT = 160;   // 比併請求視窗（80ms）久一點
 
@@ -128,7 +131,7 @@ const reads = (n) => ['staffList', 'clockAlerts', 'regionList', 'evMe', 'apvTodo
 // ============================================================
 {
   await loginAs('u901', 'tok-A');
-  __setHomeFast(true);
+  fastOn();
   let calls = makeBackend(H);
   const t0 = Date.now();
   const ps = reads(5).map((a) => call('platform', a, a === 'apvTodo' ? { k: 1 } : {}));
@@ -147,7 +150,7 @@ const reads = (n) => ['staffList', 'clockAlerts', 'regionList', 'evMe', 'apvTodo
   makeBackend(H);
   const direct = await Promise.all(reads(5).map((a) => call('platform', a, a === 'apvTodo' ? { k: 1 } : {})));
   ok(JSON.stringify(direct) === JSON.stringify(rs), '3: 併請求的回傳與單筆回傳逐字相同');
-  __setHomeFast(true);
+  fastOn();
 
   // 同一輪完全相同的讀取只送一筆，各拿到一份副本
   calls = makeBackend(H);
@@ -178,7 +181,7 @@ const reads = (n) => ['staffList', 'clockAlerts', 'regionList', 'evMe', 'apvTodo
   calls = makeBackend({ apvTodo: (p) => ({ ok: true, data: { n: p.i } }) });
   const many = await Promise.all(Array.from({ length: 25 }, (_, i) => call('platform', 'apvTodo', { i })));
   const sizes = calls.filter((c) => c.body.action === 'batchRead').map((c) => c.body.payload.items.length);
-  ok(sizes.length === 2 && sizes[0] === 20 && sizes[1] === 5 && sizes.every((n) => n <= 20), '3: 25 筆 → 20 + 5 兩批，每批不超過 20', sizes);
+  ok(sizes.join() === '6,6,6,6' && calls.length === 5 && calls[4].body.action === 'apvTodo', '3: 25 筆 → 每批最多 6 筆（6,6,6,6，剩 1 筆單送）', sizes);
   ok(many.every((r, i) => r.ok && r.data.n === i), '3: 25 筆各自拿到對的結果');
   arm(); await quietLogout();
 }
@@ -188,7 +191,7 @@ const reads = (n) => ['staffList', 'clockAlerts', 'regionList', 'evMe', 'apvTodo
 // ============================================================
 {
   await loginAs('u901', 'tok-A');
-  __setHomeFast(true);
+  fastOn();
   const calls = makeBackend({ ...H, saveUser: () => ({ ok: true, data: { saved: 1 } }), listUsers: () => ({ ok: true, data: { users: [] } }), ssoTicket: () => ({ ok: true, data: { ticket: 't' } }), getAll: () => ({ ok: true }) });
   const ps = [call('platform', 'staffList', {}), call('platform', 'saveUser', { name: 'x' }), call('platform', 'evMe', {}), call('platform', 'listUsers', {}), call('platform', 'ssoTicket', {}), call('audit', 'getAll', {}), call('cashbook', 'adminList', {})];
   await Promise.all(ps);
@@ -213,7 +216,7 @@ const reads = (n) => ['staffList', 'clockAlerts', 'regionList', 'evMe', 'apvTodo
 // ============================================================
 for (const mode of ['throw', 'notok', 'badjson', 'short', 'status']) {
   await loginAs('u901', 'tok-A');
-  __setHomeFast(true);
+  fastOn();
   let calls = makeBackend(H, { fail: mode });
   const rs = await Promise.all(reads(3).map((a) => call('platform', a, {})));
   const acts = calls.map((c) => c.body.action);
@@ -222,13 +225,14 @@ for (const mode of ['throw', 'notok', 'badjson', 'short', 'status']) {
   // 冷卻：失敗後 5 分鐘內不再嘗試併
   calls = makeBackend(H);
   await Promise.all(reads(3).map((a) => call('platform', a, {})));
-  ok(calls.length === 3 && calls.every((c) => c.body.action !== 'batchRead'), '5: 失敗（' + mode + '）之後暫停併請求，直接逐筆送');
+  if (mode === 'notok') ok(calls.length === 3 && calls.every((c) => c.body.action !== 'batchRead'), '5: 後端明說不支援（' + mode + '）之後暫停併請求，直接逐筆送');
+  else ok(calls.length === 1 && calls[0].body.action === 'batchRead', '5: 暫時性錯誤（' + mode + '）不停併：下一輪照常 batchRead', calls.map((c) => c.body.action));
   arm(); await quietLogout();
 }
 {
   // 某一筆被後端說「不支援的操作」（前後端白名單差一點）→ 只有那一筆退回單筆送
   await loginAs('u901', 'tok-A');
-  __setHomeFast(true);
+  fastOn();
   const partial = { ...H }; delete partial.evMe;   // 後端 batch 不認得 evMe；單筆路徑認得
   const calls = (() => {
     const cs = [];
@@ -245,11 +249,32 @@ for (const mode of ['throw', 'notok', 'badjson', 'short', 'status']) {
 }
 
 // ============================================================
+// 5b. 只有首頁載入期間才併
+// ============================================================
+{
+  await loginAs('u901', 'tok-A');
+  __setHomeFast(true);   // 開關開，但沒有 beginHomeBatch（在模組內頁）
+  let calls = makeBackend(H);
+  const t0 = Date.now();
+  await Promise.all(reads(3).map((a) => call('platform', a, {})));
+  ok(calls.length === 3 && calls.every((c) => c.body.action !== 'batchRead') && Date.now() - t0 < 60, '5b: 沒在首頁載入期間：立刻逐筆送，不等 80ms、不併');
+  const end = beginHomeBatch();
+  calls = makeBackend(H);
+  await Promise.all(reads(3).map((a) => call('platform', a, {})));
+  ok(calls.length === 1 && calls[0].body.action === 'batchRead', '5b: 首頁載入期間：併');
+  end(); end();
+  calls = makeBackend(H);
+  await Promise.all(reads(3).map((a) => call('platform', a, {})));
+  ok(calls.length === 3, '5b: 首頁讀取結束（end 可重複呼叫）後又回到立刻送');
+  arm(); await quietLogout();
+}
+
+// ============================================================
 // 6. 換人不混身分：每個 token 各排各的
 // ============================================================
 {
   await loginAs('u901', 'tok-A');
-  __setHomeFast(true);
+  fastOn();
   const calls = makeBackend({ staffList: (p, tok) => ({ ok: true, data: { who: tok } }), evMe: (p, tok) => ({ ok: true, data: { who: tok } }) });
   const pa = [call('platform', 'staffList', {}), call('platform', 'evMe', {})];   // 以 A 排隊
   await quietLogout();
@@ -265,7 +290,7 @@ for (const mode of ['throw', 'notok', 'badjson', 'short', 'status']) {
 // 7. 沒登入（沒有 token）不併；試跑模式照常
 // ============================================================
 {
-  __setHomeFast(true);
+  fastOn();
   await quietLogout();
   const calls = makeBackend(H);
   await Promise.all([call('platform', 'staffList', {}), call('platform', 'evMe', {})]);

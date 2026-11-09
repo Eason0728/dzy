@@ -1677,3 +1677,4 @@ textarea.input:disabled {
   opacity: 0.75;
 }
 .module-badge.stale::after { content: ' 更新中'; font-size: var(--fs-xs); font-weight: normal; }
+.module-badge.stale.off::after { content: ' 未更新'; }

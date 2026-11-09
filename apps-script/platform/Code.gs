@@ -79,7 +79,7 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   // 2026-11-10：首頁少等。一次讀多筆白名單內的純讀取（見下方 CODE_BATCH_READ_ACTIONS）；純讀取，不上鎖
   'batchRead'];
 
-// batchRead 的白名單（2026-11-10，首頁少等）。必須與前端 platform/dryrun.js BATCH_READ_ACTIONS 逐字一致（test/batch-read.test.mjs 比對）。
+// batchRead 的白名單（2026-11-10，首頁少等）。必須與前端 platform/dryrun.js BATCH_READ_ACTIONS 逐字一致（test/batch-read.mock.test.mjs 比對）。
 // 進來的條件，三條缺一不可：① 純讀取（不寫試算表、不在 dispatch_ 的 MUTATING_ACTIONS 內）② 首頁 badge()／alerts() 會用到
 // ③ 內部（含它呼叫到的所有函式）完全不呼叫 UrlFetchApp——會去問 Google 或外部的慢請求不准進來，免得拖住同一批的其他筆。
 // 不收：寫入、ssoTicket／svc* 這類有副作用或給機器用的、batchRead 自己（不准巢狀）。

@@ -37,7 +37,7 @@
 'use strict';
 
 import * as auth from './auth.js';
-import { call as backendCall, setSessionExpiredHandler } from './api.js';
+import { call as backendCall, setSessionExpiredHandler, beginHomeBatch } from './api.js';
 import { setDryRunNotifier } from './dryrun.js';
 import * as ui from './ui.js';
 import * as fmt from './fmt.js';
@@ -116,6 +116,8 @@ const staleBadge = {};
 /** 本次登入累積的最新件數（寫回 localStorage 用） */
 const latestCounts = {};
 const STALE_TITLE = '上次的件數，更新中';
+const STALE_OFF_TITLE = '上次的件數，這次沒有更新到';
+let latestBaseLoaded = false;
 
 function homeStorage() {
   try { return window.localStorage; } catch (e) { return null; }
@@ -406,14 +408,31 @@ function cleanAlerts(raw) {
 
 /** 最新件數到了：記下來（寫回 localStorage）、取消「上次件數」的灰色狀態（卡片由呼叫端換字，側邊欄在這裡換） */
 function settleFastBadge(moduleId, value) {
-  freshBadge.add(moduleId);
-  if (typeof value === 'number' && Number.isFinite(value)) latestCounts[moduleId] = value; else delete latestCounts[moduleId];
+  // 只有拿到數字才更新：算不出來（null）時舊數字原樣保留（畫面與 localStorage 都是），由 markStaleOff 標成「未更新」
+  if (!(typeof value === 'number' && Number.isFinite(value))) return;
   const user = auth.getUser();
+  if (!latestBaseLoaded) {   // 以上次內容為底，不會因為這輪還有模組沒回來就把它們的舊數字寫掉
+    latestBaseLoaded = true;
+    const base = readHomeBadges(homeStorage(), user && user.id);
+    for (const k of Object.keys(base)) if (!(k in latestCounts)) latestCounts[k] = base[k];
+  }
+  freshBadge.add(moduleId);
+  latestCounts[moduleId] = value;
   writeHomeBadges(homeStorage(), user && user.id, latestCounts);
   if (Object.prototype.hasOwnProperty.call(staleBadge, moduleId)) {
     delete staleBadge[moduleId];
-    setNavBadge(moduleId, typeof value === 'number' && value > 0 ? value : 0);
+    setNavBadge(moduleId, value > 0 ? value : 0);
   }
+}
+
+/** 這一輪沒拿到這個模組的數字（逾時、回 null、模組載入失敗）：舊數字留著，灰色改標「未更新」，不再顯示「更新中」 */
+function markStaleOff(moduleId) {
+  if (!Object.prototype.hasOwnProperty.call(staleBadge, moduleId)) return;
+  const b = viewContentEl && findDescendant(
+    viewContentEl,
+    (n) => n.getAttribute && n.getAttribute('data-role') === 'badge' && n.getAttribute('data-module') === moduleId
+  );
+  if (b) { b.className = 'module-badge stale off'; b.setAttribute('title', STALE_OFF_TITLE); }
 }
 
 /** 開首頁（或直接進「功能」「待處理」）時，先把上次件數放上去：還沒拿到最新結果的模組才放，有數字才放 */
@@ -429,6 +448,12 @@ function applyLastBadges() {
   }
 }
 
+/** 首頁讀取：開始到全部結束之間才併請求（api.beginHomeBatch）；開關關閉時 api 端不併 */
+function runHomeLoads(isStale) {
+  const end = beginHomeBatch();
+  Promise.all(permittedModules.map((m) => loadHomeGroup(m, isStale).catch(() => {}))).then(end, end);
+}
+
 /**
  * 首頁每一組：載模組本體 → 並行跑 badge() 與（選填的）alerts()，各自 5 秒逾時、拋錯視同算不出來
  * （spec §4.6）。badge 數字寫進卡片與側邊欄；alerts 畫成提醒列。
@@ -440,10 +465,11 @@ async function loadHomeGroup(manifest, isStale) {
     body = modBody && modBody.default;
   } catch (err) {
     console.error(`[shell] 模組本體載入失敗，首頁這組略過：${manifest.id}`, err);
+    if (homeFastOn()) markStaleOff(manifest.id);
     if (!isStale()) fillGroup(manifest, null, null, true);
     return;
   }
-  if (!body) return;
+  if (!body) { if (homeFastOn()) markStaleOff(manifest.id); return; }
 
   const run = (fnName) => {
     if (typeof body[fnName] !== 'function') return Promise.resolve(undefined);
@@ -469,14 +495,7 @@ async function loadHomeGroup(manifest, isStale) {
     onAlertsChanged();
   }
   if (isStale()) return;
-  if (homeFastOn() && value === null) {
-    // 最新結果算不出數字：把「上次件數」拿掉，不留可能已經不對的舊數字
-    const old = findDescendant(
-      viewContentEl,
-      (n) => n.getAttribute && n.getAttribute('data-role') === 'badge' && n.getAttribute('data-module') === manifest.id
-    );
-    if (old) { old.textContent = ''; old.className = 'module-badge'; old.removeAttribute('title'); }
-  }
+  if (homeFastOn() && value === null) markStaleOff(manifest.id);
   if (value !== null) {
     const badgeEl = findDescendant(
       viewContentEl,
@@ -725,6 +744,7 @@ function renderHomeCards() {
   const isStale = () => tok !== homeToken || currentModule !== null;
   // 手機（≤860px）：先畫「今天要處理的事＋常用」，電腦版卡片接在後面、由 CSS 藏起來（.d-only，資料與 e2e 共用）。
   // 電腦版不畫手機區塊：藏起來的那份排在前面，用文字找元素時會先找到看不見的（2026-11-06 e2e 踩過）。
+  if (homeFastOn()) applyLastBadges();   // 手機首頁的常用磚第一次畫就要有上次件數
   const mobile = isMobileWidth();
   if (mobile) viewContentEl.appendChild(renderMobileHome());
   const wrap = el('div', { class: mobile ? 'todo-groups d-only' : 'todo-groups', 'aria-live': 'polite' });
@@ -749,7 +769,6 @@ function renderHomeCards() {
     }, [head, list]));
   }
   if (homeFastOn()) {
-    applyLastBadges();
     for (const m of permittedModules) {
       if (!Object.prototype.hasOwnProperty.call(staleBadge, m.id)) continue;
       const b = wrap.querySelector(`[data-role="badge"][data-module="${m.id}"]`);
@@ -757,7 +776,7 @@ function renderHomeCards() {
     }
   }
   preloadModules(permittedModules.map((m) => m.id));
-  for (const m of permittedModules) loadHomeGroup(m, isStale);
+  runHomeLoads(isStale);
 }
 
 // ============================================================
@@ -1050,7 +1069,7 @@ function onAlertsChanged() {
 function refreshAlerts() {
   applyLastBadges();
   preloadModules(permittedModules.map((m) => m.id));
-  for (const m of permittedModules) loadHomeGroup(m, () => true);
+  runHomeLoads(() => true);
 }
 
 /** 編輯常用：打勾放進常用（最多 6 個）、▲▼ 調順序；「恢復自動」＝回到最近用過的 */
@@ -1755,7 +1774,7 @@ async function doLogout(opts) {
   // 主動登出與被踢登出（代轉 401）都先清本人的表單簽核草稿（spec approvals §14.7「登出時清掉」；稽核草稿刻意保留，見 auth.purgeLogoutDrafts；2026-10-29 對抗驗證 A）
   try { auth.purgeLogoutDrafts(window.localStorage, leavingUser && leavingUser.id); } catch (e) { /* 共用電腦 storage 被鎖也不擋登出 */ }
   // 首頁少等的「上次件數」也在登出時清掉（只有開關開著才碰 localStorage）
-  if (homeFastOn()) clearHomeBadges(homeStorage(), leavingUser && leavingUser.id);
+  clearHomeBadges(homeStorage(), leavingUser && leavingUser.id);   // 不管開關：登出／登入過期都移除本人的上次件數
   if (expired) {
     auth.expireLocal();
   } else {
@@ -1772,6 +1791,7 @@ async function doLogout(opts) {
   for (const k of Object.keys(staleBadge)) delete staleBadge[k];
   for (const k of Object.keys(latestCounts)) delete latestCounts[k];
   freshBadge.clear();
+  latestBaseLoaded = false;
   appsQuery = '';
   todoSeg = 'mine';
   deptOpenState.clear();

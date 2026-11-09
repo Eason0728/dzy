@@ -84,7 +84,11 @@ def set_last(page, module, n):
 def main():
     allow = batch_actions()
     httpd, base = start_server(PORT)
-    httpd2, base2 = start_server(PORT_LOCAL)
+    try:
+        httpd2, base2 = start_server(PORT_LOCAL)
+    except OSError as e:   # 8862 被別的 devserver 占用：不動它，③ 略過（規則本身由 test/batch-read-front.test.mjs 驗）
+        print('8862 被占用，③ 略過：%s' % e)
+        httpd2, base2 = None, None
     mock = None
     try:
         with sync_playwright() as p:
@@ -112,7 +116,7 @@ def main():
             plat = [a for b, a in mock.calls if b == 'platform']
             proxy_on = list(getattr(mock, 'proxy_calls', []))
             direct = [a for a in plat if a in allow]
-            check(direct == [] and plat.count('batchRead') in (1, 2), '②開啟：白名單讀取沒有單獨送，只有 %d 次 batchRead：%s' % (plat.count('batchRead'), mock.batch_calls))
+            check(direct == [] and plat.count('batchRead') in (1, 2, 3), '②開啟：白名單讀取沒有單獨送，只有 %d 次 batchRead：%s' % (plat.count('batchRead'), mock.batch_calls))
             inner = [a for batch in mock.batch_calls for a in batch]
             check(sorted(set(inner)) == sorted(set(reads_off)), '②開啟：批次內是基準讀取去重後的集合（%d 筆 → %d 筆）' % (len(reads_off), len(inner)))
             check(proxy_on and collections.Counter(proxy_on) == collections.Counter(proxy_off), '②開啟：代轉 ns（audit、cashbook…）請求與基準相同、不併：%d 筆' % len(proxy_on))
@@ -222,10 +226,11 @@ def main():
             ctx.close()
 
             # ---------- ③ 本機 8862：不帶參數也開 ----------
-            ctx, page, mock, snap3, errs = run_home(browser, base2)
-            plat = [a for b, a in mock.calls if b == 'platform']
-            check(plat.count('batchRead') in (1, 2) and not [a for a in plat if a in allow], '③本機 8862 不帶參數自動開：%d 次 batchRead' % plat.count('batchRead'))
-            ctx.close()
+            if base2:
+                ctx, page, mock, snap3, errs = run_home(browser, base2)
+                plat = [a for b, a in mock.calls if b == 'platform']
+                check(plat.count('batchRead') in (1, 2, 3) and not [a for a in plat if a in allow], '③本機 8862 不帶參數自動開：%d 次 batchRead' % plat.count('batchRead'))
+                ctx.close()
 
             # ---------- ⑥ 整批失敗退回逐筆 ----------
             def failing(m):
@@ -236,11 +241,80 @@ def main():
             check(len([a for a in plat if a in allow]) >= 10, '⑥批次失敗：退回逐筆（%d 筆單送）' % len([a for a in plat if a in allow]))
             ctx.close()
 
+            # ---------- ⑧ 最新結果拿不到：舊數字保留、標「未更新」、localStorage 不被洗掉；模組載不進來也收尾 ----------
+            ctx = browser.new_context(viewport={'width': 1280, 'height': 800})
+            page = ctx.new_page()
+            m8 = MockBackend(base)
+            m8.install(page)
+            page.add_init_script(HOLD_JS.replace('window.__hold = 0;', "window.__hold = Number(localStorage.getItem('e2e.hold') || 0);"))
+            login(page, base, 'admin', '?homefast=1')
+            home_snapshot(page)
+            page.wait_for_timeout(2000)
+            set_last(page, 'audit-stock', 7)
+            set_last(page, 'dorm', 4)
+            before = json.loads(storage_dump(page)['local']['dzy.u.u-admin.home_badges'])['n']
+
+            def audit_down(route):
+                if '"ns":"audit"' in (route.request.post_data or ''):
+                    route.fulfill(status=502, content_type='application/json', body='{"ok":false,"error":"UPSTREAM_DOWN"}')
+                else:
+                    route.fallback()
+            page.route(m8.urls['proxy'], audit_down)
+            page.route('**/modules/dorm/index.js', lambda r: r.abort())
+            page.evaluate("() => localStorage.setItem('e2e.hold', '800')")
+            page.reload()
+            page.wait_for_selector('.module-badge.stale', timeout=8000)
+            page.wait_for_function("() => document.querySelectorAll('.module-badge.stale.off').length >= 2", timeout=15000)
+            a = page.locator('[data-role="badge"][data-module="audit-stock"]')
+            check(a.inner_text().startswith('7') and 'off' in (a.get_attribute('class') or '') and '沒有更新' in (a.get_attribute('title') or ''),
+                  '⑧badge 拿不到（代轉掛了）：保留上次件數 7、改標「未更新」：%s／%s' % (a.inner_text(), a.get_attribute('class')))
+            dm = page.locator('[data-role="badge"][data-module="dorm"]')
+            check(dm.inner_text().startswith('4') and 'off' in (dm.get_attribute('class') or ''), '⑧模組本體載不進來：上次件數 4 保留、「更新中」收尾成「未更新」：%s' % dm.get_attribute('class'))
+            page.wait_for_timeout(1500)
+            after = json.loads(storage_dump(page)['local']['dzy.u.u-admin.home_badges'])['n']
+            check(after.get('audit-stock') == 7 and after.get('dorm') == 4, '⑧localStorage 沒有被洗掉：audit-stock、dorm 仍是 7、4：%s' % after)
+            check(all(after.get(k) == v for k, v in before.items() if k not in ('audit-stock', 'dorm')), '⑧其他模組的上次件數原封不動')
+            ctx.close()
+
+            # ---------- ⑨ 手機首頁常用磚第一次畫就有上次件數 ----------
+            ctx = browser.new_context(viewport={'width': 375, 'height': 812})
+            page = ctx.new_page()
+            m9 = MockBackend(base)
+            m9.install(page)
+            page.add_init_script(HOLD_JS.replace('window.__hold = 0;', "window.__hold = Number(localStorage.getItem('e2e.hold') || 0);"))
+            login(page, base, 'admin', '?homefast=1')
+            page.wait_for_selector('[data-role="m-tabs"]')
+            page.wait_for_timeout(2500)
+            set_last(page, 'audit-stock', 6)
+            page.evaluate("() => localStorage.setItem('e2e.hold', '2500')")
+            page.reload()
+            page.wait_for_selector('[data-role="m-tabs"]')
+            t9 = page.locator('[data-role="m-tile"][data-module="audit-stock"] .badge.stale')
+            t9.wait_for(timeout=1500)
+            check(t9.inner_text() == '6', '⑨手機首頁「常用」磚第一次畫出就有上次件數 6（不等後續重畫）')
+            ctx.close()
+
+            # ---------- ⑩ 開關關閉：登出仍移除本人的上次件數（其餘不讀不寫） ----------
+            ctx = browser.new_context(viewport={'width': 1280, 'height': 800})
+            page = ctx.new_page()
+            m10 = MockBackend(base)
+            m10.install(page)
+            login(page, base, 'admin')
+            home_snapshot(page)
+            page.evaluate("() => localStorage.setItem('dzy.u.u-admin.home_badges', JSON.stringify({v:1, at: Date.now(), n: {'audit-stock': 3}}))")
+            page.evaluate("() => localStorage.setItem('dzy.u.u-other.home_badges', '{}')")
+            page.click('[data-nav="__logout__"]')
+            page.wait_for_selector('#login-username', timeout=10000)
+            st = storage_dump(page)
+            check('dzy.u.u-admin.home_badges' not in st['local'] and 'dzy.u.u-other.home_badges' in st['local'], '⑩開關關閉：登出移除本人的 home_badges，別人的不動')
+            ctx.close()
+
             browser.close()
         check(mock is None or mock.leaked == [], '真實網路零流出：%s' % (mock.leaked if mock else None))
     finally:
         httpd.shutdown()
-        httpd2.shutdown()
+        if httpd2:
+            httpd2.shutdown()
     finish()
 
 
