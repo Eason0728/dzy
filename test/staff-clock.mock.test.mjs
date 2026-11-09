@@ -2332,6 +2332,31 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   const good = post(sb, 'staffReinstate', { emp_no: r.emp, stores: ['mztgf'] }, tok);
   ok(good.ok && good.data.job_ids.length === 1, 'XB 只勾同品牌那家 → 照常復職', good);
 
+  // 手動確認／指定打卡對照（2026-11-09）
+  const stateOf = (store, eid) => { const y = maps(app).find((z) => z.store_code === store && z.emp_id === eid); return y && y.state; };
+  giveMap(app, m.emp, 'gf', 'XM1', 'support', { state: 'suggested' });
+  const md1 = post(sb, 'clockMapDecide', { store_code: 'gf', emp_id: 'XM1', decision: 'confirm' }, tok);
+  ok(md1.ok === false && md1.code === 'cross_brand' && stateOf('gf', 'XM1') === 'suggested', 'XB ★手動確認跨品牌的建議對照 → 擋，維持待確認', md1);
+  ok(post(sb, 'clockMapDecide', { store_code: 'gf', emp_id: 'XM1', decision: 'reject' }, tok).ok && stateOf('gf', 'XM1') === 'rejected', 'XB 跨品牌的建議對照可以退回');
+  const md2 = post(sb, 'clockMapDecide', { store_code: 'gf', emp_id: 'XM2', decision: 'confirm', emp_no: m.emp, role: 'support' }, tok);
+  ok(md2.ok === false && md2.code === 'cross_brand' && stateOf('gf', 'XM2') === undefined, 'XB ★總部手動指定跨品牌 → 擋、不寫對照', md2);
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'XM3', decision: 'confirm', emp_no: m.emp, role: 'support' }, tok).ok, 'XB 同品牌別家手動指定照舊可以');
+  giveMap(app, c.emp, 'mztjs', 'XC2', 'support', { state: 'suggested' });
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztjs', emp_id: 'XC2', decision: 'confirm' }, tok).ok, 'XB ★央廚同仁手動確認到墨竹亭可以');
+  giveMap(app, h.emp, 'mztgf', 'XH2', 'support', { state: 'suggested' });
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztgf', emp_id: 'XH2', decision: 'confirm' }, tok).ok, 'XB 總部同仁手動確認到墨竹亭可以');
+  giveMap(app, x.emp, 'mztgf', 'XB9', 'support');
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztgf', emp_id: 'XB9', decision: 'confirm', role: 'support' }, tok).ok, 'XB ★已生效的舊跨品牌對照改角色不擋（舊資料改得動）');
+  // 單位空白（還沒認領）：看他已綁的店
+  const blank = claimApprove(app, '跨牌空', 'xb-e-pw-0001', MZT_GF('pt'));
+  giveMap(app, blank.emp, 'mztgf', 'XE1', 'home');
+  giveMap(app, blank.emp, 'gf', 'XE2', 'support', { state: 'suggested' });
+  const unitCol = app.sheets.staff._data[0].indexOf('unit');
+  const empCol = app.sheets.staff._data[0].indexOf('emp_no');
+  const blankRow = app.sheets.staff._data.find((y) => y[empCol] === blank.emp);
+  if (unitCol >= 0 && blankRow) blankRow[unitCol] = '';
+  ok(unitCol >= 0 && post(sb, 'clockMapDecide', { store_code: 'gf', emp_id: 'XE2', decision: 'confirm' }, tok).code === 'cross_brand', 'XB ★單位空白時看已綁的店（墨竹亭帳號確認到小辛辣 → 擋）');
+
   // 新增同仁／主店建帳號只會開在本人單位那家（不會跨品牌），照舊
   const nc = post(sb, 'staffCreateByUnit', { name: '跨牌新', unit: 'mala-gf', title: 'pt', phone: '0911000111', hire_date: dayT(0) }, tok);
   ok(nc.ok && nc.data.store_code === 'gf', 'XB 新增同仁開在本人單位那家', nc);

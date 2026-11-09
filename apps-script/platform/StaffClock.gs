@@ -1058,6 +1058,16 @@ function handleClockMapDecide_(token, payload) {
   if (!emp) return clkErr_('bad_input', CLK_MSG.BAD_INPUT);
   var target = clkStaffByEmp_(emp);
   if (!target) return clkErr_('not_found', CLK_MSG.NOT_FOUND);
+  // 跨品牌（2026-11-09）：手動確認／指定也擋，規則同 7A。已經生效給同一人的對照只是改主店／支援，不擋（舊資料才改得動）
+  if (!(row && row.state === 'confirmed' && row.emp_no === emp)) {
+    var xOrg = stfReadOrg_();
+    var xUnit = clkStaffUnit_(target);
+    var xWho = xUnit ? clkUnitBrand_(xUnit, xOrg) : clkConfirmedOf_(maps, emp).reduce(function (b, m) {   // 單位空白（還沒認領）才看已綁的店
+      return b || (m.store_code === store ? '' : clkStoreBrand_(clkStoreByCode_(m.store_code), xOrg));
+    }, '');
+    var xMsg = clkCrossBrandMsg_(xWho, clkStoreBrand_(st, xOrg), xOrg);
+    if (xMsg) return clkErr_('cross_brand', xMsg);
+  }
   // 同人同店只一個 confirmed
   var clash = maps.filter(function (m) { return m.emp_no === emp && m.store_code === store && m.state === 'confirmed' && m.emp_id !== eid; });
   if (clash.length) return clkErr_('dup_confirmed', CLK_MSG.DUP_CONFIRMED);
