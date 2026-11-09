@@ -47,6 +47,7 @@ import { reportManifest } from './manifest-check.js';
 import { render as renderLogin } from './views/login.js';
 import { sanitizeTabs, pickDynamicView, alertViewId } from './tabs.js';
 import { TODO_GROUPS, groupOf, cleanWhen, taipeiToday } from './todo.js';
+import { preloadModules, registerDeviceCache } from './preload.js';
 
 /** spec §4.6：badge() 逾時上限 5 秒，逾時視同 null（不得讓首頁壞掉）。 */
 const BADGE_TIMEOUT_MS = 5000;
@@ -686,6 +687,7 @@ function renderHomeCards() {
       'data-target': target
     }, [head, list]));
   }
+  preloadModules(permittedModules.map((m) => m.id));
   for (const m of permittedModules) loadHomeGroup(m, isStale);
 }
 
@@ -974,6 +976,7 @@ function onAlertsChanged() {
 
 /** 「功能」「待處理」頁直接進來時（沒先經過首頁）也要有數字：重讀全部模組的提醒 */
 function refreshAlerts() {
+  preloadModules(permittedModules.map((m) => m.id));
   for (const m of permittedModules) loadHomeGroup(m, () => true);
 }
 
@@ -1716,6 +1719,7 @@ setSessionExpiredHandler(() => {
 
 export async function boot(mountEl) {
   rootEl = mountEl;
+  registerDeviceCache();
   const ok = await auth.restore();
   if (ok) {
     await enterApp();

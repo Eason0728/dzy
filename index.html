@@ -24,12 +24,55 @@
   <link rel="stylesheet" href="platform/css/tokens.css">
   <link rel="stylesheet" href="platform/css/base.css">
   <link rel="stylesheet" href="platform/css/components.css">
+  <!-- preload:begin 由 tools/gen-preload.mjs 產生，不要手改 -->
+  <link rel="modulepreload" href="modules/ai-help/manifest.js">
+  <link rel="modulepreload" href="modules/approvals/manifest.js">
+  <link rel="modulepreload" href="modules/attendance/manifest.js">
+  <link rel="modulepreload" href="modules/audit-ops/manifest.js">
+  <link rel="modulepreload" href="modules/audit-stock/manifest.js">
+  <link rel="modulepreload" href="modules/bulletin/manifest.js">
+  <link rel="modulepreload" href="modules/cashbook/manifest.js">
+  <link rel="modulepreload" href="modules/dorm/manifest.js">
+  <link rel="modulepreload" href="modules/eval/manifest.js">
+  <link rel="modulepreload" href="modules/inspection/manifest.js">
+  <link rel="modulepreload" href="modules/me/manifest.js">
+  <link rel="modulepreload" href="modules/payroll/manifest.js">
+  <link rel="modulepreload" href="modules/perms/manifest.js">
+  <link rel="modulepreload" href="modules/pnl/manifest.js">
+  <link rel="modulepreload" href="modules/purchase/manifest.js">
+  <link rel="modulepreload" href="modules/schedule/manifest.js">
+  <link rel="modulepreload" href="modules/staff/manifest.js">
+  <link rel="modulepreload" href="modules/storeops/manifest.js">
+  <link rel="modulepreload" href="modules/transfer-fin/manifest.js">
+  <link rel="modulepreload" href="modules/users/manifest.js">
+  <link rel="modulepreload" href="platform/api.js">
+  <link rel="modulepreload" href="platform/auth.js">
+  <link rel="modulepreload" href="platform/config.js">
+  <link rel="modulepreload" href="platform/dryrun.js">
+  <link rel="modulepreload" href="platform/fmt.js">
+  <link rel="modulepreload" href="platform/manifest-check.js">
+  <link rel="modulepreload" href="platform/preload-map.js">
+  <link rel="modulepreload" href="platform/preload.js">
+  <link rel="modulepreload" href="platform/registry.js">
+  <link rel="modulepreload" href="platform/shell.js">
+  <link rel="modulepreload" href="platform/tabs.js">
+  <link rel="modulepreload" href="platform/todo.js">
+  <link rel="modulepreload" href="platform/ui.js">
+  <link rel="modulepreload" href="platform/views/apply-status.js">
+  <link rel="modulepreload" href="platform/views/apply.js">
+  <link rel="modulepreload" href="platform/views/claim.js">
+  <link rel="modulepreload" href="platform/views/forgot.js">
+  <link rel="modulepreload" href="platform/views/line-auth.js">
+  <link rel="modulepreload" href="platform/views/login.js">
+  <link rel="modulepreload" href="platform/views/org-fields.js">
+  <!-- preload:end -->
 </head>
 <body>
   <!--
     平台唯一入口。這裡刻意只有一個容器與一支 script：
     畫面全部由 platform/shell.js 依身分與模組清單產生。
     ⚠ 新增模組時不要動這個檔——只改 platform/registry.js（見 docs/spec.md §6.1）。
+    （head 裡的 modulepreload 區塊是 tools/gen-preload.mjs 自動產生的，新增模組後跑一次即可。）
   -->
   <div id="app"></div>
   <noscript>
