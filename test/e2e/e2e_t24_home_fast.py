@@ -241,7 +241,7 @@ def main():
             check(len([a for a in plat if a in allow]) >= 10, '⑥批次失敗：退回逐筆（%d 筆單送）' % len([a for a in plat if a in allow]))
             ctx.close()
 
-            # ---------- ⑧ 最新結果拿不到：舊數字保留、標「未更新」、localStorage 不被洗掉；模組載不進來也收尾 ----------
+            # ---------- ⑧ 模組正常回 null（沒有待辦，或模組自己吃掉錯誤）：舊數字拿掉；模組載不進來：舊數字保留、標「未更新」 ----------
             ctx = browser.new_context(viewport={'width': 1280, 'height': 800})
             page = ctx.new_page()
             m8 = MockBackend(base)
@@ -264,16 +264,16 @@ def main():
             page.evaluate("() => localStorage.setItem('e2e.hold', '800')")
             page.reload()
             page.wait_for_selector('.module-badge.stale', timeout=8000)
-            page.wait_for_function("() => document.querySelectorAll('.module-badge.stale.off').length >= 2", timeout=15000)
+            page.wait_for_function("() => document.querySelectorAll('.module-badge.stale.off').length >= 1", timeout=15000)
             a = page.locator('[data-role="badge"][data-module="audit-stock"]')
-            check(a.inner_text().startswith('7') and 'off' in (a.get_attribute('class') or '') and '沒有更新' in (a.get_attribute('title') or ''),
-                  '⑧badge 拿不到（代轉掛了）：保留上次件數 7、改標「未更新」：%s／%s' % (a.inner_text(), a.get_attribute('class')))
+            page.wait_for_function("() => { const e = document.querySelector('[data-role=badge][data-module=audit-stock]'); return e && e.textContent === ''; }", timeout=15000)
+            check(a.inner_text() == '' and 'stale' not in (a.get_attribute('class') or ''), '⑧模組回 null：舊件數 7 拿掉、不留「未更新」：%r／%s' % (a.inner_text(), a.get_attribute('class')))
             dm = page.locator('[data-role="badge"][data-module="dorm"]')
             check(dm.inner_text().startswith('4') and 'off' in (dm.get_attribute('class') or ''), '⑧模組本體載不進來：上次件數 4 保留、「更新中」收尾成「未更新」：%s' % dm.get_attribute('class'))
             page.wait_for_timeout(1500)
             after = json.loads(storage_dump(page)['local']['dzy.u.u-admin.home_badges'])['n']
-            check(after.get('audit-stock') == 7 and after.get('dorm') == 4, '⑧localStorage 沒有被洗掉：audit-stock、dorm 仍是 7、4：%s' % after)
-            check(all(after.get(k) == v for k, v in before.items() if k not in ('audit-stock', 'dorm')), '⑧其他模組的上次件數原封不動')
+            check('audit-stock' not in after and after.get('dorm') == 4, '⑧localStorage：回 null 的 audit-stock 移除、載不進來的 dorm 仍是 4：%s' % after)
+            check(all(after.get(k) == v for k, v in before.items() if k not in ('audit-stock', 'audit-ops', 'dorm')), '⑧其他模組的上次件數原封不動（audit-ops 同樣靠掛掉的稽核代轉）：%s → %s' % (before, after))
             ctx.close()
 
             # ---------- ⑨ 手機首頁常用磚第一次畫就有上次件數 ----------

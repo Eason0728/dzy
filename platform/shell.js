@@ -52,6 +52,7 @@ import { preloadModules, registerDeviceCache } from './preload.js';
 
 /** spec §4.6：badge() 逾時上限 5 秒，逾時視同 null（不得讓首頁壞掉）。 */
 const BADGE_TIMEOUT_MS = 5000;
+const BADGE_FAILED = Symbol('badge-failed');
 
 // ============================================================
 // 模組層級狀態
@@ -425,7 +426,28 @@ function settleFastBadge(moduleId, value) {
   }
 }
 
-/** 這一輪沒拿到這個模組的數字（逾時、回 null、模組載入失敗）：舊數字留著，灰色改標「未更新」，不再顯示「更新中」 */
+/** 模組正常回 null＝沒有待辦：畫面與 localStorage 的舊數字都拿掉，不留誤導的「未更新」 */
+function clearFastBadge(moduleId) {
+  const user = auth.getUser();
+  if (!latestBaseLoaded) {
+    latestBaseLoaded = true;
+    const base = readHomeBadges(homeStorage(), user && user.id);
+    for (const k of Object.keys(base)) if (!(k in latestCounts)) latestCounts[k] = base[k];
+  }
+  delete latestCounts[moduleId];
+  freshBadge.add(moduleId);
+  writeHomeBadges(homeStorage(), user && user.id, latestCounts);
+  if (!Object.prototype.hasOwnProperty.call(staleBadge, moduleId)) return;
+  delete staleBadge[moduleId];
+  const b = viewContentEl && findDescendant(
+    viewContentEl,
+    (n) => n.getAttribute && n.getAttribute('data-role') === 'badge' && n.getAttribute('data-module') === moduleId
+  );
+  if (b) { b.textContent = ''; b.className = 'module-badge'; b.removeAttribute('title'); }
+  setNavBadge(moduleId, 0);
+}
+
+/** 這一輪沒拿到這個模組的數字（逾時、拋錯、模組載入失敗）：舊數字留著，灰色改標「未更新」，不再顯示「更新中」 */
 function markStaleOff(moduleId) {
   if (!Object.prototype.hasOwnProperty.call(staleBadge, moduleId)) return;
   const b = viewContentEl && findDescendant(
@@ -478,24 +500,29 @@ async function loadHomeGroup(manifest, isStale) {
       raw = body[fnName](buildCtx(manifest, null, {}));
     } catch (err) {
       console.error(`[shell] ${fnName}() 拋錯：${manifest.id}`, err);
-      return Promise.resolve(null);
+      return Promise.resolve(fnName === 'badge' ? BADGE_FAILED : null);
     }
-    return withTimeout(raw, BADGE_TIMEOUT_MS);
+    if (fnName !== 'badge') return withTimeout(raw, BADGE_TIMEOUT_MS);
+    // 逾時、拋錯才算「這輪沒讀到」（舊數字留著標未更新）；模組正常回 null＝沒有待辦，舊數字要拿掉
+    let timedOut = false;
+    const timer = new Promise((res) => setTimeout(() => { timedOut = true; res(BADGE_FAILED); }, BADGE_TIMEOUT_MS));
+    return Promise.race([Promise.resolve(raw).catch((err) => { console.error(`[shell] badge() 失敗：${manifest.id}`, err); return BADGE_FAILED; }), timer]).then((v) => (timedOut ? BADGE_FAILED : v));
   };
 
   const hasAlerts = typeof body.alerts === 'function';
   const [badgeRaw, alertsRaw] = await Promise.all([run('badge'), run('alerts')]);
 
+  const badgeFailed = badgeRaw === BADGE_FAILED;
   const value = typeof badgeRaw === 'number' && Number.isFinite(badgeRaw) ? badgeRaw : null;
   // 手機首頁與「待處理」讀這份（不論使用者是否已切走，結果都留著）
   const cleaned = hasAlerts ? cleanAlerts(alertsRaw) : null;
   if (auth.getUser()) {
     alertCache[manifest.id] = { items: cleaned === undefined ? null : cleaned, badge: value, failed: cleaned === undefined };
-    if (homeFastOn()) settleFastBadge(manifest.id, value);
+    if (homeFastOn()) { if (value === null && !badgeFailed && typeof body.badge === 'function') clearFastBadge(manifest.id); else settleFastBadge(manifest.id, value); }
     onAlertsChanged();
   }
   if (isStale()) return;
-  if (homeFastOn() && value === null) markStaleOff(manifest.id);
+  if (homeFastOn() && value === null && badgeFailed) markStaleOff(manifest.id);
   if (value !== null) {
     const badgeEl = findDescendant(
       viewContentEl,
