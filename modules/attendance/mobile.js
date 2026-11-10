@@ -71,8 +71,19 @@ async function list(ctx, action, map) {
   return d ? d.items.map(map) : null;
 }
 
+/**
+ * 我送出的：任何有同仁編號的人都能讀自己的（不需要考勤管理權限；manifest openHooks）。
+ * 代轉回 403＝這個帳號沒有同仁編號（系統帳號），沒有東西可列 → 空清單；其他失敗 → null（殼顯示「暫時讀不到」）。
+ */
+async function mine(ctx) {
+  const r = await ctx.api.call('attendance', 'reqMine', {});
+  if (r && r.ok === false && r.status === 403) return [];
+  const d = unwrap(r);
+  return d ? d.items.map(mineItem) : null;
+}
+
 export const mobileHooks = {
-  mine: (ctx) => list(ctx, 'reqMine', mineItem),
+  mine,
   decided: (ctx) => list(ctx, 'reqDecided', decidedItem),
   quick: (ctx) => list(ctx, 'reqPending', quickItem),
   async decide(ctx, id, decision, reason) {

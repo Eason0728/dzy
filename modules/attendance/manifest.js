@@ -15,6 +15,9 @@ export default {
   keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（2026-10-20 Eason；登出管理系統時一起卸載）
   dept: 'hr',
   requires: ['platform.att'],
+  // 沒有「考勤管理」權限的同仁，手機「待處理 → 我送出的」也要看得到自己的考勤申請（2026-11-06 Eason；2026-11-10 補上畫面這一段）：
+  // openHooks 列出的掛鉤，殼對沒有模組權限的人也照跑（只跑這幾支、列出來的項目不給連結）。後端 reqMine 只回本人的單，不需要 platform.att。
+  openHooks: ['mine'],
   // 頁頂分頁＝營運系統出勤核定送來的子分頁（核定工時／申請審核…，依人依店、帶待審數字；platform/tabs.js）；views 只剩一個當進入權限的門（2026-10-20）
   dynamicTabs: true,
   views: [
