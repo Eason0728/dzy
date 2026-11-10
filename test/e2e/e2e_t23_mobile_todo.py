@@ -14,7 +14,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import MockBackend, SHOTS, check, finish, login, start_server
+from common import MockBackend, SHOTS, USERS, check, finish, login, start_server
 
 from playwright.sync_api import sync_playwright
 
@@ -131,6 +131,32 @@ def main():
             login(dk, base, 'admin')
             dk.wait_for_selector('[data-role="module-card"]')
             check(dk.locator('.m-home').count() == 0 and not dk.locator('.m-tabs').is_visible(), '⑥電腦版沒有手機首頁、底部四格')
+
+            # ⑧ 一般同仁（沒有考勤管理權限；2026-11-10 挑錯問題 4）：手機「我送出的」也列出自己的考勤申請，項目不是連結；
+            #    待我處理沒有核准卡片、功能頁沒有考勤管理；只向考勤後端要「我送出的」這一支
+            USERS['e2e-staff'] = {'password': 'e2e-staff-pw', 'user': {'id': 'u-staff', 'name': '測試同仁', 'role': 'staff', 'node': ''}, 'perms': ['platform.self', 'platform.storeops']}
+            st = browser.new_context(viewport={'width': 375, 'height': 812}).new_page()
+            mock.install(st)
+            st.on('pageerror', lambda e: errors.append(str(e)))
+            mock.proxy_calls = []
+            login(st, base, 'e2e-staff')
+            st.wait_for_selector('[data-role="m-tabs"]')
+            st.click('[data-m-tab="todo"]')
+            st.click('[data-m-seg="sent"]')
+            st.wait_for_function("() => { const b = document.querySelector('[data-role=m-sent]'); return b && !/讀取中/.test(b.textContent); }", timeout=15000)
+            st.wait_for_timeout(400)
+            sent2 = st.inner_text('[data-role="m-sent"]')
+            check(st.locator('[data-role="m-sent"] .m-row').count() == 3 and '處理中' in sent2 and '已核准' in sent2 and '退回：那天人手不夠' in sent2, '⑧一般同仁「我送出的」列出自己的 3 張考勤申請：%r' % sent2[:60])
+            check(st.locator('[data-role="m-sent"] .m-row').count() == 3 and st.locator('[data-role="m-sent"] .m-row[data-target]').count() == 0, '⑧列出來的項目不是連結（他沒有考勤管理那一頁）')
+            st.click('[data-m-seg="mine"]')
+            st.wait_for_timeout(1500)
+            check(st.locator('[data-role="quick-card"]').count() == 0, '⑧一般同仁的「待我處理」沒有可核准的卡片')
+            att_calls = [c for c in mock.proxy_calls if c[0] == 'attendance']
+            check(att_calls == [('attendance', 'reqMine')], '⑧一般同仁只向考勤後端要「我送出的」，沒有要待核、已處理、首頁件數：%s' % att_calls)
+            st.click('[data-m-tab="apps"]')
+            st.wait_for_selector('[data-role="m-tile"]')
+            check(st.locator('[data-role="m-tile"][data-module="attendance"]').count() == 0, '⑧一般同仁的功能頁沒有考勤管理')
+            st.screenshot(path=os.path.join(SHOTS, 'm-todo-staff-375.png'))
             browser.close()
         check(not errors, '頁面無 JS 錯誤：%s' % errors[:3])
         check(mock.leaked == [], '真實網路零流出：%s' % mock.leaked)

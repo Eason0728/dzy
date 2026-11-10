@@ -44,7 +44,7 @@ import * as fmt from './fmt.js';
 import { loadManifests } from './registry.js';
 import { DEPARTMENTS, WORK_GROUPS, homeFastAllowed } from './config.js';
 import { readHomeBadges, writeHomeBadges, clearHomeBadges } from './home-cache.js';
-import { reportManifest } from './manifest-check.js';
+import { reportManifest, OPEN_HOOKS } from './manifest-check.js';
 import { render as renderLogin } from './views/login.js';
 import { sanitizeTabs, pickDynamicView, alertViewId } from './tabs.js';
 import { TODO_GROUPS, groupOf, cleanWhen, taipeiToday } from './todo.js';
@@ -1188,20 +1188,29 @@ const ITEM_STATES = { wait: '處理中', ok: '已核准', no: '已退回', off: 
 let todoSeg = 'mine';
 let segToken = 0;
 
-/** 每個有權限、實作了 fnName 的模組各跑一次（8 秒逾時、拋錯當沒有）；回 [{m, body, items}] */
+/** 模組在 manifest 宣告「沒有模組權限的人也照跑」的掛鉤（openHooks，目前只准 mine；manifest-check 會擋其他名字） */
+function hasOpenHook(manifest, fnName) {
+  return OPEN_HOOKS.includes(fnName) && Array.isArray(manifest && manifest.openHooks) && manifest.openHooks.includes(fnName);
+}
+
+/**
+ * 每個有權限、實作了 fnName 的模組各跑一次（8 秒逾時、拋錯當沒有）；回 [{m, body, items, open}]。
+ * 模組宣告了 openHooks 的那一支，沒有模組權限的人也跑（open＝true：列出來的項目不給連結，他進不去那個模組）。
+ */
 async function runModuleHook(fnName) {
-  const out = await Promise.all(permittedModules.map(async (m) => {
+  const mods = allManifests.filter((m) => isModulePermitted(m) || hasOpenHook(m, fnName));
+  const out = await Promise.all(mods.map(async (m) => {
     let body;
     try { body = (await m.entry()).default; } catch (e) { return null; }
     if (!body || typeof body[fnName] !== 'function') return null;
     let raw;
     try { raw = await withTimeout(body[fnName](buildCtx(m, null, {})), 8000); } catch (e) { raw = null; }
-    return { m, body, items: Array.isArray(raw) ? raw : null };
+    return { m, body, items: Array.isArray(raw) ? raw : null, open: !isModulePermitted(m) };
   }));
   return out.filter(Boolean);
 }
 
-function cleanSegItem(m, it) {
+function cleanSegItem(m, it, open) {
   if (!it || typeof it.text !== 'string' || !it.text) return null;
   const state = Object.prototype.hasOwnProperty.call(ITEM_STATES, it.state) ? it.state : '';
   const view = typeof it.view === 'string' ? it.view : null;
@@ -1213,7 +1222,7 @@ function cleanSegItem(m, it) {
     detail: typeof it.detail === 'string' ? it.detail : '',
     state,
     stateText: typeof it.stateText === 'string' && it.stateText ? it.stateText : (ITEM_STATES[state] || ''),
-    target: view ? alertTarget(m, { view, params: it.params }) : null
+    target: view && !open ? alertTarget(m, { view, params: it.params }) : null
   };
 }
 
@@ -1246,7 +1255,7 @@ async function fillSegList(box, fnName, emptyText) {
   let failed = 0;
   for (const r of res) {
     if (!r.items) { failed++; continue; }
-    for (const it of r.items) { const c = cleanSegItem(r.m, it); if (c) rows.push(c); }
+    for (const it of r.items) { const c = cleanSegItem(r.m, it, r.open); if (c) rows.push(c); }
   }
   if (rows.length) box.appendChild(el('div', { class: 'm-list' }, rows.map(segRow)));
   else box.appendChild(el('div', { class: 'm-empty', text: emptyText }));

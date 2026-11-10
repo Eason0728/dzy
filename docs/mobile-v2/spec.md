@@ -30,6 +30,7 @@ Eason 2026-11-06 拍板：手機要「直觀、乾淨、明確知道自己要處
 | 待處理三段 | 待我處理（可以直接核准的卡片＋全部提醒）／我送出的／已處理。模組選填 `mine(ctx)`、`decided(ctx)`、`quick(ctx)`＋`decide(ctx,id,decision,reason)`，殼只畫（`runModuleHook`）。表單簽核實作 mine（apvMine）；考勤實作四支（營運系統新 action，經代轉 ns attendance） |
 | 清單直接核准 | 只開放加班請假申請（考勤）：核准一按就送、退回要寫原因；能不能核由營運系統照考勤管理同一套名單判斷 |
 | 考勤新 action | 平台 Auth.gs／dryrun.js：讀 `reqMine`（任何有 DZY 編號的同仁，只看自己）、`reqDecided`、`reqPending`（要 platform.att）；寫 `reqDecide`（要 platform.att）。營運系統在 `/store/api/svc/att-alerts` 依 body.action 分派 |
+| 沒有模組權限也看得到「我送出的」（2026-11-10 補） | manifest 選填 `openHooks: ['mine']`（`platform/manifest-check.js OPEN_HOOKS`，**只准 mine**；quick／decide／decided／alerts／badge 不准開）。殼的 `runModuleHook` 對沒有模組權限的人也跑這一支，列出來的項目不給連結（他進不去那個模組）。目前只有考勤管理宣告：一般同仁沒有 `platform.att`，原本「我送出的」永遠是空的。模組的 `mine()`：代轉 403 有兩種來源（沒有同仁編號，或考勤通行碼沒設定），前端分不出來，所以只有系統帳號（角色不是同仁、也不是系統管理者，一定沒有同仁編號）的 403 回空清單；同仁、系統管理者的 403 與其他失敗一律回 null（殼顯示「暫時讀不到」）。測試：`test/att-open-hook.test.mjs`、e2e ㉓ 第 ⑧ 段 |
 | 「我」頁標題列 | 姓名＋職稱（小字）（2026-11-06 Eason） |
 | 營運系統單獨開 | 手機底部三格（首頁／功能／我），營運系統 PR |
 

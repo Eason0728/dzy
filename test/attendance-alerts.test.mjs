@@ -54,20 +54,33 @@ await t('api.js 轉接後 alerts 正確（上游信封經 transformResponse_）'
   assert.equal(a.length, 3); assert.equal(a[0].text, '本月還有 3 天沒核定'); assert.equal(a[2].view, 'device');
   assert.equal(await mod.badge(ctx), 5);
 });
-await t('pending 信封', async () => {
+// 2026-11-10（挑錯問題 5，需求「讀不到不可當成 0」）：badge() 讀不到或還在統計時改成丟錯，不再回 null。
+// 殼把「正常回 null」當成沒有待辦、會把上次的件數清掉（shell.js clearFastBadge）；丟錯才會留著舊數字並標「未更新」。
+// 以下三條原本斷言 badge() 回 null，依這個規則改成斷言丟錯；alerts() 的行為不變。
+// 連錯誤訊息一起比：確認是「這一輪沒讀到」這條規則丟的，別的例外（例如程式打錯字的 TypeError）不算通過。
+const NOT_READ = /考勤待辦這一輪沒讀到/;
+await t('pending 信封：alerts 給「統計中」、badge 丟錯（不清掉上次件數）', async () => {
   fakeFetch({ ok: true, data: { items: [], partial: false, asOf: 'x', pending: true } });
   assert.deepEqual(await mod.alerts(ctx), [{ level: 'info', text: '出勤待辦統計中，稍後回首頁就會看到' }]);
-  assert.equal(await mod.badge(ctx), null);
+  await assert.rejects(() => mod.badge(ctx), NOT_READ);
 });
-await t('上游 ok:false → null', async () => {
+await t('上游 ok:false → alerts null、badge 丟錯', async () => {
   fakeFetch({ ok: false, error: 'UPSTREAM', message: 'x' });
-  assert.equal(await mod.alerts(ctx), null); assert.equal(await mod.badge(ctx), null);
+  assert.equal(await mod.alerts(ctx), null);
+  await assert.rejects(() => mod.badge(ctx), NOT_READ);
 });
-await t('代轉 403／網路錯誤 → null', async () => {
+await t('代轉 403／網路錯誤 → alerts null、badge 丟錯', async () => {
   fakeFetch({}, 403);
   assert.equal(await mod.alerts(ctx), null);
+  await assert.rejects(() => mod.badge(ctx), NOT_READ);
   globalThis.fetch = async () => { throw new Error('boom'); };
-  assert.equal(await mod.alerts(ctx), null); assert.equal(await mod.badge(ctx), null);
+  assert.equal(await mod.alerts(ctx), null);
+  await assert.rejects(() => mod.badge(ctx), NOT_READ);
+});
+await t('讀得到、真的沒有待辦：badge 回 0（不是丟錯）', async () => {
+  fakeFetch({ ok: true, data: { items: [], partial: false, asOf: 'x', pending: false } });
+  assert.equal(await mod.badge(ctx), 0);
+  assert.deepEqual(await mod.alerts(ctx), []);
 });
 
 // ---- 值班主管本人的申請找不到上層（2026-10-28，docs/req-upper）：平台後端 attUpperGaps ----

@@ -37,7 +37,13 @@ export default {
     if (out && gaps.length && !(data && data.pending === true)) gaps.forEach((g) => out.push(g));
     return out;
   },
-  async badge(ctx) { return toBadge(await fetchAlerts(ctx)); },
+  // 讀不到或還在統計時丟錯，不回 null（2026-11-10）：殼把「正常回 null」當成沒有待辦、會把上次的件數清掉；
+  // 丟錯才會留著舊數字並標「未更新」（需求：讀不到不可當成 0）。讀得到、真的沒有待辦時回 0。
+  async badge(ctx) {
+    const n = toBadge(await fetchAlerts(ctx));
+    if (n === null) throw new Error('考勤待辦這一輪沒讀到');
+    return n;
+  },
   // 手機「待處理」：我送出的、我核過的、可以直接核准（2026-11-06）
   ...mobileHooks
 };
