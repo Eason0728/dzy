@@ -43,7 +43,7 @@
 import { BACKENDS, homeFastAllowed } from './config.js';
 import { getUser, can, getToken, getAuditScope } from './auth.js';
 import { isDryRun, isReadAction, notifyDryRun, BATCH_READ_ACTIONS } from './dryrun.js';
-import { routeUrl, routeUrlForNs, oldUrl, isNewHostUrl, markGatewayDown } from './route.js';
+import { routeUrl, routeUrlForNs, oldUrl, isNewHostUrl, markGatewayDown, confirmGatewayDown } from './route.js';
 
 // 代轉逾時 35 秒：mini 對舊後端等 30 秒，再留 5 秒餘裕（PROXY.md 第 3 節）
 const PROXY_TIMEOUT_MS = 35000;
@@ -298,7 +298,8 @@ async function trySend_(url, body, ms) {
   try {
     res = await postJson_(url, body, ms);
   } catch (err) {
-    return { err, gwFail: !!(err && err.name !== 'AbortError' && (err instanceof TypeError || err.name === 'TypeError')) };
+    const netErr = !!(err && err.name !== 'AbortError' && (err instanceof TypeError || err.name === 'TypeError'));
+    return { err, gwFail: netErr, netErr };
   }
   let gwFail = false;
   if (res && res.status === 502) {
@@ -324,8 +325,9 @@ async function callRaw_(backendId, action, payload, tokenOverride) {
   // 櫃台故障自動改道（2026-11-10）：打新主機失敗 → 設記號（5 分鐘內之後的呼叫都走舊路）；
   // 讀取立刻改用舊主機重送一次；寫入不重送（可能已經送到），照原本錯誤訊息回畫面
   if (r.gwFail && isNewHostUrl(url)) {
-    markGatewayDown();
-    if (isReadAction(backendId, action, payload)) r = await trySend_(oldUrl(url), body, ms);
+    // 櫃台回 502 GATEWAY＝確定故障；網路錯誤要先確認（可能只是使用者重新整理中斷了請求，或一瞬間的網路抖動）
+    const down = r.netErr ? await confirmGatewayDown() : (markGatewayDown(), true);
+    if (isReadAction(backendId, action, payload)) r = await trySend_(down ? oldUrl(url) : url, body, ms);
   }
   if (r.err) {
     const err = r.err;

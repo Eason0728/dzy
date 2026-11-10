@@ -19,16 +19,33 @@ export const GW_DOWN_MS = 5 * 60 * 1000;
 export const OLD_ONLY_NS = ['payroll'];
 
 let memDown = 0;          // sessionStorage 不可用時的記憶體備援
+// 頁面正在離開（重新整理、換頁）時瀏覽器會中斷還沒回來的請求，丟出跟斷網一樣的 TypeError：這時一律不判定櫃台故障（2026-11-10 正式站實測誤判）
+let leaving = false;
+try { addEventListener('pagehide', () => { leaving = true; }); addEventListener('beforeunload', () => { leaving = true; }); } catch (e) { /* node 測試沒有 window */ }
+const realProbe = async () => {
+  try {
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 2500) : null;
+    const r = await fetch(MINI_HOST_NEW + '/__gw/ping', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
+    if (timer) clearTimeout(timer);
+    return !!r && r.ok;
+  } catch (e) { return false; }
+};
+let probe = realProbe;
 let gatewayOnOverride = null;
 let nowFn = () => Date.now();
 
 /** 測試用：覆寫總開關（true／false），其他值還原成 config.js */
 export function __setGatewayOn(v) { gatewayOnOverride = (v === true || v === false) ? v : null; }
+/** 測試用：覆寫「櫃台還活著嗎」的探測（回 true＝活著） */
+export function __setProbe(fn) { probe = (typeof fn === 'function') ? fn : realProbe; }
+/** 測試用：模擬頁面正在離開 */
+export function __setLeaving(v) { leaving = !!v; }
 /** 測試用：覆寫時鐘 */
 export function __setNow(fn) { nowFn = (typeof fn === 'function') ? fn : () => Date.now(); }
 /** 測試用：清掉故障記號 */
 export function __resetRoute() {
-  memDown = 0; gatewayOnOverride = null; nowFn = () => Date.now();
+  memDown = 0; gatewayOnOverride = null; nowFn = () => Date.now(); leaving = false;
   try { sessionStorage.removeItem(GW_DOWN_KEY); } catch (e) { /* ignore */ }
 }
 
@@ -39,6 +56,18 @@ export function markGatewayDown() {
   const t = nowFn();
   memDown = t;
   try { sessionStorage.setItem(GW_DOWN_KEY, String(t)); } catch (e) { /* 沒有 sessionStorage 就只靠記憶體 */ }
+}
+
+/**
+ * 網路錯誤後確認櫃台是不是真的壞了：頁面正在離開就不算；否則 2.5 秒內打一次 /__gw/ping，打不通才設記號。
+ * 回 true＝確認故障（已設記號）。櫃台自己回的 502 GATEWAY 不用確認，直接 markGatewayDown。
+ */
+export async function confirmGatewayDown() {
+  if (leaving) return false;
+  const alive = await probe();
+  if (alive || leaving) return false;
+  markGatewayDown();
+  return true;
 }
 
 /** 故障記號是否有效 */
