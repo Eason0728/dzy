@@ -86,24 +86,25 @@ const reads = (n) => ['staffList', 'clockAlerts', 'regionList', 'evMe', 'apvTodo
 {
   const ss = new MemoryStorage();
   const loc = (o) => Object.assign({ hostname: 'dzy.mozhuting.com', port: '', search: '' }, o);
-  ok(HOME_FAST === false, '1: config.js HOME_FAST 預設 false');
-  ok(homeFastAllowed(loc(), ss) === false, '1: 正式網址、沒帶參數 → false');
+  ok(HOME_FAST === true, '1: config.js HOME_FAST 已對全公司開（2026-11-10）');
+  ok(homeFastAllowed(loc(), ss) === true, '1: 正式網址、沒帶參數 → 照總開關 true');
   ok(homeFastAllowed(loc({ hostname: 'localhost', port: '8862' }), ss) === true, '1: localhost:8862 → true');
   ok(homeFastAllowed(loc({ hostname: '127.0.0.1', port: '8862' }), ss) === true, '1: 127.0.0.1:8862 → true');
-  ok(homeFastAllowed(loc({ hostname: 'localhost', port: '8777' }), ss) === false, '1: localhost 其他埠 → false');
-  ok(homeFastAllowed(loc({ hostname: 'evil.localhost.example.com', port: '8862' }), ss) === false, '1: 假冒的主機名 → false');
+  ok(homeFastAllowed(loc({ hostname: 'localhost', port: '8777' }), ss) === true, '1: localhost 其他埠 → 照總開關 true');
+  ok(homeFastAllowed(loc({ hostname: 'evil.localhost.example.com', port: '8862' }), ss) === true, '1: 其他主機 → 照總開關 true');
   ok(ss.ops.length === 0 || ss.ops.every((o) => o[0] === 'get'), '1: 以上都沒寫 sessionStorage');
   ok(homeFastAllowed(loc({ search: '?homefast=1' }), ss) === true, '1: ?homefast=1 → true');
   ok(ss.getItem('dzy.homefast') === '1', '1: ?homefast=1 記進 sessionStorage');
   ok(homeFastAllowed(loc({ search: '' }), ss) === true, '1: 之後網址沒帶參數（換頁、登出重載）仍 true（讀 sessionStorage）');
   ok(homeFastAllowed(loc({ search: '?x=1&homefast=1' }), new MemoryStorage()) === true, '1: 參數不在第一個也認');
-  ok(homeFastAllowed(loc({ search: '?homefast=0' }), ss) === false && ss.getItem('dzy.homefast') === null, '1: ?homefast=0 → false 並清掉記號');
-  ok(homeFastAllowed(loc({ search: '?homefast=2' }), new MemoryStorage()) === false, '1: ?homefast=2（不是 1）→ false');
-  ok(homeFastAllowed(loc({ search: '?nothomefast=1' }), new MemoryStorage()) === false, '1: 名稱只是結尾相同 → false');
+  ok(homeFastAllowed(loc({ search: '?homefast=0' }), ss) === false && ss.getItem('dzy.homefast') === '0', '1: ?homefast=0 → false 並記住這個分頁關');
+  ok(homeFastAllowed(loc({ search: '' }), ss) === false, '1: 之後網址沒帶參數仍 false（這個分頁關掉了）');
+  ok(homeFastAllowed(loc({ search: '?homefast=2' }), new MemoryStorage()) === true, '1: ?homefast=2（不認得）→ 照總開關 true');
+  ok(homeFastAllowed(loc({ search: '?nothomefast=0' }), new MemoryStorage()) === true, '1: 名稱只是結尾相同 → 不當成關閉');
   const broken = { getItem() { throw new Error('locked'); }, setItem() { throw new Error('locked'); }, removeItem() { throw new Error('locked'); } };
-  ok(homeFastAllowed(loc(), broken) === false, '1: sessionStorage 被鎖 → false，不拋例外');
+  ok(homeFastAllowed(loc(), broken) === true, '1: sessionStorage 被鎖 → 照總開關，不拋例外');
   ok(homeFastAllowed(loc({ search: '?homefast=1' }), broken) === true, '1: sessionStorage 被鎖但網址帶 ?homefast=1 → 這次網址有效');
-  ok(homeFastAllowed(null, null) === false, '1: 沒有 location（node）→ false');
+  ok(homeFastAllowed(null, null) === true, '1: 沒有 location（node）→ 照總開關');
 }
 
 // ============================================================
