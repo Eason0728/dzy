@@ -95,7 +95,7 @@ def main():
             browser = p.chromium.launch()
 
             # ---------- ① 關閉（基準） ----------
-            ctx, page, mock, snap_off, errs = run_home(browser, base)
+            ctx, page, mock, snap_off, errs = run_home(browser, base, '?homefast=0')
             plat = [a for b, a in mock.calls if b == 'platform']
             reads_off = [a for a in plat if a in allow]
             proxy_off = list(getattr(mock, 'proxy_calls', []))
@@ -103,7 +103,7 @@ def main():
             check(len(reads_off) >= 10, '①關閉：白名單讀取各自一筆（基準 %d 筆：%s）' % (len(reads_off), dict(collections.Counter(reads_off))))
             st = storage_dump(page)
             check(not any('home_badges' in k for k in st['local']), '①關閉：localStorage 沒有 home_badges')
-            check(st['session'] == {}, '①關閉：sessionStorage 空的：%s' % st['session'])
+            check(st['session'] == {'dzy.homefast': '0'}, '①關閉（?homefast=0）：sessionStorage 只記這個分頁關：%s' % st['session'])
             check(errs == [], '①關閉：無 pageerror：%s' % errs)
             print('基準 platform 請求（含 login、ssoTicket）：%d；白名單讀取 %d；proxy %d；合計首頁後端請求 %d'
                   % (len(plat), len(reads_off), len(proxy_off), len(plat) - 1 + len(proxy_off)))
@@ -299,7 +299,7 @@ def main():
             page = ctx.new_page()
             m10 = MockBackend(base)
             m10.install(page)
-            login(page, base, 'admin')
+            login(page, base, 'admin', '?homefast=0')
             home_snapshot(page)
             page.evaluate("() => localStorage.setItem('dzy.u.u-admin.home_badges', JSON.stringify({v:1, at: Date.now(), n: {'audit-stock': 3}}))")
             page.evaluate("() => localStorage.setItem('dzy.u.u-other.home_badges', '{}')")
