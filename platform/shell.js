@@ -37,12 +37,13 @@
 'use strict';
 
 import * as auth from './auth.js';
-import { call as backendCall, setSessionExpiredHandler } from './api.js';
+import { call as backendCall, setSessionExpiredHandler, beginHomeBatch } from './api.js';
 import { setDryRunNotifier } from './dryrun.js';
 import * as ui from './ui.js';
 import * as fmt from './fmt.js';
 import { loadManifests } from './registry.js';
-import { DEPARTMENTS, WORK_GROUPS } from './config.js';
+import { DEPARTMENTS, WORK_GROUPS, homeFastAllowed } from './config.js';
+import { readHomeBadges, writeHomeBadges, clearHomeBadges } from './home-cache.js';
 import { reportManifest } from './manifest-check.js';
 import { render as renderLogin } from './views/login.js';
 import { sanitizeTabs, pickDynamicView, alertViewId } from './tabs.js';
@@ -51,6 +52,7 @@ import { preloadModules, registerDeviceCache } from './preload.js';
 
 /** spec §4.6：badge() 逾時上限 5 秒，逾時視同 null（不得讓首頁壞掉）。 */
 const BADGE_TIMEOUT_MS = 5000;
+const BADGE_FAILED = Symbol('badge-failed');
 
 // ============================================================
 // 模組層級狀態
@@ -100,6 +102,27 @@ let currentShellPage = null;
 let lastShellPage = 'home';
 /** 各模組 badge()／alerts() 的最近一次結果：moduleId → {items, badge, failed}（首頁與「待處理」共用） */
 const alertCache = {};
+
+// ------------------------------------------------------------
+// 首頁少等（2026-11-10，開關 config.js HOME_FAST／?homefast=1）：先顯示「上次件數」（灰色、更新中），最新資料到了就換掉。
+// 只存 badge 數字（platform/home-cache.js），絕不存提醒文字。開關關閉時下面每一處都不執行（不讀不寫 localStorage）。
+// ------------------------------------------------------------
+function homeFastOn() {
+  try { return homeFastAllowed(); } catch (e) { return false; }
+}
+/** 這次登入已經拿到最新 badge 的模組（這些不再用上次件數蓋） */
+const freshBadge = new Set();
+/** 目前畫面上還在用「上次件數」顯示的模組：moduleId → 件數 */
+const staleBadge = {};
+/** 本次登入累積的最新件數（寫回 localStorage 用） */
+const latestCounts = {};
+const STALE_TITLE = '上次的件數，更新中';
+const STALE_OFF_TITLE = '上次的件數，這次沒有更新到';
+let latestBaseLoaded = false;
+
+function homeStorage() {
+  try { return window.localStorage; } catch (e) { return null; }
+}
 
 // ============================================================
 // 小工具：DOM 建構（不用 innerHTML 塞結構——需要能被查、能被點的節點一律用
@@ -384,6 +407,75 @@ function cleanAlerts(raw) {
     }));
 }
 
+/** 最新件數到了：記下來（寫回 localStorage）、取消「上次件數」的灰色狀態（卡片由呼叫端換字，側邊欄在這裡換） */
+function settleFastBadge(moduleId, value) {
+  // 只有拿到數字才更新：算不出來（null）時舊數字原樣保留（畫面與 localStorage 都是），由 markStaleOff 標成「未更新」
+  if (!(typeof value === 'number' && Number.isFinite(value))) return;
+  const user = auth.getUser();
+  if (!latestBaseLoaded) {   // 以上次內容為底，不會因為這輪還有模組沒回來就把它們的舊數字寫掉
+    latestBaseLoaded = true;
+    const base = readHomeBadges(homeStorage(), user && user.id);
+    for (const k of Object.keys(base)) if (!(k in latestCounts)) latestCounts[k] = base[k];
+  }
+  freshBadge.add(moduleId);
+  latestCounts[moduleId] = value;
+  writeHomeBadges(homeStorage(), user && user.id, latestCounts);
+  if (Object.prototype.hasOwnProperty.call(staleBadge, moduleId)) {
+    delete staleBadge[moduleId];
+    setNavBadge(moduleId, value > 0 ? value : 0);
+  }
+}
+
+/** 模組正常回 null＝沒有待辦：畫面與 localStorage 的舊數字都拿掉，不留誤導的「未更新」 */
+function clearFastBadge(moduleId) {
+  const user = auth.getUser();
+  if (!latestBaseLoaded) {
+    latestBaseLoaded = true;
+    const base = readHomeBadges(homeStorage(), user && user.id);
+    for (const k of Object.keys(base)) if (!(k in latestCounts)) latestCounts[k] = base[k];
+  }
+  delete latestCounts[moduleId];
+  freshBadge.add(moduleId);
+  writeHomeBadges(homeStorage(), user && user.id, latestCounts);
+  if (!Object.prototype.hasOwnProperty.call(staleBadge, moduleId)) return;
+  delete staleBadge[moduleId];
+  const b = viewContentEl && findDescendant(
+    viewContentEl,
+    (n) => n.getAttribute && n.getAttribute('data-role') === 'badge' && n.getAttribute('data-module') === moduleId
+  );
+  if (b) { b.textContent = ''; b.className = 'module-badge'; b.removeAttribute('title'); }
+  setNavBadge(moduleId, 0);
+}
+
+/** 這一輪沒拿到這個模組的數字（逾時、拋錯、模組載入失敗）：舊數字留著，灰色改標「未更新」，不再顯示「更新中」 */
+function markStaleOff(moduleId) {
+  if (!Object.prototype.hasOwnProperty.call(staleBadge, moduleId)) return;
+  const b = viewContentEl && findDescendant(
+    viewContentEl,
+    (n) => n.getAttribute && n.getAttribute('data-role') === 'badge' && n.getAttribute('data-module') === moduleId
+  );
+  if (b) { b.className = 'module-badge stale off'; b.setAttribute('title', STALE_OFF_TITLE); }
+}
+
+/** 開首頁（或直接進「功能」「待處理」）時，先把上次件數放上去：還沒拿到最新結果的模組才放，有數字才放 */
+function applyLastBadges() {
+  if (!homeFastOn()) return;
+  const user = auth.getUser();
+  const last = readHomeBadges(homeStorage(), user && user.id);
+  for (const m of permittedModules) {
+    const n = last[m.id];
+    if (freshBadge.has(m.id) || !(n > 0)) continue;
+    staleBadge[m.id] = n;
+    setNavBadge(m.id, n, true);
+  }
+}
+
+/** 首頁讀取：開始到全部結束之間才併請求（api.beginHomeBatch）；開關關閉時 api 端不併 */
+function runHomeLoads(isStale) {
+  const end = beginHomeBatch();
+  Promise.all(permittedModules.map((m) => loadHomeGroup(m, isStale).catch(() => {}))).then(end, end);
+}
+
 /**
  * 首頁每一組：載模組本體 → 並行跑 badge() 與（選填的）alerts()，各自 5 秒逾時、拋錯視同算不出來
  * （spec §4.6）。badge 數字寫進卡片與側邊欄；alerts 畫成提醒列。
@@ -395,10 +487,11 @@ async function loadHomeGroup(manifest, isStale) {
     body = modBody && modBody.default;
   } catch (err) {
     console.error(`[shell] 模組本體載入失敗，首頁這組略過：${manifest.id}`, err);
+    if (homeFastOn()) markStaleOff(manifest.id);
     if (!isStale()) fillGroup(manifest, null, null, true);
     return;
   }
-  if (!body) return;
+  if (!body) { if (homeFastOn()) markStaleOff(manifest.id); return; }
 
   const run = (fnName) => {
     if (typeof body[fnName] !== 'function') return Promise.resolve(undefined);
@@ -407,29 +500,39 @@ async function loadHomeGroup(manifest, isStale) {
       raw = body[fnName](buildCtx(manifest, null, {}));
     } catch (err) {
       console.error(`[shell] ${fnName}() 拋錯：${manifest.id}`, err);
-      return Promise.resolve(null);
+      return Promise.resolve(fnName === 'badge' ? BADGE_FAILED : null);
     }
-    return withTimeout(raw, BADGE_TIMEOUT_MS);
+    if (fnName !== 'badge') return withTimeout(raw, BADGE_TIMEOUT_MS);
+    // 逾時、拋錯才算「這輪沒讀到」（舊數字留著標未更新）；模組正常回 null＝沒有待辦，舊數字要拿掉
+    let timedOut = false;
+    const timer = new Promise((res) => setTimeout(() => { timedOut = true; res(BADGE_FAILED); }, BADGE_TIMEOUT_MS));
+    return Promise.race([Promise.resolve(raw).catch((err) => { console.error(`[shell] badge() 失敗：${manifest.id}`, err); return BADGE_FAILED; }), timer]).then((v) => (timedOut ? BADGE_FAILED : v));
   };
 
   const hasAlerts = typeof body.alerts === 'function';
   const [badgeRaw, alertsRaw] = await Promise.all([run('badge'), run('alerts')]);
 
+  const badgeFailed = badgeRaw === BADGE_FAILED;
   const value = typeof badgeRaw === 'number' && Number.isFinite(badgeRaw) ? badgeRaw : null;
   // 手機首頁與「待處理」讀這份（不論使用者是否已切走，結果都留著）
   const cleaned = hasAlerts ? cleanAlerts(alertsRaw) : null;
   if (auth.getUser()) {
     alertCache[manifest.id] = { items: cleaned === undefined ? null : cleaned, badge: value, failed: cleaned === undefined };
+    if (homeFastOn()) { if (value === null && !badgeFailed && typeof body.badge === 'function') clearFastBadge(manifest.id); else settleFastBadge(manifest.id, value); }
     onAlertsChanged();
   }
   if (isStale()) return;
+  if (homeFastOn() && value === null && badgeFailed) markStaleOff(manifest.id);
   if (value !== null) {
     const badgeEl = findDescendant(
       viewContentEl,
       (n) => n.getAttribute && n.getAttribute('data-role') === 'badge' && n.getAttribute('data-module') === manifest.id
     );
     // 0 不顯示（照營運系統：沒有待辦就不掛數字）
-    if (badgeEl) badgeEl.textContent = value > 0 ? String(value) : '';
+    if (badgeEl) {
+      badgeEl.textContent = value > 0 ? String(value) : '';
+      if (badgeEl.className !== 'module-badge') { badgeEl.className = 'module-badge'; badgeEl.removeAttribute('title'); }
+    }
     setNavBadge(manifest.id, value);
   }
 
@@ -514,6 +617,7 @@ async function destroyAllParked() {
 /** 角色代號 → 中文（spec §4.3 平台層的角色表；查不到就顯示原代號，不讓畫面壞掉）。 */
 /** 各模組最近一次 badge() 的數字：側邊欄每次切頁都會重畫，要靠這份補回件數。 */
 const navBadgeCache = {};
+const navBadgeStale = {};
 /** 側邊欄部門的展開狀態：使用者點過的才記（true／false）；沒點過＝有功能就展開、空的收合 */
 const deptOpenState = new Map();
 
@@ -593,7 +697,7 @@ function renderTopNav() {
     const items = el('div', { class: 'nav-dept-items' }, mods.map(moduleItem));
     sideNavEl.appendChild(el('div', { class: `nav-dept${open ? ' is-open' : ''}`, 'data-dept': d.id }, [head, items]));
   }
-  for (const m of permittedModules) if (navBadgeCache[m.id]) setNavBadge(m.id, navBadgeCache[m.id]);
+  for (const m of permittedModules) if (navBadgeCache[m.id]) setNavBadge(m.id, navBadgeCache[m.id], navBadgeStale[m.id]);
 
   const user = auth.getUser() || {};
   clearChildren(sideUserEl);
@@ -616,14 +720,17 @@ function renderTopNav() {
 }
 
 /** 側邊欄模組名稱右側的待辦件數（與首頁卡片同一個 badge() 結果；0／沒數字不顯示）。 */
-function setNavBadge(moduleId, value) {
+function setNavBadge(moduleId, value, stale) {
   navBadgeCache[moduleId] = value;
+  navBadgeStale[moduleId] = !!stale;
   const item = findDescendant(sideNavEl, (n) => n.getAttribute && n.getAttribute('data-nav') === moduleId);
   if (!item) return;
-  const old = findDescendant(item, (n) => n.className === 'badge');
+  const old = findDescendant(item, (n) => n.className === 'badge' || n.className === 'badge stale');
   if (old) item.removeChild(old);
   if (!value) return;
-  item.appendChild(el('i', { class: 'badge', text: String(value), 'aria-label': `${value} 件待處理` }));
+  item.appendChild(stale
+    ? el('i', { class: 'badge stale', text: String(value), title: STALE_TITLE, 'aria-label': `上次 ${value} 件待處理，更新中` })
+    : el('i', { class: 'badge', text: String(value), 'aria-label': `${value} 件待處理` }));
 }
 
 function renderViewNav(manifest) {
@@ -664,6 +771,7 @@ function renderHomeCards() {
   const isStale = () => tok !== homeToken || currentModule !== null;
   // 手機（≤860px）：先畫「今天要處理的事＋常用」，電腦版卡片接在後面、由 CSS 藏起來（.d-only，資料與 e2e 共用）。
   // 電腦版不畫手機區塊：藏起來的那份排在前面，用文字找元素時會先找到看不見的（2026-11-06 e2e 踩過）。
+  if (homeFastOn()) applyLastBadges();   // 手機首頁的常用磚第一次畫就要有上次件數
   const mobile = isMobileWidth();
   if (mobile) viewContentEl.appendChild(renderMobileHome());
   const wrap = el('div', { class: mobile ? 'todo-groups d-only' : 'todo-groups', 'aria-live': 'polite' });
@@ -687,8 +795,15 @@ function renderHomeCards() {
       'data-target': target
     }, [head, list]));
   }
+  if (homeFastOn()) {
+    for (const m of permittedModules) {
+      if (!Object.prototype.hasOwnProperty.call(staleBadge, m.id)) continue;
+      const b = wrap.querySelector(`[data-role="badge"][data-module="${m.id}"]`);
+      if (b) { b.textContent = String(staleBadge[m.id]); b.className = 'module-badge stale'; b.setAttribute('title', STALE_TITLE); }
+    }
+  }
   preloadModules(permittedModules.map((m) => m.id));
-  for (const m of permittedModules) loadHomeGroup(m, isStale);
+  runHomeLoads(isStale);
 }
 
 // ============================================================
@@ -866,7 +981,10 @@ function fillTodoBox(box) {
 }
 
 function moduleTile(m) {
-  const n = tileCount(m);
+  let n = tileCount(m);
+  // 首頁少等：最新結果還沒回來時，先用上次件數（灰色）；staleBadge 在開關關閉時永遠是空的
+  const stale = !alertCache[m.id] && staleBadge[m.id] > 0;
+  if (stale) n = staleBadge[m.id];
   return el('button', {
     type: 'button',
     class: 'm-tile',
@@ -874,7 +992,7 @@ function moduleTile(m) {
     'data-module': m.id,
     'data-target': moduleHomeTarget(m) || '#/home'
   }, [
-    n ? el('i', { class: 'badge', text: String(n), 'aria-label': `${n} 件待處理` }) : null,
+    n ? el('i', { class: stale ? 'badge stale' : 'badge', text: String(n), title: stale ? STALE_TITLE : null, 'aria-label': stale ? `上次 ${n} 件待處理，更新中` : `${n} 件待處理` }) : null,
     el('img', { src: `assets/icons/${m.icon}.png`, alt: '' }),
     el('span', { text: m.name })
   ]);
@@ -976,8 +1094,9 @@ function onAlertsChanged() {
 
 /** 「功能」「待處理」頁直接進來時（沒先經過首頁）也要有數字：重讀全部模組的提醒 */
 function refreshAlerts() {
+  applyLastBadges();
   preloadModules(permittedModules.map((m) => m.id));
-  for (const m of permittedModules) loadHomeGroup(m, () => true);
+  runHomeLoads(() => true);
 }
 
 /** 編輯常用：打勾放進常用（最多 6 個）、▲▼ 調順序；「恢復自動」＝回到最近用過的 */
@@ -1681,6 +1800,8 @@ async function doLogout(opts) {
   await destroyAllParked();   // 保留中的嵌入頁一起卸載（營運系統等會收到登出）
   // 主動登出與被踢登出（代轉 401）都先清本人的表單簽核草稿（spec approvals §14.7「登出時清掉」；稽核草稿刻意保留，見 auth.purgeLogoutDrafts；2026-10-29 對抗驗證 A）
   try { auth.purgeLogoutDrafts(window.localStorage, leavingUser && leavingUser.id); } catch (e) { /* 共用電腦 storage 被鎖也不擋登出 */ }
+  // 首頁少等的「上次件數」也在登出時清掉（只有開關開著才碰 localStorage）
+  clearHomeBadges(homeStorage(), leavingUser && leavingUser.id);   // 不管開關：登出／登入過期都移除本人的上次件數
   if (expired) {
     auth.expireLocal();
   } else {
@@ -1693,6 +1814,11 @@ async function doLogout(opts) {
   permittedModules = [];
   for (const k of Object.keys(navBadgeCache)) delete navBadgeCache[k];
   for (const k of Object.keys(alertCache)) delete alertCache[k];
+  for (const k of Object.keys(navBadgeStale)) delete navBadgeStale[k];
+  for (const k of Object.keys(staleBadge)) delete staleBadge[k];
+  for (const k of Object.keys(latestCounts)) delete latestCounts[k];
+  freshBadge.clear();
+  latestBaseLoaded = false;
   appsQuery = '';
   todoSeg = 'mine';
   deptOpenState.clear();

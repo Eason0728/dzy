@@ -40,9 +40,9 @@
 
 'use strict';
 
-import { BACKENDS } from './config.js';
+import { BACKENDS, homeFastAllowed } from './config.js';
 import { getUser, can, getToken, getAuditScope } from './auth.js';
-import { isDryRun, isReadAction, notifyDryRun } from './dryrun.js';
+import { isDryRun, isReadAction, notifyDryRun, BATCH_READ_ACTIONS } from './dryrun.js';
 
 // 代轉逾時 35 秒：mini 對舊後端等 30 秒，再留 5 秒餘裕（PROXY.md 第 3 節）
 const PROXY_TIMEOUT_MS = 35000;
@@ -80,8 +80,9 @@ export function proxyUrl() {
 /** 代轉 ns 的 payload 頂層一律剝除的欄位（見 buildRequestBody_ 說明） */
 const PROXY_STRIP_FIELDS = ['operator', 'adminKey', 'admin_key', 'pin_master', 'key', 'level', 'scope', 'account'];
 
-function buildRequestBody_(backendId, action, payload) {
+function buildRequestBody_(backendId, action, payload, tokenOverride) {
   const p = (payload && typeof payload === 'object') ? payload : {};
+  const tok = (typeof tokenOverride === 'string') ? tokenOverride : getToken();   // 併請求時要用「排隊當下」的身分，不是送出當下
 
   if (backendId === 'platform') {
     // spec §4.8 的殼：{action, token, payload}。
@@ -89,7 +90,7 @@ function buildRequestBody_(backendId, action, payload) {
     // 不採信呼叫端 payload 裡夾帶的同名欄位。呼叫端若還是塞了 payload.token，一律丟棄。
     const rest = { ...p };
     delete rest.token;
-    return { action, token: getToken(), payload: rest };
+    return { action, token: tok, payload: rest };
   }
 
   // audit／dorm（2026-10-12 代轉）：{token, ns, action, payload}。
@@ -106,7 +107,7 @@ function buildRequestBody_(backendId, action, payload) {
   // 2026-10-29 第二道防線（資料帶入測試）：mini 代轉層會依登入身分自己補 operator／level／account 等影子欄位、各後端金鑰
   // （adminKey／pin_master／key／scope）也只在 mini 帶。瀏覽器端沒有任何模組合法需要送這些頂層欄位（grep 過 modules/），一律剝除；巢狀同名欄位不動。
   PROXY_STRIP_FIELDS.forEach((k) => { delete rest[k]; });
-  return { token: getToken(), ns: backendId, action, payload: rest };
+  return { token: tok, ns: backendId, action, payload: rest };
 }
 
 /** 帶逾時的 POST；逾時用 AbortController 中斷，fetch 會丟出 name==='AbortError' 的例外 */
@@ -269,20 +270,32 @@ const PROXY_STATUS_MSG = {
  * @returns {Promise<{ok:true,data:object}|{ok:false,error:string}>}
  */
 export async function call(backendId, action, payload = {}) {
-  const viaProxy = PROXY_NS[backendId] === true;
-  const url = viaProxy ? proxyUrl() : BACKENDS[backendId];
+  const url = (PROXY_NS[backendId] === true) ? proxyUrl() : BACKENDS[backendId];
   if (!url) {
     return { ok: false, error: `後端尚未設定：${backendId}` };
   }
-
   // 試跑模式（?dryrun=1）中央攔截：白名單（platform/dryrun.js）外的 action 一律不送出。
   // 拿不準的當寫入擋（往關的方向失敗）。回 ok:true 讓畫面流程走完，data.dryRun 供模組辨識。
   if (isDryRun() && !isReadAction(backendId, action, payload)) {
     notifyDryRun(backendId, action, payload);
     return { ok: true, dryrun: true, data: { dryRun: true, action } };
   }
+  // 首頁少等：同一輪（約 80 毫秒）發出的白名單 platform 讀取併成一次 batchRead。寫入永遠不併；開關關閉時這段完全不執行
+  if (backendId === 'platform' && BATCH_READ_ACTIONS.indexOf(action) !== -1 && batchingOn_()) {
+    const tok = getToken();
+    if (tok) return enqueueBatch_(action, payload, tok);
+  }
+  return callRaw_(backendId, action, payload);
+}
 
-  const body = buildRequestBody_(backendId, action, payload);
+async function callRaw_(backendId, action, payload, tokenOverride) {
+  const viaProxy = PROXY_NS[backendId] === true;
+  const url = viaProxy ? proxyUrl() : BACKENDS[backendId];
+  if (!url) {
+    return { ok: false, error: `後端尚未設定：${backendId}` };
+  }
+
+  const body = buildRequestBody_(backendId, action, payload, tokenOverride);
 
   let res;
   try {
@@ -310,4 +323,117 @@ export async function call(backendId, action, payload = {}) {
   }
 
   return transformResponse_(backendId, json);
+}
+
+
+// ============================================================
+// 首頁少等：白名單讀取併成一次 batchRead（2026-11-10）
+// 後端 Mac mini 同一系統一次只處理一筆、手機到 Mac mini 每趟 1.3～2.5 秒，所以把同一輪的讀取併成一趟。
+// 規則：只併 platform 的 BATCH_READ_ACTIONS（platform/dryrun.js，與後端 CODE_BATCH_READ_ACTIONS 逐字一致）；
+// 寫入、代轉 ns 永遠不併；每筆在後端各自驗權限；整批失敗（逾時、舊後端不認得、格式不符）就退回逐筆送，
+// 舊後端明說不支援時暫停併請求 5 分鐘（暫時性錯誤不停）。呼叫端與模組程式完全不用改。
+// ============================================================
+
+const BATCH_WINDOW_MS = 80;   // 實測（e2e mock，admin 首頁）：30ms 裂成 3 批、80ms 只要 1 批；多等 50ms 換少兩趟 1.3～2.5 秒的往返
+const BATCH_MAX_ITEMS = 6;   // 每批最多 6 筆：Mac mini 一次處理一筆，整包太大會讓 badge() 5 秒逾時、全有全無；後端上限仍是 20
+const BATCH_COOLDOWN_MS = 5 * 60 * 1000;
+const BATCH_UNKNOWN_ACTION = '不支援的操作';   // 同 Code.gs CODE_MSG_UNKNOWN_ACTION：某筆被後端當白名單外 → 該筆退回單筆送（前後端版本差一點時不丟資料）
+
+let homeFastOverride = null;
+let batchOffUntil = 0;
+let homeBatchDepth = 0;   // >0 才併：只有首頁載入期間（shell 呼叫 beginHomeBatch）；模組內頁的讀取照舊立刻送
+/** token → { items: Map(key → {action, payload, waiters:[resolve]}), timer } */
+const batchQueues = new Map();
+
+/** 測試用：強制開／關首頁少等（true／false）；傳其他值還原成看開關。同時清掉排隊與冷卻。 */
+export function __setHomeFast(v) {
+  homeFastOverride = (v === true || v === false) ? v : null;
+  batchOffUntil = 0;
+  homeBatchDepth = 0;
+  for (const q of batchQueues.values()) clearTimeout(q.timer);
+  batchQueues.clear();
+}
+
+/**
+ * shell 在首頁讀取開始時呼叫，回傳「結束」函式（可重複呼叫）。期間才會併請求；最久 30 秒自動結束（保險）。
+ */
+export function beginHomeBatch() {
+  homeBatchDepth++;
+  let done = false;
+  const end = () => { if (done) return; done = true; clearTimeout(t); if (homeBatchDepth > 0) homeBatchDepth--; };
+  const t = setTimeout(end, 30000);
+  return end;
+}
+
+function batchingOn_() {
+  if (homeBatchDepth <= 0) return false;
+  if (Date.now() < batchOffUntil) return false;
+  if (homeFastOverride !== null) return homeFastOverride;
+  try { return homeFastAllowed(); } catch (e) { return false; }
+}
+
+function cloneJson_(v) {
+  try { return JSON.parse(JSON.stringify(v)); } catch (e) { return v; }
+}
+
+function enqueueBatch_(action, payload, tok) {
+  return new Promise((resolve) => {
+    const rest = (payload && typeof payload === 'object') ? { ...payload } : {};
+    delete rest.token;   // 同 buildRequestBody_：憑證只認 getToken()
+    const key = action + '\u0000' + JSON.stringify(rest);
+    let q = batchQueues.get(tok);
+    if (q && !q.items.has(key) && q.items.size >= BATCH_MAX_ITEMS) { flushBatch_(tok); q = null; }
+    if (!q) {
+      q = { items: new Map(), timer: setTimeout(() => flushBatch_(tok), BATCH_WINDOW_MS) };
+      batchQueues.set(tok, q);
+    }
+    const it = q.items.get(key);
+    // 同一輪完全相同的讀取（例如 badge() 與 alerts() 都問 staffList）只送一筆，各自拿到一份副本
+    if (it) it.waiters.push(resolve);
+    else q.items.set(key, { action, payload: rest, waiters: [resolve] });
+  });
+}
+
+function settleItem_(it, result) {
+  it.waiters.forEach((w, i) => w(i === 0 ? result : cloneJson_(result)));
+}
+
+async function flushBatch_(tok) {
+  const q = batchQueues.get(tok);
+  if (!q) return;
+  batchQueues.delete(tok);
+  clearTimeout(q.timer);
+  const items = [...q.items.values()];
+  // 只有一筆就照原樣單筆送（不值得包 batchRead）
+  const single = async (it) => settleItem_(it, await callRaw_('platform', it.action, it.payload, tok));
+  if (items.length === 1) { await single(items[0]); return; }
+
+  let results = null;
+  let unsupported = false;   // 只有「後端明說不支援」才停併；斷網、逾時這類暫時錯誤下一輪照常併
+  try {
+    const res = await postJson_(BACKENDS.platform, {
+      action: 'batchRead', token: tok, payload: { items: items.map((it) => ({ action: it.action, payload: it.payload })) }
+    }, timeoutMs);
+    if (!(res && typeof res.status === 'number' && res.status >= 400)) {
+      const json = await res.json();
+      if (json && json.ok === true && json.data && Array.isArray(json.data.results) && json.data.results.length === items.length) {
+        results = json.data.results;
+      } else if (json && json.ok === false && json.error === BATCH_UNKNOWN_ACTION) {
+        unsupported = true;
+      }
+    } else if (res.status === 404 || res.status === 501) {
+      unsupported = true;
+    }
+  } catch (err) { results = null; }
+
+  if (!results) {   // 整批失敗：停併 5 分鐘、逐筆送（各筆照舊自己的逾時與錯誤）
+    if (unsupported) batchOffUntil = Date.now() + BATCH_COOLDOWN_MS;
+    await Promise.all(items.map(single));
+    return;
+  }
+  await Promise.all(items.map(async (it, i) => {
+    const r = results[i];
+    if (r && r.ok === false && r.error === BATCH_UNKNOWN_ACTION) { await single(it); return; }
+    settleItem_(it, transformResponse_('platform', r));
+  }));
 }

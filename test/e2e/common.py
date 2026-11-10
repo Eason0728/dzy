@@ -326,6 +326,8 @@ class MockBackend:
             if not u:
                 return {'ok': False, 'error': 'token 無效'}
             return {'ok': True, 'data': {'user': u['user'], 'perms': u['perms']}}
+        if action == 'batchRead':
+            return self.batch_read(body)
         staff_res = self.staff_action(action, body)
         if staff_res is not None:
             return staff_res
@@ -333,6 +335,27 @@ class MockBackend:
         if apv_res is not None:
             return apv_res
         return {'ok': False, 'error': '未知的 platform action（mock）：' + action}
+
+    # ---- 首頁少等（2026-11-10）：batchRead。白名單與前端同一份（platform/dryrun.js BATCH_READ_ACTIONS），
+    # 每一筆照單筆呼叫各自處理（同一個 token）；整批記在 batch_calls，單筆的內層 action 不進 calls 流水帳 ----
+    def batch_read(self, body):
+        src = open(os.path.join(ROOT, 'platform', 'dryrun.js'), encoding='utf-8').read()
+        allow = re.findall(r"'([A-Za-z]+)'", re.search(r'BATCH_READ_ACTIONS = \[(.*?)\]', src, re.S).group(1))
+        items = (body.get('payload') or {}).get('items')
+        if not isinstance(items, list) or not items or len(items) > 20:
+            return {'ok': False, 'error': '請求格式錯誤'}
+        if getattr(self, 'batch_fail', False):   # 測試用：模擬整批失敗（舊後端不認得、逾時）
+            return {'ok': False, 'error': '不支援的操作'}
+        self.batch_calls = getattr(self, 'batch_calls', []) + [[i.get('action') for i in items]]
+        results = []
+        for it in items:
+            a = it.get('action') if isinstance(it, dict) else None
+            if a not in allow:
+                results.append({'ok': False, 'error': '不支援的操作'})
+                continue
+            self.batch_inner = getattr(self, 'batch_inner', []) + [a]
+            results.append(self.platform_action(a, {'token': body.get('token'), 'payload': it.get('payload') or {}}))
+        return {'ok': True, 'data': {'results': results}}
 
     # ---- 第三期表單簽核（2026-10-18）：有狀態的假後端在 apv_mock.py，形狀照 docs/approvals/api.md ----
     def apv_action(self, action, payload, token=''):
@@ -604,8 +627,8 @@ class MockBackend:
 # 登入流程（走真 UI，不塞 localStorage——登入頁本身也是被測物）
 # ------------------------------------------------------------
 
-def login(page, base, username):
-    page.goto(base + '/index.html')
+def login(page, base, username, query=''):
+    page.goto(base + '/index.html' + query)
     page.fill('#login-username', username)
     page.fill('#login-password', USERS[username]['password'])
     page.click('[data-role="submit"]')
