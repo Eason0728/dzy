@@ -13,7 +13,7 @@ globalThis.localStorage = new MemoryStorage();
 globalThis.sessionStorage = new MemoryStorage();
 
 import { MINI_HOST_NEW, MINI_HOST_OLD, GATEWAY_ON, BACKENDS } from '../platform/config.js';
-import { mainHost, markGatewayDown, gatewayDown, routeUrl, routeUrlForNs, GW_DOWN_KEY, GW_DOWN_MS, __setGatewayOn, __setNow, __resetRoute } from '../platform/route.js';
+import { mainHost, markGatewayDown, gatewayDown, routeUrl, routeUrlForNs, GW_DOWN_KEY, GW_DOWN_MS, __setGatewayOn, __setNow, __resetRoute, __setProbe, __setLeaving, confirmGatewayDown } from '../platform/route.js';
 import { login, logout, __setTransport } from '../platform/auth.js';
 import { call, proxyUrl, __setHomeFast } from '../platform/api.js';
 import { READ_ACTIONS } from '../platform/dryrun.js';
@@ -22,6 +22,7 @@ import { helperUrl } from '../platform/helper/client.js';
 import * as photo from '../modules/approvals/photo.js';
 import { purchaseApi } from '../modules/purchase/counts.js';
 import * as insp from '../modules/inspection/lib.js';
+__setProbe(async () => false);   // 測試不連外：預設探測結果＝櫃台打不通
 
 let passed = 0, failed = 0;
 function ok(c, label, extra) {
@@ -243,5 +244,18 @@ await loginAs();
 }
 
 ok(realCalls.length === 0, '全程沒有未 mock 的網路請求', realCalls);
+// 8. 網路錯誤要先確認（2026-11-10 正式站：重新整理中斷請求被誤判故障）
+{
+  __resetRoute(); __setProbe(async () => true);
+  let downNow = await confirmGatewayDown();
+  ok(downNow === false && gatewayDown() === false, '8: 探測打得通 → 不設故障記號');
+  __setProbe(async () => false); __setLeaving(true);
+  downNow = await confirmGatewayDown();
+  ok(downNow === false && gatewayDown() === false, '8: 頁面正在離開 → 不設故障記號');
+  __setLeaving(false);
+  downNow = await confirmGatewayDown();
+  ok(downNow === true && gatewayDown() === true, '8: 探測打不通 → 設故障記號');
+  __resetRoute(); __setProbe(async () => false);
+}
 console.log(`\n${passed} 項通過，${failed} 項失敗`);
 process.exit(failed ? 1 : 0);
