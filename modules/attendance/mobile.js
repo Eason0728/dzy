@@ -73,11 +73,16 @@ async function list(ctx, action, map) {
 
 /**
  * 我送出的：任何有同仁編號的人都能讀自己的（不需要考勤管理權限；manifest openHooks）。
- * 代轉回 403＝這個帳號沒有同仁編號（系統帳號），沒有東西可列 → 空清單；其他失敗 → null（殼顯示「暫時讀不到」）。
+ * 代轉 403 有兩種來源（mini 代轉 AUTH_STATUS）：
+ *   這個帳號沒有同仁編號（後端 storeSubForUser_：不是同仁、也不是系統管理者的系統帳號一定沒有）＝沒有東西可列；
+ *   或考勤通行碼沒設定（NO_SECRET），那是故障。
+ * 前端只拿得到狀態碼、分不出來，所以只有系統帳號的 403 當空清單；同仁、系統管理者、角色不明的 403 照樣算讀不到
+ * （回 null，殼顯示「暫時讀不到」；不可把故障顯示成「沒有送出的單」）。其他失敗一律 null。
  */
 async function mine(ctx) {
   const r = await ctx.api.call('attendance', 'reqMine', {});
-  if (r && r.ok === false && r.status === 403) return [];
+  const role = ctx && ctx.user && typeof ctx.user.role === 'string' ? ctx.user.role : '';
+  if (r && r.ok === false && r.status === 403 && role && role !== 'staff' && role !== 'admin') return [];
   const d = unwrap(r);
   return d ? d.items.map(mineItem) : null;
 }
