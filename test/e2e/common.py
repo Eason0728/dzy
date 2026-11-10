@@ -87,11 +87,23 @@ def start_server(port):
 def load_backend_urls():
     src = open(os.path.join(ROOT, 'platform', 'config.js'), encoding='utf-8').read()
     urls = dict(re.findall(r"(platform|audit|dorm):\s*'(https?://[^']+)'", src))
+    # 2026-11-10：platform 改成 (GATEWAY_ON ? MINI_HOST_NEW : MINI_HOST_OLD) + '/platform/api'，正則抓不到字串，改讀兩個主機常數
+    hosts = dict(re.findall(r"export const (MINI_HOST_NEW|MINI_HOST_OLD)\s*=\s*'(https?://[^']+)'", src))
+    assert set(hosts) == {'MINI_HOST_NEW', 'MINI_HOST_OLD'}, hosts
+    on = re.search(r"export const GATEWAY_ON\s*=\s*(true|false)", src).group(1) == 'true'
+    urls['platform'] = (hosts['MINI_HOST_NEW'] if on else hosts['MINI_HOST_OLD']) + '/platform/api'
     assert set(urls) == {'platform', 'audit', 'dorm'}, urls
     # 代轉網址＝平台網址 …/api → …/proxy（同 platform/api.js proxyUrl()）
     assert urls['platform'].endswith('/api'), urls['platform']
     urls['proxy'] = urls['platform'][:-len('/api')] + '/proxy'
     return urls
+
+
+def load_mini_hosts():
+    """(新主機, 舊主機)：e2e 兩個都要攔；舊主機的請求先換成新主機再判斷是哪支後端"""
+    src = open(os.path.join(ROOT, 'platform', 'config.js'), encoding='utf-8').read()
+    h = dict(re.findall(r"export const (MINI_HOST_NEW|MINI_HOST_OLD)\s*=\s*'(https?://[^']+)'", src))
+    return h['MINI_HOST_NEW'], h['MINI_HOST_OLD']
 
 
 # 代轉的讀清單（同 Auth.gs PROXY_READ_ACTIONS／platform/dryrun.js READ_ACTIONS）
@@ -130,6 +142,7 @@ class MockBackend:
     def __init__(self, base_url):
         self.base_url = base_url  # 本機站台網址，create 的 sign_url 要指回來
         self.urls = load_backend_urls()
+        self.host_new, self.host_old = load_mini_hosts()
         self.leaked = []          # 沒被 mock 涵蓋而流出去的請求（必須是空的）
         self.calls = []           # (backend, action) 流水帳，測試可斷言
         self.audit_fixture = json.load(open(os.path.join(FIXTURES, 'audit_getall.json'), encoding='utf-8'))
@@ -142,6 +155,9 @@ class MockBackend:
 
     # ---- 依網址判斷是哪支後端 ----
     def backend_of(self, url):
+        # 2026-11-10 櫃台：舊主機（Funnel）的請求等同新主機，先換掉再判斷（自動改走舊路時 mock 仍接得住）
+        if url.startswith(self.host_old):
+            url = self.host_new + url[len(self.host_old):]
         # 第三期照片路由：<平台主機>/platform/svc/apv-file-put|get（platform/config.js 的 /api 換成 /svc/…）
         if url.startswith(self.urls['platform'][:-len('/api')] + '/svc/apv-file-'):
             return 'svc'
@@ -166,6 +182,9 @@ class MockBackend:
                 # http／https 兩種都攔（Funnel 是 https，本機測試後端可能是 http）
                 for scheme in ('https', 'http'):
                     page.route('%s://%s/**' % (scheme, host), self._route)
+        # 兩個 Mac mini 主機都攔（新：Cloudflare 櫃台、舊：Funnel），不管 config 目前用哪個
+        for h in (self.host_new, self.host_old):
+            page.route(h + '/**', self._route)
 
     def _route(self, route):
         req = route.request

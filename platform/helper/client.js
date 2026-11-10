@@ -19,6 +19,7 @@
 'use strict';
 
 import { BACKENDS } from '../config.js';
+import { routeUrl } from '../route.js';
 import { getToken } from '../auth.js';
 
 export const TIMEOUT_MS = 30000;
@@ -45,7 +46,7 @@ export function errorMessage(code) {
 
 /** …/platform/api → …/platform/svc/ai-help；推不出來回 '' */
 export function helperUrl(platformUrl) {
-  const u = platformUrl === undefined ? (BACKENDS.platform || '') : String(platformUrl || '');
+  const u = platformUrl === undefined ? routeUrl(BACKENDS.platform || '') : String(platformUrl || '');
   return /\/api$/.test(u) ? u.replace(/\/api$/, '/svc/ai-help') : '';
 }
 

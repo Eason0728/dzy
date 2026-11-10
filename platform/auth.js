@@ -44,6 +44,7 @@ const DEVICE_MAX = 20;
 // 於是 JSON.parse 收到 '<!DOCTYPE' 而爆掉。單元測試抓不到，因為測試注入的是假 transport。
 // 教訓：設定值只能有一份正本；「之後再填」的空字串等於一顆定時炸彈。
 import { BACKENDS } from './config.js';
+import { routeUrl, markGatewayDown, isNewHostUrl } from './route.js';
 import { isDryRun, isReadAction, notifyDryRun, DRYRUN_MESSAGE } from './dryrun.js';
 
 // ============================================================
@@ -63,7 +64,7 @@ let currentToken = null; // 記憶體快取的 token（來源仍是 localStorage
  * 回傳格式：{ok:true, data:{...}} 或 {ok:false, error:"..."}
  */
 async function defaultTransport(requestBody) {
-  const url = BACKENDS.platform;
+  const url = routeUrl(BACKENDS.platform);
   if (!url) {
     return { ok: false, error: '尚未設定平台後端網址（platform/config.js）', transient: true };
   }
@@ -85,6 +86,8 @@ async function defaultTransport(requestBody) {
       signal: controller.signal
     });
   } catch (err) {
+    // 打新主機（櫃台）丟網路錯誤：設故障記號，使用者重試時就走舊路（登入不自動重送，保持原行為）
+    if (err && err.name !== 'AbortError' && isNewHostUrl(url)) markGatewayDown();
     // transient：不是後端的判定（連線失敗／逾時），restore() 看到就保留 token（2026-10-28 審查 #9）
     return { ok: false, error: (err && err.name === 'AbortError') ? '連線逾時，請稍後再試' : '連線失敗，請檢查網路', transient: true };
   } finally {

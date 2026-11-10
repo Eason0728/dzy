@@ -7,13 +7,15 @@
 'use strict';
 
 import { isDevHost } from './embed.js';
+import { MINI_HOST_NEW } from '../../platform/config.js';
+import { routeUrl } from '../../platform/route.js';
 
-const PROD_API = 'https://dingzhaoyuandemac-mini.tailc27c34.ts.net/purchase/api';
+const PROD_API = MINI_HOST_NEW + '/purchase/api';   // 實際主機經 routeUrl（櫃台／舊路）
 const DEV_API = 'http://localhost:8794/purchase/api';
 const SHARE_MS = 10000;
 const FETCH_TIMEOUT_MS = 4500; // 首頁每組 5 秒逾時
 
-export function purchaseApi(host) { return isDevHost(host) ? DEV_API : PROD_API; }
+export function purchaseApi(host) { return isDevHost(host) ? DEV_API : routeUrl(PROD_API); }
 
 /** 後端回的張數 → 首頁提醒列；0 張不列（全部 0＝空陣列＝「沒有待辦」） */
 export function countAlerts(c) {

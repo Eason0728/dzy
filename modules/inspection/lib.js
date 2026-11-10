@@ -10,6 +10,7 @@
 'use strict';
 
 import { BACKENDS } from '../../platform/config.js';
+import { routeUrl } from '../../platform/route.js';
 import { getToken } from '../../platform/auth.js';
 
 export const STYLE = `
@@ -143,7 +144,7 @@ function blobToB64(blob) {
   });
 }
 function svcUrl(name) {
-  const u = BACKENDS.platform || '';
+  const u = routeUrl(BACKENDS.platform || '');
   return /\/api$/.test(u) ? u.replace(/\/api$/, '/svc/' + name) : '';
 }
 function token() { try { return getToken() || ''; } catch (e) { return ''; } }
