@@ -72,7 +72,7 @@ await t('網址：正式用 github.io/dzy-purchase，管理系統在本機才用
   assert.equal(E.purchaseOrigin('localhost'), 'http://localhost:8795');
   assert.equal(E.purchaseOrigin('127.0.0.1'), 'http://localhost:8795');
   assert.equal(E.purchaseOrigin('localhost.evil.com'), ORIGIN);
-  assert.equal(C.purchaseApi('dzy.mozhuting.com'), 'https://dingzhaoyuandemac-mini.tailc27c34.ts.net/purchase/api');
+  assert.equal(C.purchaseApi('dzy.mozhuting.com'), 'https://dzy-gw.dingzhaoyuan888.workers.dev/purchase/api');
   assert.equal(C.purchaseApi('localhost'), 'http://localhost:8794/purchase/api');
 });
 
@@ -173,7 +173,7 @@ await t('getCounts：一張券打 /sso/counts，badge 與 alerts 共用一次', 
   assert.deepEqual(a, { review: 4, failed: 1 });
   assert.equal(a, b);
   assert.equal(calls.length, 1);
-  assert.deepEqual(fetched, [{ url: 'https://dingzhaoyuandemac-mini.tailc27c34.ts.net/purchase/api/sso/counts', body: { ticket: TICKET } }]);
+  assert.deepEqual(fetched, [{ url: 'https://dzy-gw.dingzhaoyuan888.workers.dev/purchase/api/sso/counts', body: { ticket: TICKET } }]);
 });
 await t('getCounts：換不到券或後端掛掉 → null（不擋首頁）', async () => {
   C._resetShared();

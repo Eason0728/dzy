@@ -67,10 +67,20 @@ export const DEPARTMENTS = [
  */
 export const LINE_LIFF_ID = '2011292256-Qs80XEBg';
 
+/**
+ * 連 Mac mini 的兩個主機（2026-11-10 起走 Cloudflare 櫃台，路徑兩邊相同）。
+ * MINI_HOST_NEW＝Cloudflare 櫃台（預設）；MINI_HOST_OLD＝舊路（Tailscale Funnel 直連）。
+ * 實際用哪個主機由 platform/route.js 決定（櫃台故障記號 5 分鐘內改走舊路；代轉 ns payroll 一律舊路）。
+ */
+export const MINI_HOST_NEW = 'https://dzy-gw.dingzhaoyuan888.workers.dev';
+export const MINI_HOST_OLD = 'https://dingzhaoyuandemac-mini.tailc27c34.ts.net';
+/** 總開關：改 false＝整個回到舊網址（一行退回） */
+export const GATEWAY_ON = true;
+
 export const BACKENDS = {
-  // 2026-10 起平台後端在公司 Mac mini（dzy-minikit apps/dzy-platform，Funnel /platform）。
-  // 回退：還原這一行成舊 Apps Script /exec（git revert 合併 minikit-cutover 的 commit），見 ~/dzy-minikit/apps/dzy-platform/ROLLBACK.md
-  platform: 'https://dingzhaoyuandemac-mini.tailc27c34.ts.net/platform/api',
+  // 2026-10 起平台後端在公司 Mac mini（dzy-minikit apps/dzy-platform，Funnel /platform）；2026-11-10 起預設走 Cloudflare 櫃台。
+  // 回退：GATEWAY_ON 改 false（回舊網址）；更早的 Apps Script 回退見 ~/dzy-minikit/apps/dzy-platform/ROLLBACK.md
+  platform: (GATEWAY_ON ? MINI_HOST_NEW : MINI_HOST_OLD) + '/platform/api',
   audit: 'https://script.google.com/macros/s/AKfycbz5l_aH_qypN6HK6UDT__5NLZDk4A2clyqeqvJzx5JrL9SBVeH5GyDYBCW3gv-CDy7fFQ/exec',
   dorm: 'https://script.google.com/macros/s/AKfycbyxyhJ35MWTjtvzKr54_9JzGfLZlclyqn2fYLWXgz0muTFzL_tu81nR1r3W332J1igm/exec',
   // 電子佈告欄前端網址（公告專區 iframe 來源與 postMessage 核對用；不是 API 後端，shell 不會對它發請求）

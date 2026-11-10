@@ -134,8 +134,8 @@ const fmt = { datetime, esc };
     ok(r.ok === false && r.error === 'too_large', '怎麼縮都超過：回失敗不卡死', r);
   }
   ok(photo.MAX_PHOTOS === 5 && photo.MAX_EDGE === 1600 && photo.MAX_BYTES === 180 * 1024, '常數：5 張、1600px、180KB');
-  eq(photo.putUrl(), 'https://dingzhaoyuandemac-mini.tailc27c34.ts.net/platform/svc/apv-file-put', '上傳網址由 BACKENDS.platform 推');
-  eq(photo.getUrl(), 'https://dingzhaoyuandemac-mini.tailc27c34.ts.net/platform/svc/apv-file-get', '讀圖網址');
+  eq(photo.putUrl(), 'https://dzy-gw.dingzhaoyuan888.workers.dev/platform/svc/apv-file-put', '上傳網址由 BACKENDS.platform 推');
+  eq(photo.getUrl(), 'https://dzy-gw.dingzhaoyuan888.workers.dev/platform/svc/apv-file-get', '讀圖網址');
   // 上傳：body 形狀照 api.md（token/kind/mime/b64），錯誤碼原樣回
   const seen = [];
   const fakeFetch = (resp) => async (url, init) => { seen.push({ url, body: JSON.parse(init.body) }); return { json: async () => resp }; };

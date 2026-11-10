@@ -16,6 +16,7 @@
  */
 
 import { BACKENDS, LINE_LIFF_ID } from '../config.js';
+import { routeUrl } from '../route.js';
 
 export const LIFF_SDK_URL = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
 
@@ -56,7 +57,7 @@ export const T = {
 
 /** LIFF 的 endpoint 對應到 LINE 路由：…/platform/api → …/platform/svc/line-auth（同 api.js proxyUrl() 的換路徑做法）；推不出來回 '' */
 export function lineAuthUrl(platformUrl) {
-  const u = platformUrl === undefined ? (BACKENDS.platform || '') : String(platformUrl || '');
+  const u = platformUrl === undefined ? routeUrl(BACKENDS.platform || '') : String(platformUrl || '');
   return /\/api$/.test(u) ? u.replace(/\/api$/, '/svc/line-auth') : '';
 }
 

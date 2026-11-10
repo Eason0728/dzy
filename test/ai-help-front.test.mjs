@@ -64,7 +64,7 @@ const mkClient = (handler, o) => { const f = fakeFetch(handler); return { f, c: 
 // ================= client：網址、代號 =================
 ok(helperUrl('https://h.example/platform/api') === 'https://h.example/platform/svc/ai-help', '網址：…/api 換成 …/svc/ai-help');
 ok(helperUrl('https://script.google.com/macros/s/x/exec') === '', '推不出來＝空字串');
-ok(helperUrl() === 'https://dingzhaoyuandemac-mini.tailc27c34.ts.net/platform/svc/ai-help', '預設用 BACKENDS.platform 推導');
+ok(helperUrl() === 'https://dzy-gw.dingzhaoyuan888.workers.dev/platform/svc/ai-help', '預設用 BACKENDS.platform 推導');
 {
   const id = newRid();
   ok(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id), 'rid：有 crypto.randomUUID 就用它（UUID v4）', id);

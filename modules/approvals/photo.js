@@ -12,6 +12,7 @@
 'use strict';
 
 import { BACKENDS } from '../../platform/config.js';
+import { routeUrl } from '../../platform/route.js';
 import { getToken } from '../../platform/auth.js';
 
 export const MAX_EDGE = 1600;
@@ -103,7 +104,7 @@ export function blobToB64(blob) {
 
 // ── 位址／token ────────────────────────────────────────
 export function svcUrl(name) {
-  const u = BACKENDS.platform || '';
+  const u = routeUrl(BACKENDS.platform || '');
   return /\/api$/.test(u) ? u.replace(/\/api$/, '/svc/' + name) : '';
 }
 export function putUrl() { return svcUrl('apv-file-put'); }

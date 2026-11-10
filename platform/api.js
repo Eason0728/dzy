@@ -43,6 +43,7 @@
 import { BACKENDS, homeFastAllowed } from './config.js';
 import { getUser, can, getToken, getAuditScope } from './auth.js';
 import { isDryRun, isReadAction, notifyDryRun, BATCH_READ_ACTIONS } from './dryrun.js';
+import { routeUrl, routeUrlForNs, oldUrl, isNewHostUrl, markGatewayDown } from './route.js';
 
 // 代轉逾時 35 秒：mini 對舊後端等 30 秒，再留 5 秒餘裕（PROXY.md 第 3 節）
 const PROXY_TIMEOUT_MS = 35000;
@@ -65,8 +66,8 @@ export function __setTimeoutMs(ms) {
  * 代轉網址：從平台後端網址推（…/platform/api → …/platform/proxy），config.js 不另存一份。
  * 推不出來（網址不是 /api 結尾）回 ''＝當作沒設定。
  */
-export function proxyUrl() {
-  const u = BACKENDS.platform || '';
+export function proxyUrl(ns) {
+  const u = routeUrlForNs(BACKENDS.platform || '', ns);   // 2026-11-10：主機經 platform/route.js（櫃台／舊路／payroll 例外）
   return /\/api$/.test(u) ? u.replace(/\/api$/, '/proxy') : '';
 }
 
@@ -270,7 +271,7 @@ const PROXY_STATUS_MSG = {
  * @returns {Promise<{ok:true,data:object}|{ok:false,error:string}>}
  */
 export async function call(backendId, action, payload = {}) {
-  const url = (PROXY_NS[backendId] === true) ? proxyUrl() : BACKENDS[backendId];
+  const url = (PROXY_NS[backendId] === true) ? proxyUrl(backendId) : routeUrl(BACKENDS[backendId]);
   if (!url) {
     return { ok: false, error: `後端尚未設定：${backendId}` };
   }
@@ -288,24 +289,56 @@ export async function call(backendId, action, payload = {}) {
   return callRaw_(backendId, action, payload);
 }
 
+/**
+ * 送一次。回 {res} 或 {err}；gwFail＝這次是「櫃台自己出的問題」：fetch 丟 TypeError（網路錯誤，逾時 AbortError 不算）
+ * 或收到櫃台的 502 + JSON {error:'GATEWAY'}。只有打新主機時才有意義（呼叫端判斷）。
+ */
+async function trySend_(url, body, ms) {
+  let res;
+  try {
+    res = await postJson_(url, body, ms);
+  } catch (err) {
+    return { err, gwFail: !!(err && err.name !== 'AbortError' && (err instanceof TypeError || err.name === 'TypeError')) };
+  }
+  let gwFail = false;
+  if (res && res.status === 502) {
+    try {
+      const j = await ((typeof res.clone === 'function') ? res.clone() : res).json();
+      gwFail = !!(j && j.ok === false && j.error === 'GATEWAY');
+    } catch (e) { /* 不是 JSON：不是櫃台的 502 */ }
+  }
+  return { res, gwFail };
+}
+
 async function callRaw_(backendId, action, payload, tokenOverride) {
   const viaProxy = PROXY_NS[backendId] === true;
-  const url = viaProxy ? proxyUrl() : BACKENDS[backendId];
+  const url = viaProxy ? proxyUrl(backendId) : routeUrl(BACKENDS[backendId]);
   if (!url) {
     return { ok: false, error: `後端尚未設定：${backendId}` };
   }
 
   const body = buildRequestBody_(backendId, action, payload, tokenOverride);
+  const ms = viaProxy ? (PROXY_TIMEOUT_BY_NS[backendId] || PROXY_TIMEOUT_MS) : timeoutMs;
 
-  let res;
-  try {
-    res = await postJson_(url, body, viaProxy ? (PROXY_TIMEOUT_BY_NS[backendId] || PROXY_TIMEOUT_MS) : timeoutMs);
-  } catch (err) {
+  let r = await trySend_(url, body, ms);
+  // 櫃台故障自動改道（2026-11-10）：打新主機失敗 → 設記號（5 分鐘內之後的呼叫都走舊路）；
+  // 讀取立刻改用舊主機重送一次；寫入不重送（可能已經送到），照原本錯誤訊息回畫面
+  if (r.gwFail && isNewHostUrl(url)) {
+    markGatewayDown();
+    if (isReadAction(backendId, action, payload)) r = await trySend_(oldUrl(url), body, ms);
+  }
+  if (r.err) {
+    const err = r.err;
     const timedOut = !!(err && err.name === 'AbortError');
     return {
       ok: false,
       error: timedOut ? '請求逾時，請稍後再試' : ((err && err.message) || '網路連線失敗，請稍後再試')
     };
+  }
+  const res = r.res;
+
+  if (r.gwFail && !(viaProxy && res && typeof res.status === 'number' && res.status !== 200)) {
+    return { ok: false, error: PROXY_STATUS_MSG[502], status: 502 };   // 非代轉路徑收到櫃台 502：不要把 GATEWAY 原文丟給畫面
   }
 
   if (viaProxy && res && typeof res.status === 'number' && res.status !== 200) {
@@ -411,7 +444,7 @@ async function flushBatch_(tok) {
   let results = null;
   let unsupported = false;   // 只有「後端明說不支援」才停併；斷網、逾時這類暫時錯誤下一輪照常併
   try {
-    const res = await postJson_(BACKENDS.platform, {
+    const res = await postJson_(routeUrl(BACKENDS.platform), {
       action: 'batchRead', token: tok, payload: { items: items.map((it) => ({ action: it.action, payload: it.payload })) }
     }, timeoutMs);
     if (!(res && typeof res.status === 'number' && res.status >= 400)) {

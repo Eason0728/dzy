@@ -123,7 +123,7 @@ const reads = (n) => ['staffList', 'clockAlerts', 'regionList', 'evMe', 'apvTodo
   ok(calls.every((c) => c.body.token === 'tok-A' && c.body.payload && typeof c.body.payload === 'object' && Object.keys(c.body).sort().join() === 'action,payload,token'), '2: 關閉：請求形狀 {action,token,payload} 與以前一樣');
   ok(localStorage.ops.length === before + 0 || localStorage.ops.slice(before).every((o) => o[0] === 'get'), '2: 關閉：api 沒有寫 localStorage（只可能讀登入 token）', localStorage.ops.slice(before));
   ok(![...localStorage._map.keys()].some((k) => /home_badges|homefast/.test(k)), '2: 關閉：localStorage 沒有任何 home_badges／homefast');
-  ok(globalThis.sessionStorage.ops.length === 0, '2: 關閉：完全沒有碰 sessionStorage', globalThis.sessionStorage.ops);
+  ok(globalThis.sessionStorage.ops.filter((o) => !/dzy\.gw\.down/.test(JSON.stringify(o))).length === 0, '2: 關閉：完全沒有碰 sessionStorage（櫃台故障記號 dzy.gw.down 的讀取除外）', globalThis.sessionStorage.ops);
   arm(); await quietLogout();
 }
 
