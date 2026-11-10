@@ -276,6 +276,35 @@ def main():
             check(all(after.get(k) == v for k, v in before.items() if k not in ('audit-stock', 'audit-ops', 'dorm')), '⑧其他模組的上次件數原封不動（audit-ops 同樣靠掛掉的稽核代轉）：%s → %s' % (before, after))
             ctx.close()
 
+            # ---------- ⑧b 考勤待辦讀不到（2026-11-10 挑錯問題 5，需求「讀不到不可當成 0」）：提醒列「暫時讀不到」，
+            #            卡片數字留著上次件數並標「未更新」，瀏覽器記的上次件數不被刪；讀得到、真的沒有待辦時才把數字拿掉 ----------
+            ctx = browser.new_context(viewport={'width': 1280, 'height': 800})
+            page = ctx.new_page()
+            m8b = MockBackend(base)
+            m8b.att_alerts = {'ok': True, 'data': {'items': [{'kind': 'approve', 'count': 3}, {'kind': 'request', 'count': 2}], 'partial': False, 'pending': False}}
+            m8b.install(page)
+            login(page, base, 'admin', '?homefast=1')
+            home_snapshot(page)
+            page.wait_for_function("() => (JSON.parse(localStorage.getItem('dzy.u.u-admin.home_badges') || '{}').n || {}).attendance === 5", timeout=15000)
+            m8b.att_alerts_fail = True
+            page.reload()
+            home_snapshot(page)
+            page.wait_for_timeout(6500)   # 等過首頁各模組 5 秒的逾時
+            ab = page.locator('[data-role="badge"][data-module="attendance"]')
+            rows8 = page.locator('[data-role="alert-list"][data-module="attendance"]').inner_text()
+            check(ab.inner_text().startswith('5') and 'off' in (ab.get_attribute('class') or ''), '⑧b考勤讀不到：卡片數字留著上次的 5、標「未更新」：%r／%s' % (ab.inner_text(), ab.get_attribute('class')))
+            check('暫時讀不到' in rows8, '⑧b考勤讀不到：提醒列顯示「暫時讀不到」：%r' % rows8)
+            after_b = json.loads(storage_dump(page)['local']['dzy.u.u-admin.home_badges'])['n']
+            check(after_b.get('attendance') == 5, '⑧b考勤讀不到：瀏覽器記的上次件數 5 沒被刪：%s' % after_b)
+            m8b.att_alerts_fail = False
+            m8b.att_alerts = {'ok': True, 'data': {'items': [], 'partial': False, 'pending': False}}
+            page.reload()
+            home_snapshot(page)
+            page.wait_for_timeout(1500)
+            ab = page.locator('[data-role="badge"][data-module="attendance"]')
+            check(ab.inner_text() == '' and 'stale' not in (ab.get_attribute('class') or ''), '⑧b讀得到、真的沒有待辦：數字拿掉、不留「未更新」：%r／%s' % (ab.inner_text(), ab.get_attribute('class')))
+            ctx.close()
+
             # ---------- ⑨ 手機首頁常用磚第一次畫就有上次件數 ----------
             ctx = browser.new_context(viewport={'width': 375, 'height': 812})
             page = ctx.new_page()
