@@ -779,6 +779,13 @@ const FAKE_LINK_KEY = 'FAKELINKKEY-0000-ZZZ';
   ok(dm.ok && JSON.parse(app.props.CLOCK_MAP_STATE).excluded.indexOf('mztjs:CB1') !== -1, 'B6 排除候選（TEST、錯字）');
   sb.clockMapBuildApply_({ mztjs: [rosterRow('CB1', 'TEST測試')] }, nowT(0));
   ok(JSON.parse(app.props.CLOCK_MAP_STATE).candidates.length === 0, 'B6 重建後被排除的不再出現');
+  // 2026-11-13：總部移除「已確認」的對照（例：小辛辣同仁在墨竹亭的舊帳號，名冊已停用、對照還是 confirmed → 薪資一直提醒）
+  giveMap(app, y.emp, 'mztgf', 'GD1', 'support', { state: 'confirmed', source: 'name_match', roster_active: 'FALSE' });
+  const rowD = () => maps(app).find((m) => m.store_code === 'mztgf' && m.emp_id === 'GD1');
+  ok(post(sb, 'clockMapDecide', { store_code: 'mztgf', emp_id: 'GD1', decision: 'reject' }, mgrGF.token).code === 'dead_state', '移除對照：★店長不能退回已確認的對照');
+  const dr = post(sb, 'clockMapDecide', { store_code: 'mztgf', emp_id: 'GD1', decision: 'reject' }, tok);
+  ok(dr.ok && rowD().state === 'rejected' && rowD().confirmed_by !== '', '移除對照：總部可以把已確認的對照退回（記誰、何時）', rowD());
+  // 退回後不出現在給薪資的 xmap：test/payroll-xmap.test.mjs 1c 已驗（rejected 不出）
 })();
 
 // ============================================================
