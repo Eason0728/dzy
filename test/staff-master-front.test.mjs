@@ -137,6 +137,8 @@ ok(L.personActions({ emp_no: 'DZY010', status: 'active', clock_total: 1, is_self
   ok(/data\.confirmed/.test(ui) && /personFilter\('?\w*'?/.test(ui) && /name_diff === true/.test(fs.readFileSync(path.join(ROOT, 'modules/staff-shared/clock-lib.js'), 'utf8')), '全部對照用後端 confirmed；打卡姓名不同用 name_diff 布林');
   ok(/auto_support_map: '自動（已確認身分的跨店支援）'/.test(ui) && /data-role="cm-source"/.test(ui), '全部對照看得出自動確認（auto_support_map 中文標籤）');
   ok(!/btn btn-primary" data-act="cm-yes"/.test(ui) && /data-act="cm-yes"/.test(ui), '「對」不是紅色主按鈕（改用 --ok 綠）');
+  ok(/isHq && confirmed \? `<button[^`]*data-act="cm-drop"[^`]*移除這筆對照/.test(ui), '已確認的對照：只有總部看得到「移除這筆對照」');
+  ok(/a === 'cm-drop'[\s\S]{0,400}ctx\.ui\.confirm\([\s\S]{0,300}decision: 'reject'/.test(ui), '「移除這筆對照」先確認、再送 clockMapDecide reject');
 }
 
 // ---- 第 4 段：在主店建打卡帳號（總部，no_home_map 異常列）----

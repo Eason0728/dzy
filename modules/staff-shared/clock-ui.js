@@ -378,6 +378,7 @@ export function mountClockMap(el, env) {
           ${homeAction(x, { isHq }) === 'btn' ? `<button type="button" class="btn btn-secondary" data-act="cm-home" data-emp="${esc(x.emp_no)}" data-store="${esc(x.store_code)}">設為主店</button>` : ''}
           ${homeAction(x, { isHq }) === 'mark' ? `<span class="tag tag-ok" data-role="home-mark">主店${x.pinned ? '（已指定）' : ''}</span>` : ''}
           ${isHq ? `<button type="button" class="btn btn-secondary" data-act="cm-assign" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}">${confirmed ? '改指定…' : '指定給別人…'}</button>` : ''}
+          ${isHq && confirmed ? `<button type="button" class="btn btn-danger" data-act="cm-drop" data-store="${esc(x.store_code)}" data-eid="${esc(x.emp_id)}" data-name="${esc(x.name)}" data-store-name="${esc(x.store_name || x.store_code)}">移除這筆對照</button>` : ''}
         </div>
       </div>`;
   }
@@ -491,6 +492,12 @@ export function mountClockMap(el, env) {
     if (a === 'cm-no') {
       if (!(await ctx.ui.confirm('確定不是這位同仁？這筆會轉給總部處理。'))) return;
       return act(() => decide({ store_code: store, emp_id: eid, decision: 'reject' }, '已退回'));
+    }
+    if (a === 'cm-drop') {   // 2026-11-13：總部移除已確認的對照（後端 clockMapDecide reject；總部不限狀態）
+      const who = btn.getAttribute('data-name') || '';
+      const at = btn.getAttribute('data-store-name') || store;
+      if (!(await ctx.ui.confirm(`確定移除？${at} 的打卡編號 ${eid} 之後不再算是 ${who} 的，薪資也不會再從這家店帶他的時數（最多 6 小時後生效）。`))) return;
+      return act(() => decide({ store_code: store, emp_id: eid, decision: 'reject' }, '已移除'));
     }
     if (a === 'cm-home') {
       const emp = btn.getAttribute('data-emp');
