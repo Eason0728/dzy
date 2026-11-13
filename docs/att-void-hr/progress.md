@@ -19,3 +19,5 @@ mala-store-ops 開工 4c7b4b1
 - 紅（等 Eason）：「退回給店長重核」六題設計。
 - 退回重核六題：Eason 回「紅燈全照推薦」（1A 2A 3A 4A 5A 6A）
 - 第 6 題：Eason 回「A 給唯讀班表」→ 已改（營運系統 schedView、管理系統 storeSchedGate_）
+- 鎖月：Eason 回「鎖月 A」→ 打卡 Payroll.gs payroll_leave_options 多回 locked；光復 @263 上線（2026-11-13，三方比對＋拉回逐檔比對，實測 10 月 true、11 月 false）。PR mala-clock-in#120 合併被 auto mode 擋（Merge Without Review），等 Eason。
+- 第 6 題：Eason 回「A 給唯讀班表」→ 營運系統 schedView 加作廢名單、管理系統 storeSchedGate_ 加 att.void。
