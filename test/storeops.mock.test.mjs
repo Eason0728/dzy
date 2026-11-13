@@ -1797,6 +1797,13 @@ function noDirSched(id) {
   // 到期日已過：失效
   post(sb, 'permExSave', { emp_no: 'DZY002', perm: 'att.void', mode: 'add', until: '2020-01-01', note: '過期' }, app.adminTok);
   ok(eq(app.ident('DZY002').att.void_hours, []), '14 到期的 att.void 不生效');
+  ok(!has(perms('DZY002'), 'platform.sched'), '14 到期的 att.void：門市正職沒有排班管理');
+  // 第 6 題 A：給唯讀班表 → 門市正職（本來沒有排班管理）拿到 att.void 就有 platform.sched
+  const p3a = perms('DZY003');
+  ok(!has(p3a, 'platform.sched'), '14 門市計時原本沒有排班管理', p3a);
+  ok(post(sb, 'permExSave', { emp_no: 'DZY003', perm: 'att.void', mode: 'add', until: '', note: '唯讀班表' }, app.adminTok).ok, '14 admin 給門市計時 att.void');
+  const p3 = perms('DZY003');
+  ok(has(p3, 'platform.att') && has(p3, 'platform.sched') && has(p3, 'platform.storeops') === has(p3a, 'platform.storeops'), '14 ★第 6 題 A：有 att.void 就有排班管理（唯讀看班表）；門市營運跟給之前一樣', { p3a, p3 });
 })();
 
 // ============================================================

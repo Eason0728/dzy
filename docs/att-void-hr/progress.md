@@ -18,3 +18,4 @@ mala-store-ops 開工 4c7b4b1
 - 紅（等 Eason）：確認頁第 6 題說「連唯讀班表」，但現行規則人資同仁職稱不給唯讀班表 → 先照現行規則不給。
 - 紅（等 Eason）：「退回給店長重核」六題設計。
 - 退回重核六題：Eason 回「紅燈全照推薦」（1A 2A 3A 4A 5A 6A）
+- 第 6 題：Eason 回「A 給唯讀班表」→ 已改（營運系統 schedView、管理系統 storeSchedGate_）

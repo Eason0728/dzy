@@ -70,7 +70,7 @@ var STORE_PERM_VOID = 'store.void';
 var STORE_PERM_ATT_EXTRA = 'att.extra';
 // 考勤作廢（2026-11-13 Eason 開工 1A～6A，docs/att-void-hr）：只走個別例外。持有人（非 admin／人資主管、在職、身分有效）
 //   ‧ident att.void_hours／att.void_req＝跟人資主管同一份工時／申請名單（全集團、不含自己）；營運系統只拿來「讀」與「作廢」，不核准、不退回、不核定工時
-//   ‧有 platform.att（考勤管理選單），沒有 platform.storeops、platform.sched
+//   ‧有 platform.att（考勤管理選單）、platform.sched（唯讀看門市班表，2026-11-13 Eason 第 6 題 A）；沒有 platform.storeops
 var STORE_PERM_ATT_VOID = 'att.void';
 
 // ── 支援打卡誰來核（2026-10-26 Eason 定案，docs/att-support/spec.md §1）──
@@ -1177,6 +1177,7 @@ function storeSchedGate_(values) {
   if (stfIsHrHead_(p)) return true;
   if (storeRowActingPilot_(values, storePilotUnits_()).length) return true;   // 兼任店長（Q1 A：可排兼任店的班）
   if (storeSchedViewGate_(values)) return true;   // 督導／總監「只看」名單非空＝唯讀看班表（2026-10-25 Eason）
+  if (storeRowPerms_(values).indexOf(STORE_PERM_ATT_VOID) !== -1) return true;   // 考勤作廢＝唯讀看門市班表（2026-11-13 Eason 第 6 題 A）
   // 總監排班（2026-10-30）：sched_units 非空或 sched_hq_shift＝true，不必有 hq 打卡對照（跟 ident 同一個函式）
   var orgS = stfReadOrg_();
   var dir = storeSchedDirector_({ status: 'active', unit: stfStr_(values[STF_COL.unit]), title: p.title,
