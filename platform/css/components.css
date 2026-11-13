@@ -1167,6 +1167,13 @@ textarea.input:disabled {
   border-radius: 12px;
   background: #fff;
 }
+/* 營運系統嵌入頁（考勤管理、排班管理、門市營運，data-role="store-frame"）：不要外框，內容直接貼在管理系統底色上
+   （2026-11-14 Eason；營運系統那邊 web/css/embed-dzy.css 改用管理系統的色票）。佈告欄、貨單核對照舊有框 */
+.bulletin-frame[data-role="store-frame"] {
+  border: 0;
+  border-radius: 0;
+  background: var(--bg);
+}
 
 /* ---------------------------------------------------------- */
 /* 權限設定「對照表」分頁（版本 B：先選身分、再開關功能）          */
