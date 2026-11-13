@@ -1304,7 +1304,8 @@ function quickCard(c, body, box) {
     let r;
     try { r = await body.decide(buildCtx(c.m, null, {}), c.id, decision, reason); } catch (e) { r = { ok: false, error: '送出失敗，請稍後再試' }; }
     if (r && r.ok) {
-      ui.toast(decision === 'approve' ? '已核准' : '已退回', 'ok');
+      if (r.warn) ui.dialog({ title: '已核准，還要重新核定', body: el('p', { id: 'm-quick-warn', text: r.message }), actions: [{ label: '知道了', value: 'ok' }] });      // 2026-11-13 a2：那天已核定過
+      else ui.toast(decision === 'approve' ? '已核准' : '已退回', 'ok');
       if (card.parentNode) card.parentNode.removeChild(card);
       refreshAlerts();
     } else {

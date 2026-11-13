@@ -96,7 +96,8 @@ export const mobileHooks = {
     if (!k || (decision !== 'approve' && decision !== 'reject')) return { ok: false, error: '這張單的資料不完整，請到考勤管理處理' };
     const r = await ctx.api.call('attendance', 'reqDecide', { store: k.store, id: k.id, decision, reason: reason || '' });
     const inner = r && r.data && r.data.data;
-    if (r && r.ok && (!inner || inner.ok !== false)) return { ok: true };
+    // 那天已經核定過（Eason 2026-11-13 紅燈 a2 選 A）：照常核准，帶提醒給畫面（營運系統 reqDecide 回 warn／message）
+    if (r && r.ok && (!inner || inner.ok !== false)) return inner && inner.warn ? { ok: true, warn: String(inner.warn), message: String(inner.message || '那天已經核定過，請重新核定一次') } : { ok: true };
     return { ok: false, error: errOf(r) };
   }
 };
