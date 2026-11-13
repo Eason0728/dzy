@@ -1,0 +1,139 @@
+<title>人資同仁考勤作廢</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+/* 版面：一張開工單，最上方是開工指令，中段是手機與報告的完工預覽 */
+:root{--bg:#f2f5f4;--paper:#fff;--fg:#17211f;--muted:#5a6a66;--line:#d5dfdc;--accent:#0b6b5d;--accent-soft:#dff0ec;--on-accent:#fff;--green:#23804f;--green-bg:#e3f3ea;--yellow:#8a6400;--yellow-bg:#fbf1d2;--red:#b3362b;--red-bg:#fbe5e2;--phone:#dfe6e3;--font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111816;--paper:#1a2421;--fg:#e8efed;--muted:#a0b0ab;--line:#31403c;--accent:#63cdb8;--accent-soft:#1d3a34;--on-accent:#10211d;--green:#71d29c;--green-bg:#1b3627;--yellow:#e8c565;--yellow-bg:#3a3017;--red:#f19a90;--red-bg:#42211d;--phone:#26332f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#111816;--paper:#1a2421;--fg:#e8efed;--muted:#a0b0ab;--line:#31403c;--accent:#63cdb8;--accent-soft:#1d3a34;--on-accent:#10211d;--green:#71d29c;--green-bg:#1b3627;--yellow:#e8c565;--yellow-bg:#3a3017;--red:#f19a90;--red-bg:#42211d;--phone:#26332f;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:16px;line-height:1.7}
+.wrap{max-width:820px;margin:0 auto;padding-block:40px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:40px}
+h1{font-size:clamp(30px,6vw,44px);line-height:1.2;font-weight:900;margin:0 0 12px;text-wrap:balance}
+h2{font-size:22px;line-height:1.35;margin:0 0 14px;text-wrap:balance}
+h3{font-size:16px;margin:0 0 10px}
+p{margin:0}
+.lead{color:var(--muted);font-size:17px}
+.reply{background:var(--accent);color:var(--on-accent);border-radius:8px;padding:16px 18px;font-weight:700;margin-top:20px}
+.reply small{display:block;font-weight:400;font-size:14px;opacity:.92}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;min-width:480px;font-size:15px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:13px}
+tr:last-child td{border-bottom:0}
+.preview{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:16px;align-items:start}
+.phone{background:var(--phone);border-radius:24px;padding:20px 12px;display:grid;gap:8px;min-width:0}
+.time{text-align:center;font-weight:700;font-size:30px;font-variant-numeric:tabular-nums;margin-bottom:6px}
+.push{background:var(--paper);border-radius:12px;padding:10px 12px;font-size:13.5px;line-height:1.5}
+.push b{display:block;font-size:12px}
+.push.y b{color:var(--yellow)}.push.r b{color:var(--red)}.push.d b{color:var(--green)}
+.report{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:18px;display:grid;gap:12px;min-width:0}
+.report .head{font-weight:700;font-size:17px}
+.check{display:grid;gap:4px;font-size:14.5px}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.shot{background:var(--phone);border-radius:6px;padding:10px;font-size:12.5px;color:var(--muted);min-height:92px;display:flex;align-items:flex-end}
+.tag{font-size:12.5px;color:var(--muted)}
+.lights{display:grid;gap:10px}
+.light{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;border-radius:8px;padding:12px 16px}
+.light strong{font-size:16px}.light p{color:var(--fg);font-size:15px}
+.g{background:var(--green-bg);color:var(--green)}.y{background:var(--yellow-bg);color:var(--yellow)}.r{background:var(--red-bg);color:var(--red)}
+ul{margin:0;padding-left:20px;display:grid;gap:6px}
+.note{color:var(--muted);font-size:14px;margin-top:10px}
+@media (max-width:620px){.preview{grid-template-columns:minmax(0,1fr)}.light{grid-template-columns:minmax(0,1fr);gap:2px}}
+.mock{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:10px;font-size:14px}
+.mock .bar{display:flex;justify-content:space-between;font-weight:700}
+.mock .ro{font-size:12px;color:var(--muted);font-weight:400;margin-left:6px}
+.mock .req{background:var(--accent-soft);border-radius:8px;padding:10px;display:grid;gap:6px}
+.mock .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.btn{border:1px solid var(--line);background:var(--paper);color:var(--fg);border-radius:6px;padding:3px 10px;font-size:13px;font-family:inherit}
+.btn.off{color:var(--muted);opacity:.7}
+.btn.red{background:var(--red);color:#fff;border-color:var(--red)}
+.mock input{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:13px;background:var(--paper);color:var(--fg)}
+.lock{color:var(--muted);font-size:13px}
+.q b{color:var(--accent)}
+</style>
+<div class="wrap">
+<header>
+<h1>人資同仁考勤作廢</h1>
+<p class="lead">做完後：人資主管在「權限設定 → 個別例外」勾給某位人資同仁「考勤作廢」，那位同仁就能在考勤管理看到全集團的考勤，並作廢已經核准的申請。他不能核准、退回，也不能核定工時。</p>
+<div class="reply">看完回「開工」，我就做到完成，中途不再問你。<small>六題都照推薦就只回「開工」；要改哪題就寫「開工，第 2 題選 B」。</small></div>
+</header>
+
+<section>
+<h2>請先回答（六題，都有推薦）</h2>
+<ul class="q">
+<li><b>1. 誰拿得到？</b><br>A（推薦）新增一個權限碼「考勤作廢」<code>att.void</code>，由人資主管或 admin 在「個別例外」勾給指定的人，可以設到期日，有紀錄，能撤銷。<br>B 人資部所有在職同仁自動都有。<br><span class="tag">推薦 A：作廢會影響薪資，最好知道是誰有這個權限；人資部新進的人不會自動拿到。</span></li>
+<li><b>2. 範圍？</b><br>A（推薦）全集團，跟人資主管看得到的人一樣。<br>B 每次勾的時候選門市。<br><span class="tag">推薦 A：人資本來就管全集團，B 要多做一個選門市的畫面。</span></li>
+<li><b>3. 哪幾種單？</b><br>A（推薦）加班、請假、出差、忘刷單四種都可以。<br>B 不含忘刷單（忘刷單維持只有店長作廢）。</li>
+<li><b>4. 主管代開的單？</b><br>A（推薦）不開放，維持只有總監層級可以作廢。<br>B 也開放。<br><span class="tag">推薦 A：主管代開的單本來就刻意只讓總監處理。</span></li>
+<li><b>5. 只能作廢？</b><br>A（推薦）只能作廢。考勤只能看，不能核准、退回、核定工時，也不能改名冊。<br>B 連核准、退回一起開放（那就等於「人資代理主管」，是另一件事）。</li>
+<li><b>6. 連班表一起看得到？</b><br>A（推薦）可以。系統現在給「只看考勤」的人，本來就一起給唯讀班表（區督導就是這樣）；不拆開，改動最小。<br>B 只看考勤，不看班表（要多拆一條規則）。</li>
+</ul>
+<p class="note">不管選什麼都一樣的規則：自己的單不能作廢；作廢一定要寫理由，同仁在 LINE「我的申請」看得到；作廢前要在 5 分鐘內登入驗證過，跟現在一樣。</p>
+</section>
+
+<section>
+<h2>這次的範圍（照推薦）</h2>
+<div class="tbl"><table>
+<thead><tr><th>項目</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><b>方向</b></td><td>讓人資主管指定的人資同仁，能作廢已經核准、但有問題的申請（重複的單、打錯的單），不用每次都找人資主管或店長。</td></tr>
+<tr><td><b>廣度</b></td><td><b>動到：</b>管理系統（權限碼、身分計算、個別例外的下拉選單）、營運系統後端（作廢檢查、每張單的「能不能作廢」）。<br><b>不動：</b>打卡系統、薪資計算、核准／退回／核定工時的規則、店長與人資主管現有的權限、現金帳作廢 <code>store.void</code>。</td></tr>
+<tr><td><b>深度</b></td><td>手機版和電腦版都要能用（同一套畫面）。撤銷權限、到期、人員停用之後，下一個動作就失效（營運系統最慢 5 分鐘內重新查身分）。admin 與人資主管能設，但不能設給自己。</td></tr>
+<tr><td><b>高度</b></td><td>只加「作廢」這一個權限，不重新設計考勤權限。</td></tr>
+<tr><td><b>驗收</b></td><td>① 自動測試：有 <code>att.void</code> 的人資同仁 → 全集團已核准的申請都能作廢（自己的、主管代開的不行）；不能核准、退回、核定工時；沒有這個權限碼 → 跟今天一樣。<br>② 兩個 repo 的既有測試全部通過。<br>③ 部署後，用測試帳號在正式站作廢一張測試申請，截圖對照下面的預覽（要用哪張單會先問你，見紅線）。</td></tr>
+<tr><td><b>不可降的標準</b></td><td>寫入權限只能「多給作廢」：既有測試裡「只看名單不能寫入」的每一條都不能刪也不能放寬；營運系統後端一定要自己再檢查一次，前端只是把按鈕藏起來不算數。外部裁判：派另一個模型做一次審查（這台沒有 GPT，會寫「未做 GPT 審查」）。</td></tr>
+<tr><td><b>紅線</b></td><td>權限相關的放寬都算紅燈。在正式站實際作廢任何一張單之前先問你（算改正式資料），要用哪個帳號、哪張單由你決定。實際把權限碼勾給哪位同仁由你或人資主管操作，我不勾。</td></tr>
+</tbody>
+</table></div>
+</section>
+
+<section>
+<h2>完工預覽</h2>
+<div class="preview">
+<div class="phone">
+<div class="mock">
+<div class="bar"><span>考勤管理｜小辛辣光復</span><span class="tag">11/12</span></div>
+<div><b>李計時</b><span class="ro">唯讀</span></div>
+<div class="lock">上班 10:00　下班 19:30　工時欄位已鎖定（只能看）</div>
+<div class="req">
+<div class="row"><span>加班單 18:30–19:30（已核准）</span><button class="btn">作廢</button></div>
+<div class="row"><span>加班單 18:30–19:30（已核准，重複）</span><button class="btn">作廢</button></div>
+<div class="row"><span>主管代開的忘打卡單</span><button class="btn off" disabled>送上層處理</button></div>
+</div>
+<input value="重複送出，保留第一張" aria-label="作廢理由">
+<div class="row"><span class="tag">同仁在 LINE 看得到理由</span><button class="btn red">確定作廢</button></div>
+</div>
+</div>
+<div class="report">
+<div class="head">管理系統｜權限設定 → 個別例外（人資主管畫面）</div>
+<div class="tbl"><table style="min-width:0">
+<thead><tr><th>同仁</th><th>功能</th><th>到期日</th></tr></thead>
+<tbody>
+<tr><td>（人資同仁）</td><td>考勤作廢（全集團，只能作廢）</td><td>2027-12-31</td></tr>
+</tbody></table></div>
+<p class="tag">下拉選單多一個選項「考勤作廢」，排在現有三個之後：收支作廢、額外考勤核定、公告管理。</p>
+<p><b>那位人資同仁登入後：</b>首頁出現「考勤管理」入口 → 選得到所有門市、央廚、總部 → 每位同仁的卡片都標「唯讀」，只有已核准申請旁邊的「作廢」按得下去。他自己的單顯示停用的按鈕。</p>
+</div>
+</div>
+</section>
+
+<section>
+<h2>做的時候會自己決定的事</h2>
+<ul>
+<li>綠：權限碼的中文名稱用「考勤作廢」；身分資料新增一份「可作廢名單」，跟其他三份名單同樣的格式。</li>
+<li>綠：「只看」名單直接拿人資主管那份全集團名單，不另外寫一套規則。</li>
+<li>黃：已經是人資主管或 admin 的人拿到這個碼 → 沒有任何效果（他們本來就能作廢），不擋、不提示。</li>
+<li>黃：考勤首頁的提醒件數（待核定幾件）不算給只能作廢的人，以免他收到一堆自己不能處理的提醒。</li>
+</ul>
+</section>
+
+<section>
+<h2>還沒驗證的事</h2>
+<ul>
+<li>人資部現在有幾位同仁、職稱各是什麼：未確認（不影響做法，A 方案是逐人勾）。</li>
+<li>「只看」全集團的人一打開考勤管理，要讀的資料比督導多很多，速度可能會慢；做的時候實測，太慢就改成先選門市再讀。</li>
+<li>打卡系統那邊的作廢端點會不會另外檢查是誰作廢的：看程式是由營運系統轉送、只檢查服務金鑰，實作時再確認一次。</li>
+</ul>
+</section>
+</div>

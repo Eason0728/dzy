@@ -514,7 +514,7 @@ function noDirSched(id) {
   const g = (label, got, want) => ok(eq(got, want), label, { got, want });
   // 契約形狀：兩份名單同一種項目、各自排序
   const id1 = app.ident('DZY101');
-  ok(eq(Object.keys(id1.att), ['people', 'req_people', 'view_people']) && id1.att.req_people.every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name'])), '3b att 有 people 與 req_people，項目欄位相同');
+  ok(eq(Object.keys(id1.att), ['people', 'req_people', 'view_people', 'void_hours', 'void_req']) && id1.att.req_people.every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name'])), '3b att 有 people 與 req_people，項目欄位相同');
   // 核定工時
   g('3b 工時：店長核本店所有打卡的人（計時、正職、區經理、自己）', H('DZY101'), ['DZY101', 'DZY102', 'DZY103', 'DZY104']);
   g('3b 工時：別店店長只核別店（不含甲店區經理）', H('DZY105'), ['DZY105', 'DZY106', 'DZY107']);
@@ -802,7 +802,7 @@ function noDirSched(id) {
   ok(ex(hrTok, 'DZY003', 'audit.read').code === 'no_perm', '6 ★人資主管不能設 audit.read');
   ok(ex(hrTok, 'DZY003', 'audit.write').code === 'no_perm' && ex(hrTok, 'DZY003', 'platform.staff').code === 'no_perm' && ex(hrTok, 'DZY003', 'platform.users').code === 'no_perm', '6 ★人資主管不能設其他任何碼（audit.write、platform.staff、platform.users）');
   ok(ex(hrTok, 'DZY003', 'payroll.write').code === 'no_perm' && ex(hrTok, 'DZY003', 'cashbook.write').code === 'no_perm' && ex(hrTok, 'DZY003', 'platform.permmap').code === 'no_perm', '6 ★人資主管不能設 payroll.write、cashbook.write、platform.permmap');
-  ok(JSON.stringify(sb.STORE_HR_GRANTABLE) === JSON.stringify(['store.void', 'att.extra', 'platform.bulletin']), '6 STORE_HR_GRANTABLE＝store.void、att.extra、platform.bulletin');
+  ok(JSON.stringify(sb.STORE_HR_GRANTABLE) === JSON.stringify(['store.void', 'att.extra', 'att.void', 'platform.bulletin']), '6 STORE_HR_GRANTABLE＝store.void、att.extra、att.void（2026-11-13）、platform.bulletin');
   const audit = ex(hrTok, 'DZY003', 'audit.read.own');
   ok(audit.ok === false, '6 ★audit.* 例外被拒（不能設 audit.read.own）', audit);
   ok(ex(hrTok, 'DZY020', 'store.void').code === 'perm_self', '6 人資主管不能對自己設例外');
@@ -1749,6 +1749,54 @@ function noDirSched(id) {
   // ident 與閘門共用一個函式（StoreOps.gs 原始碼各呼叫一次 storeSchedDirector_）
   const so = SRC.find(([f]) => f === 'StoreOps.gs')[1];
   ok((so.match(/storeSchedDirector_\(/g) || []).length === 3, '7k storeSchedDirector_ 定義一次、ident 與 storeSchedGate_ 各呼叫一次');
+})();
+
+// ============================================================
+// 14. 考勤作廢 att.void（2026-11-13 Eason 開工 1A～6A，docs/att-void-hr）
+//   人資主管／admin 在個別例外給；持有人 ident.att.void_hours／void_req＝人資主管同一份名單（全集團、不含自己）；
+//   一般三份名單不變（不能核）；有 platform.att、沒有 platform.storeops／platform.sched
+// ============================================================
+(() => {
+  const app = world(BIG);
+  const { sb } = app;
+  app.props.PERMS_ON = '1';
+  const hrTok = app.login('DZY020');
+  const perms = (u) => { const r = post(sb, 'login', { username: u, password: PW }); return r.ok ? r.data.perms : null; };
+  const subsOf = (arr) => arr.map((x) => x.sub).sort();
+  const before = app.ident('DZY021');
+  ok(eq(before.att.void_hours, []) && eq(before.att.void_req, []), '14 沒有 att.void：兩份作廢名單空');
+  ok(!has(perms('DZY021'), 'platform.att'), '14 沒有 att.void：人資同仁沒有考勤管理');
+  const pp0 = perms('DZY021');
+  ok(post(sb, 'permExSave', { emp_no: 'DZY020', perm: 'att.void', mode: 'add', until: '', note: '給自己' }, hrTok).code === 'perm_self', '14 ★人資主管不能把 att.void 設給自己');
+  ok(post(sb, 'permExSave', { emp_no: 'DZY021', perm: 'att.void', mode: 'add', until: '', note: '店長不能設' }, app.login('DZY001')).code === 'no_perm', '14 ★店長不能設 att.void');
+  const sv = post(sb, 'permExSave', { emp_no: 'DZY021', perm: 'att.void', mode: 'add', until: '2099-12-31', note: '人資同仁作廢' }, hrTok);
+  ok(sv.ok, '14 人資主管能把 att.void 設給人資同仁（含到期日）', sv);
+  const id = app.ident('DZY021');
+  const hr = app.ident('DZY020');
+  const hrHours = subsOf(hr.att.people).filter((x) => x !== 'DZY021');
+  const hrReq = subsOf(hr.att.req_people).filter((x) => x !== 'DZY021');
+  ok(subsOf(id.att.void_hours).includes('DZY020') === false && subsOf(id.att.void_req).includes('DZY020') === false, '14 ★人資主管本人的單不在作廢名單（審查 1）');
+  ok(id.att.void_hours.length > 5 && eq(subsOf(id.att.void_hours), hrHours), '14 ★void_hours＝人資主管的工時名單（扣掉自己）', { got: subsOf(id.att.void_hours), want: hrHours });
+  ok(id.att.void_req.length > 5 && eq(subsOf(id.att.void_req), hrReq), '14 ★void_req＝人資主管的申請名單（扣掉自己）', { got: subsOf(id.att.void_req), want: hrReq });
+  ok(!subsOf(id.att.void_hours).includes('DZY021') && !subsOf(id.att.void_req).includes('DZY021'), '14 ★作廢名單不含自己');
+  ok(subsOf(id.att.void_hours).includes('DZY003') && subsOf(id.att.void_hours).includes('DZY041') && subsOf(id.att.void_hours).includes('DZY007'), '14 全集團：墨竹亭、小辛辣、央廚都在');
+  ok(eq(id.att.people, before.att.people) && eq(id.att.req_people, before.att.req_people) && eq(id.att.view_people, before.att.view_people), '14 ★一般三份名單不變（不能核准、核定）');
+  ok(eq(id.units_managed, before.units_managed) && eq(id.void_units, before.void_units), '14 units_managed、收支作廢 void_units 不變');
+  ok(id.att.void_hours.every((x) => eq(Object.keys(x), ['clock', 'emp_id', 'sub', 'name'])), '14 名單項目欄位同其他名單');
+  const pp = perms('DZY021');
+  ok(has(pp, 'platform.att') && !has(pp, 'platform.storeops') && has(pp, 'platform.sched') === has(pp0, 'platform.sched'), '14 ★多了 platform.att；不給門市營運，排班管理跟給之前一樣（總部同仁本來就有總部自填排班）', { pp, pp0 });
+  // 人資主管、admin 拿到也不多給（本來就能作廢）
+  ok(post(sb, 'permExSave', { emp_no: 'DZY020', perm: 'att.void', mode: 'add', until: '', note: 'admin 給人資主管' }, app.adminTok).ok, '14 admin 可給人資主管');
+  const hr2 = app.ident('DZY020');
+  ok(eq(hr2.att.void_hours, []) && eq(hr2.att.void_req, []), '14 人資主管有 att.void 也不另給作廢名單');
+  // 撤銷後失效
+  const row = post(sb, 'permExList', {}, hrTok).data.items.find((i) => i.perm === 'att.void' && i.emp_no === 'DZY021');
+  ok(!!row && post(sb, 'permExRevoke', { ex_id: row.ex_id }, hrTok).ok, '14 人資主管能撤銷 att.void', row);
+  const after = app.ident('DZY021');
+  ok(eq(after.att.void_hours, []) && eq(after.att.void_req, []) && !has(perms('DZY021'), 'platform.att'), '14 ★撤銷後兩份作廢名單空、沒有考勤管理');
+  // 到期日已過：失效
+  post(sb, 'permExSave', { emp_no: 'DZY002', perm: 'att.void', mode: 'add', until: '2020-01-01', note: '過期' }, app.adminTok);
+  ok(eq(app.ident('DZY002').att.void_hours, []), '14 到期的 att.void 不生效');
 })();
 
 // ============================================================

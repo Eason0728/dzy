@@ -10,7 +10,7 @@
 
 // 可給的權限碼白名單（順序即畫面順序）
 var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap',
-  'store.void', 'att.extra',   // 2026-10-18 營運系統：收支作廢、額外考勤核定（人資主管也能設這兩碼的個別例外，PermActions.gs）
+  'store.void', 'att.extra', 'att.void',   // 2026-11-13 att.void 考勤作廢（只能作廢已核准申請，docs/att-void-hr）；2026-10-18 營運系統：收支作廢、額外考勤核定（人資主管也能設這兩碼的個別例外，PermActions.gs）
   'payroll.write',              // 2026-10-19 薪酬系統（全集團薪資讀寫，一個開關＝全部功能；鎖碼，Eason：只有他親自開給的人能進）
   'cashbook.write',             // 2026-10-24 收支管理（會計跨店查帳、作廢、月結鎖定、改科目）；2026-10-25 曾改鎖碼（審查 B-01），2026-10-27 Eason 改回不鎖碼：「將四項改成人資都能開」
   'platform.bulletin',         // 2026-10-26 公告管理（電子佈告欄的公告管理／新增公告；原本同仁名單逐人勾 BULLETIN_ADMINS，Eason：搬進權限設定、不鎖碼、人資可設）
@@ -719,7 +719,7 @@ var PERM_NAMES = {
   'platform.staff': '同仁名單', 'platform.users': '人員管理', 'platform.permmap': '權限設定',
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核', 'platform.unitstaff': '我的單位',
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
-  'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
+  'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'att.void': '考勤作廢', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
   'payroll.write': '薪酬計算', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對',
   'pnl.read': '損益試算：看', 'pnl.write': '損益試算：填', 'pnl.admin': '損益試算：管', 'transfer.write': '調撥管理',
   'platform.eval-manage': '績效評核：替所屬同仁打分', 'platform.eval-brand': '績效評核：看自己品牌各店', 'platform.eval-all': '績效評核：看全集團', 'platform.eval-admin': '績效評核：題目設定與定稿',

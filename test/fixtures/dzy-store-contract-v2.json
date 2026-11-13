@@ -121,7 +121,9 @@
               "name": "李計時"
             }
           ],
-          "view_people": []
+          "view_people": [],
+          "void_hours": [],
+          "void_req": []
         },
         "self": [
           {
@@ -184,7 +186,9 @@
               "sub": "DZY031",
               "name": "李計時"
             }
-          ]
+          ],
+          "void_hours": [],
+          "void_req": []
         },
         "self": [
           {
@@ -224,7 +228,9 @@
         "att": {
           "people": [],
           "req_people": [],
-          "view_people": []
+          "view_people": [],
+          "void_hours": [],
+          "void_req": []
         },
         "self": [
           {
@@ -300,7 +306,9 @@
               "name": "李計時"
             }
           ],
-          "view_people": []
+          "view_people": [],
+          "void_hours": [],
+          "void_req": []
         },
         "self": [],
         "own_clocks": [
@@ -336,7 +344,9 @@
         "att": {
           "people": [],
           "req_people": [],
-          "view_people": []
+          "view_people": [],
+          "void_hours": [],
+          "void_req": []
         },
         "self": [],
         "own_clocks": []

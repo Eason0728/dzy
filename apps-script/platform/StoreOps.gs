@@ -65,9 +65,13 @@ var STORE_SCHED_GATE_LADDERS = ['hq', 'office'];
 // 總部排班的打卡店別
 var STORE_SELF_CLOCK = 'hq';
 // 人資主管（不是 admin）可以設個別例外的兩個權限碼（spec §13.1）
-var STORE_HR_GRANTABLE = ['store.void', 'att.extra', 'platform.bulletin'];   // 2026-10-26 加公告管理（Eason：人資也能設）
+var STORE_HR_GRANTABLE = ['store.void', 'att.extra', 'att.void', 'platform.bulletin'];   // 2026-11-13 加考勤作廢 att.void（docs/att-void-hr）   // 2026-10-26 加公告管理（Eason：人資也能設）
 var STORE_PERM_VOID = 'store.void';
 var STORE_PERM_ATT_EXTRA = 'att.extra';
+// 考勤作廢（2026-11-13 Eason 開工 1A～6A，docs/att-void-hr）：只走個別例外。持有人（非 admin／人資主管、在職、身分有效）
+//   ‧ident att.void_hours／att.void_req＝跟人資主管同一份工時／申請名單（全集團、不含自己）；營運系統只拿來「讀」與「作廢」，不核准、不退回、不核定工時
+//   ‧有 platform.att（考勤管理選單），沒有 platform.storeops、platform.sched
+var STORE_PERM_ATT_VOID = 'att.void';
 
 // ── 支援打卡誰來核（2026-10-26 Eason 定案，docs/att-support/spec.md §1）──
 // 支援帳號：打卡帳號所在打卡店的單位清單（clkUnitsOf_）不含這位同仁的單位；總部打卡（hq）一律不算支援。
@@ -1022,10 +1026,21 @@ function storeIdent_(sub) {
   }
   // 2026-10-26 依打卡帳號所在的店算（支援打卡交給打卡店主管；docs/att-support/spec.md）＋ 指定門市只看考勤（att.view@<單位>）
   var dirSched = p ? storeSchedDirector_(p, org, pilot) : { units: [], hqShift: false };   // 總監排班（2026-10-30）
-  var lists = storeAttLists_(me, flags, people, org, home, clkSheetsReady_() ? clkMaps_() : [], storeClockUnits_(), rctx, pilot, {
+  var attMaps = clkSheetsReady_() ? clkMaps_() : [], attStoreUnits = storeClockUnits_();
+  var lists = storeAttLists_(me, flags, people, org, home, attMaps, attStoreUnits, rctx, pilot, {
     viewUnits: viewUnits,
     exViewUnits: (p && !admin && !hrHead) ? storeAttViewExUnits_(perms, org) : []
   });
+  // 考勤作廢 att.void：照人資主管的名單算（flags 換成 hrHead），只給作廢與讀取用；admin／人資主管本來就能作廢 → 不另給
+  var voidLists = { people: [], req_people: [] };
+  if (p && valid && !admin && !hrHead && perms.indexOf(STORE_PERM_ATT_VOID) !== -1) {
+    voidLists = storeAttLists_(me, { admin: false, hrHead: true, attExtra: false }, people, org, home, attMaps, attStoreUnits, rctx, pilot, {});
+    // 人資主管本人的單不給屬下作廢（2026-11-13 審查 1：人資主管自己的名單本來就不含自己，持有人不能比他寬）
+    var hrHeadSubs = {};
+    people.forEach(function (x) { if (stfIsHrHead_(x)) hrHeadSubs[stfStr_(x.emp)] = true; });
+    var dropHr = function (arr) { return arr.filter(function (e) { return !hrHeadSubs[e.sub]; }); };
+    voidLists = { people: dropHr(voidLists.people), req_people: dropHr(voidLists.req_people) };
+  }
   return {
     sub: sub, active: true,
     emp_no: p ? p.emp : '',
@@ -1039,7 +1054,7 @@ function storeIdent_(sub) {
     pilot_units: pilot,
     units_managed: storeUniqSorted_(managed),
     void_units: storeUniqSorted_(voidUnits),
-    att: { people: lists.people, req_people: lists.req_people, view_people: lists.view_people },   // people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）；view_people＝只看（督導／總監 REGIONS_ON='1'、原單位主管看支援帳號、att.view@<單位>；2026-10-25／26）
+    att: { people: lists.people, req_people: lists.req_people, view_people: lists.view_people, void_hours: voidLists.people, void_req: voidLists.req_people },   // void_hours／void_req＝考勤作廢 att.void（2026-11-13；只讀＋作廢）；   // people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）；view_people＝只看（督導／總監 REGIONS_ON='1'、原單位主管看支援帳號、att.view@<單位>；2026-10-25／26）
     self: storeSelfClocks_(p, org),   // 總部排班身分（2026-10-25）：只列 clock＝hq，不受試點限制
     sched_units: dirSched.units,          // 總監排班（2026-10-30）：odir＝本品牌試點內門市，其他＝[]
     sched_hq_shift: dirSched.hqShift,     // hm／odir 在職＝true（改總部班別清單）
@@ -1142,6 +1157,7 @@ function storeAttGate_(values) {
   if (stfExtraHeadDepts_(stfReadExtraMap_()[stfNormEmp_(values[STF_COL.emp_no])], p.title, stfReadOrg_()).some(function (d) { return STORE_ATT_HR_ONLY_DEPTS.indexOf(d) === -1; })) return true;
   var perms = storeRowPerms_(values);
   if (perms.indexOf(STORE_PERM_ATT_EXTRA) !== -1) return true;
+  if (perms.indexOf(STORE_PERM_ATT_VOID) !== -1) return true;   // 考勤作廢（2026-11-13）
   // 沒有 att.view@ 碼就不讀 org（Fable 審查 2：一般同仁每次登入都會走到這裡）
   if (!perms.some(function (c) { return String(c).indexOf('att.view@') === 0; })) return false;
   return storeAttViewExUnits_(perms, stfReadOrg_()).length > 0;

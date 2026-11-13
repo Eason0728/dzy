@@ -256,7 +256,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   const { sb, sheets, P, counters } = app;
   const A = sb.__admin;
   const g = post(sb, 'permMapGet', {}, A);
-  ok(g.ok && g.data.inited && g.data.rules.length === 36 && g.data.grantable.length === 30 && g.data.grantable[18] === 'transfer.write' && g.data.grantable[13] === 'platform.bulletin' && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write,pnl.admin,platform.aihelp', '3: permMapGet 回 36 條規則、30 個可給功能（2026-11-02 AI 小幫手 platform.aihelp；2026-10-30 作廢巡檢 insp-void；2026-10-27 營運巡檢五碼）、7 個鎖碼（2026-11-02 加 platform.aihelp；2026-10-27 收支管理改回不鎖）', g.data && Object.keys(g.data));
+  ok(g.ok && g.data.inited && g.data.rules.length === 36 && g.data.grantable.length === 31 && g.data.grantable[19] === 'transfer.write' && g.data.grantable[14] === 'platform.bulletin' && g.data.grantable[11] === 'att.void' && g.data.locked.join() === 'platform.users,platform.permmap,audit.write,platform.staff,payroll.write,pnl.admin,platform.aihelp', '3: permMapGet 回 36 條規則、31 個可給功能（2026-11-13 考勤作廢 att.void；2026-11-02 AI 小幫手 platform.aihelp；2026-10-30 作廢巡檢 insp-void；2026-10-27 營運巡檢五碼）、7 個鎖碼（2026-11-02 加 platform.aihelp；2026-10-27 收支管理改回不鎖）', g.data && Object.keys(g.data));
   ok(g.data.titles.some((t) => t.code === 'osv' && t.rank === 2 && t.ladder === 'office') && g.data.depts.some((d) => d.code === 'hr') && g.data.names['audit.read'], '3: permMapGet 的 titles／depts／names 有內容（osv 職級 2）');
   const sav = (tok, add, remove) => post(sb, 'permMapSave', { add: add || [], remove: remove || [] }, tok);
   const R = (ladder, dept, title, perm) => ({ ladder, dept, title, perm });
