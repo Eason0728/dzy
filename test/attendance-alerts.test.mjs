@@ -19,6 +19,12 @@ await t('三項都有', () => assert.deepEqual(toAlerts({ items: items3, partial
   { level: 'warn', text: '本月還有 3 天沒核定', view: 'approve', when: 'overdue' },
   { level: 'warn', text: '2 筆加班請假申請待審', view: 'request', when: 'today' },
   { level: 'warn', text: '1 支新手機等核准', view: 'device', when: 'today' }]));
+await t('被退回（考勤副本背景送出，2026-11-14）：排最前面、點了進核定工時、不算進側邊欄數字', () => {
+  const d = { items: items3.concat({ kind: 'rejected', count: 2 }), partial: false, pending: false };
+  assert.deepEqual(toAlerts(d)[0], { level: 'warn', text: '2 筆核定被打卡系統退回，請重新處理', view: 'approve', when: 'today' });
+  assert.equal(toAlerts(d).length, 4);
+  assert.equal(toBadge(d), 5);
+});
 await t('零件數回空陣列', () => assert.deepEqual(toAlerts({ items: [{ kind: 'approve', count: 0 }], partial: false }), []));
 await t('items 空', () => assert.deepEqual(toAlerts({ items: [] }), []));
 await t('pending', () => assert.deepEqual(toAlerts({ items: [], pending: true }), [{ level: 'info', text: '出勤待辦統計中，稍後回首頁就會看到' }]));
