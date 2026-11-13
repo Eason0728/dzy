@@ -45,20 +45,22 @@ const RULES = [
 ];
 const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin'] }, ORG);
 
-t('對照表 30 列（2026-11-02 加 AI 小幫手）、順序固定（2026-10-30 作廢巡檢碼；2026-10-29 補績效評核四碼、營運巡檢五碼）（不跟後端 grantable 順序）', () => {
+t('對照表 31 列（2026-11-13 加考勤作廢 att.void；2026-11-02 加 AI 小幫手）、順序固定（2026-10-30 作廢巡檢碼；2026-10-29 補績效評核四碼、營運巡檢五碼）（不跟後端 grantable 順序）', () => {
   const rows = L.featureRows(DATA);
-  assert.equal(rows.length, 30);
-  assert.equal(rows[18].perm, 'transfer.write');
-  assert.equal(rows[18].name, '調撥管理');
-  assert.equal(rows[13].perm, 'platform.bulletin');
-  assert.equal(rows[13].name, '公告管理');
+  assert.equal(rows.length, 31);
+  assert.equal(rows[19].perm, 'transfer.write');
+  assert.equal(rows[19].name, '調撥管理');
+  assert.equal(rows[11].perm, 'att.void');
+  assert.equal(rows[11].name, '考勤作廢');
+  assert.equal(rows[14].perm, 'platform.bulletin');
+  assert.equal(rows[14].name, '公告管理');
   assert.deepEqual(rows.map((r) => r.perm), L.FEATURE_ORDER);
   assert.equal(rows[0].name, '看自己店稽核');
   assert.equal(rows[8].name, '改權限對照表');
   assert.equal(rows[9].name, '收支作廢');
   assert.equal(rows[10].name, '額外考勤核定');
-  assert.equal(rows[11].name, '薪酬計算');
-  assert.equal(rows[12].name, '收支管理');
+  assert.equal(rows[12].name, '薪酬計算');
+  assert.equal(rows[13].name, '收支管理');
 });
 t('鎖住的兩列', () => {
   const locked = L.featureRows(DATA).filter((r) => r.locked).map((r) => r.perm);
@@ -71,8 +73,8 @@ t('同一列的 chip 依階梯→部門排', () => {
 t('★對照表列以後端 grantable 為準（FEATURE_ORDER 只管排序與中文名；後端沒給的碼不畫，多給的接在後面；沒回才退回全部，2026-10-29）', () => {
   const sub = L.featureRows(Object.assign({}, DATA, { grantable: ['pnl.read', 'audit.read', 'x.new'] }));
   assert.deepEqual(sub.map((r) => r.perm), ['audit.read', 'pnl.read', 'x.new']);
-  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: [] })).length, 30, '空陣列當沒回');
-  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: undefined })).length, 30);
+  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: [] })).length, 31, '空陣列當沒回');
+  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: undefined })).length, 31);
 });
 t('沒有規則的功能 rules 為空', () => assert.deepEqual(L.featureRows(DATA).find((x) => x.perm === 'dorm.write').rules, []));
 
@@ -307,7 +309,7 @@ t('★個別例外的功能下拉以後端 permExList 回的 grantable 為準；
   assert.deepEqual(L.exFeatureList({ grantable: [] }, true), L.FEATURE_ORDER, '空陣列當沒回');
 });
 t('人資主管在個別例外只能選的三碼（2026-10-26 加公告管理），都在可給清單裡', () => {
-  assert.deepEqual(L.HR_EX_FEATURES, ['store.void', 'att.extra', 'platform.bulletin']);
+  assert.deepEqual(L.HR_EX_FEATURES, ['store.void', 'att.extra', 'att.void', 'platform.bulletin']);
   L.HR_EX_FEATURES.forEach((p) => assert.ok(L.FEATURE_ORDER.includes(p), p));
 });
 t('薪酬負責門市（payroll.store@，docs/payroll-scope/spec.md §5）：代碼、名稱', () => {
