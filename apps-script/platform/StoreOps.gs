@@ -634,6 +634,15 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
     // 推算不出的人（orphan）照舊只給人資主管／admin；打卡店不在試點時，非支援帳號（推算者、品牌辦公室同仁）照原身分（同 10-30 對抗驗證：不讓帳號從所有人名單消失）
     var byClock = a.units.length > 0 && !a.ex && !t.orphan && (pClock || a.support);
     var pHome = storeAnyIn_(t.pilotUnits || [t.unit], pilot) || (a.ex && pClock);   // 個人例外的帳號：打卡店在試點也算（2026-10-29 審查低 3）
+    // 2026-11-15 驗收 C1-1：有單位、沒職稱（或職稱代碼已停用）、又沒有主店可推算的人（orphan 且 pilotUnits 空；例：唯一的打卡對照在別家店）
+    //   pHome 永遠不成立 → 連人資主管／admin 的工時、申請名單都沒有他。只補這一種、只給人資主管／admin：改看打卡店單位在不在試點。
+    //   沒填單位（或單位已停用）的人照舊不列（每日同步會把他的對照改成主店、走推算）；其他身分不受影響（orphan 本來就不在他們的 hrsT／reqT）。
+    var hrOrphan = false;
+    if (t.orphan && (flags.admin || flags.hrHead) && !(t.pilotUnits || []).length) {
+      var ou = org.unit[stfStr_(t.unit)];
+      var cu = ((storeUnits && storeUnits[a.m.store_code]) || []).filter(function (c) { var u = org.unit[c]; return !!(u && u.active && ((u.ladder || 'store') === 'store' || u.ladder === 'hq')); });
+      hrOrphan = !!(ou && ou.active) && storeAnyIn_(cu, pilot);
+    }
     var apprH;
     if (byClock) {
       // 多單位共用的打卡店：在本人單位打卡只看本人單位的店長（不讓同店別單位店長核），不在本人單位才看打卡店全部單位
@@ -643,12 +652,13 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
       var extra = !!flags.attExtra && !!myUnit && (a.away ? a.units : [stfStr_(t.unit)]).indexOf(myUnit) !== -1 && !self;
       apprH = pClock && needH && (((flags.admin || flags.hrHead) && !self) || extra || (!!myEmp && !!headCache[key][myEmp]));
     } else {
-      apprH = pHome && !!hrsT[t.emp];   // 同 10-26 前：人資主管／admin 也看得到不推算的人（hrsT 已含）
+      apprH = (pHome || hrOrphan) && !!hrsT[t.emp];   // 同 10-26 前：人資主管／admin 也看得到不推算的人（hrsT 已含）
     }
     if (apprH) storeAttListAdd_(L.hours, a);
     // 申請資料存在打卡店那邊：門市／央廚打卡要打卡店在試點才列（營運系統才讀得到），總部打卡與個人例外看本人
     var pAcct = byClock ? pClock : pHome;
     if (pAcct && reqT[t.emp] && !t.orphan && attNeedOf_(t, org, 'req')) storeAttListAdd_(L.req, a);
+    else if (hrOrphan && reqT[t.emp]) storeAttListAdd_(L.req, a);   // C1-1：這種人的申請也只有人資主管／admin 核得到（reqT 已不含本人）
     if (viewable && pAcct) {
       // 督導／總監只看：在本人單位打卡看本人單位、不在本人單位看打卡店單位（同舊規則）；
       // 原本照身分能核工時、改規則後核不到這個帳號的人（例：督導到門市打卡時的總監、支援同仁的原單位店長）→ 只看

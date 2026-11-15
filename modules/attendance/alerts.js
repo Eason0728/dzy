@@ -52,11 +52,16 @@ export function toAlerts(data) {
   return out;
 }
 
-/** 上游 data → 側邊欄／卡片數字（核定＋申請）；統計中或形狀不對回 null */
+/**
+ * 上游 data → 側邊欄／卡片數字（核定＋申請）；統計中或形狀不對回 null。
+ * 部分門市讀不到（partial）而且件數是空的：這個 0 不可信，也回 null（當讀不到，2026-11-15）；partial 但有件數照樣給數字。
+ */
 export function toBadge(data) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.items)) return null;
   if (data.pending === true) return null;
-  return countOf(data.items, 'approve') + countOf(data.items, 'request');
+  const n = countOf(data.items, 'approve') + countOf(data.items, 'request');
+  if (data.partial === true && n === 0) return null;
+  return n;
 }
 
 /**
