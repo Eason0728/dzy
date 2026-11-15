@@ -43,6 +43,12 @@ var PERM_ACTING_RE = /^store\.sm@([A-Za-z0-9_-]{1,40})$/;
 //   效果：StaffClock.gs clkActor_ 把他當成該店的單位主管（新增、離職登記、打卡連結、打卡對照、本店打卡提醒；職級照本人職稱）。
 var PERM_STAFF_ADD_PREFIX = 'staff.add@';
 var PERM_STAFF_ADD_RE = /^staff\.add@([A-Za-z0-9_-]{1,40})$/;
+// 2026-11-15 排班管理（指定門市）（docs/sched-admin-ex，Eason 開工 1A 2A 3A 4A）：sched.admin@<門市單位>，例 sched.admin@mzt-gf。
+//   跟 store.sm@ 一樣只走個別例外、只能「多給」、不進 permCompute_ 的 perms；admin 與人資主管都能設（PermActions.gs permAcExAuth_）。
+//   單位要存在、啟用、store 階梯、不是央廚（同 permActingUnitOk_）；可以是任何一家門市（不限本人主要單位，督導也能用）。
+//   效果只有排班：StoreOps.gs 把這些門市併進 ident.sched_units（營運系統 schedUnit＝排班跟店長一樣，不算 isManager），排班選單 storeSchedGate_ 放行。
+var PERM_SCHED_ADMIN_PREFIX = 'sched.admin@';
+var PERM_SCHED_ADMIN_RE = /^sched\.admin@([A-Za-z0-9_-]{1,40})$/;
 // 2026-10-29 薪酬負責門市（docs/payroll-scope/spec.md §1）：payroll.store@<薪資店代碼>，例 payroll.store@CF。同 att.view@ 的做法：
 //   不在 PERM_GRANTABLE、規則一律不收、只走個別例外、只認 add；只有 admin 能設（permAcExAuth_：人資主管只能動 STORE_HR_GRANTABLE，不含它）。
 //   平台不驗證代碼是否存在於薪資門市表（平台讀不到）；代轉時 proxyWithOperator_ 把這些代碼整理成 scope 交給薪資後端裁切。
@@ -168,7 +174,7 @@ function permActingUnitOk_(unit, org) {
 var PERM_ACTING_CACHE_ = null;
 var PERM_ACTING_TTL_MS = 3000;   // 不經 dispatch_ 的全域函式（mini 排程）也不會一直拿舊值
 /** 每個請求開頭清（Code.gs dispatch_）；測試改了 perm_ex 也要清 */
-function permActingReset_() { PERM_ACTING_CACHE_ = null; PERM_STAFF_ADD_CACHE_ = null; }
+function permActingReset_() { PERM_ACTING_CACHE_ = null; PERM_STAFF_ADD_CACHE_ = null; PERM_SCHED_ADMIN_CACHE_ = null; }
 /**
  * 兼任店長對照（同一個請求內快取）：{同仁編號: [單位…]}（排序去重）。
  * 只採 perm_ex 中 active、mode add、碼合法、單位合法（permActingUnitOk_）、沒過期（到期日當天仍有效；壞日期＝不給）的列，
@@ -280,6 +286,59 @@ function permAttExtraEmps_() {
     });
   } catch (e) { return {}; }
   return out;
+}
+/** sched.admin@<單位> → 單位代碼；不是這種碼 → '' */
+function permSchedAdminUnit_(perm) {
+  var m = PERM_SCHED_ADMIN_RE.exec(permStr_(perm));
+  return m ? m[1] : '';
+}
+/** 排班管理（指定門市）的單位合不合法：同兼任店長（存在、啟用、store 階梯、不是央廚）。央廚是固定排班、總部是自填，不適用 */
+function permSchedAdminUnitOk_(unit, org) { return permActingUnitOk_(unit, org); }
+/**
+ * 排班管理（指定門市）對照（同一個請求內快取，TTL 同兼任店長）：{同仁編號: [{unit, until, ex_id}…]}（依單位排序、同店只留一筆，取最晚到期）。
+ * 只採 perm_ex 中 active、mode add、碼合法、單位合法、沒過期（到期日當天仍有效；壞日期＝不給）的列；
+ * 本人要在職、主要身分有效（permStaffIdentityOk_）、單位在試點（STORE_SSO_UNITS）。不看 PERMS_ON。表沒建或讀失敗＝{}。
+ */
+var PERM_SCHED_ADMIN_CACHE_ = null;
+function permSchedAdminMap_() {
+  if (PERM_SCHED_ADMIN_CACHE_ && Date.now() - PERM_SCHED_ADMIN_CACHE_.at < PERM_ACTING_TTL_MS) return PERM_SCHED_ADMIN_CACHE_.map;
+  var out = {};
+  try {
+    var t = permReadTable_(SpreadsheetApp.getActive(), PERM_SHEET_EX, PERM_EX_HEADERS);
+    if (!t.missing && !t.mismatch && t.rows.length) {
+      var org = permOrgIndex_();
+      var today = permTodayTaipei_();
+      t.rows.forEach(function (r) {
+        var unit = permSchedAdminUnit_(r[2]);
+        if (!unit || !permIsActive_(r[6]) || permStr_(r[3]).toLowerCase() !== 'add') return;
+        if (!permSchedAdminUnitOk_(unit, org)) return;
+        var until = '';
+        if (permStr_(r[4]) !== '') { until = permNormDate_(r[4]); if (!until || until < today) return; }
+        var emp = permStr_(r[1]).toUpperCase();
+        if (!emp) return;
+        var list = out[emp] = out[emp] || [];
+        var old = list.filter(function (x) { return x.unit === unit; })[0];
+        if (!old) list.push({ unit: unit, until: until, ex_id: permStr_(r[0]) });
+        else if (old.until !== '' && (until === '' || until > old.until)) { old.until = until; old.ex_id = permStr_(r[0]); }
+      });
+      var pilot = typeof storePilotUnits_ === 'function' ? storePilotUnits_() : [];
+      Object.keys(out).forEach(function (k) {
+        var hit = typeof stfFindByEmp_ === 'function' ? stfFindByEmp_(k) : null;
+        var v = hit ? hit.values : null;
+        if (!v || permStr_(v[STF_COL.status]) !== 'active' || !permStaffIdentityOk_(org, v)) { delete out[k]; return; }
+        var list = out[k].filter(function (x) { return pilot.indexOf(x.unit) !== -1; });
+        list.sort(function (a, b) { return a.unit < b.unit ? -1 : (a.unit > b.unit ? 1 : 0); });
+        if (list.length) out[k] = list; else delete out[k];
+      });
+    }
+  } catch (e) { out = {}; }
+  PERM_SCHED_ADMIN_CACHE_ = { at: Date.now(), map: out };
+  return out;
+}
+/** 某人「排班管理（指定門市）」生效的門市單位（[]＝沒有） */
+function permSchedAdminUnitsOf_(emp) {
+  var e = permStr_(emp).toUpperCase();
+  return e ? (permSchedAdminMap_()[e] || []).map(function (x) { return x.unit; }) : [];
 }
 function permActingUnitsOf_(emp) {
   var e = permStr_(emp).toUpperCase();
@@ -604,7 +663,8 @@ function permValidateEx_(ex, today, org) {
   var acu = permActingUnit_(ex.perm);
   var psc = permPayrollStoreCode_(ex.perm);
   var sau = permStaffAddUnit_(ex.perm);
-  if (!avu && !acu && !psc && !sau && !permIsGrantable_(ex.perm)) return permErr_('bad_perm', '這個功能不能設成例外');
+  var sdu = permSchedAdminUnit_(ex.perm);
+  if (!avu && !acu && !psc && !sau && !sdu && !permIsGrantable_(ex.perm)) return permErr_('bad_perm', '這個功能不能設成例外');
   var mode = permStr_(ex.mode);
   if (mode !== 'add' && mode !== 'remove') return permErr_('bad_mode', '請選擇多給或拿掉');
   if (psc && mode !== 'add') return permErr_('bad_mode', '薪酬負責門市只能「多給」；要收回請撤銷那筆例外');
@@ -615,6 +675,10 @@ function permValidateEx_(ex, today, org) {
   if (sau) {
     if (mode !== 'add') return permErr_('bad_mode', '可新增同仁只能「多給」；要收回請撤銷那筆例外');
     if (!permStaffAddUnitOk_(sau, org)) return permErr_('bad_target', '這個門市不存在、已停用，或不是門市／央廚');
+  }
+  if (sdu) {
+    if (mode !== 'add') return permErr_('bad_mode', '排班管理只能「多給」；要收回請撤銷那筆例外');
+    if (!permSchedAdminUnitOk_(sdu, org)) return permErr_('bad_target', '這個門市不存在、已停用，或不是門市（央廚、總部不適用）');
   }
   if (acu) {
     if (mode !== 'add') return permErr_('bad_mode', '兼任店長只能「多給」；要收回請撤銷那筆例外');
@@ -746,6 +810,12 @@ function permName_(code) {
     try { org3 = typeof stfReadOrg_ === 'function' ? stfReadOrg_() : null; } catch (e3) { org3 = null; }
     return '可新增同仁（' + permAttViewLabel_(sau, org3) + '）';
   }
+  var sdu = permSchedAdminUnit_(code);
+  if (sdu) {
+    var org4 = null;
+    try { org4 = typeof stfReadOrg_ === 'function' ? stfReadOrg_() : null; } catch (e4) { org4 = null; }
+    return '排班管理（' + permAttViewLabel_(sdu, org4) + '）';
+  }
   var psc = permPayrollStoreCode_(code);
   if (psc) return '薪酬負責門市（' + psc + '）';
   return code;
@@ -854,6 +924,14 @@ function permSessionCompute_(base, staffValues) {
     var addP = function (p) { if (perms.indexOf(p) === -1 && perms.indexOf('*') === -1) { perms.push(p); sources.push({ perm: p, source: 'acting' }); } };
     if (!perms.some(function (p) { return p === 'audit.read' || p === 'audit.write' || p === 'audit.read.brand' || p === 'audit.read.own'; })) addP('audit.read.own');
     addP('platform.eval-manage');
+  }
+  // 排班管理（指定門市）（2026-11-15）：權限本身是衍生的 platform.sched（排班選單），這裡只補來源讓「我的資料」列出是哪幾家店、到哪天
+  if (permStr_(staffValues[STF_COL.status]) === 'active') {
+    (permSchedAdminMap_()[permStr_(emp).toUpperCase()] || []).forEach(function (x) {
+      var s0 = { perm: PERM_SCHED_ADMIN_PREFIX + x.unit, source: 'exception', ex_id: x.ex_id };
+      if (x.until) s0.until = x.until;
+      sources.push(s0);
+    });
   }
   return { perms: perms, auditScope: scope, sources: sources };
 }

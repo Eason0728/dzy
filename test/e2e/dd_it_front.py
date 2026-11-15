@@ -32,7 +32,7 @@ GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 
              'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
              'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void']
 LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin']
-HR_EX = ['store.void', 'att.extra', 'platform.bulletin']
+HR_EX = ['store.void', 'att.extra', 'att.void', 'platform.bulletin']   # 2026-11-13 加考勤作廢 att.void（STORE_HR_GRANTABLE）
 NAMES = {p: p for p in GRANTABLE}
 TITLES = [('pt', '計時同仁', 'store', 1), ('ft', '正職同仁', 'store', 2), ('sm', '店長', 'store', 3), ('am', '區經理', 'store', 4), ('fm', '廠長', 'store', 3), ('rdd', '廚藝總監', 'store', 4),
           ('ofs', '行政同仁', 'office', 1), ('osv', '區督導', 'office', 2), ('odir', '總監', 'office', 3),
@@ -374,8 +374,9 @@ class MockIT(MockBackend):
                                                      'perms': self.perms_of(s, self.rules), 'sources': [{'perm': x, 'source': 'title', 'rule_id': 'R001'} for x in self.perms_of(s, self.rules)],
                                                      'audit_scope': 'none'} for s in hits]}}
         if action == 'permExList':
-            items = [dict(x) for x in self.exs if is_admin or x['perm'] in HR_EX or x['perm'].startswith('store.sm@')]
-            data = {'inited': True, 'items': items, 'acting_units': [{'code': u[0], 'name': u[1]} for u in UNITS if u[3] == 'store' and u[0] != 'ck']}
+            items = [dict(x) for x in self.exs if is_admin or x['perm'] in HR_EX or x['perm'].startswith('store.sm@') or x['perm'].startswith('sched.admin@')]
+            data = {'inited': True, 'items': items, 'acting_units': [{'code': u[0], 'name': u[1]} for u in UNITS if u[3] == 'store' and u[0] != 'ck'],
+                    'sched_admin_units': [{'code': u[0], 'name': u[1]} for u in UNITS if u[3] == 'store' and u[0] != 'ck']}   # 2026-11-15 排班管理（指定門市）
             if is_admin:
                 data['att_view_units'] = [{'code': u[0], 'name': u[1]} for u in UNITS if u[3] == 'store']
             return {'ok': True, 'data': data}
@@ -745,7 +746,7 @@ def main():
             vals = [o.get_attribute('value') for o in feat_opts]
             missing_feats = [p for p in GRANTABLE if p not in vals]
             check(not missing_feats, '★系統問題候選：admin 個別例外的功能下拉應含後端 grantable 全部 %d 碼，缺 %s（lib.js FEATURE_ORDER 沒跟上 Perms.gs PERM_GRANTABLE）' % (len(GRANTABLE), missing_feats))
-            check('__att_view__' in vals and '__acting__' in vals and '__payroll_store__' in vals, 'admin 功能下拉含只看考勤／兼任店長／薪酬負責門市')
+            check('__att_view__' in vals and '__acting__' in vals and '__payroll_store__' in vals and '__sched_admin__' in vals, 'admin 功能下拉含只看考勤／兼任店長／薪酬負責門市／排班管理')
             ad.fill('[data-role="ex-who"]', '沒這個人')
             ad.fill('[data-role="ex-note"]', '')
             cm.click(ad, '[data-role="ex-submit"]', '新增例外送出')
@@ -789,6 +790,21 @@ def main():
             check(toast(ad, '已新增例外') and mock.last_ex['perm'] == 'store.sm@' + act_unit and mock.last_ex['mode'] == 'add', '兼任店長送出 store.sm@%s、add' % act_unit)
             ad.wait_for_selector('[data-role="ex-item"][data-ex="%s"]' % mock.exs[-1]['ex_id'])
             check('兼任店長' in ad.locator('[data-role="ex-item"][data-ex="%s"]' % mock.exs[-1]['ex_id']).inner_text(), '清單顯示「兼任店長（門市）」')
+            # 排班管理（指定門市）（2026-11-15）：選了才出現門市欄、模式鎖多給、送 sched.admin@<門市>、清單顯示「排班管理（門市名）」
+            ad.select_option('[data-role="ex-perm"]', '__sched_admin__')
+            check(ad.locator('[data-role="ex-sched-field"]').is_visible() and ad.locator('[data-role="ex-acting-field"]').is_hidden() and ad.locator('[data-role="ex-mode"]').is_disabled() and ad.input_value('[data-role="ex-mode"]') == 'add', '排班管理 → 門市下拉出現、兼任收起、模式鎖多給')
+            check('鎖定與解鎖' in ad.inner_text('[data-role="ex-hint"]'), '排班管理有說明文字')
+            ad.fill('[data-role="ex-who"]', target['emp_no'])
+            ad.fill('[data-role="ex-note"]', '排班測試')
+            ad.click('[data-role="ex-submit"]')
+            check('請選擇門市' in ad.inner_text('[data-role="ex-error"]'), '排班管理沒選門市 → 「請選擇門市」')
+            sch_u = R.choice([u for u in UNITS if u[3] == 'store' and u[0] != 'ck'])
+            ad.select_option('[data-role="ex-sched"]', sch_u[0])
+            ad.click('[data-role="ex-submit"]')
+            check(toast(ad, '已新增例外') and mock.last_ex['perm'] == 'sched.admin@' + sch_u[0] and mock.last_ex['mode'] == 'add', '排班管理送出 sched.admin@%s、add' % sch_u[0])
+            ad.wait_for_selector('[data-role="ex-item"][data-ex="%s"]' % mock.exs[-1]['ex_id'])
+            sch_txt = ad.locator('[data-role="ex-item"][data-ex="%s"]' % mock.exs[-1]['ex_id']).inner_text()
+            check(('排班管理（%s）' % sch_u[1]) in sch_txt, '清單顯示「排班管理（%s）」：%s' % (sch_u[1], sch_txt))
             ad.select_option('[data-role="ex-perm"]', '__payroll_store__')
             check(ad.locator('[data-role="ex-pay-field"]').is_visible(), '薪酬負責門市 → 門市欄出現')
             ad.fill('[data-role="ex-who"]', target['emp_no'])
@@ -800,7 +816,7 @@ def main():
                 check(toast(ad, '已新增例外') and mock.last_ex['perm'] == 'payroll.store@CF', '薪酬門市手動輸入 cf → payroll.store@CF（轉大寫）')
             cm.mark(cm.key(ad, '[data-role="ex-perm"]'), '功能下拉切換')
             cm.mark(cm.key(ad, '[data-role="ex-mode"]'), '模式下拉')
-            for sel in ('[data-role="ex-unit"]', '[data-role="ex-acting"]', '[data-role="ex-pay"]'):
+            for sel in ('[data-role="ex-unit"]', '[data-role="ex-acting"]', '[data-role="ex-pay"]', '[data-role="ex-sched"]'):
                 if ad.locator(sel).count():
                     cm.mark(cm.key(ad, sel), '門市下拉')
             shot(ad, 'perms-ex-admin')
@@ -943,10 +959,10 @@ def main():
             hr.wait_for_selector('[data-role="ex-perm"]')
             opts = hr.locator('[data-role="ex-perm"] option').all()
             vals = [o.get_attribute('value') for o in opts]
-            check(vals == HR_EX + ['__acting__'], '人資主管功能下拉＝三碼＋兼任店長（沒有只看考勤、薪酬門市）：%s' % vals)
+            check(vals == HR_EX + ['__acting__', '__sched_admin__'], '人資主管功能下拉＝三碼＋兼任店長＋排班管理（沒有只看考勤、薪酬門市）：%s' % vals)
             check(hr.locator('[data-role="ex-unit-field"]').count() == 0 and hr.locator('[data-role="ex-pay-field"]').count() == 0, '沒有只看考勤／薪酬門市欄')
             shown = [e.get_attribute('data-ex') for e in hr.locator('[data-role="ex-item"]').all()]
-            exp_shown = [x['ex_id'] for x in mock.exs if x['perm'] in HR_EX or x['perm'].startswith('store.sm@')]
+            exp_shown = [x['ex_id'] for x in mock.exs if x['perm'] in HR_EX or x['perm'].startswith('store.sm@') or x['perm'].startswith('sched.admin@')]
             check(sorted(shown) == sorted(exp_shown), '人資主管只看到三碳＋兼任的例外（%d 筆）' % len(exp_shown))
             hr.fill('[data-role="ex-who"]', mock.acct['hrm'])
             hr.fill('[data-role="ex-note"]', '給自己')
