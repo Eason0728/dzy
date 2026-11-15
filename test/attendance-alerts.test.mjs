@@ -25,6 +25,14 @@ await t('被退回（考勤副本背景送出，2026-11-14）：排最前面、�
   assert.equal(toAlerts(d).length, 4);
   assert.equal(toBadge(d), 5);
 });
+await t('等同仁補單（2026-11-15）：排在沒核定後面、點了進核定工時、不算進側邊欄數字', () => {
+  const d = { items: items3.concat({ kind: 'wait', count: 4 }), partial: false, pending: false };
+  const r = toAlerts(d);
+  assert.equal(r.length, 4);
+  assert.deepEqual(r[1], { level: 'warn', text: '4 筆在等同仁補單，結薪前要處理', view: 'approve', when: 'today' });
+  assert.equal(r[0].view, 'approve'); assert.equal(r[0].when, 'overdue');
+  assert.equal(toBadge(d), 5);
+});
 await t('零件數回空陣列', () => assert.deepEqual(toAlerts({ items: [{ kind: 'approve', count: 0 }], partial: false }), []));
 await t('items 空', () => assert.deepEqual(toAlerts({ items: [] }), []));
 await t('pending', () => assert.deepEqual(toAlerts({ items: [], pending: true }), [{ level: 'info', text: '出勤待辦統計中，稍後回首頁就會看到' }]));
