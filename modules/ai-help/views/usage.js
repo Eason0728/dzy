@@ -136,6 +136,7 @@ export function mountUsage(el, ctx, shared) {
     const down = it.feedback === 'down';
     box.appendChild(h('div', { class: 'aim-meta' }, [
       h('span', { 'data-role': 'log-time', style: 'white-space:nowrap' }, taipeiTime(it.ts)), '　·　',
+      it.asker ? h('span', { 'data-role': 'log-asker', style: 'white-space:nowrap' }, it.asker) : null, it.asker ? '　·　' : null,
       h('span', { 'data-role': 'log-page' }, pageLabel(pages, it.m, it.v)), '　·　',
       h('span', { class: 'aim-chip' + (it.kind === 'answered' ? '' : ' is-paused'), 'data-role': 'log-kind' }, KIND_ZH[it.kind] || it.kind || '—'),
       down ? ' ' : null,

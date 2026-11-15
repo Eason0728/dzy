@@ -562,7 +562,8 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   const r = post(sb, 'aihLogList', { month: '2026-11' }, adm);
   ok(r.ok && r.data.total === 4 && eq(r.data.items.map((x) => x.id), [LOGID(4), LOGID(3), LOGID(2), LOGID(1)]) && r.data.next === '', 'LL 11 月 4 筆、新的在前（同時間依 id 由大到小）、沒有下一頁', r.data.items && r.data.items.map((x) => x.id));
   const keys = r.data.items.map((x) => Object.keys(x).sort().join(','));
-  ok(keys.every((k) => k === 'answer,feedback,id,kind,m,q,ts,v'), 'LL 每筆只回 id ts m v q kind answer feedback（不回 uid、conv、tok、usd、kb_ids）', keys[0]);
+  ok(keys.every((k) => k === 'answer,asker,feedback,id,kind,m,q,ts,v'), 'LL 每筆只回 id ts m v q kind answer feedback asker（不回 uid、conv、tok、usd、kb_ids）', keys[0]);
+  ok(r.data.items.every((x) => x.asker === '（帳號已不存在）'), 'LL 提問者帳號不在 users → （帳號已不存在）', r.data.items.map((x) => x.asker));
   ok(!JSON.stringify(r.data).includes('u900'), 'LL 回應裡沒有 uid');
   const one = r.data.items.find((x) => x.id === LOGID(1));
   ok(one.feedback === 'down' && one.m === 'me' && one.v === 'profile' && one.kind === 'answered' && !('kb_ids' in one) && one.ts === '2026-11-01T01:00:00.000Z', 'LL 欄位：👎、頁面、kind、ts（ISO）、沒有 kb_ids', one);
@@ -593,6 +594,32 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   const nf = post(sb, 'aihLogList', { month: '2026-11', limit: 1 }, adm);
   sb.aihStaffNames_ = saved;
   ok(nf.ok && nf.data.names_ok === false && nf.data.items[0].answer === '' && nf.data.items[0].q === '' && nf.data.items[0].kind === 'answered', 'LL 同仁名單讀不到 → q、answer 都不回、names_ok:false（fail closed），其他照回', nf.data);
+})();
+
+// aihLogList 提問者姓名（2026-11-15 Eason：要顯示姓名）：users 姓名（帳號）、users 姓名空白改用 staff 姓名、帳號不存在、讀表失敗不擋
+(() => {
+  const app = scene();
+  const { sb } = app;
+  const adm = app.admin;
+  const uRow = (id, uname, name) => [id, uname, name, 'staff', '', 's', 'h', 'TRUE', '', '', ''];
+  app.sheets.users._data.push(uRow('u950', 'DZY950', '測試甲'), uRow('u951', 'DZY951', ''), uRow('u952', 'sysacct', ''));
+  const st = new Array(24).fill(''); st[0] = 'DZY951'; st[2] = '測試乙'; st[3] = 'active';
+  app.sheets.staff._data.push(st);
+  sb.aihLogAppend_(logRow({ id: LOGID(81), ts: '2026-11-02T04:00:00Z', uid: 'u950' }));
+  sb.aihLogAppend_(logRow({ id: LOGID(82), ts: '2026-11-02T04:01:00Z', uid: 'u951' }));
+  sb.aihLogAppend_(logRow({ id: LOGID(83), ts: '2026-11-02T04:02:00Z', uid: 'u952' }));
+  const r = post(sb, 'aihLogList', { month: '2026-11' }, adm);
+  const by = (n) => r.data.items.find((x) => x.id === LOGID(n));
+  ok(r.ok && by(81).asker === '測試甲（DZY950）', 'LA users 有姓名 → 姓名（帳號）', by(81));
+  ok(by(82).asker === '測試乙（DZY951）', 'LA users 姓名空白 → 用 staff 同編號姓名', by(82));
+  ok(by(83).asker === 'sysacct', 'LA 都沒有姓名 → 只回帳號', by(83));
+  ok(!JSON.stringify(r.data).includes('u950') && !JSON.stringify(r.data).includes('u951'), 'LA 回應裡仍沒有 uid');
+  ok(by(81).q === '怎麼改密碼', 'LA 問題內容照舊（提問者姓名不影響遮罩）', by(81).q);
+  const saved = sb.aihAskerMap_;
+  sb.aihAskerMap_ = () => null;      // 帳號表讀不到（aihAskerMap_ 內部 catch 回 null）；直接讓 readUsersRows_ 丟錯會連登入驗證一起壞
+  const f = post(sb, 'aihLogList', { month: '2026-11' }, adm);
+  sb.aihAskerMap_ = saved;
+  ok(f.ok && f.data.items.every((x) => x.asker === ''), 'LA 帳號表讀不到 → asker 空字串、清單照回', f.data && f.data.items.map((x) => x.asker));
 })();
 
 // aihLogList：ts 是 Date 物件、數字、沒時區字串（假試算表可能這樣存）也能排進月份；游標指向已刪除的列照樣往下接

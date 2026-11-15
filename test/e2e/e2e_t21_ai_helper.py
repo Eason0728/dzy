@@ -129,7 +129,8 @@ class Mock21(MockBackend):
                 ans = '這題我還不會' if kind == 'unknown' else ('到「我的資料」按「修改密碼」。' + '先輸入舊密碼，再輸入兩次新密碼，最後按儲存；忘記舊密碼請用 LINE 重設。' * (3 if i == 0 else 1))
                 out.append({'id': 'aih_202611%02d10%02d00_%04x' % (day, minute, i), 'ts': '2026-11-%02dT02:%02d:00.000Z' % (day, minute), 'm': m, 'v': v,
                             'q': self.LOG_QS[i % len(self.LOG_QS)] + ('' if i < 6 else '（第 %d 題）' % (i + 1)), 'kind': kind, 'answer': ans,
-                            'kb_ids': 'kb0001' if kind == 'answered' else '', 'feedback': 'down' if i in (1, 7) else ('up' if i == 4 else '')})
+                            'kb_ids': 'kb0001' if kind == 'answered' else '', 'feedback': 'down' if i in (1, 7) else ('up' if i == 4 else ''),
+                            'asker': '' if i == 1 else '假同仁%d（DZY9%02d）' % (i % 3, i % 3)})
             out.append({'id': 'aih_20261015100000_aaaa', 'ts': '2026-10-15T02:00:00.000Z', 'm': '', 'v': '', 'q': '十月的問題', 'kind': 'answered', 'answer': '十月', 'kb_ids': '', 'feedback': ''})
             self._logs = out
         return self._logs
@@ -504,6 +505,8 @@ def main():
                     first = items.nth(0)
                     check(first.locator('[data-role="log-time"]').inner_text() == '11-02 10:59', '⑧ 時間以台北時間顯示：%s' % first.locator('[data-role="log-time"]').inner_text())
                     check(first.locator('[data-role="log-page"]').inner_text() == '我的資料・個人資料', '⑧ 頁面名稱用中文對照：%s' % first.locator('[data-role="log-page"]').inner_text())
+                    check(first.locator('[data-role="log-asker"]').inner_text() == '假同仁0（DZY900）', '⑧ 顯示提問者姓名（帳號）：%s' % (first.locator('[data-role="log-asker"]').all_inner_texts(),))
+                    check(items.nth(1).locator('[data-role="log-asker"]').count() == 0, '⑧ 沒有提問者（舊後端／讀不到）就不顯示那一格')
                     check(items.nth(2).locator('[data-role="log-page"]').inner_text() == '通用（不限頁面）', '⑧ m 空＝通用')
                     check(first.locator('[data-role="log-kind"]').inner_text() == '答得出來' and items.nth(2).locator('[data-role="log-kind"]').inner_text() == '沒答出來', '⑧ 結果：答得出來／沒答出來')
                     check(items.nth(1).locator('[data-role="log-down"]').count() == 1 and first.locator('[data-role="log-down"]').count() == 0 and items.nth(4).locator('[data-role="log-up"]').count() == 1, '⑧ 👎／👍 標示')

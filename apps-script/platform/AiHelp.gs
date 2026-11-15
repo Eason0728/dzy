@@ -476,8 +476,8 @@ function handleAihUsage_(token, payload) {
 
 /**
  * 問答紀錄清單（2026-11-05 Eason：用量頁看得到同仁問了什麼）。payload {month:'YYYY-MM'（台北；沒給＝本月）, limit?:1–200（預設 50）, before?:上一頁回的 next}
- * → {month, total, names_ok, items:[{id, ts, m, v, q, kind, answer, feedback}], next}；新的排最前（ts 由新到舊，同時間再依 id 由大到小）。
- * 刻意不回 uid、conv、tok_in、tok_out、usd、kb_ids（誰問的、費用、引用題號不在這裡）。q 是 node 寫 log 前已遮罩的文字（手機、身分證、email、DZY 編號、在職同仁姓名），
+ * → {month, total, names_ok, items:[{id, ts, m, v, q, kind, answer, feedback, asker}], next}；新的排最前（ts 由新到舊，同時間再依 id 由大到小）。
+ * asker＝提問者「姓名（帳號）」（2026-11-15 Eason 要顯示，見 aihAskerMap_）。刻意不回 uid、conv、tok_in、tok_out、usd、kb_ids（帳號代碼、費用、引用題號不在這裡）。q 是 node 寫 log 前已遮罩的文字（手機、身分證、email、DZY 編號、在職同仁姓名），
  * 但 node 寫 log 當下名單讀不到時姓名不會遮，所以回之前 q 也再遮一次姓名（2026-11-05 Codex 審查第 2 條）。
  * answer 回 log 裡的全文（寫入時已截到 AIH_MAX.logAnswer），前端截短顯示、點開看全文；回之前把在職同仁完整姓名遮成 [同仁]
  *（node 寫 log 時 answer 只遮手機／身分證／email／DZY 編號，沒遮姓名）。名單讀不到 → q、answer 都回空字串、names_ok:false（fail closed）。
@@ -528,13 +528,41 @@ function handleAihLogList_(token, payload) {
   if (before) rows = rows.filter(function (x) { return newer({ ms: bMs, id: bId }, x); });
   var page = rows.slice(0, limit);
   var sn = page.length ? aihStaffNames_() : { ok: true, names: [] };
+  var askers = page.length ? aihAskerMap_() : null;
   var items = page.map(function (x) {
     var r = x.r;
     return { id: x.id, ts: aihIso_(x.ms), m: aihStr_(r.m), v: aihStr_(r.v), q: sn.ok ? aihMaskNames_(aihStr_(r.q), sn.names) : '', kind: aihStr_(r.kind),
-      answer: sn.ok ? aihMaskNames_(aihStr_(r.answer), sn.names) : '', feedback: aihStr_(r.feedback) };
+      answer: sn.ok ? aihMaskNames_(aihStr_(r.answer), sn.names) : '', feedback: aihStr_(r.feedback), asker: aihAskerName_(askers, aihStr_(r.uid)) };
   });
   var last = page[page.length - 1];
   return { ok: true, data: { month: month, total: total, names_ok: !!sn.ok, items: items, next: rows.length > limit && last ? last.ms + ':' + last.id : '' } };
+}
+
+/**
+ * 問答紀錄的提問者（2026-11-15 Eason：「要，顯示姓名」，推翻 §12.13「不回 uid」的一半）：
+ * 帳號 id → 「姓名（帳號）」。users 姓名空白時改用 staff 分頁同編號的姓名；帳號不在了回「（帳號已不存在）」。
+ * 只回顯示用的姓名字串，uid 本身照舊不回。讀表失敗＝null，每筆回空字串（不擋清單）。
+ */
+function aihAskerMap_() {
+  try {
+    var staff = {};
+    try { stfAllRows_().forEach(function (r) { var no = aihStr_(r.values[STF_COL.emp_no]).toUpperCase(); if (no) staff[no] = aihStr_(r.values[STF_COL.name]); }); } catch (e) {}
+    var map = {};
+    readUsersRows_().forEach(function (v) {
+      var id = aihStr_(v[AUTH_USERS_COL.id]);
+      if (!id) return;
+      var uname = aihStr_(v[AUTH_USERS_COL.username]);
+      var name = aihStr_(v[AUTH_USERS_COL.name]) || staff[uname.toUpperCase()] || '';
+      map[id] = name ? name + (uname && uname !== name ? '（' + uname + '）' : '') : (uname || '');
+    });
+    return map;
+  } catch (e) {
+    return null;
+  }
+}
+function aihAskerName_(map, uid) {
+  if (!map || !uid) return '';
+  return Object.prototype.hasOwnProperty.call(map, uid) ? (map[uid] || '（沒有姓名）') : '（帳號已不存在）';
 }
 
 /**
