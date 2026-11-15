@@ -89,6 +89,31 @@ await t('讀得到、真的沒有待辦：badge 回 0（不是丟錯）', async 
   assert.deepEqual(await mod.alerts(ctx), []);
 });
 
+// 2026-11-15（驗收 B2-9-7，需求 9「讀不到不可當成 0」）：部分門市讀不到（partial:true）而且核定＋申請的件數是空的，
+// 這個 0 不可信（可能只是那幾家沒讀到）→ 照「讀不到」處理：toBadge 回 null、badge() 丟錯，殼留著上次件數並標「未更新」。
+// partial 但有件數：照樣顯示件數；alerts() 的「部分門市暫時讀不到」那一列不變。
+await t('partial 且件數空：toBadge 回 null（不是 0）；partial 有件數照樣給數字', () => {
+  assert.equal(toBadge({ items: [], partial: true, pending: false }), null);
+  assert.equal(toBadge({ items: [{ kind: 'approve', count: 0 }], partial: true }), null);
+  assert.equal(toBadge({ items: [{ kind: 'device', count: 1 }], partial: true }), null);   // 新手機不算進數字，核定＋申請還是空的
+  assert.equal(toBadge({ items: [{ kind: 'request', count: 3 }], partial: true }), 3);
+  assert.equal(toBadge({ items: [], partial: false }), 0);
+});
+await t('partial 信封、件數空：badge 丟錯（不把上次的 3 清成 0），alerts 仍給「部分門市暫時讀不到」', async () => {
+  fakeFetch({ ok: true, data: { items: [{ kind: 'request', count: 3 }], partial: false, asOf: 'x', pending: false } });
+  assert.equal(await mod.badge(ctx), 3);
+  fakeFetch({ ok: true, data: { items: [], partial: true, asOf: 'x', pending: false } });
+  await assert.rejects(() => mod.badge(ctx), NOT_READ);
+  assert.deepEqual(await mod.alerts(ctx), [{ level: 'warn', text: '部分門市暫時讀不到' }]);
+});
+await t('partial 信封、有件數：badge 給件數，alerts 保留部分讀不到提示', async () => {
+  fakeFetch({ ok: true, data: { items: [{ kind: 'approve', count: 2 }], partial: true, asOf: 'x', pending: false } });
+  assert.equal(await mod.badge(ctx), 2);
+  assert.deepEqual(await mod.alerts(ctx), [
+    { level: 'warn', text: '本月還有 2 天沒核定', view: 'approve', when: 'overdue' },
+    { level: 'warn', text: '部分門市暫時讀不到' }]);
+});
+
 // ---- 值班主管本人的申請找不到上層（2026-10-28，docs/req-upper）：平台後端 attUpperGaps ----
 function routedFetch(gaps) {
   globalThis.fetch = async (url, opts) => {
