@@ -9,13 +9,14 @@ const TEXT = {
   approve: (n) => `本月還有 ${n} 天沒核定`,
   request: (n) => `${n} 筆加班請假申請待審`,
   device: (n) => `${n} 支新手機等核准`,
-  rejected: (n) => `${n} 筆核定被打卡系統退回，請重新處理`      // 考勤副本背景送出（2026-11-14，營運系統 docs/duty-replica-b）
+  rejected: (n) => `${n} 筆核定被打卡系統退回，請重新處理`,     // 考勤副本背景送出（2026-11-14，營運系統 docs/duty-replica-b）
+  wait: (n) => `${n} 筆在等同仁補單，結薪前要處理`                 // 等同仁補單（2026-11-15，營運系統 docs/duty-timeline 第 4 題）：營運系統只在月底前 3 天回這項
 };
-const ORDER = ['rejected', 'approve', 'request', 'device'];
+const ORDER = ['rejected', 'approve', 'wait', 'request', 'device'];
 /** 手機「待處理」分段（platform/todo.js）：沒核定的天都已過去＝已逾期；申請、新手機、被退回＝今天 */
-const WHEN = { approve: 'overdue', request: 'today', device: 'today', rejected: 'today' };
-/** 點了進哪個分頁：被退回的在核定工時頁頂列出 */
-const VIEW = { approve: 'approve', request: 'request', device: 'device', rejected: 'approve' };
+const WHEN = { approve: 'overdue', request: 'today', device: 'today', rejected: 'today', wait: 'today' };
+/** 點了進哪個分頁：被退回的在核定工時頁頂列出；等同仁補單也在核定工時 */
+const VIEW = { approve: 'approve', request: 'request', device: 'device', rejected: 'approve', wait: 'approve' };
 
 /**
  * ctx.api.call('attendance', …) 的結果 → 上游 data。
