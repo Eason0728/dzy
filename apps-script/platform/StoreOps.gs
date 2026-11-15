@@ -1026,6 +1026,7 @@ function storeIdent_(sub) {
   }
   // 2026-10-26 依打卡帳號所在的店算（支援打卡交給打卡店主管；docs/att-support/spec.md）＋ 指定門市只看考勤（att.view@<單位>）
   var dirSched = p ? storeSchedDirector_(p, org, pilot) : { units: [], hqShift: false };   // 總監排班（2026-10-30）
+  var schedEx = p && typeof permSchedAdminUnitsOf_ === 'function' ? permSchedAdminUnitsOf_(p.emp).filter(function (u) { return pilot.indexOf(u) !== -1; }) : [];   // 排班管理（指定門市）（2026-11-15，docs/sched-admin-ex）
   var attMaps = clkSheetsReady_() ? clkMaps_() : [], attStoreUnits = storeClockUnits_();
   var lists = storeAttLists_(me, flags, people, org, home, attMaps, attStoreUnits, rctx, pilot, {
     viewUnits: viewUnits,
@@ -1056,7 +1057,7 @@ function storeIdent_(sub) {
     void_units: storeUniqSorted_(voidUnits),
     att: { people: lists.people, req_people: lists.req_people, view_people: lists.view_people, void_hours: voidLists.people, void_req: voidLists.req_people },   // void_hours／void_req＝考勤作廢 att.void（2026-11-13；只讀＋作廢）；   // people＝核定工時；req_people＝加班單／請假單／忘刷單（2026-10-21）；view_people＝只看（督導／總監 REGIONS_ON='1'、原單位主管看支援帳號、att.view@<單位>；2026-10-25／26）
     self: storeSelfClocks_(p, org),   // 總部排班身分（2026-10-25）：只列 clock＝hq，不受試點限制
-    sched_units: dirSched.units,          // 總監排班（2026-10-30）：odir＝本品牌試點內門市，其他＝[]
+    sched_units: storeUniqSorted_(dirSched.units.concat(schedEx)),   // 總監排班（2026-10-30）：odir＝本品牌試點內門市；＋個別例外「排班管理」sched.admin@<門市>（2026-11-15）；其他＝[]
     sched_hq_shift: dirSched.hqShift,     // hm／odir 在職＝true（改總部班別清單）
     own_clocks: storeOwnClocks_(p)        // 本人全部打卡帳號（2026-11-06）：只給「我送出的」過濾本人申請用，不給任何權限
   };
@@ -1178,6 +1179,7 @@ function storeSchedGate_(values) {
   if (storeRowActingPilot_(values, storePilotUnits_()).length) return true;   // 兼任店長（Q1 A：可排兼任店的班）
   if (storeSchedViewGate_(values)) return true;   // 督導／總監「只看」名單非空＝唯讀看班表（2026-10-25 Eason）
   if (storeRowPerms_(values).indexOf(STORE_PERM_ATT_VOID) !== -1) return true;   // 考勤作廢＝唯讀看門市班表（2026-11-13 Eason 第 6 題 A）
+  if (typeof permSchedAdminUnitsOf_ === 'function' && permSchedAdminUnitsOf_(stfNormEmp_(values[STF_COL.emp_no])).length) return true;   // 排班管理（指定門市）個別例外（2026-11-15；對照已濾在職、身分有效、試點）
   // 總監排班（2026-10-30）：sched_units 非空或 sched_hq_shift＝true，不必有 hq 打卡對照（跟 ident 同一個函式）
   var orgS = stfReadOrg_();
   var dir = storeSchedDirector_({ status: 'active', unit: stfStr_(values[STF_COL.unit]), title: p.title,

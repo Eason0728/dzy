@@ -1,0 +1,126 @@
+<title>排班管理個別例外</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+:root{--bg:#f2f5f4;--paper:#fff;--fg:#17211f;--muted:#5a6a66;--line:#d5dfdc;--accent:#0b6b5d;--accent-soft:#dff0ec;--on-accent:#fff;--green:#23804f;--green-bg:#e3f3ea;--yellow:#8a6400;--yellow-bg:#fbf1d2;--red:#b3362b;--red-bg:#fbe5e2;--phone:#dfe6e3;--dzy:#b3262d;--font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111816;--paper:#1a2421;--fg:#e8efed;--muted:#a0b0ab;--line:#31403c;--accent:#63cdb8;--accent-soft:#1d3a34;--on-accent:#10211d;--green:#71d29c;--green-bg:#1b3627;--yellow:#e8c565;--yellow-bg:#3a3017;--red:#f19a90;--red-bg:#42211d;--phone:#26332f;--dzy:#e0737a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#111816;--paper:#1a2421;--fg:#e8efed;--muted:#a0b0ab;--line:#31403c;--accent:#63cdb8;--accent-soft:#1d3a34;--on-accent:#10211d;--green:#71d29c;--green-bg:#1b3627;--yellow:#e8c565;--yellow-bg:#3a3017;--red:#f19a90;--red-bg:#42211d;--phone:#26332f;--dzy:#e0737a;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:16px;line-height:1.7;margin:0}
+.wrap{max-width:820px;margin:0 auto;padding-block:40px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:40px}
+h1{font-size:clamp(30px,6vw,44px);line-height:1.2;font-weight:900;margin:0 0 12px;text-wrap:balance}
+h2{font-size:22px;line-height:1.35;margin:0 0 14px}
+h3{font-size:16px;margin:0 0 10px}
+p{margin:0}
+.lead{color:var(--muted);font-size:17px}
+.reply{background:var(--accent);color:var(--on-accent);border-radius:8px;padding:16px 18px;font-weight:700;margin-top:20px}
+.reply small{display:block;font-weight:400;font-size:14px;opacity:.92}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;min-width:480px;font-size:15px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:13px}
+tr:last-child td{border-bottom:0}
+ol.q{margin:0;padding-left:22px;display:grid;gap:12px}
+ol.q b.rec{color:var(--green)}
+ul{margin:0;padding-left:20px;display:grid;gap:6px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:10px;min-width:0}
+.card .cap{font-size:13px;color:var(--muted)}
+.fld{display:grid;gap:4px;font-size:14px}
+.fld span{color:var(--muted);font-size:12.5px}
+.sel{border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:var(--bg);display:flex;justify-content:space-between}
+.sel.new{border-color:var(--dzy);box-shadow:0 0 0 2px color-mix(in srgb,var(--dzy) 20%,transparent)}
+.btn{background:var(--dzy);color:#fff;border-radius:6px;padding:8px 12px;text-align:center;font-weight:700;font-size:14px}
+.btn.ghost{background:transparent;color:var(--dzy);border:1px solid var(--dzy)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-size:12px;border-radius:99px;padding:2px 8px;background:var(--accent-soft);color:var(--accent)}
+.perm{display:flex;justify-content:space-between;gap:8px;font-size:14px;border-bottom:1px solid var(--line);padding:6px 0}
+.perm:last-child{border:0}
+.mini{font-size:12.5px;color:var(--muted)}
+.hl{background:var(--yellow-bg);color:var(--yellow);border-radius:6px;padding:8px 10px;font-size:14px}
+@media (max-width:620px){.grid{grid-template-columns:minmax(0,1fr)}}
+</style>
+<div class="wrap">
+<header>
+<h1>排班管理個別例外</h1>
+<p class="lead">人資或管理員在「個別例外」選一位同仁、選一家或幾家門市，他就能排那幾家店的班，權限跟店長排班一樣。督導、會排班的正職都用這個開，不用再設兼任店長。</p>
+<div class="reply">看完回「開工」，我就做到完成，中途不再問你。<small>要改哪一題，直接寫在同一句，例如「開工，第 1 題選 B」。</small></div>
+</header>
+
+<section>
+<h2>請先回答（都有推薦，照推薦就回「開工」）</h2>
+<ol class="q">
+<li><b>可以設在哪些店？</b><br>A 任何一家門市（督導設負責的幾家店，正職設本店）　B 只能設本人所屬那家店<br><b class="rec">推薦 A</b>：督導本來就不屬於門市，選 B 督導就不能用。</li>
+<li><b>央廚、總部要不要也能設？</b><br>A 不行，只限門市　B 也可以<br><b class="rec">推薦 A</b>：央廚是固定排班、由廠長設；總部是每個人自己填。這兩種的排法不一樣，套用門市排班權限會對不上。</li>
+<li><b>誰可以設這個例外？</b><br>A 管理員＋人資主管（跟兼任店長一樣）　B 只有管理員<br><b class="rec">推薦 A</b>。</li>
+<li><b>拿到之後可以做什麼？</b><br>A 跟店長排班完全一樣：排班、自動排班、鎖定與解鎖、送 LINE 班表，也看得到特休、生日、手機；<u>不能</u>在排班頁「新增同仁」，也不會多出考勤核定或其他店長權限　B 只能排班與存檔，鎖定解鎖還是要店長<br><b class="rec">推薦 A</b>：跟 10/31 開給品牌總監的排班權限同一套，營運系統不用改。</li>
+</ol>
+</section>
+
+<section>
+<h2>這次的範圍</h2>
+<div class="tbl"><table>
+<thead><tr><th>項目</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><b>方向</b></td><td>個別例外加一個新項目「排班管理（指定門市）」，權限碼是 <code>sched.admin@&lt;門市單位&gt;</code>，一家店一筆。</td></tr>
+<tr><td><b>廣度</b></td><td>只改管理系統：權限碼的檢查、人資可設的清單、個別例外畫面（多一個選項＋門市下拉）、「我的資料」顯示來源、排班管理選單、交給營運系統的身分資料（排班門市清單）。<b>營運系統不用改</b>，它本來就認得這份清單（總監排班那套）。<br><b>不做</b>：督導依區域自動拿到排班權限（之後要做另外開案）；央廚、總部；排班頁「新增同仁」。</td></tr>
+<tr><td><b>深度</b></td><td>有期限的例外到期就失效、撤銷馬上收回；同仁離職或停用就失效；首頁的排班提醒（班表還沒送到 LINE、門市支援有變動）也會出現在他的首頁。電腦、手機都要能用。</td></tr>
+<tr><td><b>高度</b></td><td>只加這一種權限，照「可新增同仁」<code>staff.add@</code> 的做法做，不重新設計權限系統。</td></tr>
+<tr><td><b>驗收</b></td><td>① 管理系統單元測試＋新案例全部通過；② 本機真規則串營運系統：設了例外的同仁進得了那家店、能存格子、能鎖定；別家店照舊不行；撤銷後馬上不行；③ 畫面測試：個別例外選得到、存得進去、「我的資料」顯示「因為個別例外：排班管理（某某店）」；④ 上線後在正式站用測試帳號看選單出現、撤銷後消失。</td></tr>
+<tr><td><b>不可降的標準</b></td><td>沒設例外的人權限一個都不能變多：用全員身分掃描（每個人 × 每家店）比對改動前後的 <code>sched_units</code>，只有設了例外的那幾筆可以不同，其他差異數＝0。</td></tr>
+<tr><td><b>紅線</b></td><td>不替任何真實同仁設這個例外（上線後由人資或你設）；不動央廚的 4 支備份 Apps Script；權限範圍超出上面 4 題答案的地方停下問你。</td></tr>
+</tbody>
+</table></div>
+</section>
+
+<section>
+<h2>完工預覽</h2>
+<div class="grid">
+<div class="card">
+<div class="cap">① 資訊部門 → 權限設定 → 個別例外（新增）</div>
+<div class="fld"><span>同仁</span><div class="sel">王小明（DZY035・區督導）<span>▾</span></div></div>
+<div class="fld"><span>功能</span><div class="sel new">排班管理（指定門市）<span>▾</span></div></div>
+<div class="fld"><span>門市</span><div class="sel new">墨竹亭 新竹光復店<span>▾</span></div></div>
+<div class="fld"><span>期限（選填）</span><div class="sel">不限<span>▾</span></div></div>
+<div class="fld"><span>原因</span><div class="sel">負責光復、金山排班</div></div>
+<div class="btn">新增</div>
+<div class="mini">要開兩家店就新增兩筆。</div>
+</div>
+<div class="card">
+<div class="cap">② 他的「我的資料 → 我能用的功能」</div>
+<div class="perm"><span>考勤管理</span><span class="pill">因為職稱</span></div>
+<div class="perm"><span>排班管理（墨竹亭 新竹光復店）</span><span class="pill">個別例外</span></div>
+<div class="perm"><span>排班管理（墨竹亭 金山店）</span><span class="pill">個別例外</span></div>
+<div class="cap" style="margin-top:8px">③ 人資部門 → 排班管理（選店只列這兩家）</div>
+<div class="row"><div class="btn">自動排班</div><div class="btn ghost">鎖定這一期</div><div class="btn ghost">匯入 Excel</div></div>
+<div class="hl">沒設例外的店：照舊唯讀，或根本不出現在選單。</div>
+</div>
+</div>
+</section>
+
+<section>
+<h2>做的時候會自己決定的事</h2>
+<ul>
+<li>（綠）權限碼名稱 <code>sched.admin@</code>、畫面上叫「排班管理（指定門市）」。</li>
+<li>（綠）同一人同一家店重複新增＝擋下並提示「已經有了」，照兼任店長的處理方式。</li>
+<li>（綠）題庫（AI 小幫手）補一題「怎麼讓某位同仁可以排班」，操作手冊補一段。</li>
+<li>（黃）那家店不在試點名單或已經停用：例外存得進去，但不生效，畫面標「目前不生效」（跟兼任店長一樣）。</li>
+</ul>
+</section>
+
+<section>
+<h2>上線方式</h2>
+<ul>
+<li>管理系統 PR 合併 → 同步到 Mac mini 的管理系統副本（<code>sync-gas.sh dzy-platform</code>）→ <code>update-all.sh</code>（先 <code>--dry-run</code>）→ 健康檢查。營運系統不用更新。</li>
+<li>上線後沒有任何人自動拿到新權限，要人資或你去設才會有。</li>
+</ul>
+</section>
+
+<section>
+<h2>還沒驗證的事</h2>
+<ul>
+<li>個別例外畫面的門市下拉要列哪些店：預計沿用兼任店長的清單（啟用中、門市、不含央廚），實作時確認。</li>
+<li>未做 GPT 交叉審查（這台沒裝），改由沒看過過程的 Claude 審查員審一次。</li>
+</ul>
+</section>
+</div>

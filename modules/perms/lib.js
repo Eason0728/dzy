@@ -77,6 +77,8 @@ export function featureName(code, units, payStores) {
   if (au) return `兼任店長（${attViewUnitName(au, units)}）`;
   const su = staffAddUnitOf(code);
   if (su) return `可新增同仁（${attViewUnitName(su, units)}）`;
+  const sd = schedAdminUnitOf(code);
+  if (sd) return `排班管理（${attViewUnitName(sd, units)}）`;
   return FEATURE_NAMES[code] || OTHER_NAMES[code] || code;
 }
 
@@ -136,6 +138,22 @@ export function staffAddUnitOf(code) {
 export function staffAddCode(unit) {
   const c = STAFF_ADD_PREFIX + String(unit || '').trim();
   return staffAddUnitOf(c) ? c : '';
+}
+// ---- 排班管理（指定門市）（sched.admin@<單位>，docs/sched-admin-ex；admin 與人資主管都能設、只能多給、只能用個別例外、任何一家門市、不含央廚） ----
+export const SCHED_ADMIN_PREFIX = 'sched.admin@';
+/** 功能下拉裡「排班管理（指定門市）」那一項的值（送出時換成 sched.admin@<門市>） */
+export const SCHED_ADMIN_CHOICE = '__sched_admin__';
+export const SCHED_ADMIN_CHOICE_NAME = '排班管理（指定門市）';
+const SCHED_ADMIN_RE = /^sched\.admin@([A-Za-z0-9_-]{1,40})$/;
+/** sched.admin@<單位> → 單位代碼；其他 → '' */
+export function schedAdminUnitOf(code) {
+  const m = SCHED_ADMIN_RE.exec(String(code || ''));
+  return m ? m[1] : '';
+}
+/** 門市代碼 → 權限碼；代碼格式不對回 '' */
+export function schedAdminCode(unit) {
+  const c = SCHED_ADMIN_PREFIX + String(unit || '').trim();
+  return schedAdminUnitOf(c) ? c : '';
 }
 // ---- 薪酬負責門市（payroll.store@<薪資店代碼>，docs/payroll-scope/spec.md §5；只有 admin 能設、只能多給、只能用個別例外） ----
 export const PAYROLL_STORE_PREFIX = 'payroll.store@';
