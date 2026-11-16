@@ -30,6 +30,7 @@ TESTS=(
   e2e_t21_ai_helper.py
   e2e_t23_mobile_todo.py
   e2e_t24_home_fast.py
+  e2e_t25_nav_badge.py
 )
 
 for i in "${!TESTS[@]}"; do
