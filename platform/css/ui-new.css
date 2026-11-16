@@ -1,0 +1,247 @@
+/* ============================================================
+   新外觀（2026-11-16 Eason 開工：方向 1 三家融合＋Apple 藍＋保留彩色圖示）
+   只在 <html data-ui="new"> 時生效：網址 ?ui=new 打開、?ui=old 關掉（記在這個分頁），
+   總開關在 index.html 開頭的 UI_NEW_DEFAULT。沒有 data-ui="new" 時這個檔完全不作用。
+   - Apple：淺灰底、白色圓角清單、細分隔線、留白
+   - 特斯拉：首頁三個大數字；紅色只給逾期／異常／件數
+   - 微軟：表格表頭清楚、選中列明確
+   規格與決定紀錄：docs/ui-new/progress.md
+   ============================================================ */
+
+:root[data-ui="new"] {
+  --brand: #0071e3;          /* Apple 藍：選中、主要按鈕、連結（第 2 題 B） */
+  --brand-dark: #0058b0;
+  --brand-light: #e8f1fc;
+  --ink: #1d1d1f;
+  --muted: #6e6e73;          /* 在 #f5f5f7 上 4.7:1、白底 5.1:1 */
+  --line: #d2d2d7;
+  --bg: #f5f5f7;
+  --card: #fff;
+  --ok: #1f7a35;
+  --ok-light: #e9f6ec;
+  --warn: #9a5800;
+  --warn-light: #fff4e5;
+  --danger: #d70015;
+  --danger-light: #fff0f1;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 18px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .04);
+  --shadow-lift: 0 4px 16px rgba(0, 0, 0, .08);
+  --shadow-card-hover: 0 2px 8px rgba(0, 0, 0, .06);
+  --overlay: rgba(0, 0, 0, .32);
+
+  /* 側邊欄：淺色（Apple 側邊欄），選中＝藍底白字 */
+  --sidebar: #f0f0f3;
+  --sidebar-2: #e4e4e9;
+  --sidebar-3: #d8d8de;
+  --sidebar-line: #d2d2d7;
+  --side-txt: #1d1d1f;
+  --side-txt-soft: #636366;
+  --side-label: #636366;     /* 在 #f0f0f3 上 5.2:1 */
+  --side-role: #636366;
+  --nav-pill: #0071e3;
+  --nav-pill-ink: #fff;
+  --tab-line: #0071e3;
+  --shadow-pill: none;
+  --todo-error-bg: #fff;
+  --todo-warn-bg: #fff;
+
+  --hairline: #e5e5ea;       /* 清單內的細分隔線 */
+  --dot-warn: #ff9f0a;       /* 待處理圓點（不承載文字，不受對比限制） */
+}
+
+:root[data-ui="new"] body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 側邊欄 ---------- */
+:root[data-ui="new"] .sidebar { border-right: 1px solid var(--line); }
+:root[data-ui="new"] .sidebar .bt { color: var(--ink); font-weight: 700; }
+:root[data-ui="new"] .side-nav { gap: 2px; }
+:root[data-ui="new"] .nav-label { letter-spacing: .02em; font-weight: 600; }
+:root[data-ui="new"] .side-nav .nav-item,
+:root[data-ui="new"] .nav-dept-items .nav-item {
+  font-size: 15px;
+  font-weight: 500;
+  padding: 7px 10px;
+  border-radius: 9px;
+  gap: 11px;
+}
+:root[data-ui="new"] .side-nav .nav-item:hover,
+:root[data-ui="new"] .nav-dept-head:hover { background: var(--sidebar-2); color: var(--ink); }
+:root[data-ui="new"] .side-nav .nav-item.is-active { font-weight: 600; }
+:root[data-ui="new"] .nav-item .ic { width: 24px; height: 24px; }
+:root[data-ui="new"] .nav-item .ic img { width: 24px; height: 24px; border-radius: 6px; }
+:root[data-ui="new"] .nav-dept-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--side-label);
+  padding: 12px 10px 4px;
+}
+:root[data-ui="new"] .nav-item .badge { background: var(--danger); }
+:root[data-ui="new"] .side-user .nm { color: var(--ink); }
+:root[data-ui="new"] .su-act button { color: var(--ink); background: var(--card); border: 1px solid var(--line); }
+:root[data-ui="new"] .su-act button:hover { background: var(--sidebar-2); }
+
+/* ---------- 頁首與分頁列 ---------- */
+:root[data-ui="new"] .topbar { padding: 28px 32px 6px; }
+:root[data-ui="new"] .topbar .page-title { font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+:root[data-ui="new"] .topbar .sub { color: var(--muted); font-weight: 500; }
+:root[data-ui="new"] .app-main .page { padding: 14px 32px 70px; }
+:root[data-ui="new"] [data-role="view-nav"] {
+  background: rgba(245, 245, 247, .88);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--line);
+  padding: 0 22px;
+}
+:root[data-ui="new"] [data-role="view-nav"] .nav-item {
+  font-weight: 500;
+  padding: 12px 14px;
+  border-bottom-width: 2px;
+}
+:root[data-ui="new"] [data-role="view-nav"] .nav-item.is-active { color: var(--ink); font-weight: 600; }
+
+/* ---------- 共用元件 ---------- */
+:root[data-ui="new"] .card { border: 0; border-radius: 14px; }
+:root[data-ui="new"] .card-title { font-weight: 600; letter-spacing: -.01em; }
+:root[data-ui="new"] .btn { border-radius: 10px; font-weight: 500; }
+:root[data-ui="new"] .btn-secondary { background: var(--card); border-color: var(--line); }
+:root[data-ui="new"] .btn-secondary:hover:not(:disabled) { background: var(--bg); }
+:root[data-ui="new"] .input,
+:root[data-ui="new"] select.input,
+:root[data-ui="new"] textarea.input { border-color: var(--line); border-radius: 10px; }
+:root[data-ui="new"] .table-wrap { border: 0; border-radius: 12px; box-shadow: var(--shadow); background: var(--card); }
+:root[data-ui="new"] .table th {
+  background: #fafafa;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  letter-spacing: .02em;
+  border-bottom: 1px solid var(--line);
+}
+:root[data-ui="new"] .table td { border-bottom-color: var(--hairline); }
+:root[data-ui="new"] .table tbody tr:hover { background: #f5f9ff; }
+:root[data-ui="new"] .dialog { border-radius: 16px; }
+:root[data-ui="new"] .module-badge { background: var(--danger-light); color: var(--danger); }
+:root[data-ui="new"] .module-icon { border-radius: 6px; }
+
+/* ---------- 首頁（電腦版）：三個大數字＋依急迫排序的清單＋各功能 ---------- */
+:root[data-ui="new"] .hn-home { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+:root[data-ui="new"] .hn-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+:root[data-ui="new"] .hn-stat {
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+:root[data-ui="new"] .hn-stat b {
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-ui="new"] .hn-stat span { color: var(--muted); font-size: var(--fs-sm); font-weight: 500; }
+:root[data-ui="new"] .hn-stat.hot b { color: var(--danger); }
+:root[data-ui="new"] .hn-stat.idle b { color: #aeaeb2; }
+:root[data-ui="new"] .hn-h { font-size: 20px; font-weight: 700; letter-spacing: -.01em; margin: 12px 0 0; }
+:root[data-ui="new"] .hn-home .m-todo { display: flex; flex-direction: column; gap: 6px; }
+
+/* 各功能卡：白色圓角群組清單，提醒列＝細線分隔＋左邊圓點 */
+:root[data-ui="new"] .todo-groups .card + .card { margin-top: 12px; }
+:root[data-ui="new"] .todo-group.module-card {
+  border: 0;
+  border-radius: 14px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+:root[data-ui="new"] .todo-head { padding: 12px 16px; }
+:root[data-ui="new"] .todo-head .module-icon { width: 24px; height: 24px; border-radius: 6px; }
+:root[data-ui="new"] .todo-head .card-title { font-weight: 600; }
+:root[data-ui="new"] .todo-row {
+  position: relative;
+  background: var(--card);
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  border-radius: 0;
+  margin: 0;
+  padding: 12px 16px 12px 32px;
+  font-weight: 500;
+}
+:root[data-ui="new"] .todo-row::before {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  background: #c7c7cc;
+}
+:root[data-ui="new"] .todo-row.lv-error,
+:root[data-ui="new"] .todo-row.lv-warn { background: var(--card); }
+:root[data-ui="new"] .todo-row.lv-error::before { background: var(--danger); }
+:root[data-ui="new"] .todo-row.lv-warn::before { background: var(--dot-warn); }
+:root[data-ui="new"] .todo-row.lv-note { color: var(--muted); }
+:root[data-ui="new"] .todo-row[data-target]:hover { background: var(--bg); border-color: var(--hairline); box-shadow: none; }
+:root[data-ui="new"] .todo-empty { padding: 0 16px 14px; }
+
+/* ---------- 手機與首頁共用的清單 ---------- */
+:root[data-ui="new"] .m-h { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+:root[data-ui="new"] .m-list,
+:root[data-ui="new"] .m-card { border: 0; border-radius: 14px; box-shadow: var(--shadow); }
+:root[data-ui="new"] .m-row { border-top-color: var(--hairline); border-left: 0; padding-left: 14px; }
+:root[data-ui="new"] .m-row .m-t { font-weight: 500; }
+:root[data-ui="new"] .m-row.lv-error .m-t { color: var(--danger); }
+:root[data-ui="new"] .m-row .m-ic { width: 28px; height: 28px; border-radius: 7px; }
+:root[data-ui="new"] .m-tile { border: 0; border-radius: 14px; box-shadow: var(--shadow); }
+:root[data-ui="new"] .m-tile img { width: 32px; height: 32px; border-radius: 8px; }
+:root[data-ui="new"] .m-me { border: 0; box-shadow: var(--shadow); }
+:root[data-ui="new"] .m-fav-row { border-color: var(--line); }
+:root[data-ui="new"] .m-fav-row.on { border-color: var(--brand); background: var(--brand-light); }
+:root[data-ui="new"] .m-tabs .badge,
+:root[data-ui="new"] .m-tile .badge,
+:root[data-ui="new"] .m-grp .badge { background: var(--danger); }
+
+@media (max-width: 860px) {
+  :root[data-ui="new"] .app-main .page { padding: 12px 16px calc(84px + env(safe-area-inset-bottom, 0px)); }
+  :root[data-ui="new"] .m-bar {
+    background: rgba(255, 255, 255, .88);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    color: var(--ink);
+    border-bottom: 1px solid var(--line);
+  }
+  :root[data-ui="new"] .m-bar .m-title .m-rl { color: var(--muted); }
+  :root[data-ui="new"] .m-bar .m-help { color: var(--ink); border-color: var(--muted); }
+  :root[data-ui="new"] .m-tabs {
+    background: rgba(255, 255, 255, .92);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-top-color: var(--line);
+  }
+  :root[data-ui="new"] .m-tabs button.is-active { color: var(--brand); font-weight: 600; }
+  :root[data-ui="new"] .m-tabs button.is-active .ic { background: none; color: var(--brand); }
+  :root[data-ui="new"] [data-role="view-nav"] { padding: 0 6px; }
+}
+
+/* 手機首頁也放三個大數字（數字縮小，320 寬也排得下） */
+@media (max-width: 860px) {
+  :root[data-ui="new"] .m-home .hn-stats { gap: 8px; margin: 4px 0 6px; }
+  :root[data-ui="new"] .m-home .hn-stat { padding: 12px 12px 10px; border-radius: 12px; }
+  :root[data-ui="new"] .m-home .hn-stat b { font-size: 30px; }
+  :root[data-ui="new"] .m-home .hn-stat span { font-size: var(--fs-xs); }
+}

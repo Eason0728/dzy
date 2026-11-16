@@ -774,6 +774,7 @@ function renderHomeCards() {
   if (homeFastOn()) applyLastBadges();   // 手機首頁的常用磚第一次畫就要有上次件數
   const mobile = isMobileWidth();
   if (mobile) viewContentEl.appendChild(renderMobileHome());
+  else if (uiNewOn()) viewContentEl.appendChild(renderDeskSummary());
   const wrap = el('div', { class: mobile ? 'todo-groups d-only' : 'todo-groups', 'aria-live': 'polite' });
   viewContentEl.appendChild(wrap);
   for (const m of permittedModules) {
@@ -1088,6 +1089,8 @@ function onAlertsChanged() {
   if (!viewContentEl) return;
   const box = findDescendant(viewContentEl, (x) => x.getAttribute && x.getAttribute('data-role') === 'm-todo');
   if (box) fillTodoBox(box);
+  const stats = findDescendant(viewContentEl, (x) => x.getAttribute && x.getAttribute('data-role') === 'hn-stats');
+  if (stats) fillDeskStats(stats);
   const grid = findDescendant(viewContentEl, (x) => x.getAttribute && x.getAttribute('data-role') === 'm-grid');
   if (grid) fillGrid(grid);
 }
@@ -1152,12 +1155,59 @@ async function editFav() {
   if (grid) fillGrid(grid);
 }
 
+/** 新外觀（<html data-ui="new">，2026-11-16）開著嗎；開關在 index.html 開頭 */
+function uiNewOn() {
+  try { return document.documentElement.getAttribute('data-ui') === 'new'; } catch (e) { return false; }
+}
+
+const DESK_TODO_MAX = 8;
+const DESK_STATS = [
+  { id: 'overdue', name: '已逾期', hot: true },
+  { id: 'today', name: '今天' },
+  { id: 'week', name: '這週' }
+];
+
+/** 新外觀電腦版首頁上方的三個大數字（已逾期／今天／這週）；讀取中顯示「–」 */
+function fillDeskStats(box) {
+  const { items, loading } = collectTodos();
+  clearChildren(box);
+  for (const g of DESK_STATS) {
+    const n = items.filter((t) => t.group === g.id).length;
+    const cls = ['hn-stat'];
+    if (g.hot && n > 0) cls.push('hot');
+    if (!n) cls.push('idle');
+    box.appendChild(el('div', { class: cls.join(' '), 'data-group': g.id }, [
+      el('b', { text: (!n && loading) ? '–' : String(n) }),
+      el('span', { text: g.name })
+    ]));
+  }
+}
+
+/** 新外觀電腦版首頁：三個大數字＋依急迫排序的清單（與手機首頁共用 fillTodoBox），下面接各功能卡片 */
+function renderDeskSummary() {
+  const stats = el('div', { class: 'hn-stats', 'data-role': 'hn-stats' });
+  fillDeskStats(stats);
+  const box = el('div', { class: 'm-todo', 'data-role': 'm-todo', 'data-max': String(DESK_TODO_MAX), 'data-groups': 'overdue,today,week' });
+  fillTodoBox(box);
+  return el('div', { class: 'hn-home' }, [
+    stats,
+    el('h2', { class: 'hn-h', text: '要處理的事' }), box,
+    el('h2', { class: 'hn-h', text: '各功能' })
+  ]);
+}
+
 function renderMobileHome() {
   const box = el('div', { class: 'm-todo', 'data-role': 'm-todo', 'data-max': String(HOME_TODO_MAX), 'data-groups': 'overdue,today,week' });
   fillTodoBox(box);
   const grid = el('div', { 'data-role': 'm-grid', 'data-kind': 'recent' });
   fillGrid(grid);
+  let stats = null;
+  if (uiNewOn()) {
+    stats = el('div', { class: 'hn-stats', 'data-role': 'hn-stats' });
+    fillDeskStats(stats);
+  }
   return el('div', { class: 'm-page m-home m-only' }, [
+    stats,
     el('h2', { class: 'm-h', text: '你要處理的事' }), box,
     el('div', { class: 'm-h-row' }, [
       el('h2', { class: 'm-h', text: '常用' }),

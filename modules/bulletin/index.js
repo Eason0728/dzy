@@ -17,6 +17,11 @@
 import { BACKENDS } from '../../platform/config.js';
 import { isBoardTab, navMessage } from './nav.js';
 
+/** 新外觀（管理系統 <html data-ui="new">，2026-11-16）：帶 ui=new 給嵌入頁，讓子系統跟著換外觀 */
+function uiParam() {
+  try { return document.documentElement.getAttribute('data-ui') === 'new' ? '&ui=new' : ''; } catch (e) { return ''; }
+}
+
 const BULLETIN_ORIGIN = BACKENDS.bulletin;
 const LOAD_TIMEOUT_MS = 15000;
 
@@ -81,7 +86,7 @@ function render(viewId) {
   state.src = v.src;
   state.ready = false;
   state.timer = setTimeout(showDown, LOAD_TIMEOUT_MS); // 佈告欄頁載好會送 dzyb-sso-ready；逾時沒收到就提示
-  state.frame.src = BULLETIN_ORIGIN + v.src;
+  state.frame.src = BULLETIN_ORIGIN + v.src + uiParam();
 }
 
 async function onMessage(e) {

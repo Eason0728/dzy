@@ -24,6 +24,24 @@
   <link rel="stylesheet" href="platform/css/tokens.css">
   <link rel="stylesheet" href="platform/css/base.css">
   <link rel="stylesheet" href="platform/css/components.css">
+  <link rel="stylesheet" href="platform/css/ui-new.css">
+  <script>
+  // 新外觀開關（2026-11-16，docs/ui-new/progress.md）：要在畫面出來前決定，所以寫在這裡、不放 config.js。
+  // ?ui=new 打開、?ui=old 關掉（記進這個分頁的 sessionStorage）；都沒有就照 UI_NEW_DEFAULT。
+  // 嵌入的子系統（營運系統、佈告欄、貨單、薪酬、調撥）由各模組讀 <html data-ui> 把 ui=new 帶過去。
+  (function () {
+    var UI_NEW_DEFAULT = false;
+    var KEY = 'dzy.ui';
+    var on = UI_NEW_DEFAULT;
+    try {
+      var m = /(?:^|[?&])ui=(new|old)(?:&|#|$)/.exec(location.search || '');
+      if (m) sessionStorage.setItem(KEY, m[1]);
+      var saved = sessionStorage.getItem(KEY);
+      if (saved === 'new') on = true; else if (saved === 'old') on = false;
+    } catch (e) { /* 存取不了就照預設 */ }
+    if (on) document.documentElement.setAttribute('data-ui', 'new');
+  })();
+  </script>
   <!-- preload:begin 由 tools/gen-preload.mjs 產生，不要手改 -->
   <link rel="modulepreload" href="modules/ai-help/manifest.js">
   <link rel="modulepreload" href="modules/approvals/manifest.js">

@@ -15,6 +15,11 @@
  */
 'use strict';
 
+/** 新外觀（管理系統 <html data-ui="new">，2026-11-16）：帶 ui=new 給嵌入頁，讓子系統跟著換外觀 */
+function uiParam() {
+  try { return document.documentElement.getAttribute('data-ui') === 'new' ? '&ui=new' : ''; } catch (e) { return ''; }
+}
+
 const PROD_ORIGIN = 'https://dzy-bulletin.github.io';
 const PROD_BASE = PROD_ORIGIN + '/dzy-purchase/';
 const DEV_ORIGIN = 'http://localhost:8795';
@@ -157,7 +162,7 @@ export function createEmbed(cfg) {
     state.frame = frame;
     state.el.appendChild(frame);
     state.timer = setTimeout(showDown, LOAD_TIMEOUT_MS); // 貨單網頁載好會送 ready 或 nav；逾時沒收到就提示
-    frame.src = state.base + 'review.html?embed=dzy';
+    frame.src = state.base + 'review.html?embed=dzy' + uiParam();
   }
 
   return {

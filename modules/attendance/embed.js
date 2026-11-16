@@ -17,6 +17,11 @@
  */
 'use strict';
 
+/** 新外觀（管理系統 <html data-ui="new">，2026-11-16）：帶 ui=new 給嵌入頁，讓子系統跟著換外觀 */
+function uiParam() {
+  try { return document.documentElement.getAttribute('data-ui') === 'new' ? '&ui=new' : ''; } catch (e) { return ''; }
+}
+
 export const STORE_ORIGIN = 'https://dzy-bulletin.github.io';
 export const STORE_BASE = STORE_ORIGIN + '/dzy-store/';
 const LOAD_TIMEOUT_MS = 15000;
@@ -168,7 +173,7 @@ export function createEmbed(cfg) {
     state.frame = frame;
     state.el.appendChild(frame);
     state.timer = setTimeout(showDown, LOAD_TIMEOUT_MS); // 營運系統頁載好會送 ready；逾時沒收到就提示
-    frame.src = STORE_BASE + '?embed=dzy' + cfg.query;
+    frame.src = STORE_BASE + '?embed=dzy' + cfg.query + uiParam();
   }
 
   /** 處理 #/storeops?return=…：合格 → 取券導回去；不合格或取不到 → 回傳 false 讓呼叫端顯示正常模組。 */
