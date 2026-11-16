@@ -41,6 +41,21 @@
     } catch (e) { /* 存取不了就照預設 */ }
     if (on) document.documentElement.setAttribute('data-ui', 'new');
   })();
+  // 從手機主畫面圖示打開一律回首頁（2026-11-16 Eason）：iOS 加到主畫面會記住當時的網址（例如 #/staff/clockmap），
+  // 下次點圖示就停在那頁。只在「主畫面網頁 App」（standalone）且這次啟動第一次載入時清掉 #；
+  // 同一次使用中重新整理照舊（sessionStorage 記著）。LINE／瀏覽器打開的連結（#/bulletin、#/attendance…）不受影響。
+  (function () {
+    try {
+      var standalone = window.navigator.standalone === true ||
+        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+      if (!standalone) return;
+      if (sessionStorage.getItem('dzy.launched')) return;
+      sessionStorage.setItem('dzy.launched', '1');
+      var h = location.hash || '';
+      if (/^#\/(claim|forgot|apply|apply-status)(\/|\?|$)/.test(h)) return;
+      if (h && h !== '#' && h !== '#/' && h !== '#/home') history.replaceState(null, '', location.pathname + location.search);
+    } catch (e) { /* 存取不了就照網址 */ }
+  })();
   </script>
   <!-- preload:begin 由 tools/gen-preload.mjs 產生，不要手改 -->
   <link rel="modulepreload" href="modules/ai-help/manifest.js">
