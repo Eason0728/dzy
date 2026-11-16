@@ -41,6 +41,12 @@
   gap: var(--space-3);
 }
 
+/* 手機：卡片標題列放不下就換行，標題不被旁邊的說明擠成一字一行（2026-11-16 打卡對照「打卡對／照」） */
+@media (max-width: 860px) {
+  .card-row:has(> .card-title) { flex-wrap: wrap; }
+  .card-row > .card-title { flex: 0 0 auto; max-width: 100%; }
+}
+
 /* 一排按鈕／標籤放不下就換行（手機 375px 不撐出橫向捲軸）；疊在 .card-row 上用 */
 .card-row.row-wrap {
   flex-wrap: wrap;
