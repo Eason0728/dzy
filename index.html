@@ -30,7 +30,7 @@
   // ?ui=new 打開、?ui=old 關掉（記進這個分頁的 sessionStorage）；都沒有就照 UI_NEW_DEFAULT。
   // 嵌入的子系統（營運系統、佈告欄、貨單、薪酬、調撥）由各模組讀 <html data-ui> 把 ui=new 帶過去。
   (function () {
-    var UI_NEW_DEFAULT = false;
+    var UI_NEW_DEFAULT = true;   // 2026-11-16 Eason「可以全公司上」；改回 false＝全部回舊外觀
     var KEY = 'dzy.ui';
     var on = UI_NEW_DEFAULT;
     try {
