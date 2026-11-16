@@ -245,3 +245,8 @@
   :root[data-ui="new"] .m-home .hn-stat b { font-size: 30px; }
   :root[data-ui="new"] .m-home .hn-stat span { font-size: var(--fs-xs); }
 }
+
+/* 電腦版內容滿版（2026-11-16 Eason：「右半部是空的」）：新外觀拿掉內容區 1180px 上限，表格多的頁面（排班、考勤、薪酬）用滿螢幕 */
+@media (min-width: 861px) {
+  :root[data-ui="new"] .app-main .page { max-width: none; }
+}
