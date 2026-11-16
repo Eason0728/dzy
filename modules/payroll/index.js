@@ -6,6 +6,11 @@
 
 import { payrollTarget, parseCall, toPageResult, navMessage, routeOf } from './bridge.js';
 
+/** 新外觀（管理系統 <html data-ui="new">，2026-11-16）：帶 ui=new 給嵌入頁，讓子系統跟著換外觀 */
+function uiParam() {
+  try { return document.documentElement.getAttribute('data-ui') === 'new' ? '&ui=new' : ''; } catch (e) { return ''; }
+}
+
 const LOAD_TIMEOUT_MS = 20000;
 let state = null;   // { el, ctx, frame, target, down, timer }
 
@@ -62,7 +67,7 @@ export default {
     el.appendChild(bar);
     el.appendChild(frame);
     state.timer = setTimeout(showDown, LOAD_TIMEOUT_MS);
-    frame.src = target.url;
+    frame.src = target.url + uiParam();
     return function unmount() {
       window.removeEventListener('message', onMessage);
       clearDown();
