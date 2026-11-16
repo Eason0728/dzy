@@ -521,6 +521,8 @@ async function loadHomeGroup(manifest, isStale) {
     if (homeFastOn()) { if (value === null && !badgeFailed && typeof body.badge === 'function') clearFastBadge(manifest.id); else settleFastBadge(manifest.id, value); }
     onAlertsChanged();
   }
+  // 側邊欄數字不管使用者還在不在首頁都要更新（2026-11-16 Eason：側邊欄沒數字——算好前已點去別的功能，數字被丟掉）
+  if (value !== null && auth.getUser()) setNavBadge(manifest.id, value);
   if (isStale()) return;
   if (homeFastOn() && value === null && badgeFailed) markStaleOff(manifest.id);
   if (value !== null) {
@@ -533,7 +535,6 @@ async function loadHomeGroup(manifest, isStale) {
       badgeEl.textContent = value > 0 ? String(value) : '';
       if (badgeEl.className !== 'module-badge') { badgeEl.className = 'module-badge'; badgeEl.removeAttribute('title'); }
     }
-    setNavBadge(manifest.id, value);
   }
 
   if (hasAlerts) {
@@ -1839,7 +1840,14 @@ async function enterApp() {
   allManifests = loaded;
   permittedModules = loaded.filter(isModulePermitted);
   route();
+  // 一開就在模組頁（重新整理、LINE 連結、書籤）：首頁沒跑過，側邊欄沒有待辦數字 → 等模組頁先開好，再在背景算一次（2026-11-16）
+  const first = parseHash(window.location.hash).moduleId;
+  if (first && !['home', 'apps', 'todo', 'claim', 'forgot', 'apply', 'apply-status'].includes(first)) {
+    setTimeout(() => { if (auth.getUser() && !freshBadge.size && !Object.keys(alertCache).length) refreshAlerts(); }, NAV_BADGE_DEFER_MS);
+  }
 }
+/** 一開就在模組頁時，背景補算側邊欄數字前先等多久（讓模組頁的讀取先走） */
+const NAV_BADGE_DEFER_MS = 2500;
 
 function showLogin() {
   clearChildren(rootEl);
