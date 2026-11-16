@@ -47,6 +47,9 @@
   .card-row > .card-title { flex: 0 0 auto; max-width: 100%; }
 }
 
+/* 同一排的欄位名稱（例：盤點抽查「年份」＋下拉）不被輸入框擠成直排（2026-11-16） */
+.card-row > .field-label { flex-shrink: 0; white-space: nowrap; margin-bottom: 0; }
+
 /* 一排按鈕／標籤放不下就換行（手機 375px 不撐出橫向捲軸）；疊在 .card-row 上用 */
 .card-row.row-wrap {
   flex-wrap: wrap;

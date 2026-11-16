@@ -34,3 +34,4 @@
 - Eason 回報手機一打開就是「同仁名單 → 打卡對照」：iOS 加到主畫面會記住當時網址（含 #），主畫面網頁 App 下次啟動照那個網址開。
 - index.html 開頭：只在 standalone（navigator.standalone 或 display-mode: standalone）且這次啟動第一次載入時清掉 #（sessionStorage `dzy.launched`）；重新整理照舊；claim／forgot／apply 不清。LINE 等外部連結（#/bulletin、#/attendance、#/claim）在瀏覽器開，不受影響。
 - components.css：手機寬度 `.card-row` 內有 `.card-title` 時可換行、標題不縮，修「打卡對／照」直排（新舊外觀都有）。
+- 盤點抽查「年份」直排（舊問題）：components.css `.card-row > .field-label` 不縮、不換行。Eason 11-16 回報 iPhone 上主畫面回首頁與標題都正確。
