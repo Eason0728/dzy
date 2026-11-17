@@ -26,6 +26,8 @@ export const READ_ACTIONS = {
     'ssoTicket',
     // 個人帳號第二期（2026-10-17）：權限設定的純讀取；permInit／permMapSave／permEx*／permStoreSave／permAuditSeen 不列（寫入，試跑會攔）
     'permMapGet', 'permExList', 'permStoreGet', 'myPerms', 'permAuditList', 'permWho',
+    // 我的資料 → 設定（2026-11-17，docs/alert-prefs/spec.md）：讀自己的提醒開關；myPrefsSave 不列（寫入，試跑會攔）
+    'myPrefsGet',
     // 第三期表單簽核（2026-10-18）：純讀取；apvSubmit／apvResubmit／apvWithdraw／apvDecide／apvSign／apvHandle／apvReassign／apvVoid／apvThresholdSave 不列（寫入，試跑會攔）
     'apvThresholdGet', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta',
     // 區域（2026-10-25，docs/regions/spec.md 第 9 節）：純讀取；regionSave（preview:false）／regionSwitch 不列（寫入，試跑會攔）

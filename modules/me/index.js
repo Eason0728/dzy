@@ -9,10 +9,11 @@ import { mountUnit } from './views/unit.js';
 import { mountReview } from './views/review.js';
 import { mountTeamView } from './views/team.js';
 import { mountClockView } from './views/clock.js';
+import { mountSettings } from './views/settings.js';
 import { alertRows } from '../staff-shared/clock-lib.js';
 import { viewerOf } from '../staff-shared/viewer.js';
 
-const VIEW_MOUNTERS = { profile: mountProfile, unit: mountUnit, review: mountReview, team: mountTeamView, clock: mountClockView };
+const VIEW_MOUNTERS = { profile: mountProfile, unit: mountUnit, review: mountReview, team: mountTeamView, clock: mountClockView, settings: mountSettings };
 let currentEl = null;
 let viewUnmount = null;
 
@@ -69,9 +70,10 @@ export default {
     }
     const p = res.data || {};
     if (p.none) return out;
-    if (p.status === 'rejected') out.push({ level: 'error', text: `資料被退回：${p.reject_reason || '請重新確認'}`, view: 'profile' });
-    else if (p.status === 'pending') out.push({ level: 'warn', text: '資料已送出，等後台確認', view: 'profile' });
-    else if (p.has_pending_change) out.push({ level: 'info', text: '你改的品牌／單位／職稱等後台確認', view: 'profile' });
+    // keep:true＝固定開啟（2026-11-17 提醒開關：使用者把「我的資料」提醒關掉時，自己帳號的狀態仍照常顯示）
+    if (p.status === 'rejected') out.push({ level: 'error', text: `資料被退回：${p.reject_reason || '請重新確認'}`, view: 'profile', keep: true });
+    else if (p.status === 'pending') out.push({ level: 'warn', text: '資料已送出，等後台確認', view: 'profile', keep: true });
+    else if (p.has_pending_change) out.push({ level: 'info', text: '你改的品牌／單位／職稱等後台確認', view: 'profile', keep: true });
     return out;
   }
 };

@@ -48,6 +48,7 @@ import { reportManifest, OPEN_HOOKS } from './manifest-check.js';
 import { render as renderLogin } from './views/login.js';
 import { sanitizeTabs, pickDynamicView, alertViewId } from './tabs.js';
 import { TODO_GROUPS, groupOf, cleanWhen, taipeiToday } from './todo.js';
+import * as alertPrefs from './alert-prefs.js';
 import { preloadModules, registerDeviceCache } from './preload.js';
 
 /** spec §4.6：badge() 逾時上限 5 秒，逾時視同 null（不得讓首頁壞掉）。 */
@@ -288,8 +289,82 @@ function buildCtx(manifest, viewId, params) {
     viewId,
     params: params || {},
     // 動態分頁（2026-10-20）：只有 manifest.dynamicTabs 的模組才有，回傳 true＝已更新
-    ...(manifest.dynamicTabs ? { tabs: (list) => setModuleTabs(manifest.id, list) } : {})
+    ...(manifest.dynamicTabs ? { tabs: (list) => setModuleTabs(manifest.id, list) } : {}),
+    // 提醒開關（2026-11-17，docs/alert-prefs/spec.md）：只有 manifest.alertSettings 的模組（我的資料 → 設定）拿得到
+    ...(manifest.alertSettings ? { alertPrefs: alertPrefsCtx(manifest) } : {})
   };
+}
+
+// ============================================================
+// 提醒開關（2026-11-17 Eason：「我的資料 → 設定」每人自己關掉某些功能的提醒；docs/alert-prefs/spec.md）
+// 關掉＝殼不跑那個模組的 badge()／alerts()／quick()；模組照常點得進去。判斷「什麼算提醒」照舊由模組自己算。
+// ============================================================
+
+function prefStorage() { try { return window.localStorage; } catch (e) { return null; } }
+
+/** 進系統時：先用本機快取，背景問後端；不同就以後端為準並重算提醒 */
+function initAlertPrefs() {
+  const user = auth.getUser();
+  if (!user || !user.id) return;
+  alertPrefs.loadFor(prefStorage(), user.id);
+  backendCall('platform', 'myPrefsGet', {}).then((res) => {
+    const now = auth.getUser();
+    if (!res || !res.ok || !res.data || !now || now.id !== user.id) return;
+    if (alertPrefs.apply(prefStorage(), res.data.alerts_off)) afterAlertPrefsChanged();
+  }).catch(() => { /* 讀不到就照本機快取 */ });
+}
+
+/** 開關變了：清掉舊結果、重算全部提醒（側邊欄數字立刻跟著變）；在首頁就整頁重畫 */
+function afterAlertPrefsChanged() {
+  for (const k of Object.keys(alertCache)) delete alertCache[k];
+  for (const m of permittedModules) if (alertPrefs.isMuted(m.id)) setNavBadge(m.id, 0);
+  if (!currentModule && currentShellPage === 'home') { renderHomeCards(); return; }
+  refreshAlerts();
+}
+
+/** 部門名稱（側邊欄同一套）；沒填 dept 的模組排在首頁下 */
+function deptNameOf(m) {
+  const d = m.dept && DEPARTMENTS.find((x) => x.id === m.dept);
+  return d ? d.name : '首頁';
+}
+
+function alertPrefsCtx(manifest) {
+  return {
+    /** 這個人看得到、而且會跳提醒的功能：[{id, name, desc, group, keep, off}]，照側邊欄部門順序 */
+    async list() {
+      const rows = await Promise.all(permittedModules.map(async (m) => {
+        let body = null;
+        try { body = (await m.entry()).default; } catch (e) { return null; }
+        if (!body || !['badge', 'alerts', 'quick'].some((f) => typeof body[f] === 'function')) return null;
+        return { m, id: m.id, name: m.name, desc: m.desc || '', group: deptNameOf(m), keep: !!m.alertsKeep, off: alertPrefs.isMuted(m.id) };
+      }));
+      const order = ['首頁'].concat(DEPARTMENTS.map((d) => d.name));
+      return rows.filter(Boolean)
+        .sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group))
+        .map(({ m, ...r }) => r);
+    },
+    off: () => alertPrefs.offList(),
+    /** 存檔：成功才換本機狀態並重算；試跑模式不存 */
+    async save(list) {
+      const clean = alertPrefs.cleanOff(list);
+      let res;
+      try { res = await sharedApi.call(manifest.id, 'myPrefsSave', { alerts_off: clean }); } catch (e) { res = null; }
+      if (res && res.dryrun) return { ok: false, error: '試跑模式不會存檔' };
+      if (!res || !res.ok) return { ok: false, error: (res && res.error) || '存檔失敗，請稍後再試' };
+      const saved = res.data && Array.isArray(res.data.alerts_off) ? res.data.alerts_off : clean;
+      if (alertPrefs.apply(prefStorage(), saved)) afterAlertPrefsChanged();
+      return { ok: true, data: { alerts_off: alertPrefs.offList(), updated_at: (res.data && res.data.updated_at) || '' } };
+    }
+  };
+}
+
+/** 首頁／待處理那一行「你關了 N 項提醒」；沒關任何一項回 null */
+function mutedHint() {
+  const muted = permittedModules.filter((m) => alertPrefs.isMuted(m.id));
+  if (!muted.length) return null;
+  const names = muted.slice(0, 3).map((m) => m.name).join('、') + (muted.length > 3 ? ' 等' : '');
+  return el('button', { type: 'button', class: 'm-more m-muted', 'data-m-act': 'alert-settings', 'data-role': 'muted-hint',
+    text: `你關了 ${muted.length} 項提醒（${names}）→ 到設定調整` });
 }
 
 function setModuleTabs(moduleId, list) {
@@ -364,10 +439,15 @@ function moduleHomeTarget(manifest) {
   return view ? `#/${manifest.id}/${view.id}` : null;
 }
 
-function fillGroup(manifest, items, badgeValue, failed) {
+function fillGroup(manifest, items, badgeValue, failed, muted) {
   const body = findGroupBody(manifest.id);
   if (!body) return;
   clearChildren(body);
+  if (muted) {
+    (items || []).slice(0, ALERTS_MAX_ROWS).forEach((it) => body.appendChild(alertRow(it.level, it.text, alertTarget(manifest, it))));
+    body.appendChild(el('div', { class: 'todo-empty', 'data-role': 'muted-note', text: '提醒已關閉（我的資料 → 設定）' }));
+    return;
+  }
   if (failed) {
     body.appendChild(alertRow('note', '暫時讀不到'));
     return;
@@ -464,7 +544,7 @@ function applyLastBadges() {
   const last = readHomeBadges(homeStorage(), user && user.id);
   for (const m of permittedModules) {
     const n = last[m.id];
-    if (freshBadge.has(m.id) || !(n > 0)) continue;
+    if (freshBadge.has(m.id) || !(n > 0) || alertPrefs.isMuted(m.id)) continue;
     staleBadge[m.id] = n;
     setNavBadge(m.id, n, true);
   }
@@ -508,6 +588,20 @@ async function loadHomeGroup(manifest, isStale) {
     const timer = new Promise((res) => setTimeout(() => { timedOut = true; res(BADGE_FAILED); }, BADGE_TIMEOUT_MS));
     return Promise.race([Promise.resolve(raw).catch((err) => { console.error(`[shell] badge() 失敗：${manifest.id}`, err); return BADGE_FAILED; }), timer]).then((v) => (timedOut ? BADGE_FAILED : v));
   };
+
+  // 提醒關掉了：不跑 badge()；alertsKeep 的模組照跑 alerts() 但只留固定開啟的項目（docs/alert-prefs/spec.md）
+  if (alertPrefs.isMuted(manifest.id)) {
+    const keepRaw = manifest.alertsKeep && typeof body.alerts === 'function' ? await run('alerts') : [];
+    const kept = cleanAlerts(alertPrefs.keepOnly(keepRaw)) || [];
+    if (!auth.getUser() || !alertPrefs.isMuted(manifest.id)) return;
+    alertCache[manifest.id] = { items: kept, badge: null, failed: false, muted: true };
+    if (homeFastOn()) clearFastBadge(manifest.id);
+    setNavBadge(manifest.id, 0);
+    onAlertsChanged();
+    if (isStale()) return;
+    fillGroup(manifest, kept, null, false, true);
+    return;
+  }
 
   const hasAlerts = typeof body.alerts === 'function';
   const [badgeRaw, alertsRaw] = await Promise.all([run('badge'), run('alerts')]);
@@ -777,6 +871,7 @@ function renderHomeCards() {
   if (mobile) viewContentEl.appendChild(renderMobileHome());
   else if (uiNewOn()) viewContentEl.appendChild(renderDeskSummary());
   const wrap = el('div', { class: mobile ? 'todo-groups d-only' : 'todo-groups', 'aria-live': 'polite' });
+  if (!mobile && !uiNewOn()) { const hint = mutedHint(); if (hint) viewContentEl.appendChild(el('div', { class: 'muted-hint-row' }, [hint])); }
   viewContentEl.appendChild(wrap);
   for (const m of permittedModules) {
     const firstView = m.views.find(isViewPermitted);
@@ -980,6 +1075,8 @@ function fillTodoBox(box) {
     if (loading) box.appendChild(el('div', { class: 'm-note', text: `還有 ${loading} 個功能讀取中…` }));
   }
   if (failed) box.appendChild(el('div', { class: 'm-note', text: `${failed} 個功能暫時讀不到` }));
+  const hint = mutedHint();
+  if (hint) box.appendChild(hint);
 }
 
 function moduleTile(m) {
@@ -1254,6 +1351,7 @@ async function runModuleHook(fnName) {
     let body;
     try { body = (await m.entry()).default; } catch (e) { return null; }
     if (!body || typeof body[fnName] !== 'function') return null;
+    if (fnName === 'quick' && alertPrefs.isMuted(m.id)) return null;   // 提醒關掉的功能不出現在「待我處理」的快速核准
     let raw;
     try { raw = await withTimeout(body[fnName](buildCtx(m, null, {})), 8000); } catch (e) { raw = null; }
     return { m, body, items: Array.isArray(raw) ? raw : null, open: !isModulePermitted(m) };
@@ -1487,6 +1585,7 @@ function onMobileAct(a) {
   else if (a === 'logout') doLogout();
   else if (a === 'reload') { try { window.location.reload(); } catch (e) { /* ignore */ } }
   else if (a === 'fav-edit') editFav();
+  else if (a === 'alert-settings') navigateTo('#/me/settings');
   else if (a.startsWith('tab-')) navigateTo(`#/${a.slice(4)}`);
 }
 
@@ -1839,6 +1938,7 @@ async function enterApp() {
   const loaded = await loadManifests(reportManifest);
   allManifests = loaded;
   permittedModules = loaded.filter(isModulePermitted);
+  initAlertPrefs();   // 提醒開關：本機快取先套，後端背景讀（要在 route() 前，首頁第一次跑就知道哪些不用算）
   route();
   // 一開就在模組頁（重新整理、LINE 連結、書籤）：首頁沒跑過，側邊欄沒有待辦數字 → 等模組頁先開好，再在背景算一次（2026-11-16）
   const first = parseHash(window.location.hash).moduleId;

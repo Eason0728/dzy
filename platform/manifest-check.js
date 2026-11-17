@@ -24,7 +24,8 @@ const REQUIRED_KEYS = ['id', 'ns', 'backend', 'name', 'desc', 'icon', 'requires'
 // keepAlive（切走後保留畫面的毫秒數）、dynamicTabs（頁頂分頁由模組動態決定）是 shell.js 實際會讀的欄位（2026-10-25 審查 A-08）
 // work（手機功能頁的工作分類）、accountMenu（分頁列進手機「我」頁）：2026-11-06 手機版改版
 // openHooks（沒有模組權限的人也照跑的掛鉤，2026-11-10）：只准 mine（手機「我送出的」，後端只回本人的資料）
-const KNOWN_KEYS = REQUIRED_KEYS.concat(['color', 'dept', 'keepAlive', 'dynamicTabs', 'work', 'accountMenu', 'openHooks']);
+// alertSettings（拿得到 ctx.alertPrefs，只准「我的資料」）、alertsKeep（提醒關掉時 alerts() 仍照跑、只留 keep:true 的項目）：2026-11-17 提醒開關
+const KNOWN_KEYS = REQUIRED_KEYS.concat(['color', 'dept', 'keepAlive', 'dynamicTabs', 'work', 'accountMenu', 'openHooks', 'alertSettings', 'alertsKeep']);
 /** openHooks 可以列的掛鉤：只有 mine。待我處理的清單與核准（quick／decide）、已處理（decided）、首頁件數（alerts／badge）不准對沒有權限的人開 */
 export const OPEN_HOOKS = ['mine'];
 
@@ -65,6 +66,10 @@ export function validateManifest(m) {
   if (m.accountMenu !== undefined && typeof m.accountMenu !== 'boolean') {
     errors.push(`${at('accountMenu')} 必須是 true／false`);
   }
+  for (const k of ['alertSettings', 'alertsKeep']) {
+    if (m[k] !== undefined && typeof m[k] !== 'boolean') errors.push(`${at(k)} 必須是 true／false`);
+  }
+  if (m.alertSettings === true && m.id !== 'me') errors.push(`${at('alertSettings')} 只准「我的資料」（me）使用`);
   if (m.openHooks !== undefined && !(Array.isArray(m.openHooks) && m.openHooks.every((h) => OPEN_HOOKS.includes(h)))) {
     errors.push(`${at('openHooks')} 必須是陣列，而且只能列 ${OPEN_HOOKS.join('、')}（沒有模組權限的人也會跑這些掛鉤）`);
   }
