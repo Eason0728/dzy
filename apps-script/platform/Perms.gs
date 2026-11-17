@@ -783,7 +783,7 @@ var PERM_NAMES = {
   'platform.staff': '同仁名單', 'platform.users': '人員管理', 'platform.permmap': '權限設定',
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核', 'platform.unitstaff': '我的單位',
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
-  'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'att.void': '考勤作廢', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
+  'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'att.void': '人資考勤代理', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
   'payroll.write': '薪酬計算', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對',
   'pnl.read': '損益試算：看', 'pnl.write': '損益試算：填', 'pnl.admin': '損益試算：管', 'transfer.write': '調撥管理',
   'platform.eval-manage': '績效評核：替所屬同仁打分', 'platform.eval-brand': '績效評核：看自己品牌各店', 'platform.eval-all': '績效評核：看全集團', 'platform.eval-admin': '績效評核：題目設定與定稿',
