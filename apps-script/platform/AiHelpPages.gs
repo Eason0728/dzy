@@ -60,6 +60,7 @@ var AIH_PAGES = [
   {"m":"payroll","v":"export","name":"薪酬計算","view_name":"8 匯出","dept":"hr","requires_module":["payroll.write"],"requires":["payroll.write"]},
   {"m":"payroll","v":"attexp","name":"薪酬計算","view_name":"出勤紀錄表","dept":"hr","requires_module":["payroll.write"],"requires":["payroll.write"]},
   {"m":"payroll","v":"oplog","name":"薪酬計算","view_name":"操作紀錄","dept":"hr","requires_module":["payroll.write"],"requires":["payroll.write"]},
+  {"m":"payroll","v":"guide","name":"薪酬計算","view_name":"操作手冊","dept":"hr","requires_module":["payroll.write"],"requires":["payroll.write"]},
   {"m":"eval","v":"fill","name":"績效評核","view_name":"填寫評鑑","dept":"hr","requires_module":["platform.login"],"requires":["platform.login"]},
   {"m":"eval","v":"self","name":"績效評核","view_name":"自評","dept":"hr","requires_module":["platform.login"],"requires":["platform.login"]},
   {"m":"eval","v":"mine","name":"績效評核","view_name":"我的成績","dept":"hr","requires_module":["platform.login"],"requires":["platform.login"]},
