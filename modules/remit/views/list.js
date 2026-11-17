@@ -37,7 +37,6 @@ export function mountList(el, ctx) {
   }
 
   function rowHtml(r) {
-    const bank = bankText(r);
     const acts = [];
     if (r.state === 'pending') {
       if (!r.self_pay && !r.bank) acts.push(`<button type="button" class="btn btn-secondary" data-act="set-bank" data-id="${esc(r.id)}">設定帳戶</button>`);
@@ -51,16 +50,20 @@ export function mountList(el, ctx) {
       ? `<span class="tag tag-ok">已匯款 ${esc((r.paid && r.paid.date) || '')}</span>${r.paid && r.paid.by_name ? `<div class="remit-sub">${esc(r.paid.by_name)}</div>` : ''}`
       : `<span class="tag tag-warn">待出帳</span>${r.overdue ? '<div class="remit-due">已過希望付款日</div>' : ''}`;
     return `<tr data-role="remit-row" data-id="${esc(r.id)}" data-state="${esc(r.state)}">
-      <td data-label="${esc(r.date_label)}">${esc(r.date || '—')}${r.own ? '<div class="remit-sub">本人的單</div>' : ''}</td>
-      <td data-label="種類">${esc(r.type_name)}<div class="remit-sub">${esc(r.category)}</div></td>
+      <td class="remit-nw" data-label="${esc(r.date_label)}">${esc(r.date || '—')}${r.own ? '<div class="remit-sub">本人的單</div>' : ''}</td>
+      <td class="remit-nw" data-label="種類">${esc(r.type_name)}<div class="remit-sub">${esc(r.category)}</div></td>
       <td data-label="單位">${esc(r.unit_name)}<div class="remit-sub">會計：${esc(accts)}</div></td>
       <td class="remit-payee" data-label="對象">${esc(r.payee)}</td>
       <td data-label="說明">${esc(r.desc)}</td>
       <td class="num" data-label="金額" data-role="amount">${esc(money(r.amount))}</td>
-      <td data-label="帳戶" class="remit-bank">${r.self_pay ? '<span class="tag tag-info">同仁代墊</span>' : bank ? esc(bank) : '<span class="tag tag-danger">還沒設定帳戶</span>'}</td>
+      <td data-label="帳戶" class="remit-bank">${r.self_pay ? '<span class="tag tag-info">同仁代墊</span>' : r.bank ? bankHtml(r.bank) : '<span class="tag tag-danger">還沒設定帳戶</span>'}</td>
       <td data-label="狀態">${status}</td>
       <td><div class="remit-acts">${acts.join('')}</div></td>
     </tr>`;
+  }
+
+  function bankHtml(b) {
+    return `${esc([b.bank_code, b.bank_name, b.branch].filter(Boolean).join(' '))}<br>戶名 ${esc(b.acct_name)}<br><span class="remit-no">${esc(b.acct_no)}</span>`;
   }
 
   function rowsNow() { return visibleRows((data && data.rows) || [], mineOnly); }

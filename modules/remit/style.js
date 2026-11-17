@@ -12,13 +12,17 @@ const CSS = `
 .remit-table td.num,.remit-table th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .remit-table .remit-acts{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
 .remit-table .remit-sub{color:var(--muted);font-size:.86em}
-.remit-bank{font-size:.9em;line-height:1.45}
+.remit-table th,.remit-table td{white-space:normal;vertical-align:top}
+.remit-bank{font-size:.9em;line-height:1.45;min-width:11em;max-width:15em;overflow-wrap:anywhere}
+.remit-bank .remit-no{font-variant-numeric:tabular-nums;font-weight:700}
+.remit-table td.remit-nw{white-space:nowrap}
 .remit-due{color:var(--danger);font-weight:700}
 @media (max-width:860px){
   .remit-table thead{display:none}
   .remit-table,.remit-table tbody,.remit-table tr,.remit-table td{display:block;width:100%}
   .remit-table tr{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;margin-bottom:10px}
-  .remit-table td{border:0;padding:2px 0}
+  .remit-table td{border:0;padding:2px 0;max-width:none}
+  .remit-bank{min-width:0;max-width:none}
   .remit-table td[data-label]::before{content:attr(data-label) "　";color:var(--muted);font-size:.86em}
   .remit-table td.num{text-align:left;font-size:1.1em;font-weight:700}
   .remit-table td.remit-payee{font-weight:700;font-size:1.02em}
