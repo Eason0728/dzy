@@ -9,7 +9,7 @@ export const FEATURE_ORDER = ['audit.read.own', 'audit.read.brand', 'audit.read'
   'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write',
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
   'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank',
-  'platform.insp-void', 'platform.aihelp'];   // 2026-11-02 AI 小幫手管理（鎖碼）；2026-10-30 作廢巡檢獨立權限碼
+  'platform.insp-void', 'platform.remit', 'platform.aihelp'];   // 2026-11-18 匯款清單；2026-11-02 AI 小幫手管理（鎖碼）；2026-10-30 作廢巡檢獨立權限碼
 
 /**
  * 個別例外的功能下拉清單（2026-10-29）：以後端 permExList 回的 grantable 為準（admin＝全部、人資主管＝STORE_HR_GRANTABLE，與對照表頁一致）；
@@ -55,6 +55,7 @@ export const FEATURE_NAMES = {
   'platform.insp-all': '營運巡檢：看全集團',
   'platform.insp-bank': '營運巡檢：題目設定',
   'platform.insp-void': '營運巡檢：作廢巡檢',
+  'platform.remit': '匯款清單',
   'platform.aihelp': 'AI 小幫手管理'
 };
 
@@ -419,6 +420,7 @@ export const FEATURE_DESC = {
   'platform.insp-all': '看全集團的營運巡檢報告（營運部、執行長以上預設有）',
   'platform.insp-bank': '設定營運巡檢題目（墨竹亭、一悟自訂題庫）',
   'platform.insp-void': '作廢巡檢報告（打錯店、測試資料），作廢後只有有這個權限的人看得到該筆與照片（營運部預設有）',
+  'platform.remit': '進匯款清單：看個人代墊、單位請款的待出帳與已匯款、標記已匯款、設定廠商銀行帳戶（財務部門預設有）',
   'platform.aihelp': '管理 AI 小幫手：上架知識庫、處理待回答、看用量、暫停小幫手（只有系統管理者能給）'
 };
 

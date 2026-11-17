@@ -1,7 +1,9 @@
 /**
  * 送單（spec §4、§7、§14）：選表單 → 填 → 拍照 → 預覽路線 → 送出。
  * - 請購：品項明細（金額由 apvCalcAmount 算，伺服器會重算並忽略前端金額）、廠商、用途、需求日、照片選填。
- * - 請款：支出日、類別、金額、說明、付款對象、（選填）對應請購單、收據照片 1～5 張。
+ * - 個人代墊（2026-11-18）：支出日、類別、金額、說明、收據照片 1～5 張；錢還給送件人。
+ * - 單位請款（2026-11-18）：希望付款日、類別、金額、廠商名稱（可從匯款清單的廠商選）、說明、單據照片 1～5 張。
+ * - 兩種都照核決權限簽，最後一關財務部主管，簽完進財務部匯款清單。舊「費用請款」只剩退回再送。
  * - 人事異動：離職／調職／調薪；離職要本人簽名（本人送＝簽名板；主管替送＝對象線上簽或附紙本簽名照）。
  * - 草稿：請購／請款存 localStorage dzy.u.<id>.apv_draft_<type>；人事單不存（含薪資，spec §14.7）。照片檔號不存進草稿（未綁定 24 小時會被清）。
  * - 送出帶 client_id；失敗重試沿用同一個 client_id（後端同 sender＋client_id 回原單），成功後才換新的。
@@ -10,7 +12,7 @@
 'use strict';
 
 import {
-  TYPES, TYPE_LABEL, CATEGORY, KIND_LABEL, ROLE_LABEL, DEPT_LABEL, calcPurchase, checkExpenseAmount, toNum, money,
+  TYPES, TYPE_LABEL, REMIT_TYPES, PAY_TYPES, CATEGORY, KIND_LABEL, ROLE_LABEL, DEPT_LABEL, calcPurchase, checkExpenseAmount, toNum, money,
   loadDraft, saveDraft, clearDraft, newClientId, errText, isConflict, DRAFT_TYPES
 } from '../lib.js';
 import { createPhotoPicker, domOf } from '../widgets.js';
@@ -22,7 +24,8 @@ export function mountSubmit(el, ctx) {
   const esc = ctx.fmt.esc;
   const userId = ctx.user && ctx.user.id;
   let alive = true;
-  let type = 'expense';
+  let type = 'advance';
+  let vendorNames = null;   // 單位請款的廠商名稱建議（apvVendorNames，只讀一次）
   // 送單、上傳收據都要同仁帳號（後端 c.me.opened）；系統帳號（admin 等）先講清楚，免得收據上傳被當成登入過期（2026-11-02）
   const sysAcct = !!(ctx.user && ctx.user.role && ctx.user.role !== 'staff');
   let resub = null;       // {id, rev, step, files:[...]} 改完再送
@@ -74,6 +77,43 @@ export function mountSubmit(el, ctx) {
         <div class="checkbox-row"><input type="radio" name="payee" id="f-payee-vendor" value="vendor" data-field="payee"${vendor ? ' checked' : ''}><label for="f-payee-vendor">直接付給廠商</label></div></div>
       <div class="field" data-role="vendor-name"${vendor ? '' : ' hidden'}><label class="field-label" for="f-vname">廠商名稱</label><input class="input" id="f-vname" data-field="vendor_name" maxlength="60" value="${esc(v.vendor_name || '')}"></div>
       <div class="field"><div class="field-label">收據照片（必填，1～5 張）</div><div data-role="photo-slot"></div></div>`;
+  }
+  function catOptions(v) {
+    return Object.keys(CATEGORY).map((k) => `<option value="${k}"${v.category === k ? ' selected' : ''}>${esc(CATEGORY[k])}</option>`).join('');
+  }
+  function advanceHtml(v) {
+    return `
+      <p class="field-hint">你先墊了錢，請公司還給你。簽完後財務部會匯到你的帳戶。</p>
+      <div class="form-grid-2">
+        <div class="field"><label class="field-label" for="f-date">支出日（必填）</label><input class="input" id="f-date" data-field="spend_date" type="date" value="${esc(v.spend_date || today())}"></div>
+        <div class="field"><label class="field-label" for="f-cat">類別（必填）</label><select class="input" id="f-cat" data-field="category">${catOptions(v)}</select></div>
+        <div class="field"><label class="field-label" for="f-amount">金額（元，必填）</label><input class="input" id="f-amount" data-field="amount" type="number" inputmode="numeric" step="1" min="1" value="${esc(v.amount === undefined ? '' : v.amount)}"></div>
+      </div>
+      <div class="field"><label class="field-label" for="f-desc">說明（必填）</label><textarea class="input" id="f-desc" data-field="desc" rows="2" maxlength="200">${esc(v.desc || '')}</textarea></div>
+      <div class="field"><div class="field-label">收據照片（必填，1～5 張）</div><div data-role="photo-slot"></div></div>`;
+  }
+  function unitpayHtml(v) {
+    const opts = (vendorNames || []).map((n) => `<option value="${esc(n)}"></option>`).join('');
+    return `
+      <p class="field-hint">請公司直接付錢給廠商。簽完後財務部依廠商帳戶匯款。</p>
+      <div class="form-grid-2">
+        <div class="field"><label class="field-label" for="f-pdate">希望付款日（必填）</label><input class="input" id="f-pdate" data-field="pay_date" type="date" value="${esc(v.pay_date || '')}"></div>
+        <div class="field"><label class="field-label" for="f-cat">類別（必填）</label><select class="input" id="f-cat" data-field="category">${catOptions(v)}</select></div>
+        <div class="field"><label class="field-label" for="f-amount">金額（元，必填）</label><input class="input" id="f-amount" data-field="amount" type="number" inputmode="numeric" step="1" min="1" value="${esc(v.amount === undefined ? '' : v.amount)}"></div>
+      </div>
+      <div class="field"><label class="field-label" for="f-vname">付款對象：廠商名稱（必填）</label><input class="input" id="f-vname" data-field="vendor_name" maxlength="60" list="f-vname-list" autocomplete="off" value="${esc(v.vendor_name || '')}"><datalist id="f-vname-list" data-role="vendor-list">${opts}</datalist>
+        <p class="field-hint">打字會出現財務部已設定帳戶的廠商；新廠商直接打全名，財務部匯款前會補帳戶。</p></div>
+      <div class="field"><label class="field-label" for="f-desc">說明（必填）</label><textarea class="input" id="f-desc" data-field="desc" rows="2" maxlength="200">${esc(v.desc || '')}</textarea></div>
+      <div class="field"><div class="field-label">單據照片（必填，1～5 張；報價單、發票或請款單）</div><div data-role="photo-slot"></div></div>`;
+  }
+  async function loadVendorNames() {
+    if (vendorNames) return;
+    let r;
+    try { r = await ctx.api.call('approvals', 'apvVendorNames', {}); } catch (e) { return; }
+    if (!alive || !r || !r.ok || !r.data) return;
+    vendorNames = Array.isArray(r.data.names) ? r.data.names : [];
+    const dl = el.querySelector('[data-role="vendor-list"]');
+    if (dl) dl.innerHTML = vendorNames.map((n) => `<option value="${esc(n)}"></option>`).join('');
   }
   function personnelHtml(v) {
     const kind = v.kind || 'leave';
@@ -131,6 +171,8 @@ export function mountSubmit(el, ctx) {
     if (type === 'expense') {
       return { spend_date: g('spend_date'), category: g('category'), amount: g('amount'), desc: g('desc'), payee: g('payee'), vendor_name: g('vendor_name'), purchase_id: g('purchase_id') };
     }
+    if (type === 'advance') return { spend_date: g('spend_date'), category: g('category'), amount: g('amount'), desc: g('desc') };
+    if (type === 'unitpay') return { pay_date: g('pay_date'), category: g('category'), amount: g('amount'), desc: g('desc'), vendor_name: g('vendor_name') };
     return {
       kind: g('kind'), mode: g('mode'), signMode: g('signMode'), subject: g('subject'), effective: g('effective'), reason: g('reason'),
       from: { unit: g('from_unit'), title: g('from_title'), pay: g('from_pay') },
@@ -170,10 +212,11 @@ export function mountSubmit(el, ctx) {
     const keep = keepPhotos && picker ? picker.ids().map((id) => ({ id })) : (v.__files || []);
     teardownWidgets();
     const root = formEl();
-    root.innerHTML = type === 'purchase' ? purchaseHtml(v) : type === 'expense' ? expenseHtml(v) : personnelHtml(v);
+    root.innerHTML = type === 'purchase' ? purchaseHtml(v) : type === 'expense' ? expenseHtml(v) : type === 'advance' ? advanceHtml(v) : type === 'unitpay' ? unitpayHtml(v) : personnelHtml(v);
+    if (type === 'unitpay') loadVendorNames();
     const slot = root.querySelector('[data-role="photo-slot"]');
     if (slot) {
-      picker = createPhotoPicker(ctx, { initial: keep, label: type === 'expense' ? '拍收據／選照片' : '拍照／選照片' });
+      picker = createPhotoPicker(ctx, { initial: keep, label: type === 'unitpay' ? '拍單據／選照片' : PAY_TYPES.indexOf(type) !== -1 ? '拍收據／選照片' : '拍照／選照片' });
       slot.appendChild(picker.el);
     }
     const cv = root.querySelector('[data-role="sign-pad"]');
@@ -240,6 +283,17 @@ export function mountSubmit(el, ctx) {
       if ((v.purchase_id || '').trim()) b.purchase_id = v.purchase_id.trim();   // 欄位已拿掉（請購停用），只剩舊單再送時帶回的值
       return { amount: b.amount, payload: { body: b, files }, previewExtra: { amount: b.amount } };
     }
+    if (type === 'advance' || type === 'unitpay') {
+      const isU = type === 'unitpay';
+      if (isU ? !v.pay_date : !v.spend_date) return warn(isU ? '請選希望付款日' : '請選支出日');
+      if (!checkExpenseAmount(v.amount)) return warn('金額要是 1 以上的整數元');
+      if (isU && !(v.vendor_name || '').trim()) return warn('請填廠商名稱');
+      if (!v.desc.trim()) return warn('請填說明');
+      if (!files.length) return warn(isU ? '單位請款至少要附一張單據照片' : '個人代墊至少要附一張收據照片');
+      const b = { category: v.category, amount: toNum(v.amount), desc: v.desc.trim() };
+      if (isU) { b.pay_date = v.pay_date; b.vendor_name = v.vendor_name.trim().replace(/\s+/g, ' '); } else b.spend_date = v.spend_date;
+      return { amount: b.amount, payload: { body: b, files }, previewExtra: { amount: b.amount } };
+    }
     // personnel
     const kind = v.kind || 'leave';
     const self = kind === 'leave' && (v.mode || 'self') === 'self';
@@ -277,9 +331,11 @@ export function mountSubmit(el, ctx) {
     const lines = steps.map((s, i) => {
       const names = (s.candidates || []).map((c) => c.name).filter(Boolean).join('、');
       const label = (s.override && s.override.to) ? `指派 ${s.override.to}` : (ROLE_LABEL[s.role] || s.role);
-      return `<li>第 ${i + 1} 關：${esc(label)}${s.self ? '（你本人，在核決權限內，送出即核准）' : names ? `（${esc(names)}）` : s.status === 'skipped' ? '（目前沒人可簽，會自動往上）' : ''}</li>`;
+      const selfTxt = s.role === 'fin_head' ? '（你本人就是財務部主管，送出即核准）' : '（你本人，在核決權限內，送出即核准）';
+      return `<li>第 ${i + 1} 關：${esc(label)}${s.self ? selfTxt : names ? `（${esc(names)}）` : s.status === 'skipped' ? '（目前沒人可簽，會自動往上）' : ''}</li>`;
     });
     const h = DEPT_LABEL[data && data.handler] || (data && data.handler) || '';
+    if (REMIT_TYPES.indexOf(type) !== -1) return `<ol>${lines.join('')}</ol><p>簽完進財務部匯款清單，由單位會計出帳。</p>`;
     return `<ol>${lines.join('')}</ol>${h ? `<p>簽完交 ${esc(h)} 承辦。</p>` : ''}`;
   }
   async function previewRoute(extra) {
@@ -397,7 +453,7 @@ export function mountSubmit(el, ctx) {
   // ── 開場 ────────────────────────────────────────────
   async function start() {
     const rid = ctx.params && ctx.params.resubmit;
-    if (!rid) { showType('expense'); return; }
+    if (!rid) { showType('advance'); return; }
     el.innerHTML = '<div class="card"><p class="text-muted">讀取中…</p></div>';
     const r = await ctx.api.call('approvals', 'apvGet', { id: rid });
     if (!alive) return;

@@ -141,6 +141,9 @@ function freshApp(opts) {
     module_secrets: [['backend_id', 'level', 'secret']], login_log: [['at', 'username', 'ip_hash', 'result']]
   });
   const sb = app.sb;
+  // 2026-11-18 起新單只能送個人代墊／單位請款（測在 test/apv-remit.mock.test.mjs）。本檔測的是共用簽核引擎，用舊「費用請款」一關制最好讀：
+  // 這裡把 expense 放回「可新送」，等於模擬 11/18 以前（舊單退回再送仍走這套引擎）
+  if (!opts.noLegacyExpense) sb.APV_SUBMIT_TYPES.push('expense');
   sb.setupStaff();
   const st = app.sheets.staff;
   PEOPLE.forEach((p) => {

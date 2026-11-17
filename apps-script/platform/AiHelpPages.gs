@@ -87,5 +87,8 @@ var AIH_PAGES = [
   {"m":"pnl","v":"uncontrollable","name":"損益試算","view_name":"不可控","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
   {"m":"pnl","v":"revenue","name":"損益試算","view_name":"營業收入","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
   {"m":"pnl","v":"import","name":"損益試算","view_name":"匯入","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
-  {"m":"pnl","v":"settings","name":"損益試算","view_name":"設定","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.admin"]}
+  {"m":"pnl","v":"settings","name":"損益試算","view_name":"設定","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.admin"]},
+  {"m":"remit","v":"list","name":"匯款清單","view_name":"匯款清單","dept":"fin","requires_module":["platform.remit"],"requires":["platform.remit"]},
+  {"m":"remit","v":"vendors","name":"匯款清單","view_name":"廠商帳戶","dept":"fin","requires_module":["platform.remit"],"requires":["platform.remit"]},
+  {"m":"remit","v":"accts","name":"匯款清單","view_name":"單位會計","dept":"fin","requires_module":["platform.remit"],"requires":["platform.remit"]}
 ];

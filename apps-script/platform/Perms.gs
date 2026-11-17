@@ -20,6 +20,7 @@ var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
   'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank',
   'platform.insp-void',
+  'platform.remit',   // 2026-11-18 匯款清單（財務部門；不鎖碼，預設規則 hq/fin/*；docs/remit/progress.md）。插在 aihelp 前：aihelp 固定最後一碼
   'platform.aihelp'];   // 2026-11-02 AI 小幫手管理（docs/ai-helper §8、§12.5；鎖碼：只有 admin 能給）；上一碼 platform.insp-void 的註解：2026-10-30 作廢巡檢獨立權限碼（Eason 照推薦；預設只給營運部，不鎖碼；正式環境 admin 要再按一次「初始化營運巡檢」補規則）   // 2026-10-27 營運巡檢（docs/inspection/spec.md；預設規則在 Inspect.gs INSP_PERM_DEFAULT_RULES，inspSetup 補進 perm_map；不鎖碼）   // 2026-10-26 績效評核（docs/eval/spec.md §2.2；預設規則在 Eval.gs EV_PERM_DEFAULT_RULES，evSetup 補進 perm_map）
 // 鎖碼：只有 role admin 能在對照表新增／刪除含這些碼的規則，也只有 admin 能改變某人有無這些碼（2026-10-17 擴大到四碼）
 // 角色（roles 分頁）含 * 或與 PERM_LOCKED 有交集＝高權限角色，只有 admin 能指派（Users.gs usrRoleIsSuper_，同一份清單）
@@ -97,7 +98,8 @@ var PERM_DEFAULT_RULES = (function () {
   add('hq', 'fin', '*', ['platform.purchase']);
   // 2026-10-24（docs/pnl-fin）：財務部門預設損益試算「填」級；正式環境由 Eason 在權限設定打開
   add('hq', 'fin', '*', ['pnl.write']);
-  add('hq', 'fin', '*', ['transfer.write']);   // 2026-10-24 調撥管理（第 36 條；正式環境 perm_map 已初始化不會自動補，由 Eason 在權限設定打開）
+  add('hq', 'fin', '*', ['transfer.write']);
+  add('hq', 'fin', '*', ['platform.remit']);   // 2026-11-18 匯款清單（第 37 條；正式環境 perm_map 已初始化，要在權限設定手動打開）   // 2026-10-24 調撥管理（第 36 條；正式環境 perm_map 已初始化不會自動補，由 Eason 在權限設定打開）
   return out;
 })();
 
@@ -803,7 +805,7 @@ var PERM_NAMES = {
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
   'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'att.void': '人資考勤代理', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
   'payroll.write': '薪酬計算', 'payroll.admin': '薪酬計算：全部門市與集團總覽', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對',
-  'pnl.read': '損益試算：看', 'pnl.write': '損益試算：填', 'pnl.admin': '損益試算：管', 'transfer.write': '調撥管理',
+  'pnl.read': '損益試算：看', 'pnl.write': '損益試算：填', 'pnl.admin': '損益試算：管', 'transfer.write': '調撥管理', 'platform.remit': '匯款清單',
   'platform.eval-manage': '績效評核：替所屬同仁打分', 'platform.eval-brand': '績效評核：看自己品牌各店', 'platform.eval-all': '績效評核：看全集團', 'platform.eval-admin': '績效評核：題目設定與定稿',
   'platform.insp-do': '營運巡檢：到店巡檢', 'platform.insp-own': '營運巡檢：看自己店', 'platform.insp-brand': '營運巡檢：看自己品牌各店', 'platform.insp-all': '營運巡檢：看全集團', 'platform.insp-bank': '營運巡檢：題目設定', 'platform.insp-void': '營運巡檢：作廢巡檢',
   'platform.aihelp': 'AI 小幫手管理'

@@ -53,6 +53,8 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   // 2026-10-18：第三期表單簽核（Approvals.gs；契約 docs/approvals/api.md）。jobs 專用的全域函式（apvFile*_／apvDigest_ 等）刻意不在這裡
   'apvSetup', 'apvThresholdGet', 'apvThresholdSave', 'apvRoutePreview', 'apvMine', 'apvTodo', 'apvGet', 'apvList', 'apvExport', 'apvFileMeta',
   'apvSubmit', 'apvResubmit', 'apvWithdraw', 'apvDecide', 'apvSign', 'apvHandle', 'apvReassign', 'apvVoid',
+  // 2026-11-18 匯款清單（Approvals.gs 第 11 節，docs/remit/progress.md）
+  'apvRemitList', 'apvRemitSummary', 'apvVendorList', 'apvVendorNames', 'apvAcctGet', 'apvRemitMark', 'apvRemitUnmark', 'apvVendorSave', 'apvVendorToggle', 'apvAcctSave',
   // 2026-10-18：門市營運系統（StoreOps.gs）；永遠不可列進 minikit readActions 與 dryrun READ_ACTIONS
   'svcStoreRedeem', 'svcStoreWho', 'svcStoreRoster',
   // 2026-10-28：值班主管本人的申請改由上層審（docs/req-upper）。attUpperGaps 是純讀取（人資主管／admin 才有內容），首頁提醒用
@@ -151,6 +153,7 @@ function dispatch_(e) {
     orgUpgrade2026: 1, orgRollback2026: 1, orgUpgrade202610: 1, orgRollback202610: 1, orgRename202610: 1, orgRenameRollback202610: 1, orgAddBranddev202610: 1, orgAddBranddevRollback202610: 1, orgEnableMztMc202610: 1, orgEnableMztMcRollback202610: 1, clockAddMztMc202610: 1, clockAddMztMcRollback202610: 1, orgEnableMztRg202611: 1, orgEnableMztRgRollback202611: 1, clockAddMztRg202611: 1, clockAddMztRgRollback202611: 1, orgEnableMztWx202611: 1, orgEnableMztWxRollback202611: 1, clockAddMztWx202611: 1, clockAddMztWxRollback202611: 1, orgDisableOps202610: 1, orgDisableOpsRollback202610: 1,
     permInit: 1, permMapSave: 1, permExSave: 1, permExRevoke: 1, permStoreSave: 1, permAuditSeen: 1,
     apvSetup: 1, apvThresholdSave: 1, apvSubmit: 1, apvResubmit: 1, apvWithdraw: 1, apvDecide: 1, apvSign: 1, apvHandle: 1, apvReassign: 1, apvVoid: 1,
+    apvRemitMark: 1, apvRemitUnmark: 1, apvVendorSave: 1, apvVendorToggle: 1, apvAcctSave: 1,
     regionSave: 1, regionSwitch: 1, lineRevoke: 1, myPrefsSave: 1 };
   if (MUTATING_ACTIONS[action]) {
     var lock = LockService.getScriptLock();
@@ -299,6 +302,16 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'apvHandle': return handleApvHandle_(token, payload);
     case 'apvReassign': return handleApvReassign_(token, payload);
     case 'apvVoid': return handleApvVoid_(token, payload);
+    case 'apvRemitList': return handleApvRemitList_(token, payload);
+    case 'apvRemitSummary': return handleApvRemitSummary_(token);
+    case 'apvVendorList': return handleApvVendorList_(token);
+    case 'apvVendorNames': return handleApvVendorNames_(token);
+    case 'apvAcctGet': return handleApvAcctGet_(token);
+    case 'apvRemitMark': return handleApvRemitMark_(token, payload);
+    case 'apvRemitUnmark': return handleApvRemitUnmark_(token, payload);
+    case 'apvVendorSave': return handleApvVendorSave_(token, payload);
+    case 'apvVendorToggle': return handleApvVendorToggle_(token, payload);
+    case 'apvAcctSave': return handleApvAcctSave_(token, payload);
     case 'svcStoreRedeem': return handleSvcStoreRedeem_(payload);
     case 'svcStoreWho': return handleSvcStoreWho_(payload);
     case 'svcStoreRoster': return handleSvcStoreRoster_(payload);

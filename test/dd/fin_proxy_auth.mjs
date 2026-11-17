@@ -232,8 +232,8 @@ function expectAuth(person, ns, action, haveNs) {
 {
   const { env } = buildEnv();
   const sb = env.sb;
-  const codes = ['cashbook.write', 'transfer.write', 'pnl.read', 'pnl.write', 'pnl.admin', 'platform.purchase'];
-  ok(codes.every((c) => sb.PERM_GRANTABLE.includes(c)), '3a: 六個財務權限碼都可給（PERM_GRANTABLE）', sb.PERM_GRANTABLE);
+  const codes = ['cashbook.write', 'transfer.write', 'pnl.read', 'pnl.write', 'pnl.admin', 'platform.purchase', 'platform.remit'];
+  ok(codes.every((c) => sb.PERM_GRANTABLE.includes(c)), '3a: 七個財務權限碼都可給（PERM_GRANTABLE；2026-11-18 匯款清單 platform.remit）', sb.PERM_GRANTABLE);
   ok(sb.PERM_LOCKED.includes('pnl.admin') && !sb.PERM_LOCKED.includes('cashbook.write') && !sb.PERM_LOCKED.includes('transfer.write') && !sb.PERM_LOCKED.includes('platform.purchase') && !sb.PERM_LOCKED.includes('pnl.write'), '3b: 只有 pnl.admin 是鎖碼（Eason 2026-10-27 改回：其餘四碼人資可開）', sb.PERM_LOCKED);
   const names = sb.PERM_NAMES || sb.PERM_LABELS || {};
   ok(names['cashbook.write'] === '收支管理' && names['platform.purchase'] === '貨單核對' && names['transfer.write'] === '調撥管理' && /損益/.test(names['pnl.write'] || ''), '3c: 中文名稱', names);
@@ -242,7 +242,7 @@ function expectAuth(person, ns, action, haveNs) {
   if (Array.isArray(rules)) {
     const finPerms = new Set();
     rules.forEach((r) => { const unit = r.unit || r[0], dept = r.dept || r[1], title = r.title || r[2], perms = r.perms || r[3]; if (unit === 'hq' && dept === 'fin' && title === '*') (Array.isArray(perms) ? perms : String(perms).split(',')).forEach((p) => finPerms.add(p)); });
-    ok(['cashbook.write', 'platform.purchase', 'pnl.write', 'transfer.write'].every((p) => finPerms.has(p)) && !finPerms.has('pnl.admin') && !finPerms.has('pnl.read'), '3d: 財務部門預設規則有四模組（填損益不含管／看）', Array.from(finPerms));
+    ok(['cashbook.write', 'platform.purchase', 'platform.remit', 'pnl.write', 'transfer.write'].every((p) => finPerms.has(p)) && !finPerms.has('pnl.admin') && !finPerms.has('pnl.read'), '3d: 財務部門預設規則有五模組（填損益不含管／看；2026-11-18 匯款清單 platform.remit）', Array.from(finPerms));
   } else {
     ok(false, '3d: 找不到 PERM_DEFAULT_RULES 形狀', Object.keys(sb).filter((k) => /PERM/.test(k)));
   }

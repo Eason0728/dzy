@@ -7,16 +7,22 @@
 import { apvCalcAmount } from '../approvals-shared/amount.js';
 
 export const TYPES = [
-  { id: 'expense', name: '費用請款' },
+  { id: 'advance', name: '個人代墊' },
+  { id: 'unitpay', name: '單位請款' },
   { id: 'personnel', name: '人事異動' }
 ];
 // 2026-11-02 Eason：請購停用（送單不再出現；舊單照常顯示），請款改名「費用請款」
-export const TYPE_LABEL = { purchase: '請購', expense: '費用請款', personnel: '人事異動' };
+// 2026-11-18 Eason：費用請款拆成「個人代墊」（同仁先墊、公司還）與「單位請款」（公司付給廠商）；兩種都照核決權限簽，最後一關財務部主管，簽完進財務部匯款清單
+export const TYPE_LABEL = { purchase: '請購', expense: '費用請款', personnel: '人事異動', advance: '個人代墊', unitpay: '單位請款' };
+/** 請款類（有金額、類別、收據）：舊費用請款＋兩種新的 */
+export const PAY_TYPES = ['expense', 'advance', 'unitpay'];
+/** 簽完進匯款清單的種類（待我辦不出現，改在匯款清單出帳） */
+export const REMIT_TYPES = ['advance', 'unitpay'];
 export const KIND_LABEL = { leave: '離職', transfer: '調職', raise: '調薪' };
 export const CATEGORY = { repair: '設備維修', food: '食材臨時採購', misc: '雜支', transport: '交通', supplies: '文具耗材', other: '其他' };
 export const DEPT_LABEL = { purchase: '採購部', fin: '財務部', hr: '人資部' };
 // brand_dir：品牌辦公室總監；中央工廠是廚藝總監（docs/org/spec.md 第 15 節）。head：門市店長、中央工廠廠長
-export const ROLE_LABEL = { head: '單位主管', brand_dir: '品牌總監／廚藝總監', ceo: '執行長', gm: '總經理', chair: '董事長', direct: '直屬主管', self_sign: '本人簽名' };
+export const ROLE_LABEL = { fin_head: '財務部主管', head: '單位主管', brand_dir: '品牌總監／廚藝總監', ceo: '執行長', gm: '總經理', chair: '董事長', direct: '直屬主管', self_sign: '本人簽名' };
 /** 權限表可選的權限人（由低到高，spec §2） */
 export const THR_ROLES = ['head', 'brand_dir', 'ceo', 'gm', 'chair'];
 export const THR_ROLE_STORE_LABEL = { head: '店長／廠長', brand_dir: '品牌總監／廚藝總監', ceo: '執行長', gm: '總經理', chair: '董事長' };
@@ -67,7 +73,7 @@ export function errText(res) {
     case 'forbidden': return msg || '你沒有權限做這件事';
     case 'unauthorized': return '登入已過期，請重新登入';
     case 'not_found': return '找不到這張單';
-    case 'no_files': return '費用請款至少要附一張收據照片';
+    case 'no_files': return msg || '請款至少要附一張收據或單據照片';
     case 'file_invalid': return '照片格式不對，請重新拍一張';
     case 'file_too_large': return '照片太大，請重新拍一張';
     case 'quota': return '今天上傳的照片太多了，明天再試';
@@ -103,7 +109,7 @@ export function checkExpenseAmount(v) {
 }
 
 // ── 草稿（請購／請款存 localStorage；人事單不存，spec §14.7）──────
-export const DRAFT_TYPES = ['purchase', 'expense'];
+export const DRAFT_TYPES = ['purchase', 'expense', 'advance', 'unitpay'];
 export function draftKey(userId, type) { return `dzy.u.${userId}.apv_draft_${type}`; }
 export function loadDraft(storage, userId, type) {
   if (!storage || !userId || DRAFT_TYPES.indexOf(type) === -1) return null;
@@ -137,6 +143,7 @@ export function whereText(form) {
     const s = steps[form.step];
     return s ? `卡在：${stepWho(s)}` : '簽核中';
   }
+  if (st === 'handling' && REMIT_TYPES.indexOf(form.type) !== -1) return '已核准，等財務部匯款';
   if (st === 'handling') return `等承辦：${DEPT_LABEL[form.handler_dept] || form.handler_dept || ''}`;
   if (st === 'exception') return '找不到合格的簽核人，等人資指派';
   return '';

@@ -37,7 +37,9 @@ var APV_THR_DEFAULT = [
 
 var APV_CATEGORIES = ['repair', 'food', 'misc', 'transport', 'supplies', 'other'];
 var APV_CATEGORY_NAME = { repair: '設備維修', food: '食材臨時採購', misc: '雜支', transport: '交通', supplies: '文具耗材', other: '其他' };
-var APV_TYPE_NAME = { purchase: '請購', expense: '費用請款', personnel: '人事異動' };
+// 2026-11-18：可以「新送」的種類；費用請款 expense 只剩舊單的退回再送（引擎照舊，apvResubmit 不受這張表限制）
+var APV_SUBMIT_TYPES = ['purchase', 'personnel', 'advance', 'unitpay'];
+var APV_TYPE_NAME = { purchase: '請購', expense: '費用請款', personnel: '人事異動', advance: '個人代墊', unitpay: '單位請款' };
 var APV_FILE_LIMIT = { receipt: 180 * 1024, sign: 100 * 1024 };
 var APV_FILE_DAILY_QUOTA = 60;
 var APV_FILE_MAX_PER_FORM = 5;
@@ -369,6 +371,8 @@ function apvCanView_(c, f, eff, events) {
   if (!c.me) return false;
   if (f.sender === c.me.emp) return true;
   if (apvIsHandlerOf_(c, f) && (f.status === 'handling' || f.status === 'done')) return true;
+  // 匯款清單（2026-11-18）：有 platform.remit 的人看得到待出帳／已匯款的個人代墊、單位請款（含收據）
+  if (APV_REMIT_TYPES.indexOf(f.type) !== -1 && (f.status === 'handling' || f.status === 'done') && hasPerm_(c.perms, 'platform.remit')) return true;
   if (eff && eff.candidates.some(function (p) { return p.emp === c.me.emp; })) return true;
   return apvSignedBefore_(c, f, events || []);
 }
@@ -408,7 +412,7 @@ function apvCan_(c, f, status, route, index, cands) {
     sign: status === 'signing' && inCands && selfSign,
     resubmit: status === 'rejected' && f.sender === meEmp,
     withdraw: status === 'signing' && f.sender === meEmp && !apvHasDoneStep_(route),
-    handle: status === 'handling' && apvIsHandlerOf_(c, f),
+    handle: status === 'handling' && apvIsHandlerOf_(c, f) && APV_REMIT_TYPES.indexOf(f.type) === -1,   // 個人代墊／單位請款在匯款清單出帳
     reassign: (status === 'signing' || status === 'exception') && c.isStaffPerm,
     void: status !== 'done' && status !== 'voided' && (c.isStaffPerm || c.isAdmin)
   };
@@ -619,6 +623,25 @@ function apvNormalize_(c, type, rawBody, rawFiles, rawSubject, forms, existing) 
     if (purchaseId) eb.purchase_id = purchaseId;
     return { ok: true, body: eb, amount: ec.amount, subject: null, kind: '', fileGroups: [{ ids: ef, kind: 'receipt' }] };
   }
+  if (type === 'advance' || type === 'unitpay') {
+    // 2026-11-18：個人代墊＝支出日；單位請款＝希望付款日＋廠商名稱（付款對象）
+    var dKey = type === 'advance' ? 'spend_date' : 'pay_date';
+    if (typeof b[dKey] !== 'string' || !apvDateOk_(b[dKey])) return bad(dKey);
+    if (APV_CATEGORIES.indexOf(b.category) === -1) return bad('category');
+    var rdesc = apvText_(b.desc, 1, 200);
+    if (rdesc === null) return bad('desc');
+    var rv = '';
+    if (type === 'unitpay') { rv = apvText_(b.vendor_name, 1, 60); if (rv === null) return bad('vendor_name'); rv = rv.replace(/\s+/g, ' '); }
+    var rc0 = apvCalcAmount_(type, { amount: b.amount });
+    if (!rc0.ok) return apvFail_(rc0.error, '金額要是 1～10,000,000 的整數元');
+    var rfs = apvFileIds_(rawFiles, APV_FILE_MAX_PER_FORM);
+    if (rfs === null) return apvFail_('file_invalid', '單據最多 5 張，檔號格式要正確');
+    if (rfs.length < 1) return apvFail_('no_files', type === 'advance' ? '個人代墊至少要附一張收據' : '單位請款至少要附一張單據');
+    var rb = { category: b.category, amount: rc0.amount, desc: rdesc, payee: type === 'advance' ? 'self' : 'vendor' };
+    rb[dKey] = b[dKey];
+    if (rv) rb.vendor_name = rv;
+    return { ok: true, body: rb, amount: rc0.amount, subject: null, kind: '', fileGroups: [{ ids: rfs, kind: 'receipt' }] };
+  }
   if (type === 'personnel') {
     var kind = b.kind;
     if (['leave', 'transfer', 'raise'].indexOf(kind) === -1) return bad('kind');
@@ -724,7 +747,8 @@ function apvWriteVersion_(c, fr, isNew, norm, eff, items, signedAtSubmit, note) 
   else { apvSaveForm_(fr); }
   apvAddEvent_(f, c.actor, 'submit', note, sha, c.now);
   if (signedAtSubmit) apvAddEvent_(f, c.actor, 'sign', '', sha, c.now);
-  if ((eff.route.steps || []).some(function (s) { return s.self && s.status === 'done'; })) apvAddEvent_(f, c.actor, 'approve', '本人核准（金額在自己的核決權限內）', sha, c.now);
+  if ((eff.route.steps || []).some(function (s) { return s.self && s.status === 'done' && s.role !== 'fin_head'; })) apvAddEvent_(f, c.actor, 'approve', '本人核准（金額在自己的核決權限內）', sha, c.now);
+  if ((eff.route.steps || []).some(function (s) { return s.self && s.status === 'done' && s.role === 'fin_head'; })) apvAddEvent_(f, c.actor, 'approve', '本人核准（財務部主管本人送單）', sha, c.now);
   eff.skips.forEach(function (s) {
     apvAddEvent_(f, 'system', 'skip', apvRoleLabel_(s.role) + (s.next ? ' 找不到合格的人，改找' + apvRoleLabel_(s.next) : ' 找不到合格的人，已無更高一級'), '', c.now);
   });
@@ -744,6 +768,7 @@ function handleApvSubmit_(token, payload) {
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(clientId) || !/[^0-9]/.test(clientId)) return apvFail_('bad_request', '缺少 client_id');
   var type = payload.type;
   if (APV_TYPES.indexOf(type) === -1) return apvFail_('bad_request', 'type 不合法');
+  if (APV_SUBMIT_TYPES.indexOf(type) === -1) return apvFail_('bad_request', '「' + (APV_TYPE_NAME[type] || type) + '」已改成「個人代墊」與「單位請款」，請重新整理後改用新的種類');
   var forms = apvReadForms_();
   for (var i = 0; i < forms.length; i++) {   // 重送：同一個人＋同一個 client_id 回原單
     if (forms[i].f.sender === c.me.emp && forms[i].f.client_id === clientId) {
@@ -817,7 +842,7 @@ function handleApvRoutePreview_(token, payload) {
   if (APV_TYPES.indexOf(type) === -1) return apvFail_('bad_request', 'type 不合法');
   var f = { type: type, sender: c.me.emp, subject: '' };
   var amount = null, subject = null, kind = '', signed = false;
-  if (type === 'purchase' || type === 'expense') {
+  if (type === 'purchase' || APV_PAY_TYPES.indexOf(type) !== -1) {
     var calc = apvCalcAmount_('expense', { amount: payload.amount });
     if (!calc.ok) return apvFail_('bad_amount', '金額要是 1～10,000,000 的整數元');
     amount = calc.amount;
@@ -871,6 +896,12 @@ function apvStepDone_(c, f, index, patch) {
   var st = route.steps[index];
   Object.keys(patch).forEach(function (k) { st[k] = patch[k]; });
   st.status = 'done';
+  // 請款類（2026-11-18）：剛核准的人同時是財務部主管 → 後面那關財務部主管一併算完成（簽一次兩關都算）
+  var nx = route.steps[index + 1];
+  var byP = patch.by ? c.byEmp[patch.by] : null;
+  if (nx && nx.role === 'fin_head' && nx.status === 'pending' && !nx.override && byP && apvIsFinHead_(byP) && patch.by !== f.sender) {
+    nx.status = 'done'; nx.by = patch.by; nx.at = patch.at; nx.dup = true;
+  }
   return apvAdvance_(route, apvRCtx_(c, f));
 }
 
@@ -899,6 +930,8 @@ function handleApvDecide_(token, payload) {
   var n = apvStr_(payload.note);
   var next = apvStepDone_(c, f, f.step, { by: c.me.emp, at: c.now });
   apvAddEvent_(f, c.me.emp, 'approve', n.slice(0, APV_NOTE_MAX), sha, c.now);
+  var dupSt = next.route.steps[f.step + 1];
+  if (dupSt && dupSt.dup && dupSt.by === c.me.emp && !(f.route.steps[f.step + 1] || {}).dup) apvAddEvent_(f, c.me.emp, 'approve', '同時是財務部主管，一併核准', sha, c.now);
   apvPersistEff_(c, fr, next, c.now);
   return { ok: true, data: { status: f.status, step: f.step } };
 }
@@ -930,6 +963,7 @@ function handleApvHandle_(token, payload) {
   if (payload.result !== 'done' && payload.result !== 'return') return apvFail_('bad_request', 'result 要是 done 或 return');
   if (f.status !== 'handling') return apvFail_('conflict', '這張單目前不在承辦中');
   if (!apvIsHandlerOf_(c, f)) return apvForbidden_('只有承辦部門的人可以處理');
+  if (APV_REMIT_TYPES.indexOf(f.type) !== -1) return apvForbidden_('個人代墊、單位請款請到「匯款清單」標記已匯款');
   var note = apvStr_(payload.note);
   if (note.length > APV_NOTE_MAX) return apvFail_('bad_request', '備註最多 200 字');
   var sha = apvCurrentSha_(f);
@@ -1042,7 +1076,7 @@ function handleApvTodo_(token) {
     var eff = apvEffOf_(c, f);
     var status = eff ? eff.status : f.status;
     if (status === 'signing' && c.me && eff && eff.candidates.some(function (p) { return p.emp === c.me.emp; })) sign.push(apvFormView_(c, f, eff, files, {}));
-    else if (status === 'handling' && apvIsHandlerOf_(c, f)) handle.push(apvFormView_(c, f, eff, files, {}));
+    else if (status === 'handling' && apvIsHandlerOf_(c, f) && APV_REMIT_TYPES.indexOf(f.type) === -1) handle.push(apvFormView_(c, f, eff, files, {}));
     else if (status === 'exception' && (c.isStaffPerm || c.isAdmin)) exception.push(apvFormView_(c, f, eff, files, {}));
   });
   var data = { sign: sign.slice(0, APV_LIST_MAX), handle: handle.slice(0, APV_LIST_MAX) };
@@ -1117,15 +1151,15 @@ function handleApvExport_(token, payload) {
   var rows = [];
   apvReadForms_().forEach(function (fr) {
     var f = fr.f;
-    if (f.status !== 'done' || (f.type !== 'purchase' && f.type !== 'expense')) return;
+    if (f.status !== 'done' || (f.type !== 'purchase' && APV_PAY_TYPES.indexOf(f.type) === -1)) return;
     var h = handleAt[f.id + '#' + f.rev];
     if (!h || apvMonth_(h.at) !== month) return;
     var b = apvBodyOf_(f);
     rows.push({
       id: f.id, rev: f.rev, type: f.type, unit_name: apvUnitName_(c, f.unit), sender_name: apvName_(c, f.sender), amount: f.amount,
-      category: f.type === 'expense' ? (APV_CATEGORY_NAME[b.category] || b.category) : undefined,
-      vendor: f.type === 'expense' ? (b.vendor_name || '') : (b.vendor || ''),
-      desc: f.type === 'expense' ? b.desc : b.purpose,
+      category: f.type !== 'purchase' ? (APV_CATEGORY_NAME[b.category] || b.category) : undefined,
+      vendor: f.type !== 'purchase' ? (b.vendor_name || '') : (b.vendor || ''),
+      desc: f.type !== 'purchase' ? b.desc : b.purpose,
       created_at: f.created_at, approved_at: approvedAt[f.id + '#' + f.rev] || null, done_at: h.at, handle_note: h.note
     });
   });
@@ -1400,14 +1434,15 @@ function apvPnlCutoffMonth_(ms) {
 
 /** 這張單該推的內容；不是 expense、單位或類別沒對照、日期或金額壞 → null。金額取「目前這一版」的 rev 金額（沒有就用單上金額） */
 function apvPnlItemOf_(f, revAmount) {
-  if (f.type !== 'expense' || f.status !== 'done') return null;
+  if (APV_PAY_TYPES.indexOf(f.type) === -1 || f.status !== 'done') return null;
   var store = APV_PNL_UNIT_STORE.hasOwnProperty(f.unit) ? APV_PNL_UNIT_STORE[f.unit] : '';
   var b = apvBodyOf_(f);
   var acc = APV_PNL_CATEGORY_ACC.hasOwnProperty(b.category) ? APV_PNL_CATEGORY_ACC[b.category] : '';
-  if (!store || !acc || typeof b.spend_date !== 'string' || !apvDateOk_(b.spend_date)) return null;
+  var day = f.type === 'unitpay' ? b.pay_date : b.spend_date;   // 單位請款沒有支出日，用希望付款日的月份（2026-11-18）
+  if (!store || !acc || typeof day !== 'string' || !apvDateOk_(day)) return null;
   var amount = revAmount !== undefined && revAmount !== null && revAmount !== '' ? Number(revAmount) : Number(f.amount);
   if (!isFinite(amount) || amount < 1 || amount > 1000000000 || Math.floor(amount) !== amount) return null;
-  return { form_id: f.id, store_id: store, spend_month: b.spend_date.slice(0, 7), acc_id: acc, amount: amount, desc: String(b.desc === undefined || b.desc === null ? '' : b.desc).slice(0, 60) };
+  return { form_id: f.id, store_id: store, spend_month: day.slice(0, 7), acc_id: acc, amount: amount, desc: String(b.desc === undefined || b.desc === null ? '' : b.desc).slice(0, 60) };
 }
 
 /**
@@ -1428,7 +1463,7 @@ function apvPnlClaim_(nowMs, limit) {
   var cutoff = apvPnlCutoffMonth_(now);
   apvReadForms_().forEach(function (fr) {
     var f = fr.f;
-    if (f.type !== 'expense' || f.status !== 'done') return;
+    if (APV_PAY_TYPES.indexOf(f.type) === -1 || f.status !== 'done') return;
     var p = pnl[f.id];
     if (p && (apvStr_(p.state) === 'done' || apvStr_(p.state) === 'failed')) return;
     var item = apvPnlItemOf_(f, revAmt[f.id + '#' + f.rev]);
@@ -1505,7 +1540,7 @@ function apvPnlStat_(nowMs) {
   var out = [], pending = 0;
   apvReadForms_().forEach(function (fr) {
     var f = fr.f;
-    if (f.type !== 'expense' || f.status !== 'done') return;
+    if (APV_PAY_TYPES.indexOf(f.type) === -1 || f.status !== 'done') return;
     var p = pnl[f.id], st = p ? apvStr_(p.state) : 'pending';
     if (st === 'done') return;
     if (!apvPnlItemOf_(f, undefined)) return;
@@ -1523,4 +1558,405 @@ function apvPnlSecret_() {
   var by = readModuleSecrets_();
   var v = by.pnl && by.pnl.write !== undefined && by.pnl.write !== null ? String(by.pnl.write).trim() : '';
   return { key: v };
+}
+
+// ============================================================
+// 11. 匯款清單（2026-11-18 Eason，docs/remit/progress.md）
+//   個人代墊、單位請款簽完（handling、承辦 fin）＝待出帳；單位會計在這裡「標記已匯款」＝結案 done（照舊推損益）。
+//   廠商銀行帳戶、單位會計設定也在這裡。權限 platform.remit（財務部門預設、可個別加；不鎖碼）。
+//   分頁第一次寫入才建（apvRemitEnsure_）；讀不到分頁＝空。
+// ============================================================
+
+var APV_SHEET_REMIT = 'apv_remit';
+var APV_SHEET_VENDORS = 'apv_vendors';
+var APV_SHEET_VENDOR_LOG = 'apv_vendor_log';
+var APV_SHEET_ACCTS = 'apv_accountants';
+var APV_REMIT_HEADERS = ['form_id', 'state', 'paid_date', 'by', 'at', 'bank_json', 'note', 'updated_at'];
+var APV_VENDOR_HEADERS = ['id', 'name', 'bank_code', 'bank_name', 'branch', 'acct_name', 'acct_no', 'note', 'active', 'updated_at', 'updated_by'];
+var APV_VENDOR_LOG_HEADERS = ['at', 'actor', 'vendor_id', 'action', 'before_json', 'after_json'];
+var APV_ACCT_HEADERS = ['unit', 'emps', 'updated_at', 'updated_by'];
+var APV_REMIT_PERM = 'platform.remit';
+var APV_ACCT_MAX = 5;
+var APV_VENDOR_MAX = 2000;
+
+function apvRemitEnsure_(name, headers) {
+  if (stfSheet_(name)) return;
+  stfEnsureSheet_(SpreadsheetApp.getActive(), name, headers, []);
+}
+
+/** 進場：已初始化＋有 platform.remit（admin 的 * 也算） */
+function apvRemitEnter_(token) {
+  var c = apvEnter_(token);
+  if (!c.ok) return c;
+  if (!apvReady_()) return apvNotInited_();
+  if (!hasPerm_(c.perms, APV_REMIT_PERM)) return apvForbidden_('沒有匯款清單的權限');
+  return c;
+}
+
+/** 廠商名稱比對用的鍵：去前後空白、中間連續空白併一個、英文不分大小寫 */
+function apvVendorKey_(name) { return apvStr_(name).replace(/\s+/g, ' ').toLowerCase(); }
+
+function apvReadVendors_() {
+  if (!stfSheet_(APV_SHEET_VENDORS)) return [];
+  return apvRows_(APV_SHEET_VENDORS, APV_VENDOR_HEADERS).map(function (r) {
+    var o = r.o;
+    return { row: r.row, o: { id: apvStr_(o.id), name: apvStr_(o.name), bank_code: apvStr_(o.bank_code), bank_name: apvStr_(o.bank_name), branch: apvStr_(o.branch),
+      acct_name: apvStr_(o.acct_name), acct_no: apvStr_(o.acct_no), note: apvStr_(o.note), active: apvStr_(o.active).toUpperCase() !== 'FALSE',
+      updated_at: Number(o.updated_at) || 0, updated_by: apvStr_(o.updated_by) } };
+  }).filter(function (r) { return r.o.id !== ''; });
+}
+/** 廠商名稱鍵 → 啟用中的廠商（同鍵只會有一筆，存檔時擋） */
+function apvVendorIndex_(vendors) {
+  var m = {};
+  vendors.forEach(function (v) { if (v.o.active) m[apvVendorKey_(v.o.name)] = v.o; });
+  return m;
+}
+function apvBankView_(v) {
+  return v ? { vendor_id: v.id, bank_code: v.bank_code, bank_name: v.bank_name, branch: v.branch, acct_name: v.acct_name, acct_no: v.acct_no, note: v.note } : null;
+}
+
+function apvReadRemit_() {
+  var m = {};
+  if (!stfSheet_(APV_SHEET_REMIT)) return m;
+  apvRows_(APV_SHEET_REMIT, APV_REMIT_HEADERS).forEach(function (r) {
+    var id = apvStr_(r.o.form_id);
+    if (id) m[id] = { row: r.row, o: { form_id: id, state: apvStr_(r.o.state), paid_date: apvStr_(r.o.paid_date), by: apvStr_(r.o.by), at: Number(r.o.at) || 0,
+      bank_json: apvStr_(r.o.bank_json), note: apvStr_(r.o.note), updated_at: Number(r.o.updated_at) || 0 } };
+  });
+  return m;
+}
+
+/** 單位 → {row, emps:[DZY…], updated_at, updated_by} */
+function apvReadAccts_() {
+  var m = {};
+  if (!stfSheet_(APV_SHEET_ACCTS)) return m;
+  apvRows_(APV_SHEET_ACCTS, APV_ACCT_HEADERS).forEach(function (r) {
+    var u = apvStr_(r.o.unit);
+    if (!u) return;
+    m[u] = { row: r.row, emps: apvStr_(r.o.emps).split(',').map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean),
+      updated_at: Number(r.o.updated_at) || 0, updated_by: apvStr_(r.o.updated_by) };
+  });
+  return m;
+}
+/** 能當會計的人：已開通、主要或兼任財務部 */
+function apvAcctCandidates_(c) {
+  return c.people.filter(function (p) { return apvIsHandler_(p, 'fin'); });
+}
+/** 單位會計現在有效的名單（離職、停用、調出財務部的自動不算） */
+function apvAcctLive_(c, emps) {
+  return (emps || []).filter(function (e) { return apvIsHandler_(c.byEmp[e], 'fin'); });
+}
+
+function apvTodayYmd_(ms) { var t = apvTaipei_(ms); return t.y + '-' + t.m + '-' + t.d; }
+
+function apvCmp_(x, y) { return x === y ? 0 : (x < y ? -1 : 1); }
+
+/** 匯款清單一列（給畫面與匯出）。bankIdx＝廠商索引；rm＝apv_remit 那筆（沒有就 null） */
+function apvRemitRow_(c, f, rm, bankIdx, accts) {
+  var b = apvBodyOf_(f);
+  var paid = f.status === 'done';
+  var date = f.type === 'unitpay' ? apvStr_(b.pay_date) : apvStr_(b.spend_date);
+  var acc = apvAcctLive_(c, accts[f.unit] ? accts[f.unit].emps : []);
+  var bank = null;
+  if (f.type === 'unitpay') {
+    if (paid && rm && rm.o.bank_json) bank = apvParseJson_(rm.o.bank_json, null);
+    else bank = apvBankView_(bankIdx[apvVendorKey_(b.vendor_name)] || null);
+  }
+  var today = apvTodayYmd_(c.now);
+  var row = {
+    id: f.id, rev: f.rev, type: f.type, type_name: APV_TYPE_NAME[f.type], unit: f.unit, unit_name: apvUnitName_(c, f.unit),
+    sender: { emp: f.sender, name: apvName_(c, f.sender) },
+    date: date, date_label: f.type === 'unitpay' ? '希望付款日' : '支出日',
+    payee: f.type === 'unitpay' ? apvStr_(b.vendor_name) : apvName_(c, f.sender) + '（' + f.sender + '）',
+    vendor_name: f.type === 'unitpay' ? apvStr_(b.vendor_name) : '',
+    desc: apvStr_(b.desc), category: APV_CATEGORY_NAME[b.category] || apvStr_(b.category), amount: Number(f.amount) || 0,
+    state: paid ? 'paid' : 'pending',
+    bank: bank, self_pay: f.type === 'advance',
+    overdue: !paid && f.type === 'unitpay' && date !== '' && apvCmp_(date, today) < 0,
+    accountants: acc.map(function (e) { return { emp: e, name: apvName_(c, e) }; }),
+    mine: !!c.me && acc.indexOf(c.me.emp) !== -1,
+    own: !!c.me && f.sender === c.me.emp
+  };
+  if (paid) {
+    row.paid = rm && rm.o.state === 'paid' ? { date: rm.o.paid_date, by: rm.o.by, by_name: apvName_(c, rm.o.by), at: rm.o.at, note: rm.o.note } : { date: '', by: '', by_name: '', at: f.updated_at, note: '' };
+  }
+  return row;
+}
+
+/** 所有在匯款清單上的單（待出帳＋已匯款）：個人代墊／單位請款、status handling 或 done */
+function apvRemitForms_() {
+  return apvReadForms_().filter(function (fr) {
+    return APV_REMIT_TYPES.indexOf(fr.f.type) !== -1 && (fr.f.status === 'handling' || fr.f.status === 'done');
+  });
+}
+
+function apvRemitSummaryOf_(rows) {
+  var s = { pending: 0, pending_total: 0, overdue: 0, mine: 0, unassigned: 0 };
+  rows.forEach(function (r) {
+    if (r.state !== 'pending') return;
+    s.pending++; s.pending_total += r.amount;
+    if (r.overdue) s.overdue++;
+    if (r.mine) s.mine++;
+    if (!r.accountants.length) s.unassigned++;
+  });
+  return s;
+}
+
+function apvRemitAllRows_(c) {
+  var rm = apvReadRemit_(), idx = apvVendorIndex_(apvReadVendors_()), accts = apvReadAccts_();
+  return apvRemitForms_().map(function (fr) { return apvRemitRow_(c, fr.f, rm[fr.f.id] || null, idx, accts); });
+}
+
+/** 已匯款那列算哪個月：匯款日的月份（舊資料沒有匯款日就用結案時間） */
+function apvRemitPaidMonth_(r) {
+  if (!r.paid) return '';
+  return r.paid.date ? r.paid.date.slice(0, 7) : apvMonth_(r.paid.at || 0);
+}
+
+/** action apvRemitList {state:'pending'|'paid'|'all', month:'YYYY-MM'}：待出帳一律全列；已匯款依匯款日的月份 */
+function handleApvRemitList_(token, payload) {
+  var c = apvRemitEnter_(token);
+  if (!c.ok) return c;
+  payload = payload || {};
+  var state = apvStr_(payload.state) || 'pending';
+  if (['pending', 'paid', 'all'].indexOf(state) === -1) return apvFail_('bad_request', 'state 要是 pending、paid 或 all');
+  var month = apvStr_(payload.month) || apvMonth_(c.now);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return apvFail_('bad_request', 'month 格式要是 YYYY-MM');
+  var all = apvRemitAllRows_(c);
+  var inMonth = function (r) { return r.state === 'paid' && apvRemitPaidMonth_(r) === month; };
+  var rows = all.filter(function (r) {
+    if (state === 'pending') return r.state === 'pending';
+    if (state === 'paid') return inMonth(r);
+    return r.state === 'pending' || inMonth(r);
+  });
+  rows.sort(function (a, b) {
+    if (a.state !== b.state) return a.state === 'pending' ? -1 : 1;
+    if (a.state === 'pending') return apvCmp_(a.date, b.date) || apvCmp_(a.id, b.id);
+    return apvCmp_(b.paid.date || '', a.paid.date || '') || apvCmp_(b.id, a.id);
+  });
+  var paidRows = all.filter(inMonth);
+  var sum = apvRemitSummaryOf_(all);
+  sum.paid = paidRows.length;
+  sum.paid_total = paidRows.reduce(function (t, r) { return t + r.amount; }, 0);
+  return { ok: true, data: { month: month, state: state, rows: rows.slice(0, 500), summary: sum, today: apvTodayYmd_(c.now) } };
+}
+
+/** action apvRemitSummary：首頁提醒用（只回數字） */
+function handleApvRemitSummary_(token) {
+  var c = apvRemitEnter_(token);
+  if (!c.ok) return c;
+  return { ok: true, data: apvRemitSummaryOf_(apvRemitAllRows_(c)) };
+}
+
+/** 改匯款狀態的共同開頭：權限、找單、種類、rev */
+function apvRemitOpen_(token, payload) {
+  var c = apvRemitEnter_(token);
+  if (!c.ok) return c;
+  payload = payload || {};
+  var fr = apvFindForm_(apvStr_(payload.id));
+  if (!fr || APV_REMIT_TYPES.indexOf(fr.f.type) === -1 || (fr.f.status !== 'handling' && fr.f.status !== 'done')) return apvFail_('not_found', '匯款清單上找不到這張單');
+  if (payload.rev !== fr.f.rev) return apvFail_('conflict', '這張單剛被別人處理過，請重新整理');
+  return { ok: true, c: c, fr: fr, f: fr.f };
+}
+
+function apvRemitUpsert_(rm, o) {
+  apvRemitEnsure_(APV_SHEET_REMIT, APV_REMIT_HEADERS);
+  if (rm) apvPutRow_(APV_SHEET_REMIT, APV_REMIT_HEADERS, rm.row, o);
+  else apvAppendObj_(APV_SHEET_REMIT, APV_REMIT_HEADERS, o);
+}
+
+/** action apvRemitMark {id, rev, paid_date, note?}：標記已匯款＝結案（done、寫 handle 事件，照舊推損益） */
+function handleApvRemitMark_(token, payload) {
+  var o = apvRemitOpen_(token, payload);
+  if (!o.ok) return o;
+  var c = o.c, fr = o.fr, f = o.f;
+  if (f.status !== 'handling') return apvFail_('conflict', '這張單已經標記匯款了');
+  var pd = apvStr_(payload.paid_date);
+  if (!apvDateOk_(pd)) return apvFail_('bad_request', '請填匯款日');
+  if (apvCmp_(pd, apvTodayYmd_(c.now)) > 0) return apvFail_('bad_request', '匯款日不能是未來的日子');
+  var note = apvStr_(payload.note);
+  if (note.length > APV_NOTE_MAX) return apvFail_('bad_request', '備註最多 200 字');
+  var bank = null;
+  if (f.type === 'unitpay') {
+    var v = apvVendorIndex_(apvReadVendors_())[apvVendorKey_(apvBodyOf_(f).vendor_name)];
+    if (!v) return apvFail_('no_account', '這家廠商還沒設定銀行帳戶，請先設定再標記');
+    bank = apvBankView_(v);
+  }
+  var rm = apvReadRemit_()[f.id] || null;
+  f.status = 'done';
+  f.step = null;
+  f.step_at = c.now;
+  f.updated_at = c.now;
+  apvSaveForm_(fr);
+  apvAddEvent_(f, c.actor, 'handle', ('已匯款 ' + pd + (note ? '：' + note : '')).slice(0, APV_NOTE_MAX), apvCurrentSha_(f), c.now);
+  apvRemitUpsert_(rm, { form_id: f.id, state: 'paid', paid_date: pd, by: c.actor, at: c.now, bank_json: bank ? JSON.stringify(bank) : '', note: note, updated_at: c.now });
+  return { ok: true, data: { status: 'done', paid_date: pd } };
+}
+
+/** action apvRemitUnmark {id, rev, reason}：標錯取消 → 回到待出帳（已推的損益不撤、之後也不重推） */
+function handleApvRemitUnmark_(token, payload) {
+  var o = apvRemitOpen_(token, payload);
+  if (!o.ok) return o;
+  var c = o.c, fr = o.fr, f = o.f;
+  if (f.status !== 'done') return apvFail_('conflict', '這張單還沒標記匯款');
+  var reason = apvText_(payload.reason, 1, APV_NOTE_MAX);
+  if (reason === null) return apvFail_('bad_request', '取消要寫原因');
+  var rm = apvReadRemit_()[f.id] || null;
+  f.status = 'handling';
+  f.step = null;
+  f.step_at = c.now;
+  f.updated_at = c.now;
+  apvSaveForm_(fr);
+  apvAddEvent_(f, c.actor, 'unpaid', reason, apvCurrentSha_(f), c.now);
+  apvRemitUpsert_(rm, { form_id: f.id, state: 'unpaid', paid_date: '', by: c.actor, at: c.now, bank_json: '', note: reason, updated_at: c.now });
+  return { ok: true, data: { status: 'handling' } };
+}
+
+// ---- 廠商帳戶 ----
+
+function apvVendorFull_(c, v, logs) {
+  return { id: v.id, name: v.name, bank_code: v.bank_code, bank_name: v.bank_name, branch: v.branch, acct_name: v.acct_name, acct_no: v.acct_no, note: v.note,
+    active: v.active, updated_at: v.updated_at, updated_by: v.updated_by, updated_by_name: v.updated_by ? apvName_(c, v.updated_by) : '', log: logs || [] };
+}
+
+/** action apvVendorList：廠商帳戶全部（含停用）＋每家最近 5 筆異動 */
+function handleApvVendorList_(token) {
+  var c = apvRemitEnter_(token);
+  if (!c.ok) return c;
+  var logs = {};
+  if (stfSheet_(APV_SHEET_VENDOR_LOG)) {
+    apvRows_(APV_SHEET_VENDOR_LOG, APV_VENDOR_LOG_HEADERS).forEach(function (r) {
+      var id = apvStr_(r.o.vendor_id);
+      if (!id) return;
+      (logs[id] = logs[id] || []).push({ at: Number(r.o.at) || 0, actor: apvStr_(r.o.actor), actor_name: apvName_(c, apvStr_(r.o.actor)), action: apvStr_(r.o.action) });
+    });
+  }
+  var list = apvReadVendors_().map(function (v) { return apvVendorFull_(c, v.o, (logs[v.o.id] || []).slice(-5).reverse()); });
+  list.sort(function (a, b) { return a.active === b.active ? apvCmp_(a.name, b.name) : (a.active ? -1 : 1); });
+  return { ok: true, data: { vendors: list } };
+}
+
+/** action apvVendorNames：送單頁的廠商名稱建議（只回啟用中的名稱，不含帳戶）。已開通同仁都能叫 */
+function handleApvVendorNames_(token) {
+  var c = apvEnter_(token);
+  if (!c.ok) return c;
+  if (!(c.me && c.me.opened) && !hasPerm_(c.perms, APV_REMIT_PERM)) return apvForbidden_();
+  var names = apvReadVendors_().filter(function (v) { return v.o.active; }).map(function (v) { return v.o.name; });
+  names.sort();
+  return { ok: true, data: { names: names } };
+}
+
+function apvVendorClean_(p) {
+  var bad = function (f) { return apvFail_('bad_request', f); };
+  var name = apvText_(p.name, 1, 60); if (name === null) return bad('廠商名稱要 1～60 字');
+  name = name.replace(/\s+/g, ' ');
+  var code = apvStr_(p.bank_code); if (!/^\d{3}$/.test(code)) return bad('銀行代碼要是 3 位數字');
+  var bname = apvText_(p.bank_name, 1, 30); if (bname === null) return bad('請填銀行名稱（最多 30 字）');
+  var branch = p.branch === undefined || p.branch === null ? '' : apvText_(p.branch, 0, 30); if (branch === null) return bad('分行最多 30 字');
+  var an = apvText_(p.acct_name, 1, 60); if (an === null) return bad('請填戶名（最多 60 字）');
+  var no = apvStr_(p.acct_no).replace(/\s+/g, '');
+  var digits = no.replace(/-/g, '');
+  if (!/^[0-9-]+$/.test(no) || digits.length < 6 || digits.length > 16 || /^-|-$|--/.test(no)) return bad('帳號只能是 6～16 位數字（可用 - 分段）');
+  var note = p.note === undefined || p.note === null ? '' : apvText_(p.note, 0, 100); if (note === null) return bad('備註最多 100 字');
+  return { ok: true, v: { name: name, bank_code: code, bank_name: bname, branch: branch, acct_name: an, acct_no: no, note: note } };
+}
+
+/** action apvVendorSave {id?, name, bank_code, bank_name, branch, acct_name, acct_no, note, expected_updated_at?}：新增或修改（同名擋、改要帶 expected_updated_at） */
+function handleApvVendorSave_(token, payload) {
+  var c = apvRemitEnter_(token);
+  if (!c.ok) return c;
+  payload = payload || {};
+  var cl = apvVendorClean_(payload);
+  if (!cl.ok) return cl;
+  var vs = apvReadVendors_();
+  var id = apvStr_(payload.id);
+  var cur = null;
+  if (id) { vs.forEach(function (v) { if (v.o.id === id) cur = v; }); if (!cur) return apvFail_('not_found', '找不到這家廠商'); }
+  var key = apvVendorKey_(cl.v.name);
+  for (var i = 0; i < vs.length; i++) {
+    if (vs[i].o.id !== id && apvVendorKey_(vs[i].o.name) === key) return apvFail_('dup', '已經有同名的廠商「' + vs[i].o.name + '」' + (vs[i].o.active ? '' : '（已停用，可以到廠商帳戶重新啟用）'));
+  }
+  if (cur && payload.expected_updated_at !== cur.o.updated_at) return apvFail_('conflict', '這家廠商剛被別人改過，請重新整理');
+  if (!cur && vs.length >= APV_VENDOR_MAX) return apvFail_('bad_request', '廠商已達上限 ' + APV_VENDOR_MAX + ' 家');
+  apvRemitEnsure_(APV_SHEET_VENDORS, APV_VENDOR_HEADERS);
+  apvRemitEnsure_(APV_SHEET_VENDOR_LOG, APV_VENDOR_LOG_HEADERS);
+  var before = cur ? cur.o.name + '｜' + JSON.stringify(apvBankView_(cur.o)) : '';
+  var o = Object.assign({}, cur ? cur.o : {}, cl.v, { updated_at: c.now, updated_by: c.actor });
+  if (!cur) {
+    var maxN = 0;
+    vs.forEach(function (v) { var n = parseInt(v.o.id.slice(1), 10); if (n > maxN) maxN = n; });
+    var s = String(maxN + 1);
+    while (s.length < 4) s = '0' + s;
+    o.id = 'V' + s;
+    o.active = 'TRUE';
+    apvAppendObj_(APV_SHEET_VENDORS, APV_VENDOR_HEADERS, o);
+  } else {
+    o.active = cur.o.active ? 'TRUE' : 'FALSE';
+    apvPutRow_(APV_SHEET_VENDORS, APV_VENDOR_HEADERS, cur.row, o);
+  }
+  apvAppendObj_(APV_SHEET_VENDOR_LOG, APV_VENDOR_LOG_HEADERS, { at: c.now, actor: c.actor, vendor_id: o.id, action: cur ? 'edit' : 'add',
+    before_json: before, after_json: o.name + '｜' + JSON.stringify(apvBankView_(o)) });
+  return { ok: true, data: { id: o.id, updated_at: c.now } };
+}
+
+/** action apvVendorToggle {id, active, expected_updated_at}：停用／重新啟用（停用的廠商不會帶進清單） */
+function handleApvVendorToggle_(token, payload) {
+  var c = apvRemitEnter_(token);
+  if (!c.ok) return c;
+  payload = payload || {};
+  if (typeof payload.active !== 'boolean') return apvFail_('bad_request', 'active 要是 true 或 false');
+  var cur = null;
+  apvReadVendors_().forEach(function (v) { if (v.o.id === apvStr_(payload.id)) cur = v; });
+  if (!cur) return apvFail_('not_found', '找不到這家廠商');
+  if (payload.expected_updated_at !== cur.o.updated_at) return apvFail_('conflict', '這家廠商剛被別人改過，請重新整理');
+  if (cur.o.active === payload.active) return { ok: true, data: { id: cur.o.id, updated_at: cur.o.updated_at } };
+  apvRemitEnsure_(APV_SHEET_VENDOR_LOG, APV_VENDOR_LOG_HEADERS);
+  var o = Object.assign({}, cur.o, { active: payload.active ? 'TRUE' : 'FALSE', updated_at: c.now, updated_by: c.actor });
+  apvPutRow_(APV_SHEET_VENDORS, APV_VENDOR_HEADERS, cur.row, o);
+  apvAppendObj_(APV_SHEET_VENDOR_LOG, APV_VENDOR_LOG_HEADERS, { at: c.now, actor: c.actor, vendor_id: o.id, action: payload.active ? 'enable' : 'disable', before_json: '', after_json: '' });
+  return { ok: true, data: { id: o.id, updated_at: c.now } };
+}
+
+// ---- 單位會計 ----
+
+function apvAcctCanEdit_(c) { return c.isAdmin || (!!c.me && apvIsFinHead_(c.me)); }
+
+/** action apvAcctGet：每個啟用單位的會計＋可選的人（財務部同仁）＋能不能改（admin、財務部主管） */
+function handleApvAcctGet_(token) {
+  var c = apvRemitEnter_(token);
+  if (!c.ok) return c;
+  var accts = apvReadAccts_();
+  var units = (c.org.list.unit || []).filter(function (u) { return u.active; }).map(function (u) {
+    var a = accts[u.code];
+    var emps = a ? a.emps : [];
+    return { unit: u.code, unit_name: u.name, brand_name: c.org.brand[u.parent] ? c.org.brand[u.parent].name : '',
+      accountants: emps.map(function (e) { return { emp: e, name: apvName_(c, e), live: apvIsHandler_(c.byEmp[e], 'fin') }; }),
+      updated_at: a ? a.updated_at : 0, updated_by_name: a && a.updated_by ? apvName_(c, a.updated_by) : '' };
+  });
+  var cands = apvAcctCandidates_(c).map(function (p) { return { emp: p.emp, name: p.name }; });
+  return { ok: true, data: { units: units, candidates: cands, can_edit: apvAcctCanEdit_(c) } };
+}
+
+/** action apvAcctSave {unit, emps:[DZY…], expected_updated_at}：admin 或財務部主管；只能選財務部同仁、最多 5 位 */
+function handleApvAcctSave_(token, payload) {
+  var c = apvRemitEnter_(token);
+  if (!c.ok) return c;
+  if (!apvAcctCanEdit_(c)) return apvForbidden_('只有財務部主管或系統管理者可以設定單位會計');
+  payload = payload || {};
+  var unit = apvStr_(payload.unit);
+  if (!c.org.unit[unit] || !c.org.unit[unit].active) return apvFail_('bad_request', '單位不存在或已停用');
+  if (!Array.isArray(payload.emps) || payload.emps.length > APV_ACCT_MAX) return apvFail_('bad_request', '會計最多 ' + APV_ACCT_MAX + ' 位');
+  var emps = [];
+  for (var i = 0; i < payload.emps.length; i++) {
+    var e = apvStr_(payload.emps[i]).toUpperCase();
+    if (!apvIsHandler_(c.byEmp[e], 'fin')) return apvFail_('bad_request', '單位會計要選已開通的財務部同仁（' + e + '）');
+    if (emps.indexOf(e) === -1) emps.push(e);
+  }
+  var cur = apvReadAccts_()[unit] || null;
+  if ((cur ? cur.updated_at : 0) !== payload.expected_updated_at) return apvFail_('conflict', '這個單位的會計剛被別人改過，請重新整理');
+  apvRemitEnsure_(APV_SHEET_ACCTS, APV_ACCT_HEADERS);
+  var o = { unit: unit, emps: emps.join(','), updated_at: c.now, updated_by: c.actor };
+  if (cur) apvPutRow_(APV_SHEET_ACCTS, APV_ACCT_HEADERS, cur.row, o);
+  else apvAppendObj_(APV_SHEET_ACCTS, APV_ACCT_HEADERS, o);
+  return { ok: true, data: { unit: unit, emps: emps, updated_at: c.now } };
 }

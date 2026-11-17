@@ -33,6 +33,7 @@ export const MODULES = [
   { load: () => import('../modules/cashbook/manifest.js') },
   { load: () => import('../modules/transfer-fin/manifest.js') },
   { load: () => import('../modules/pnl/manifest.js') },   // 財務部門：損益試算（排在貨單核對、收支管理、調撥管理之後）
+  { load: () => import('../modules/remit/manifest.js') },   // 財務部門：匯款清單（2026-11-18；排在損益試算後）
 ];
 
 /**

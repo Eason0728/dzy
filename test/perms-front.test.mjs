@@ -45,9 +45,9 @@ const RULES = [
 ];
 const DATA = Object.assign({ rules: RULES, grantable: L.FEATURE_ORDER.slice().reverse(), locked: ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin'] }, ORG);
 
-t('對照表 31 列（2026-11-13 加考勤作廢 att.void；2026-11-02 加 AI 小幫手）、順序固定（2026-10-30 作廢巡檢碼；2026-10-29 補績效評核四碼、營運巡檢五碼）（不跟後端 grantable 順序）', () => {
+t('對照表 32 列（2026-11-18 加匯款清單 platform.remit；2026-11-13 加考勤作廢 att.void；2026-11-02 加 AI 小幫手）、順序固定（2026-10-30 作廢巡檢碼；2026-10-29 補績效評核四碼、營運巡檢五碼）（不跟後端 grantable 順序）', () => {
   const rows = L.featureRows(DATA);
-  assert.equal(rows.length, 31);
+  assert.equal(rows.length, 32);
   assert.equal(rows[19].perm, 'transfer.write');
   assert.equal(rows[19].name, '調撥管理');
   assert.equal(rows[11].perm, 'att.void');
@@ -73,8 +73,8 @@ t('同一列的 chip 依階梯→部門排', () => {
 t('★對照表列以後端 grantable 為準（FEATURE_ORDER 只管排序與中文名；後端沒給的碼不畫，多給的接在後面；沒回才退回全部，2026-10-29）', () => {
   const sub = L.featureRows(Object.assign({}, DATA, { grantable: ['pnl.read', 'audit.read', 'x.new'] }));
   assert.deepEqual(sub.map((r) => r.perm), ['audit.read', 'pnl.read', 'x.new']);
-  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: [] })).length, 31, '空陣列當沒回');
-  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: undefined })).length, 31);
+  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: [] })).length, 32, '空陣列當沒回');
+  assert.equal(L.featureRows(Object.assign({}, DATA, { grantable: undefined })).length, 32);
 });
 t('沒有規則的功能 rules 為空', () => assert.deepEqual(L.featureRows(DATA).find((x) => x.perm === 'dorm.write').rules, []));
 
