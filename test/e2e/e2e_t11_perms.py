@@ -130,7 +130,7 @@ class Mock11(MockBackend):
                 return {'ok': True, 'data': {'inited': False}}
             return {'ok': True, 'data': {
                 'inited': True, 'rules': list(self.rules),
-                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void'],
+                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void', 'platform.remit'],
                 'locked': LOCKED, 'names': {},
                 'counts': self.counts(),
                 'ladders': [{'code': 'store', 'name': '門市'}, {'code': 'office', 'name': '品牌辦公室'}, {'code': 'hq', 'name': '總部'}],
@@ -306,7 +306,7 @@ def main():
             check('3 人' in role('店長').inner_text(), '身分顯示人數（店長 3 人）：%s' % role('店長').inner_text().replace('\n', ' '))
             role('店長').click()
             perms_order = [r.get_attribute('data-perm') for r in ad.locator('[data-role="feature-row"]').all()]
-            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void'],
+            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void', 'platform.remit'],
                   '★右側 29 個功能列（＝後端 grantable；2026-10-30 作廢巡檢 insp-void）、順序正確：%s' % perms_order)
             sw = lambda pg, perm: pg.locator('[data-role="feature-row"][data-perm="%s"] [data-act="toggle"]' % perm)
             on = lambda pg, perm: sw(pg, perm).get_attribute('aria-checked') == 'true'

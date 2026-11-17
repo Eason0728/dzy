@@ -837,11 +837,11 @@ function noDirSched(id) {
   const mapRows = old.sheets.perm_map._data;
   const r20 = mapRows.findIndex((r, i) => i > 0 && r[3] === 'sm' && r[4] === 'store.void');
   mapRows.splice(r20, 1);                                       // 模擬少了店長 store.void 那一條
-  ok(old.sb.permLoadTables_().rules.length === 35, '6 模擬正式環境：perm_map 少一條（新預設規則不會自動生效）');
+  ok(old.sb.permLoadTables_().rules.length === 36, '6 模擬正式環境：perm_map 少一條（新預設規則不會自動生效）（2026-11-18 匯款清單 platform.remit）');
   ok(eq(old.ident('DZY001').void_units, []), '6 正式環境未補規則前：店長沒有 store.void');
   ok(old.sb.storeopsPermSeed_({ role: 'staff', id: 'u1' }).error === 'no_perm', '6 補規則函式只有 admin');
   const sd = old.sb.storeopsPermSeed_({ role: 'admin', id: 'a001' });
-  ok(sd.ok && eq(sd.added, ['R037']) && old.sheets.perm_map._data.length === 37, '6 補預設規則：只補缺的一條，流水號接在最大號後', sd);
+  ok(sd.ok && eq(sd.added, ['R038']) && old.sheets.perm_map._data.length === 38, '6 補預設規則：只補缺的一條，流水號接在最大號後（最大號現為 R037）（2026-11-18 匯款清單 platform.remit）', sd);
   ok(eq(old.ident('DZY001').void_units, ['mzt-gf']), '6 補完後店長有 store.void');
   ok(eq(old.sb.storeopsPermSeed_({ role: 'admin', id: 'a001' }).added, []), '6 重跑不重複');
   old.sheets.perm_map._data.find((r, i) => i > 0 && r[3] === 'sm' && r[4] === 'store.void')[5] = 'FALSE';

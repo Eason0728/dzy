@@ -30,7 +30,7 @@ EXTERNAL = re.compile(r'^https?://(?!127\.0\.0\.1)')
 GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap',
              'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write',
              'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
-             'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void']
+             'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void', 'platform.remit']   # 2026-11-18 匯款清單 platform.remit
 LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin']
 HR_EX = ['store.void', 'att.extra', 'att.void', 'platform.bulletin']   # 2026-11-13 加考勤作廢 att.void（STORE_HR_GRANTABLE）
 NAMES = {p: p for p in GRANTABLE}

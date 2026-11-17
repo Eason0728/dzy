@@ -241,6 +241,9 @@ function freshApp() {
     st._data.push(row);
   });
   sb.setupApprovals();
+  // 2026-11-18 起新單只能送個人代墊／單位請款（多一關財務部主管，測在 test/apv-remit.mock.test.mjs）。本檔測的是核決權限一關制的路線引擎，
+  // 用舊「費用請款」最好對照；這裡把 expense 放回「可新送」，等於模擬 11/18 以前（舊單退回再送仍走這套引擎）
+  sb.APV_SUBMIT_TYPES.push('expense');
   // 權限表換成本次隨機的（直接寫表，ver 1）
   const thr = app.sheets.apv_thresholds;
   thr._data.length = 1;

@@ -134,7 +134,7 @@ function post(sb, action, payload, token, clientIp) {
 const GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap',
   'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write',
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
-  'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void'];
+  'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void', 'platform.remit']; // 2026-11-18 匯款清單 platform.remit
 const LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin'];
 const HR_EX = ['store.void', 'att.extra', 'platform.bulletin'];
 const DEFAULT_RULES = (() => {
@@ -158,6 +158,7 @@ const DEFAULT_RULES = (() => {
   add('hq', 'fin', '*', ['platform.purchase']);
   add('hq', 'fin', '*', ['pnl.write']);
   add('hq', 'fin', '*', ['transfer.write']);
+  add('hq', 'fin', '*', ['platform.remit']); // R037 2026-11-18 匯款清單 platform.remit
   return out.map((r, i) => Object.assign({ rule_id: 'R' + String(i + 1).padStart(3, '0') }, r));
 })();
 const DEFAULT_STORE_MAP = { 'mala-gf': 'sxl-gf', ck: 'ck', 'mzt-gf': 'mzt-gf', 'mzt-js': 'mzt-js', 'mzt-lzl': 'mzt-lzl' };
