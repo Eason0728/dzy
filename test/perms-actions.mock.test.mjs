@@ -466,6 +466,7 @@ const on = (app) => { app.props.PERMS_ON = '1'; };
   ok(sm.items.some((i) => i.perm === 'platform.self' && i.source === 'role') && JSON.stringify(sm.audit_scope) === '["sxl-gf"]', '6: 角色權限 source=role、audit_scope 陣列', sm);
   const fin = post(sb, 'myPerms', {}, P.fin.token).data;
   ok(fin.items.filter((i) => i.source === 'dept').map((i) => i.perm).sort().join() === 'audit.read,audit.write,cashbook.write,platform.purchase,pnl.write,transfer.write' && fin.audit_scope === 'all', '6: 財務同仁 audit.read／write／cashbook.write 來源=dept、scope all', fin);
+  ok(fin.items.filter((i) => i.source === 'fin').map((i) => i.perm).sort().join() === 'payroll.admin,payroll.write', '6b: 財務同仁的薪酬來源＝fin（財務部身分，2026-11-17）', fin);
   const ceo = post(sb, 'myPerms', {}, P.ceo.token).data;
   ok(ceo.items.find((i) => i.perm === 'dorm.read').source === 'title', '6: 執行長 dorm.read 來源=title');
   post(sb, 'permExSave', { emp_no: P.pt.emp, perm: 'dorm.read', mode: 'add', until: dayShift(sb, 3), note: '暫時' }, A);
@@ -612,7 +613,7 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   ok(e.ok, '10: admin 把資訊同仁調去財務部（非 admin 會被鎖碼擋）', e);
   let au = sheets.perm_audit._rows();
   let last = au[au.length - 1];
-  ok(au.length === n0 + 1 && last[5] === 'staff_edit' && last[2] === P.it.emp && last[3] === 'audit.read,audit.write,cashbook.write,platform.purchase,pnl.write,transfer.write' && last[4] === '' && last[6] === 'FALSE', '10: 權限有差異 → perm_audit 一列 cause=staff_edit、added=audit.read,audit.write,cashbook.write', last);
+  ok(au.length === n0 + 1 && last[5] === 'staff_edit' && last[2] === P.it.emp && last[3] === 'audit.read,audit.write,cashbook.write,payroll.admin,payroll.write,platform.purchase,pnl.write,transfer.write' && last[4] === '' && last[6] === 'FALSE', '10: 權限有差異 → perm_audit 一列 cause=staff_edit、added=audit.read,audit.write,cashbook.write', last);
   ok(last[1] !== '', '10: by 是帳號 id');
   // 只改手機：權限沒差異 → 不寫
   post(sb, 'staffEdit', { emp_no: P.it.emp, phone: '0911000123' }, P.hrHs.token);
@@ -620,7 +621,7 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   // 調成另一個沒規則的部門：removed
   post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'it' }, A);
   au = sheets.perm_audit._rows(); last = au[au.length - 1];
-  ok(last[5] === 'staff_edit' && last[3] === '' && last[4] === 'audit.read,audit.write,cashbook.write,platform.purchase,pnl.write,transfer.write', '10: 調回資訊部 → removed=audit.read,audit.write,cashbook.write', last);
+  ok(last[5] === 'staff_edit' && last[3] === '' && last[4] === 'audit.read,audit.write,cashbook.write,payroll.admin,payroll.write,platform.purchase,pnl.write,transfer.write', '10: 調回資訊部 → removed=audit.read,audit.write,cashbook.write', last);
   // confirm：新認領的店長，admin 確認 → 從無到有
   const emp = claim(sb, '待確認店長', { brand: 'mala', unit: 'mala-gf', title: 'sm' });
   const n1 = sheets.perm_audit._rows().length;
@@ -687,14 +688,14 @@ adminOnlyCases('9c 開關開', (app) => { init(app); on(app); });
   ok(post(sb, 'staffEdit', { emp_no: P.it.emp, dept: 'fin' }, A).ok, '13b: 還原');
   const au = sheets.perm_audit._rows();
   const last = au[au.length - 1];
-  ok(au.length === nAudit1 + 1 && last[5] === 'staff_edit' && last[2] === P.it.emp && last[3] === 'audit.read,audit.write,cashbook.write,platform.purchase,pnl.write,transfer.write', '13b: 停用中改組織欄也寫 perm_audit（added）', last);
+  ok(au.length === nAudit1 + 1 && last[5] === 'staff_edit' && last[2] === P.it.emp && last[3] === 'audit.read,audit.write,cashbook.write,payroll.admin,payroll.write,platform.purchase,pnl.write,transfer.write', '13b: 停用中改組織欄也寫 perm_audit（added）', last);
   // (c) 停用有權限的人 → perm_audit removed
   const fin = P.fin;
   const n2 = sheets.perm_audit._rows().length;
   ok(post(sb, 'staffSetActive', { emp_no: fin.emp, active: false }, A).ok, '13c: 停用財務同仁');
   const au2 = sheets.perm_audit._rows();
   const l2 = au2[au2.length - 1];
-  ok(au2.length === n2 + 1 && l2[2] === fin.emp && l2[3] === '' && l2[4] === 'audit.read,audit.write,cashbook.write,platform.purchase,pnl.write,transfer.write' && l2[5] === 'staff_edit', '13c: 停用收回權限 → perm_audit removed', l2);
+  ok(au2.length === n2 + 1 && l2[2] === fin.emp && l2[3] === '' && l2[4] === 'audit.read,audit.write,cashbook.write,payroll.admin,payroll.write,platform.purchase,pnl.write,transfer.write' && l2[5] === 'staff_edit', '13c: 停用收回權限 → perm_audit removed', l2);
   // (d) 停用沒有任何規則權限的人 → 不寫
   const n3 = sheets.perm_audit._rows().length;
   ok(post(sb, 'staffSetActive', { emp_no: P.pt.emp, active: false }, A).ok, '13d: 停用計時同仁');

@@ -27,6 +27,7 @@ export function sourceText(src, profile) {
     case 'exception': return src.until ? `個別例外，到 ${shortDate(src.until)}` : '個別例外';
     case 'implied': return '因為能填稽核單';
     case 'acting': return '因為兼任店長';
+    case 'fin': return src.via === 'extra' ? '因為兼任財務部' : '因為財務部';   // 2026-11-17 財務部身分＝薪酬全部門市
     case 'role': return '系統角色';
     default: return String(src.source || '');
   }

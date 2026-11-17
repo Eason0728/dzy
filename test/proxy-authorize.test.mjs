@@ -540,7 +540,8 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   ok(me.ok && !hasPay(me) && me.data.perms.indexOf('payroll.write') !== -1, '13o: 人資主管 me 有 payroll.write 但不含金鑰', me.data && me.data.perms);
 
   // ── 薪酬負責門市 scope（docs/payroll-scope/spec.md §1、§2）。標籤用 13S*（brief 的 13h～13l 與既有標籤撞號）──
-  const finStaff = mkStaff(sb, boss, '財務同仁癸', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' });
+  // 2026-11-17 起財務部身分一律全部門市（下方 13Sw），負責門市 scope 改用資訊部同仁驗（變數名沿用 finStaff）
+  const finStaff = mkStaff(sb, boss, '資訊同仁癸', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
   const exSave = (tok, emp, perm, extra) => post(sb, 'permExSave', Object.assign({ emp_no: emp, perm, mode: 'add', until: '', note: '負責門市' }, extra || {}), tok);
   const sa = sb.proxyAuthorize_(boss, 'payroll', 'payroll_month');
   ok(sa.ok && sa.scope === '*', "13Sp: admin 打 payroll → scope === '*'", sa);
@@ -552,7 +553,7 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   ok(f0.ok === false && f0.code === 'FORBIDDEN' && !hasPay(f0), '13Sr: 有 payroll.store@ 但沒有 payroll.write → 仍 FORBIDDEN、不含金鑰', f0);
   sheets.perm_ex.appendRow(['X950', finStaff.emp, 'payroll.write', 'add', '', 'Eason 開', 'TRUE', '', 'u001', '', '']);
   const f1 = sb.proxyAuthorize_(finStaff.token, 'payroll', 'payroll_month');
-  ok(f1.ok && JSON.stringify(f1.scope) === JSON.stringify(['CF', 'MZTJS']), '13Ss: 財務同仁兩筆例外 → scope 深等於 [CF, MZTJS]（排序）', f1);
+  ok(f1.ok && JSON.stringify(f1.scope) === JSON.stringify(['CF', 'MZTJS']), '13Ss: 非財務同仁兩筆例外 → scope 深等於 [CF, MZTJS]（排序）', f1);
   const f1w = sb.proxyAuthorize_(finStaff.token, 'payroll', 'payroll_calc');
   ok(f1w.ok && JSON.stringify(f1w.scope) === JSON.stringify(['CF', 'MZTJS']), '13Ss2: 寫入 action 也帶 scope', f1w);
   const meF = post(sb, 'me', {}, finStaff.token);
@@ -564,10 +565,26 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   ok(post(sb, 'permExRevoke', { ex_id: cfEx.ex_id }, boss).ok, '13St1: admin 撤銷');
   { const t = sb.proxyAuthorize_(finStaff.token, 'payroll', 'payroll_month'); ok(JSON.stringify(t.scope) === '["MZTJS"]', '13St: 撤銷後 scope 只剩 [MZTJS]', t); }
   // 沒例外 → []
-  const noEx = mkStaff(sb, boss, '財務同仁子', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' });
+  const noEx = mkStaff(sb, boss, '資訊同仁子', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
   sheets.perm_ex.appendRow(['X951', noEx.emp, 'payroll.write', 'add', '', 'Eason 開', 'TRUE', '', 'u001', '', '']);
   const f2 = sb.proxyAuthorize_(noEx.token, 'payroll', 'payroll_month');
   ok(f2.ok && Array.isArray(f2.scope) && f2.scope.length === 0, '13Su: 有 payroll.write 沒例外 → scope 為 []（不是 undefined）', f2);
+  // 2026-11-17 財務部身分（主要或兼任）＝不分門市：不用個別例外就進得去、scope '*'、讀寫都是；有負責門市例外也照樣 '*'
+  const finA = mkStaff(sb, boss, '財務同仁丑', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' });
+  const fa = sb.proxyAuthorize_(finA.token, 'payroll', 'payroll_month');
+  const faw = sb.proxyAuthorize_(finA.token, 'payroll', 'payroll_calc');
+  ok(fa.ok && fa.scope === '*' && faw.ok && faw.isWrite === true && faw.scope === '*' && fa.secret === PAY, "13Sw: 財務部同仁沒有任何例外 → 讀寫都過、scope '*'", [fa, faw]);
+  ok(exSave(boss, finA.emp, 'payroll.store@CF').ok && sb.proxyAuthorize_(finA.token, 'payroll', 'payroll_month').scope === '*', "13Sw2: 財務同仁另有負責門市例外 → 仍是 '*'");
+  const meA = post(sb, 'me', {}, finA.token);
+  ok(meA.ok && meA.data.perms.indexOf('payroll.admin') !== -1 && meA.data.perms.indexOf('payroll.write') !== -1 && !hasPay(meA), '13Sw3: 財務同仁 me 有 payroll.write＋payroll.admin（集團總覽），不含金鑰', meA.data && meA.data.perms);
+  const finX = mkStaff(sb, boss, '兼任財務寅', { brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' });
+  ok(sb.proxyAuthorize_(finX.token, 'payroll', 'payroll_month').code === 'FORBIDDEN', '13Sw4a: 資訊同仁還沒兼任 → FORBIDDEN');
+  { const e = post(sb, 'staffEdit', { emp_no: finX.emp, extra_depts: [{ dept: 'fin', title: 'hs' }] }, boss); ok(e.ok, '13Sw4b: admin 讓他兼任財務部同仁', e); }
+  const fx = sb.proxyAuthorize_(finX.token, 'payroll', 'payroll_calc');
+  ok(fx.ok && fx.scope === '*', "13Sw4: 兼任財務部同仁 → scope '*'", fx);
+  const finM = mkStaff(sb, boss, '財務總監卯', { brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hm' });
+  sheets.perm_ex.appendRow(['X952', finM.emp, 'payroll.write', 'remove', '', '想關掉', 'TRUE', '', 'u001', '', '']);
+  ok(sb.proxyAuthorize_(finM.token, 'payroll', 'payroll_month').scope === '*', '13Sw5: 財務總監有 remove 例外也關不掉');
   // 其他 ns 不帶 scope
   ok(!('scope' in sb.proxyAuthorize_(boss, 'audit', 'getAll')), '13Sv: audit 回傳沒有 scope 欄');
 

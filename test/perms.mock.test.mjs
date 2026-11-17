@@ -199,7 +199,7 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
 // ===== 總部 =====
 {
   const cases = [
-    ['ops', 'hs', ['audit.read']], ['mgmt', 'hs', ['audit.read', 'audit.write']], ['fin', 'hm', ['audit.read', 'audit.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.write', 'transfer.write']],
+    ['ops', 'hs', ['audit.read']], ['mgmt', 'hs', ['audit.read', 'audit.write']], ['fin', 'hm', ['audit.read', 'audit.write', 'cashbook.write', 'payroll.admin', 'payroll.write', 'platform.bulletin', 'platform.purchase', 'pnl.write', 'transfer.write']],
     ['hr', 'hs', ['dorm.read', 'dorm.write', 'platform.staff']], ['hr', 'hm', ['dorm.read', 'dorm.write', 'platform.bulletin', 'platform.permmap', 'platform.staff']]
   ];
   for (const [dept, title, expect] of cases) {
@@ -221,10 +221,25 @@ ok(dbInit.sheets.perm_audit._data[0].join('|') === 'at|by|emp_no|added|removed|c
   // 2026-10-26：總監 hm 不分部門有公告管理（R028）；其他預設權限 it 仍不在表
   ok(eq(it.perms, ['platform.bulletin']), '資訊部主管只有公告管理（it 不在表；hm 不分部門的 R028）', it);
 }
+// ===== 2026-11-17 財務部身分＝薪酬全部門市（不靠規則、remove 例外拿不掉）=====
+{
+  const fin = run({ brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' }, { rules: [] });
+  ok(has(fin, 'payroll.write') && has(fin, 'payroll.admin'), '財務部同仁：對照表沒規則也有 payroll.write＋payroll.admin', fin.perms);
+  ok(fin.sources.some((x) => x.perm === 'payroll.write' && x.source === 'fin' && !x.via), '主要部門財務：來源 fin、沒有 via', fin.sources);
+  const rm = run({ brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hm' }, { exs: [{ perm: 'payroll.write', mode: 'remove', until: '' }] });
+  ok(has(rm, 'payroll.write') && has(rm, 'payroll.admin'), '財務部：remove 例外拿不掉薪酬（Eason：關不掉）', rm.perms);
+  const xh = run({ brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hm', extra_depts: ['fin:hm'] });
+  ok(has(xh, 'payroll.write') && has(xh, 'payroll.admin'), '兼任財務部總監也有', xh.perms);
+  const no = [run({ brand: 'dzy', unit: 'dzy-hq', dept: 'it', title: 'hs' }), run({ brand: 'dzy', unit: 'dzy-hq', dept: 'hr', title: 'hm' }), run({ unit: 'mala-gf', title: 'sm' }), run({ status: 'disabled', brand: 'dzy', unit: 'dzy-hq', dept: 'fin', title: 'hs' })];
+  ok(no.every((r) => !has(r, 'payroll.admin') && !has(r, 'payroll.write')), '資訊／人資總監／店長／停用的財務同仁都沒有薪酬', no.map((r) => r.perms));
+  ok(P.permPayrollAll_(['payroll.write', 'payroll.admin']) && P.permPayrollAll_(['*']) && !P.permPayrollAll_(['payroll.write', 'payroll.store@CF']) && !P.permPayrollAll_(null), 'permPayrollAll_：* 或 payroll.admin 才算全部門市');
+  ok(P.PERM_GRANTABLE.indexOf('payroll.admin') === -1, 'payroll.admin 不在可給清單（只由財務部身分衍生）');
+}
 // ===== 兼任 =====
 {
   const r = run({ brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs', extra_depts: ['fin'] });
-  ok(eq(r.perms, ['audit.read', 'audit.write', 'cashbook.write', 'platform.purchase', 'pnl.write', 'transfer.write']) && r.auditScope === 'all', '主部門 ops 兼 fin → 有 audit.write、貨單核對', r);
+  ok(eq(r.perms, ['audit.read', 'audit.write', 'cashbook.write', 'payroll.admin', 'payroll.write', 'platform.purchase', 'pnl.write', 'transfer.write']) && r.auditScope === 'all', '主部門 ops 兼 fin → 有 audit.write、貨單核對、薪酬全部門市', r);
+  ok(r.sources.some((x) => x.perm === 'payroll.admin' && x.source === 'fin' && x.via === 'extra'), '兼任財務部的薪酬來源標 fin＋via extra', r.sources);
   const s = r.sources.find((x) => x.perm === 'audit.write');
   ok(s.source === 'dept' && s.rule_id, 'audit.write 來源是部門', s);
   const r2 = run({ brand: 'dzy', unit: 'dzy-hq', dept: 'ops', title: 'hs', extra_depts: ['', 'hr'] });

@@ -793,11 +793,14 @@ function run() {
     if (!d) return;
     const res = sb.proxyWithOperator_({ ok: true }, 'payroll', { name: p.name, username: p.emp }, d.perms);
     const codes = uniqSorted(O.permsOf(p).filter((c) => c.indexOf('payroll.store@') === 0).map((c) => c.slice(14)));
-    ok(eq(res.scope, codes), `${p.emp} payroll scope`, { got: res.scope, exp: codes });
+    // 2026-11-17 財務部身分（在職、身分有效、總部階梯、主要部門 fin；本測試資料沒有兼任）＝不分門市 '*'
+    const finAll = p.status === 'active' && identityOk(W, p) && (unit(p.unit) || {}).ladder === 'hq' && p.dept === 'fin';
+    if (finAll) pathHit('payroll_fin_all');
+    ok(eq(res.scope, finAll ? '*' : codes), `${p.emp} payroll scope`, { got: res.scope, exp: finAll ? '*' : codes });
     ok(res.operator.indexOf(p.emp) !== -1 && res.operator.indexOf('（管理系統）') !== -1, `${p.emp} payroll operator 由平台決定`);
     const other = sb.proxyWithOperator_({ ok: true }, 'audit', { name: p.name, username: p.emp }, d.perms);
     ok(other.scope === undefined, `${p.emp} 其他 ns 不帶 scope`);
-    if (codes.length) {
+    if (codes.length && !finAll) {
       pathHit('payroll_scope');
       // payrollStaffRoster：清單內放行（不是 not_ready 以外的 forbidden）、清單外 scope_forbidden；沒有 payroll.write → FORBIDDEN
       const inS = post(sb, 'payrollStaffRoster', { store: codes[0] }, d.token);
