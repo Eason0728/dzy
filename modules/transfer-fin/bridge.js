@@ -54,7 +54,7 @@ export function toPageResult(r) {
 /** 會計頁的分頁（由管理系統的分頁列畫，會計頁自己的選單在嵌入時隱藏）。
  *  id＝會計頁分頁代碼；manifest.js 的 views 要跟這裡一致（測試比對）。 */
 export const TRANSFER_PAGES = [
-  ['report', '月報'], ['memory', '品項記憶'], ['overview', '卡關總覽']
+  ['report', '月報'], ['memory', '品項記憶'], ['overview', '卡關總覽'], ['cats', '類別設定']
 ];
 
 /** 管理系統換分頁 → 通知會計頁切換的訊息；不認得的分頁一律回月報 */

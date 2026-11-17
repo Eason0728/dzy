@@ -171,7 +171,7 @@ class MockT16(MockBackend):
             if k in payload:
                 self.leaked.append('FRONT_SENT_%s: %s' % (k, action))
         op = payload.get('op')
-        if action == 'adminUpdate' and op not in ('memoryEdit', 'memoryDelete'):
+        if action == 'adminUpdate' and op not in ('memoryEdit', 'memoryDelete', 'catAdd', 'catEdit', 'catToggle', 'catOrder'):   # 與 mini proxy-hook TRANSFER_ADMIN_OPS 一致
             return 403, {'ok': False, 'error': 'OP_FORBIDDEN', 'code': 'OP_FORBIDDEN'}
         self.transfer_calls.append((action, op, name))
         payload['pin_master'] = UPSTREAM_PIN

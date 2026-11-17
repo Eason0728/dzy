@@ -77,6 +77,7 @@ var AIH_PAGES = [
   {"m":"transfer-fin","v":"report","name":"調撥管理","view_name":"月報","dept":"fin","requires_module":["transfer.write"],"requires":["transfer.write"]},
   {"m":"transfer-fin","v":"memory","name":"調撥管理","view_name":"品項記憶","dept":"fin","requires_module":["transfer.write"],"requires":["transfer.write"]},
   {"m":"transfer-fin","v":"overview","name":"調撥管理","view_name":"卡關總覽","dept":"fin","requires_module":["transfer.write"],"requires":["transfer.write"]},
+  {"m":"transfer-fin","v":"cats","name":"調撥管理","view_name":"類別設定","dept":"fin","requires_module":["transfer.write"],"requires":["transfer.write"]},
   {"m":"pnl","v":"dashboard","name":"損益試算","view_name":"儀表板","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.read","pnl.write","pnl.admin"]},
   {"m":"pnl","v":"pending","name":"損益試算","view_name":"待補","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},
   {"m":"pnl","v":"food","name":"損益試算","view_name":"食材","dept":"fin","requires_module":["pnl.read","pnl.write","pnl.admin"],"requires":["pnl.write","pnl.admin"]},

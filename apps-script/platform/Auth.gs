@@ -383,7 +383,7 @@ var PROXY_WRITE_ACTIONS = {
   // 損益試算：「管」級動作另由 PROXY_PNL_ADMIN_ACTIONS 要求 pnl.admin，損益後端也依角色擋
   pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',
     'refreshConnectors', 'refreshFixed', 'loadGroupUnits', 'adminSyncSeed', 'adminApplyS01Connectors', 'adminCreateLastMonthDraft', 'adminLoadStoreSeedS01'],
-  // 調撥管理：adminUpdate 只准 op＝memoryEdit／memoryDelete，由 mini 的 proxy-hook 再限（其餘 op 一律 OP_FORBIDDEN）
+  // 調撥管理：adminUpdate 只准 op＝memoryEdit／memoryDelete／catAdd／catEdit／catToggle／catOrder（2026-11-17 品項類別），由 mini 的 proxy-hook 再限（其餘 op 一律 OP_FORBIDDEN）
   transfer: ['buildMonthlyReport', 'adminUpdate']
 };
 
