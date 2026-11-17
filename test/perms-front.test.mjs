@@ -51,7 +51,7 @@ t('對照表 31 列（2026-11-13 加考勤作廢 att.void；2026-11-02 加 AI �
   assert.equal(rows[19].perm, 'transfer.write');
   assert.equal(rows[19].name, '調撥管理');
   assert.equal(rows[11].perm, 'att.void');
-  assert.equal(rows[11].name, '考勤作廢');
+  assert.equal(rows[11].name, '人資考勤代理');
   assert.equal(rows[14].perm, 'platform.bulletin');
   assert.equal(rows[14].name, '公告管理');
   assert.deepEqual(rows.map((r) => r.perm), L.FEATURE_ORDER);

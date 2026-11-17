@@ -36,7 +36,7 @@ export const FEATURE_NAMES = {
   'platform.permmap': '改權限對照表',
   'store.void': '收支作廢',
   'att.extra': '額外考勤核定',
-  'att.void': '考勤作廢',
+  'att.void': '人資考勤代理',
   'payroll.write': '薪酬計算',
   'cashbook.write': '收支管理',
   'platform.bulletin': '公告管理',
