@@ -29,7 +29,8 @@ export default {
     { id: 'slip', name: '7 薪資單', requires: ['payroll.write'] },
     { id: 'export', name: '8 匯出', requires: ['payroll.write'] },
     { id: 'attexp', name: '出勤紀錄表', requires: ['payroll.write'] },
-    { id: 'oplog', name: '操作紀錄', requires: ['payroll.write'] }   // 定案／解鎖／設定變更的紀錄（2026-11-04，唯讀；範圍由薪資後端依負責門市裁切）
+    { id: 'oplog', name: '操作紀錄', requires: ['payroll.write'] },   // 定案／解鎖／設定變更的紀錄（2026-11-04，唯讀；範圍由薪資後端依負責門市裁切）
+    { id: 'guide', name: '操作手冊', requires: ['payroll.write'] }   // 2026-11-17 薪資結算手冊（payroll-guide.html）
   ],
   entry: () => import('./index.js')
 };
