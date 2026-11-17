@@ -335,8 +335,10 @@ globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' });
 
 const realNetworkCalls = [];
 function armFetchGuard() {
-  globalThis.fetch = async (url) => {
-    realNetworkCalls.push(String(url));
+  globalThis.fetch = async (url, opts) => {
+    let action = '';
+    try { action = JSON.parse(String(opts && opts.body || '{}')).action || ''; } catch (e) { /* 不是 JSON */ }
+    realNetworkCalls.push(action ? String(url) + '#' + action : String(url));
     throw new Error('GUARD: 這次呼叫沒有被 mock，攔截下來避免真的打網路。url=' + url);
   };
 }
@@ -1277,7 +1279,8 @@ await at('動態分頁模組的提醒可導到動態分頁；view 格式不合�
 
 t('全程沒有任何一次呼叫落到未被 mock 的真實 fetch', () => {
   // AI 小幫手（2026-11-02）：登入後殼會掛 platform/helper，開頁打一次 /svc/ai-help 的 status；這裡的哨兵會讓它失敗＝按鈕不出現，是預期行為，不算流出
-  const leaked = realNetworkCalls.filter((u) => !/\/platform\/svc\/ai-help$/.test(String(u)));
+  // 提醒開關（2026-11-17）：進系統時背景打一次 myPrefsGet，失敗就照本機快取（全部開著），一樣是預期行為
+  const leaked = realNetworkCalls.filter((u) => !/\/platform\/svc\/ai-help$/.test(String(u)) && !/#myPrefsGet$/.test(String(u)));
   assert.equal(leaked.length, 0, JSON.stringify(leaked));
 });
 

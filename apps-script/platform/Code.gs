@@ -77,7 +77,9 @@ var CODE_ALLOWED_ACTIONS = ['login', 'me', 'listUsers', 'saveUser', 'setActive',
   // ⚠ 給 Mac mini node 路由用的全域函式（AiHelp.gs 內結尾底線那 8 支）刻意不在這裡，也不可加進來（test/ai-help.mock.test.mjs 會比對 Code.gs 全文）
   'aihSetup', 'aihKbList', 'aihKbSave', 'aihKbImport', 'aihKbHist', 'aihPendingList', 'aihPendingSet', 'aihUsage', 'aihLogList', 'aihPauseSet',
   // 2026-11-10：首頁少等。一次讀多筆白名單內的純讀取（見下方 CODE_BATCH_READ_ACTIONS）；純讀取，不上鎖
-  'batchRead'];
+  'batchRead',
+  // 2026-11-17：我的資料 → 設定（Prefs.gs；docs/alert-prefs/spec.md）。myPrefsGet 讀取、myPrefsSave 寫入（上鎖）；都只碰自己的
+  'myPrefsGet', 'myPrefsSave'];
 
 // batchRead 的白名單（2026-11-10，首頁少等）。必須與前端 platform/dryrun.js BATCH_READ_ACTIONS 逐字一致（test/batch-read.mock.test.mjs 比對）。
 // 進來的條件，三條缺一不可：① 純讀取（不寫試算表、不在 dispatch_ 的 MUTATING_ACTIONS 內）② 首頁 badge()／alerts() 會用到
@@ -149,7 +151,7 @@ function dispatch_(e) {
     orgUpgrade2026: 1, orgRollback2026: 1, orgUpgrade202610: 1, orgRollback202610: 1, orgRename202610: 1, orgRenameRollback202610: 1, orgAddBranddev202610: 1, orgAddBranddevRollback202610: 1, orgEnableMztMc202610: 1, orgEnableMztMcRollback202610: 1, clockAddMztMc202610: 1, clockAddMztMcRollback202610: 1, orgEnableMztRg202611: 1, orgEnableMztRgRollback202611: 1, clockAddMztRg202611: 1, clockAddMztRgRollback202611: 1, orgEnableMztWx202611: 1, orgEnableMztWxRollback202611: 1, clockAddMztWx202611: 1, clockAddMztWxRollback202611: 1, orgDisableOps202610: 1, orgDisableOpsRollback202610: 1,
     permInit: 1, permMapSave: 1, permExSave: 1, permExRevoke: 1, permStoreSave: 1, permAuditSeen: 1,
     apvSetup: 1, apvThresholdSave: 1, apvSubmit: 1, apvResubmit: 1, apvWithdraw: 1, apvDecide: 1, apvSign: 1, apvHandle: 1, apvReassign: 1, apvVoid: 1,
-    regionSave: 1, regionSwitch: 1, lineRevoke: 1 };
+    regionSave: 1, regionSwitch: 1, lineRevoke: 1, myPrefsSave: 1 };
   if (MUTATING_ACTIONS[action]) {
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) {
@@ -274,6 +276,8 @@ function dispatchAction_(action, token, payload, ipHash) {
     case 'permStoreGet': return handlePermStoreGet_(token);
     case 'permStoreSave': return handlePermStoreSave_(token, payload);
     case 'myPerms': return handleMyPerms_(token);
+    case 'myPrefsGet': return handleMyPrefsGet_(token);
+    case 'myPrefsSave': return handleMyPrefsSave_(token, payload);
     case 'permAuditList': return handlePermAuditList_(token, payload);
     case 'permAuditSeen': return handlePermAuditSeen_(token, payload);
     case 'permWho': return handlePermWho_(token, payload);

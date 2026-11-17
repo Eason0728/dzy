@@ -71,6 +71,7 @@ export const PRELOAD = {
   "modules/me/views/clock.js",
   "modules/me/views/profile.js",
   "modules/me/views/review.js",
+  "modules/me/views/settings.js",
   "modules/me/views/team.js",
   "modules/me/views/unit.js",
   "modules/staff-shared/clock-lib.js",

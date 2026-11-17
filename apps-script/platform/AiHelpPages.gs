@@ -31,6 +31,7 @@ var AIH_PAGES = [
   {"m":"me","v":"review","name":"我的資料","view_name":"待審核","dept":"","requires_module":["platform.self"],"requires":["platform.review","platform.staff"]},
   {"m":"me","v":"team","name":"我的資料","view_name":"我的單位","dept":"","requires_module":["platform.self"],"requires":["platform.review","platform.unitstaff"]},
   {"m":"me","v":"clock","name":"我的資料","view_name":"打卡對照","dept":"","requires_module":["platform.self"],"requires":["platform.review","platform.unitstaff"]},
+  {"m":"me","v":"settings","name":"我的資料","view_name":"設定","dept":"","requires_module":["platform.self"],"requires":["platform.self"]},
   {"m":"bulletin","v":"board","name":"公告專區","view_name":"公告","dept":"","requires_module":["platform.login"],"requires":["platform.login"]},
   {"m":"bulletin","v":"hist","name":"公告專區","view_name":"歷史區","dept":"","requires_module":["platform.login"],"requires":["platform.login"]},
   {"m":"bulletin","v":"manage","name":"公告專區","view_name":"公告管理","dept":"","requires_module":["platform.login"],"requires":["platform.bulletin"]},

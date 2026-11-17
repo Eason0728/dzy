@@ -13,6 +13,8 @@ export default {
   icon: 'me',
   work: 'self',                // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   accountMenu: true,          // 分頁列進手機「我」頁
+  alertSettings: true,        // 2026-11-17 提醒開關：殼給 ctx.alertPrefs（只准 me；docs/alert-prefs/spec.md）
+  alertsKeep: true,           // 提醒關掉時，帳號狀態（被退回、待確認）仍照常顯示（alerts() 標 keep:true 的項目）
   keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘（2026-10-21 Eason：不用最新狀態沒關係；登出管理系統時一起卸載）
   requires: ['platform.self'],
   views: [
@@ -24,7 +26,9 @@ export default {
     // 2026-10-13 員工名單統一：店長的「我的單位」（新增／離職／打卡連結）與「打卡對照」（對／不對）
     // 2026-10-30 platform.unitstaff：個別例外「可新增同仁」（staff.add@<本店>）的衍生權限，跟店長一樣用這兩頁（不給待審核）
     { id: 'team', name: '我的單位', requires: ['platform.review', 'platform.unitstaff'] },
-    { id: 'clock', name: '打卡對照', requires: ['platform.review', 'platform.unitstaff'] }
+    { id: 'clock', name: '打卡對照', requires: ['platform.review', 'platform.unitstaff'] },
+    // 2026-11-17：每個功能的提醒開關（docs/alert-prefs/spec.md）；所有能進「我的資料」的人都有
+    { id: 'settings', name: '設定', requires: ['platform.self'] }
   ],
   entry: () => import('./index.js')
 };

@@ -31,6 +31,7 @@ TESTS=(
   e2e_t23_mobile_todo.py
   e2e_t24_home_fast.py
   e2e_t25_nav_badge.py
+  e2e_t26_alert_prefs.py
 )
 
 for i in "${!TESTS[@]}"; do
@@ -43,4 +44,4 @@ for i in "${!TESTS[@]}"; do
 done
 
 echo
-echo "e2e 二十五支全部通過"
+echo "e2e 二十七支全部通過"

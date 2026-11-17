@@ -347,6 +347,18 @@ class MockBackend:
             return {'ok': True, 'data': {'user': u['user'], 'perms': u['perms']}}
         if action == 'batchRead':
             return self.batch_read(body)
+        # 提醒開關（2026-11-17，Prefs.gs）：一個 token 一份，跟後端一樣只認自己的
+        if action in ('myPrefsGet', 'myPrefsSave'):
+            prefs = getattr(self, 'prefs', None)
+            if prefs is None:
+                prefs = self.prefs = {}
+            key = body.get('token') or ''
+            if action == 'myPrefsSave':
+                off = payload.get('alerts_off')
+                if not isinstance(off, list) or getattr(self, 'prefs_fail', False):
+                    return {'ok': False, 'error': '設定格式不正確，請重新整理後再試' if not isinstance(off, list) else '系統忙碌中，請稍後再試'}
+                prefs[key] = {'alerts_off': list(dict.fromkeys(off)), 'updated_at': '2026-11-17 14:32:00'}
+            return {'ok': True, 'data': prefs.get(key, {'alerts_off': [], 'updated_at': ''})}
         staff_res = self.staff_action(action, body)
         if staff_res is not None:
             return staff_res
