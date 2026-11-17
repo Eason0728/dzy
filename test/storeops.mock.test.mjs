@@ -1541,7 +1541,7 @@ function noDirSched(id) {
   // 純函式：storeAttViewExUnits_ 過濾不合法單位
   ok(eq(sb.storeAttViewExUnits_(['att.view@mala-gf', 'att.view@mala-gf', 'att.view@mala-hq', 'att.view@mzt-wx', 'att.view@ck', 'att.view@dzy-hq', 'store.void'], sb.stfReadOrg_()), ['ck', 'dzy-hq', 'mala-gf']), '10 storeAttViewExUnits_：只留存在、啟用、store 階梯或總部的單位，排序去重');
   // permCompute_：只走例外、只認 add、單位要合法
-  const base = { staff: { status: 'active', unit: 'dzy-hq', dept: 'fin', title: 'hs', emp_no: 'DZY356' }, org: pidx, rules: [{ rule_id: 'R1', ladder: 'hq', dept: '', title: '*', perm: 'att.view@mala-gf' }], today: '2026-10-26' };
+  const base = { staff: { status: 'active', unit: 'dzy-hq', dept: 'it', title: 'hs', emp_no: 'DZY356' }, org: pidx, rules: [{ rule_id: 'R1', ladder: 'hq', dept: '', title: '*', perm: 'att.view@mala-gf' }], today: '2026-10-26' };
   const pc = (exs) => sb.permCompute_(Object.assign({}, base, { exs })).perms;
   ok(eq(pc([]), []), '10 permCompute_：規則裡的 att.view@ 一律不採用');
   ok(eq(pc([{ emp_no: 'DZY356', perm: 'att.view@mala-gf', mode: 'add', until: '' }]), ['att.view@mala-gf']), '10 permCompute_：例外 add → perms 有');

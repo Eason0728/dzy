@@ -494,7 +494,7 @@ function proxyWithOperator_(res, ns, user, perms) {
   if (ns === 'pnl') { res.level = proxyPnlLevel_(perms); res.account = uname; }
   // 薪酬系統（2026-10-29，docs/payroll-scope/spec.md §2）：scope 決定薪資後端能碰哪些門市。role admin（或 perms 含 *）→ '*'；
   // 其他 → payroll.store@X 的 X 組成的陣列（排序去重，可為空陣列）。mini 的 proxy-hook 強制覆寫上游 body.scope。
-  if (ns === 'payroll') res.scope = (Array.isArray(perms) && perms.indexOf('*') !== -1) ? '*' : permPayrollStoresOf_(perms);
+  if (ns === 'payroll') res.scope = permPayrollAll_(perms) ? '*' : permPayrollStoresOf_(perms);   // 2026-11-17 財務部身分（payroll.admin）也是 '*'
   return res;
 }
 

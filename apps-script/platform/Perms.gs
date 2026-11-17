@@ -54,6 +54,8 @@ var PERM_SCHED_ADMIN_RE = /^sched\.admin@([A-Za-z0-9_-]{1,40})$/;
 //   平台不驗證代碼是否存在於薪資門市表（平台讀不到）；代轉時 proxyWithOperator_ 把這些代碼整理成 scope 交給薪資後端裁切。
 var PERM_PAYROLL_STORE_PREFIX = 'payroll.store@';
 var PERM_PAYROLL_STORE_RE = /^payroll\.store@([A-Z0-9]{2,12})$/;
+// 2026-11-17 財務部身分＝薪酬全部門市（permCompute_ 衍生 payroll.write＋payroll.admin；permPayrollAll_ 是唯一判斷「不限門市」的地方）
+var PERM_PAYROLL_FIN_DEPT = 'fin';
 
 var PERM_SHEET_MAP = 'perm_map';
 var PERM_SHEET_EX = 'perm_ex';
@@ -349,6 +351,10 @@ function permPayrollStoreCode_(perm) {
   var m = PERM_PAYROLL_STORE_RE.exec(permStr_(perm));
   return m ? m[1] : '';
 }
+/** 薪酬不限門市：系統管理者（*）或財務部身分（衍生的 payroll.admin）。scope '*'、同仁名單、打卡對照都用這一支判斷 */
+function permPayrollAll_(perms) {
+  return Array.isArray(perms) && (perms.indexOf('*') !== -1 || perms.indexOf('payroll.admin') !== -1);
+}
 /** perms（session／me 的權限陣列）中所有 payroll.store@X 的 X：排序去重，格式不對的略過；非陣列 → [] */
 function permPayrollStoresOf_(perms) {
   var out = [];
@@ -556,6 +562,18 @@ function permCompute_(input) {
   });
 
   var perms = Object.keys(granted).filter(function (p) { return !removes[p]; });
+  // 2026-11-17 財務部身分＝薪酬計算全部門市（Eason：「只要有財務部同仁身份都可以編輯、觀看、修改內容，不分門市也不綁限定單位」；
+  //   主要部門或兼任部門是財務部都算、不分總監／同仁；含集團總覽；開關與 remove 例外都關不掉，要擋只能調部門）。
+  //   payroll.admin 不在 PERM_GRANTABLE：只由這裡衍生，permPayrollAll_ 看到它就給 scope '*'。
+  if (idents.some(function (id) { return id.ladder === 'hq' && !!id.depts[PERM_PAYROLL_FIN_DEPT]; })) {
+    var finVia = idents.some(function (id) { return !id.extra && id.ladder === 'hq' && !!id.depts[PERM_PAYROLL_FIN_DEPT]; }) ? null : 'extra';
+    ['payroll.write', 'payroll.admin'].forEach(function (p) {
+      var fs = { perm: p, source: 'fin' };
+      if (finVia) fs.via = finVia;
+      addSource(p, fs);
+      if (perms.indexOf(p) === -1) perms.push(p);
+    });
+  }
   perms.sort(function (a, b) { return permIdx_(a) - permIdx_(b); });
   // 輸出陣列去重＋依代碼排序（契約：陣列已去重、排序）
   perms = permUniqSorted_(perms);
@@ -784,7 +802,7 @@ var PERM_NAMES = {
   'platform.permex': '個別例外', 'platform.self': '我的資料', 'platform.review': '待審核', 'platform.unitstaff': '我的單位',
   'platform.bulletin': '公告管理', 'platform.login': '登入', '*': '全部功能',
   'store.void': '收支作廢', 'att.extra': '額外考勤核定', 'att.void': '人資考勤代理', 'platform.att': '考勤管理', 'platform.sched': '排班管理', 'platform.storeops': '門市營運',
-  'payroll.write': '薪酬計算', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對',
+  'payroll.write': '薪酬計算', 'payroll.admin': '薪酬計算：全部門市與集團總覽', 'cashbook.write': '收支管理', 'platform.purchase': '貨單核對',
   'pnl.read': '損益試算：看', 'pnl.write': '損益試算：填', 'pnl.admin': '損益試算：管', 'transfer.write': '調撥管理',
   'platform.eval-manage': '績效評核：替所屬同仁打分', 'platform.eval-brand': '績效評核：看自己品牌各店', 'platform.eval-all': '績效評核：看全集團', 'platform.eval-admin': '績效評核：題目設定與定稿',
   'platform.insp-do': '營運巡檢：到店巡檢', 'platform.insp-own': '營運巡檢：看自己店', 'platform.insp-brand': '營運巡檢：看自己品牌各店', 'platform.insp-all': '營運巡檢：看全集團', 'platform.insp-bank': '營運巡檢：題目設定', 'platform.insp-void': '營運巡檢：作廢巡檢',

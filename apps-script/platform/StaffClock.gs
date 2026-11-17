@@ -2763,13 +2763,13 @@ function handlePayrollStaffRoster_(token, payload) {
   var pay = stfStr_(payload && payload.store).toUpperCase();
   if (!/^[A-Z0-9]{2,12}$/.test(pay)) return clkErr_('bad_input', '門市代碼不正確');
   // 負責門市（docs/payroll-scope/spec.md §2）：非 admin（perms 沒有 *）只能讀 payroll.store@ 清單內的門市，與代轉的 scope 同一套規則
-  if (me.data.perms.indexOf('*') === -1 && permPayrollStoresOf_(me.data.perms).indexOf(pay) === -1) {
+  if (!permPayrollAll_(me.data.perms) && permPayrollStoresOf_(me.data.perms).indexOf(pay) === -1) {
     return { ok: false, code: 'FORBIDDEN', error: 'scope_forbidden' };
   }
   if (!clkSheetsReady_()) return clkErr_('not_ready', '同仁名單還沒和打卡系統對照');
   var data = payStaffRosterBuild_(pay, clkStaffAll_(), clkMaps_(), clkStores_(), stfReadOrg_(), clkTodayOf_(new Date()));
   data.ids = payPickIds_(data.ids, payload && payload.emp_ids, data.staff);
-  if (me.data.perms.indexOf('*') === -1) {
+  if (!permPayrollAll_(me.data.perms)) {
     var scopeL = permPayrollStoresOf_(me.data.perms);
     data.ids = payScopeIds_(data.ids, scopeL);
     // 沒帶 emp_ids（不是陣列）→ 別店編號整筆不回，連 state／pay_store／pay_none 都不給，免得列舉全集團打卡編號與薪資門市（fix3）
@@ -2849,7 +2849,7 @@ function handlePayrollXmap_(token, payload) {
   var me = handleMe_(token);
   if (!me.ok) return me;
   if (!hasPerm_(me.data.perms, 'payroll.write')) return { ok: false, code: 'FORBIDDEN', error: '沒有權限' };
-  var scopeList = me.data.perms.indexOf('*') !== -1 ? null : permPayrollStoresOf_(me.data.perms);
+  var scopeList = permPayrollAll_(me.data.perms) ? null : permPayrollStoresOf_(me.data.perms);
   if (!clkSheetsReady_()) return clkErr_('not_ready', '同仁名單還沒和打卡系統對照');
   var now = new Date();
   var rows = payXmapBuild_(clkStaffAll_(), clkMaps_(), clkStores_(), stfReadOrg_(), clkTodayOf_(now), scopeList);

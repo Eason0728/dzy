@@ -159,3 +159,10 @@ L 為空陣列時，所有動作都會因 `st ∉ L` 被擋（除 `payroll_store
 - **空名單開頁**：還沒被指派任何門市的人開薪資頁時，boot 仍會平行送出 `payroll_month`／`payroll_trend`，後端以 `scope_forbidden` 擋掉（沒有資料外洩），之後頁面停在「尚未指派」。只是多兩支被擋的請求，不修。
 - **D5「看」的範圍（Eason 2026-10-29 裁示）**：D5 的「只有 Eason 能看」指的是**集團層級的控制**（集團總覽、集團預設參數的設定畫面、紅字天數同步、門市設定、集團共用假別表的編輯）。負責門市的參數頁照常顯示**合併後實際生效的參數值**（集團預設＋本店覆寫的結果），這是計薪必須看到的，不算違反 D5。
 - **差異清單看得到別店代碼**：`payrollStaffRoster` 對範圍外編號回 `pay_store`（例如「薪資應歸 HQ」），只有店碼、沒有人名／員編。
+
+## 11. 財務部身分＝不分門市（2026-11-17）
+Eason：「管理系統中的薪酬計算，只要有財務部同仁身份都可以編輯、觀看、修改內容，不分門市也不綁限定單位」。三題照推薦：主要＋兼任都算、含集團總覽、身分自動有（開關與 remove 例外都關不掉，要擋只能調部門）。
+- `Perms.gs permCompute_`：任一身分是總部階梯＋財務部（主要部門 fin，或兼任 `fin:hm`／`fin:hs`）→ 衍生 `payroll.write`＋`payroll.admin`，來源 `fin`（只因兼任＝`via:'extra'`；我的資料顯示「因為財務部／因為兼任財務部」）。`payroll.admin` 不在 PERM_GRANTABLE，對照表與例外都給不了。
+- 「不限門市」唯一判斷 `permPayrollAll_(perms)`＝`*` 或 `payroll.admin`：代轉 scope（Auth.gs proxyWithOperator_）、payrollStaffRoster、payrollXmap 三處共用。薪資後端不用改（`'*'` 本來就是不限制）。
+- 財務同仁原有的 `payroll.store@` 負責門市例外留著不影響（scope 一律 `'*'`）。人資把人調進／調出財務部仍會被鎖碼擋（payroll.write 有無改變），要 admin 調。
+- 測試：perms.mock「財務部身分＝薪酬全部門市」、proxy-authorize 13Sw～13Sw5、perms-actions 6b、dd it_backend／hr2_backend oracle。

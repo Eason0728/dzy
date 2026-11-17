@@ -245,6 +245,8 @@ function expectPerms(staff, rules, exs, storeMap, pilot) {
     else if (mode === 'remove') removes[x.perm] = true;
   });
   let perms = Object.keys(P).filter((p) => !removes[p]);
+  // 2026-11-17 財務部身分（主要或兼任、總部階梯）＝薪酬全部門市：payroll.write＋payroll.admin，remove 例外拿不掉
+  if (ids.some((id) => id.ladder === 'hq' && id.dept === 'fin')) ['payroll.write', 'payroll.admin'].forEach((p) => { if (perms.indexOf(p) === -1) perms.push(p); });
   // 兼任店長（§13 2026-10-29）：active add store.sm@U、U 是啟用門市非 ck、U≠本人單位、U 在試點、沒過期
   const acting = [];
   exs.forEach((x) => {
@@ -280,7 +282,7 @@ function expectPerms(staff, rules, exs, storeMap, pilot) {
   }
   return { perms: perms.sort(), scope };
 }
-const isGrantLike = (p) => GRANTABLE.indexOf(p) !== -1 || /^att\.view@/.test(p) || /^payroll\.store@/.test(p);
+const isGrantLike = (p) => GRANTABLE.indexOf(p) !== -1 || p === 'payroll.admin' || /^att\.view@/.test(p) || /^payroll\.store@/.test(p);
 const filterPerms = (arr) => (arr || []).filter(isGrantLike).sort();
 
 // ============================================================

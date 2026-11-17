@@ -19,7 +19,7 @@ export default {
   // 分頁＝薪酬頁原本的側欄（2026-10-20 Eason：跟「薪酬管理」同一列）；要與 bridge.js PAYROLL_PAGES 一致（test/payroll-module.test.mjs 比對）
   views: [
     { id: 'dash', name: '儀表板', requires: ['payroll.write'] },
-    { id: 'group', name: '集團總覽', requires: ['payroll.admin'] },   // 只有系統管理者（*）通過；財務同仁看不到（docs/payroll-scope/spec.md §7）
+    { id: 'group', name: '集團總覽', requires: ['payroll.admin'] },   // 系統管理者（*）與財務部身分（Perms.gs permCompute_ 衍生 payroll.admin，2026-11-17）
     { id: 'emp', name: '1 員工設定', requires: ['payroll.write'] },
     { id: 'cfg', name: '2 參數設定', requires: ['payroll.write'] },
     { id: 'punch', name: '3 打卡紀錄', requires: ['payroll.write'] },
