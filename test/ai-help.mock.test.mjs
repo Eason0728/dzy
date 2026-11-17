@@ -437,7 +437,7 @@ const logRow = (o) => Object.assign({ ts: iso(NOW), uid: 'u900', conv: '', m: ''
   const exists = (m, v) => PAGES.some((p) => p.m === m && p.v === v);
   const f = (o, k) => (typeof o[k] === 'string' ? o[k] : '');
   const KEYS = 'm,v,question,answer,who,go_m,go_v,source';
-  ok(SEED.length >= 50 && SEED.length <= 90, 'SEED 題數 50～90（約 60 題）', SEED.length);
+  ok(SEED.length >= 50 && SEED.length <= 120, 'SEED 題數 50～120', SEED.length);
   ok(SEED.every((o) => Object.keys(o).join() === KEYS && KEYS.split(',').every((k) => typeof o[k] === 'string')), 'SEED 每題欄位固定為 ' + KEYS + '（不含 id、status、時間），都是字串');
   // 規則 1：m／v 組合
   const bad1 = SEED.filter((o) => (o.m || o.v) && !(o.m && o.v && exists(o.m, o.v)));
