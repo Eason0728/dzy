@@ -31,7 +31,7 @@ const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
 const chance = (p) => rnd() < p;
 
 let passed = 0, failed = 0; const fails = [];
-function ok(cond, label, extra) { if (cond) passed++; else { failed++; fails.push(label); console.error('FAIL: ' + label + (extra !== undefined ? '\n  ' + JSON.stringify(extra).slice(0, 700) : '')); } }
+function ok(cond, label, extra) { if (cond) passed++; else { failed++; fails.push(label); console.error('FAIL: ' + label + (extra !== undefined ? '\n  ' + JSON.stringify(extra).slice(0, Number(process.env.E2E_FAIL_LEN) || 700) : '')); } }
 const J = (v) => JSON.stringify(v);
 const eq = (a, b) => J(a) === J(b);
 const sortU = (a) => [...new Set(a)].sort();
@@ -90,6 +90,7 @@ const TITLES = { pt: 'store', ft: 'store', sm: 'store', am: 'store', fm: 'store'
 const DEPTS = ['fin', 'hr', 'it', 'eng', 'franchise', 'purchase', 'ops', 'training', 'marketing', 'mgmt', 'branddev'];
 const NO_ATT = ['odir', 'hm', 'ceo', 'gm', 'chair'];
 const LIST_STATUSES = ['active', 'unclaimed', 'pending', 'rejected'];
+const NOT_SUPPORT_EX = { DZY027: ['cf'] };   // 個人例外：這個編號在央廚打卡不算支援（docs/att-hr-acting/spec.md §8、契約 att_home_tag）
 const STORE_UNITS = Object.keys(UNITS).filter((u) => UNITS[u].ladder === 'store');
 
 // ── 隨機人員 ──
@@ -187,7 +188,7 @@ function need(t, mode) {
   if (u.ladder === 'office') return ['ofs', 'osv'].includes(t.title) ? { kind: 'office', unit: t.unit } : null;
   if (t.title !== 'hs' || !DEPTS.includes(t.dept)) return null;
   if (t.dept === 'mgmt') return { kind: 'mgmt' };
-  if (t.dept === 'fin') return { kind: 'hr_only' };
+  // 2026-11-02 Eason（docs/att-hr-acting/spec.md §8）：財務部同仁回到一般部門規則＝同部門總監核工時與申請（hr_only 清單清空）
   return { kind: 'dept', dept: t.dept };
 }
 function approves(a, t, mode) {
@@ -198,7 +199,8 @@ function approves(a, t, mode) {
   if (nd.kind === 'unit') { if (same && mode !== 'hours') return false; return al === 'store' && ['sm', 'fm'].includes(a.title) && a.unit === nd.unit; }
   if (same) return false;
   if (nd.kind === 'head') return (al === 'store' && ['am', 'rdd'].includes(a.title) && a.unit === nd.unit) || (al === 'office' && ab === nd.brand && a.title === 'osv');
-  if (nd.kind === 'brand_office') return al === 'office' && ['osv', 'odir'].includes(a.title) && ab === nd.brand;
+  // 2026-11-03 Eason（docs/regions/spec.md §14 第 1 題）：區經理本人的申請只給品牌總監 odir，區督導不再簽；區域開關關也生效
+  if (nd.kind === 'brand_office') return al === 'office' && a.title === 'odir' && ab === nd.brand;
   if (nd.kind === 'hq_exec') return al === 'hq' && ['ceo', 'gm', 'chair'].includes(a.title);
   if (nd.kind === 'office') return al === 'office' && a.title === 'odir' && a.unit === nd.unit;
   if (nd.kind === 'dept') return al === 'hq' && a.title === 'hm' && a.dept === nd.dept;
@@ -223,7 +225,12 @@ function rows(ts) {
   for (const t of ts) {
     if (!pilot.includes(t.unit) || !t.clock || !t.clock.active) continue;
     if (!CLOCK_UNITS[t.clock.store].includes(t.unit)) continue;   // 支援帳號不在本測試範圍
-    out.push({ clock: t.clock.store, emp_id: t.clock.eid, sub: t.emp, name: t.name });
+    const row = { clock: t.clock.store, emp_id: t.clock.eid, sub: t.emp, name: t.name };
+    // 個人例外（契約 rules.att_home_tag；名單＝docs/att-hr-acting/spec.md §8「個人例外 DZY027（央廚不算支援）」）：
+    // 例外帳號在 name 後多 home_tag＝單位顯示名稱（非總部同仁）。本測試的假編號會撞到 DZY027；打卡店一定等於本單位，
+    // 所以只會出現「DZY027 在 ck、打卡 cf」這一種，顯示名稱照 Staff.gs 組織種子（央廚不加品牌）。
+    if (NOT_SUPPORT_EX[t.emp] && NOT_SUPPORT_EX[t.emp].includes(t.clock.store) && t.unit === 'ck') row.home_tag = '中央工廠（央廚）';
+    out.push(row);
   }
   return out.sort((a, b) => a.clock !== b.clock ? (a.clock < b.clock ? -1 : 1) : (a.emp_id < b.emp_id ? -1 : a.emp_id > b.emp_id ? 1 : 0));
 }
@@ -240,24 +247,30 @@ function expectIdent(p) {
     sub: p ? p.emp : 'U:a001', active: true, emp_no: p ? p.emp : '', name: p ? p.name : '系統管理者', admin, hr_head: flags.hrHead,
     unit: p ? p.unit : '', title: p ? p.title : '', epoch: p ? p.hire : '', token_after: 0, pilot_units: pilot,
     units_managed: sortU(managed), void_units: sortU(voids),
-    att: pilot.length ? { people: rows(targets(me, flags, 'hours')), req_people: rows(targets(me, flags, 'req')), view_people: [] } : { people: [], req_people: [], view_people: [] },
+    // void_hours／void_req（2026-11-13，docs/att-void-hr/spec.md）：只有持有個別例外 att.void 的人才有內容；admin／人資主管持有也沒效果。
+    // 本測試不設任何個別例外 → 每個人都是空陣列（契約範例也是兩欄空陣列，排在 view_people 後面）
+    att: pilot.length ? { people: rows(targets(me, flags, 'hours')), req_people: rows(targets(me, flags, 'req')), view_people: [], void_hours: [], void_req: [] } : { people: [], req_people: [], view_people: [], void_hours: [], void_req: [] },
     self,
     // 總監排班（#68，docs/schedule-hq/spec.md §13）：odir＝本品牌試點內啟用門市（不含 ck）；hm／odir 在職＝sched_hq_shift
     sched_units: schedUnitsOf(p),
-    sched_hq_shift: !!p && p.status === 'active' && ['hm', 'odir'].includes(p.title)
+    sched_hq_shift: !!p && p.status === 'active' && ['hm', 'odir'].includes(p.title),
+    // 本人全部打卡帳號（2026-11-06，契約 own_clocks）：已確認、名冊在職的對照，不論哪家、不受試點限制；本測試每人最多一筆
+    own_clocks: p && p.clock && p.clock.active ? [{ clock: p.clock.store, emp_id: p.clock.eid }] : []
   };
 }
 function schedUnitsOf(p) {
   if (!p || p.status !== 'active' || p.title !== 'odir' || !validOrg(p)) return [];
   const office = UNITS[p.unit];
   if (!office || office.ladder !== 'office') return [];
-  return sortU(STORE_UNITS.filter((u) => u !== 'ck' && UNITS[u].active !== false && UNITS[u].parent === office.parent && pilot.includes(u)));
+  // 本品牌＝辦公室的 parent（docs/schedule-hq/spec.md §13）；本檔 UNITS 的 parent 記在 brand 欄（原本比 .parent＝兩邊都 undefined，會算成全部品牌）
+  return sortU(STORE_UNITS.filter((u) => u !== 'ck' && UNITS[u].active !== false && UNITS[u].brand === office.brand && pilot.includes(u)));
 }
 function expectGates(p) {
   if (!pilot.length || p.status !== 'active') return { storeops: false, att: false, sched: false };
   const hr = isHrHead(p);
   const storeops = NO_ATT.includes(p.title) || (pilot.includes(p.unit) && validOrg(p) && UNITS[p.unit].ladder === 'store');
-  const att = (['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo', 'gm', 'chair'].includes(p.title) && !(p.title === 'hm' && p.dept === 'fin')) || hr;
+  // 2026-11-02 Eason（docs/att-hr-acting/spec.md §8）：財務總監因職稱 hm 拿回考勤管理選單
+  const att = ['sm', 'fm', 'am', 'rdd', 'osv', 'odir', 'hm', 'ceo', 'gm', 'chair'].includes(p.title) || hr;
   const dirSched = schedUnitsOf(p).length > 0 || ['hm', 'odir'].includes(p.title);   // 總監排班（#68）：不必有 hq 打卡對照
   const sched = ['sm', 'fm', 'am'].includes(p.title) || hr || dirSched || (['hq', 'office'].includes(UNITS[p.unit].ladder) && !!(p.clock && p.clock.active && p.clock.store === 'hq'));
   return { storeops, att, sched };
@@ -281,6 +294,8 @@ for (const p of cast) {
   ok(eq(got.att.people, want.att.people), `1e att.people（核定工時）${tag}：${want.att.people.length} 位`, { got: got.att.people, want: want.att.people });
   ok(eq(got.att.req_people, want.att.req_people), `1f att.req_people（申請）${tag}：${want.att.req_people.length} 位`, { got: got.att.req_people, want: want.att.req_people });
   ok(eq(got.att.view_people, []), `1g view_people 空（沒開區域）${tag}`, got.att.view_people);
+  ok(eq(Object.keys(got.att), Object.keys(want.att)) && eq(got.att.void_hours, []) && eq(got.att.void_req, []), `1g2 att 欄位名與順序、作廢名單兩欄空（沒設 att.void）${tag}`, { keys: Object.keys(got.att), void_hours: got.att.void_hours, void_req: got.att.void_req });
+  ok(eq(got.sched_units, want.sched_units) && got.sched_hq_shift === want.sched_hq_shift && eq(got.own_clocks, want.own_clocks), `1g3 sched_units／sched_hq_shift／own_clocks ${tag}`, { got: [got.sched_units, got.sched_hq_shift, got.own_clocks], want: [want.sched_units, want.sched_hq_shift, want.own_clocks] });
 }
 {
   const r = who('U:a001');
@@ -335,7 +350,7 @@ ok(post(sb, 'svcStoreRoster', { svc_key: SVC, unit: 'no such' }).code === 'bad_i
   const act = cast.filter((p) => p.status === 'active');
   const p = pick(act);
   const r = who(p.emp).data;
-  ok(r.active === true && eq(r.pilot_units, []) && eq(r.units_managed, []) && eq(r.void_units, []) && eq(r.att, { people: [], req_people: [], view_people: [] }), `4a 開關空：${p.emp} 身分照發、名單與單位全空`, r);
+  ok(r.active === true && eq(r.pilot_units, []) && eq(r.units_managed, []) && eq(r.void_units, []) && eq(r.att, { people: [], req_people: [], view_people: [], void_hours: [], void_req: [] }), `4a 開關空：${p.emp} 身分照發、名單與單位全空`, r);
   ok(eq(who('U:a001').data.units_managed, []) && eq(who('U:a001').data.att.people, []), '4b 開關空：admin 也空');
   const lg = login(p);
   ok(lg.ok && !lg.data.perms.some((x) => /platform\.(storeops|att|sched)/.test(x)), `4c 開關空：${p.emp} 三個衍生權限都沒有`, lg.data && lg.data.perms);
