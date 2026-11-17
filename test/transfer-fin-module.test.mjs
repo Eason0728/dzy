@@ -62,11 +62,12 @@ t('模組程式裡沒有任何密碼／後端網址樣子的字串', () => {
 });
 t('分頁：manifest views＝TRANSFER_PAGES，全部只認 transfer.write', () => {
   assert.deepEqual(manifest.views.map((v) => [v.id, v.name]), TRANSFER_PAGES);
-  assert.deepEqual(TRANSFER_PAGES.map((x) => x[0]), ['report', 'memory', 'overview']);
+  assert.deepEqual(TRANSFER_PAGES.map((x) => x[0]), ['report', 'memory', 'overview', 'cats']);
   for (const v of manifest.views) assert.deepEqual(v.requires, ['transfer.write']);
 });
 t('切換訊息：認得的分頁照送，其他一律回月報', () => {
   assert.deepEqual(navMessage('memory'), { type: 'dzy-transfer-nav', v: 1, p: 'memory' });
+  assert.deepEqual(navMessage('cats'), { type: 'dzy-transfer-nav', v: 1, p: 'cats' });
   for (const bad of [null, undefined, 'main', '', 'x;y', '__proto__']) assert.equal(navMessage(bad).p, 'report');
 });
 

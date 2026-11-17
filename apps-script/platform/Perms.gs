@@ -16,7 +16,7 @@ var PERM_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit
   'platform.bulletin',         // 2026-10-26 公告管理（電子佈告欄的公告管理／新增公告；原本同仁名單逐人勾 BULLETIN_ADMINS，Eason：搬進權限設定、不鎖碼、人資可設）
   'platform.purchase',           // 2026-10-24 貨單核對（財務部門；不鎖碼，Eason：財務部門自動有、他可再用個別例外加人；docs/purchase-fin）
   'pnl.read', 'pnl.write', 'pnl.admin',   // 2026-10-24 損益試算：看／填（財務部門預設）／管（定稿與設定，鎖碼）
-  'transfer.write',            // 2026-10-24 調撥管理（財務部門看調撥月報、品項記憶、卡關總覽；不鎖碼，Eason Q1 B：人資可在權限設定打開）
+  'transfer.write',            // 2026-10-24 調撥管理（財務部門看調撥月報、品項記憶、卡關總覽、品項類別（2026-11-17）；不鎖碼，Eason Q1 B：人資可在權限設定打開）
   'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin',
   'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank',
   'platform.insp-void',

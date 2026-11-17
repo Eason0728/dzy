@@ -162,7 +162,7 @@ class MockEmbeds(MockBackend):
             ok_ = has('transfer.write')
         if not ok_:
             return 403, {'ok': False, 'error': '沒有權限', 'code': 'FORBIDDEN'}
-        if ns == 'transfer' and action == 'adminUpdate' and payload.get('op') not in ('memoryEdit', 'memoryDelete'):
+        if ns == 'transfer' and action == 'adminUpdate' and payload.get('op') not in ('memoryEdit', 'memoryDelete', 'catAdd', 'catEdit', 'catToggle', 'catOrder'):
             return 200, {'ok': False, 'error': 'OP_FORBIDDEN', 'code': 'OP_FORBIDDEN'}
         self.ns_calls.append((ns, action, payload, who))
         # 上游回傳形狀：{ok:true,data:X}；殼 transformResponse_ 會包成 data.data
@@ -384,7 +384,7 @@ def main():
                 action = {'read': R.choice(T_READ), 'write': 'buildMonthlyReport', 'badop': 'adminUpdate', 'unknown': R.choice(['wipeData', 'deleteConfig', 'login']), 'notfound': 'getDoc'}[kind]
                 payload = {'ym': '2026-%02d' % R.randint(1, 12), 'n': R.randint(1, 99)}
                 if kind == 'badop':
-                    payload['op'] = R.choice(['wipeData', 'deleteConfig', 'reasonAdd', 'memoryEdit', 'memoryDelete'])
+                    payload['op'] = R.choice(['wipeData', 'deleteConfig', 'reasonAdd', 'catDelete', 'memoryEdit', 'memoryDelete', 'catAdd', 'catToggle'])
                 if kind == 'notfound':
                     payload['no'] = 'MISSING'
                 for k in R.sample(['pin_master', 'token', 'operator', 'action'], R.randint(0, 4)):
@@ -393,7 +393,7 @@ def main():
                 before = len(mock.ns_calls)
                 res = tfr.evaluate("([id, a, p]) => window.__call(id, a, p)", [cid, action, payload])
                 clean = {k: v for k, v in payload.items() if k not in ('pin_master', 'token', 'operator', 'action')}
-                if kind in ('read', 'write') or (kind == 'badop' and payload['op'] in ('memoryEdit', 'memoryDelete')):
+                if kind in ('read', 'write') or (kind == 'badop' and payload['op'] in ('memoryEdit', 'memoryDelete', 'catAdd', 'catEdit', 'catToggle', 'catOrder')):
                     want = {'ok': True, 'data': {'echo': action, 'payload': clean, 'operator': '財務全權（finall）（管理系統）'}}
                     good = res == want and len(mock.ns_calls) == before + 1
                 elif kind == 'badop':

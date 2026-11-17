@@ -10,7 +10,7 @@ export default {
   ns: 'transfer',
   backend: 'transfer',
   name: '調撥管理',
-  desc: '調撥月報、品項記憶、卡關總覽',
+  desc: '調撥月報、品項記憶、卡關總覽、品項類別',
   icon: 'transfer',
   work: 'money',               // 手機「功能」頁的工作分類（platform/config.js WORK_GROUPS）
   keepAlive: 30 * 60 * 1000,   // 切走後保留 30 分鐘不重載（登出管理系統時一起卸載）
@@ -20,7 +20,8 @@ export default {
   views: [
     { id: 'report', name: '月報', requires: ['transfer.write'] },
     { id: 'memory', name: '品項記憶', requires: ['transfer.write'] },
-    { id: 'overview', name: '卡關總覽', requires: ['transfer.write'] }
+    { id: 'overview', name: '卡關總覽', requires: ['transfer.write'] },
+    { id: 'cats', name: '類別設定', requires: ['transfer.write'] }   // 2026-11-17：會計自訂品項類別
   ],
   entry: () => import('./index.js')
 };
