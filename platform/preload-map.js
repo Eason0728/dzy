@@ -188,5 +188,18 @@ export const PRELOAD = {
   "modules/pnl/views/settings-ops.js",
   "modules/pnl/views/settings-tables.js",
   "modules/pnl/views/settings.js"
+ ],
+ "remit": [
+  "modules/approvals-shared/amount.js",
+  "modules/approvals/cards.js",
+  "modules/approvals/lib.js",
+  "modules/approvals/photo.js",
+  "modules/approvals/widgets.js",
+  "modules/remit/index.js",
+  "modules/remit/lib.js",
+  "modules/remit/style.js",
+  "modules/remit/views/accts.js",
+  "modules/remit/views/list.js",
+  "modules/remit/views/vendors.js"
  ]
 };

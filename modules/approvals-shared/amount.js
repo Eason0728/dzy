@@ -28,7 +28,7 @@ export function apvCalcAmount(type, body) {
     if (!(total > 0) || total > 10000000) return bad;
     return { ok: true, amount: total, subtotals: subtotals };
   }
-  if (type === 'expense') {
+  if (type === 'expense' || type === 'advance' || type === 'unitpay') {
     var a = body && body.amount;
     if (typeof a !== 'number' || !isFinite(a) || Math.floor(a) !== a || a < 1 || a > 10000000) return bad;
     return { ok: true, amount: a, subtotals: [] };

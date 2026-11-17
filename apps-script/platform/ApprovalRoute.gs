@@ -8,11 +8,14 @@
  */
 
 var APV_ROLES = ['head', 'brand_dir', 'ceo', 'gm', 'chair'];   // 權限人代碼，由低到高（往上順序）
-var APV_TYPES = ['purchase', 'expense', 'personnel'];
-var APV_HANDLER_DEPT = { purchase: 'purchase', expense: 'fin', personnel: 'hr' };   // 承辦部門代碼（org 正本，spec §14.8）
+var APV_TYPES = ['purchase', 'expense', 'personnel', 'advance', 'unitpay'];
+// 2026-11-18 Eason（docs/remit/progress.md）：送單改三種＝個人代墊 advance、單位請款 unitpay、人事異動；請購 purchase、費用請款 expense 只留舊單顯示
+var APV_PAY_TYPES = ['expense', 'advance', 'unitpay'];    // 有金額、有類別、結案推損益的「請款類」
+var APV_REMIT_TYPES = ['advance', 'unitpay'];             // 核決權限 → 財務部主管 → 匯款清單出帳
+var APV_HANDLER_DEPT = { purchase: 'purchase', expense: 'fin', personnel: 'hr', advance: 'fin', unitpay: 'fin' };   // 承辦部門代碼（org 正本，spec §14.8）
 // 單位自己的 brand_dir（沒有品牌辦公室的單位）：中央工廠＝廚藝總監 rdd（docs/org/spec.md 第 15 節）
 var APV_UNIT_DIR_TITLE = { ck: 'rdd' };
-var APV_ROLE_LABEL = { head: '單位主管', brand_dir: '營運主管（品牌總監／廚藝總監）', ceo: '執行長', gm: '總經理', chair: '董事長', direct: '直屬主管', self_sign: '本人簽名' };
+var APV_ROLE_LABEL = { fin_head: '財務部主管', head: '單位主管', brand_dir: '營運主管（品牌總監／廚藝總監）', ceo: '執行長', gm: '總經理', chair: '董事長', direct: '直屬主管', self_sign: '本人簽名' };
 var APV_AMOUNT_MAX = 10000000;
 var APV_TABLE_MAX_ROWS = 20;
 var APV_STUCK_MS = 72 * 60 * 60 * 1000;
@@ -47,7 +50,7 @@ function apvCalcAmount_(type, body) {
     if (!(total > 0) || total > 10000000) return bad;
     return { ok: true, amount: total, subtotals: subtotals };
   }
-  if (type === 'expense') {
+  if (type === 'expense' || type === 'advance' || type === 'unitpay') {
     var a = body && body.amount;
     if (typeof a !== 'number' || !isFinite(a) || Math.floor(a) !== a || a < 1 || a > 10000000) return bad;
     return { ok: true, amount: a, subtotals: [] };
@@ -140,6 +143,11 @@ function apvFindPerson_(ctx, emp) {
 
 function apvExcluded_(ctx, emp) { return !!ctx.exclude && ctx.exclude.indexOf(emp) !== -1; }
 
+/** 財務部主管（2026-11-18）：已開通、總部財務部總監，或兼任財務部總監（stfExtraHeadDepts_）。請款類最後一關，不比職級 */
+function apvIsFinHead_(p) {
+  return !!p && p.opened && p.unit === 'dzy-hq' && ((p.dept === 'fin' && p.title === 'hm') || (p.extraHeads || []).indexOf('fin') !== -1);
+}
+
 /** 承辦部門的人：主要部門或兼任部門是該部門、已開通 */
 function apvIsHandler_(person, dept) {
   return !!person && person.opened && !!dept && (person.dept === dept || person.extra.indexOf(dept) !== -1);
@@ -163,6 +171,11 @@ function apvRoleMembers_(role, of, ctx, opts) {
     if (!p.opened || apvExcluded_(ctx, p.emp)) continue;
     var hit = false;
     var actingHit = false;
+    if (role === 'fin_head') {
+      // 財務部主管：看的是財務把關，不是組織上下，所以不比職級（董事長送的單也給財務部主管看）
+      if (apvIsFinHead_(p)) out.push(p);
+      continue;
+    }
     if (role === 'head') {
       if (of) {
         if (of.ladder === 'store') hit = p.unit === of.unit && STF_STORE_HEAD_TITLES.indexOf(p.title) !== -1;
@@ -233,6 +246,7 @@ function apvResolveStep_(step, ctx) {
 
 function apvScope_(role, of, ctx) {
   if (!of) return '';
+  if (role === 'fin_head') return 'dzy-hq/fin';
   if (role === 'head' || role === 'direct') return of.unit + (of.ladder === 'hq' && of.dept ? '/' + of.dept : '');
   if (role === 'brand_dir') {
     var list = (ctx.org && ctx.org.list && ctx.org.list.unit) || [];
@@ -265,6 +279,7 @@ function apvSenderCovers_(sender, role, ctx) {
 /** 找不到人時，下一個更高的權限人；direct 找不到 → 從品牌總監往上；董事長之後沒有 */
 function apvNextRole_(role) {
   if (role === 'direct') return 'brand_dir';
+  if (role === 'fin_head') return 'ceo';   // 財務部沒有在職主管 → 執行長以上
   var i = APV_ROLES.indexOf(role);
   return (i === -1 || i === APV_ROLES.length - 1) ? null : APV_ROLES[i + 1];
 }
@@ -303,7 +318,7 @@ function apvBuildRoute_(input) {
   var ctx = input.ctx;
   var sender = input.sender;
   var route = { v: 1, thr_ver: 0, row: null, steps: [], handler: APV_HANDLER_DEPT[input.type] || '' };
-  if (input.type === 'purchase' || input.type === 'expense') {
+  if (input.type === 'purchase' || APV_PAY_TYPES.indexOf(input.type) !== -1) {
     var table = input.table;
     if (!table || !table.rows || !table.rows.length) return { ok: false, error: 'not_inited' };
     var row = apvPickRow_(table.rows, input.amount);
@@ -315,6 +330,12 @@ function apvBuildRoute_(input) {
     // 本人在核決權限內（2026-11-02 Eason）：送件人就是這一級（或更高一級）的權限人 → 送出即本人核准，直接交承辦
     if (apvSenderCovers_(sender, role, ctx)) { st.status = 'done'; st.by = sender.emp; st.at = input.now || 0; st.self = true; }
     route.steps.push(st);
+    // 個人代墊／單位請款（2026-11-18）：最後一關一律財務部主管；送件人本人就是財務部主管 → 送出即本人核准（Eason 第 10 題 B）
+    if (APV_REMIT_TYPES.indexOf(input.type) !== -1) {
+      var fh = apvNewStep_('fin_head', sender, ctx);
+      if (apvIsFinHead_(sender)) { fh.status = 'done'; fh.by = sender.emp; fh.at = input.now || 0; fh.self = true; }
+      route.steps.push(fh);
+    }
     return { ok: true, route: route };
   }
   if (input.type !== 'personnel') return { ok: false, error: 'bad_request' };
@@ -389,6 +410,8 @@ function apvReassignMembers_(route, index, status, ctx) {
   var roles = [];
   if (step.role === 'direct') {
     roles = ['direct'].concat(APV_ROLES.slice(1));
+  } else if (step.role === 'fin_head') {
+    roles = ['fin_head', 'ceo', 'gm', 'chair'];
   } else {
     roles = APV_ROLES.slice(Math.max(0, APV_ROLES.indexOf(step.role)));
   }

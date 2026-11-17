@@ -8,7 +8,7 @@ import { TYPE_LABEL, KIND_LABEL, CATEGORY, STATUS, whereText, visibleActions, mo
 
 export const ACTION_LABEL = {
   submit: '送出', resubmit: '改完再送', approve: '核准', reject: '退回', skip: '跳過（沒人可簽）', reassign: '改派',
-  withdraw: '撤回', handle: '承辦處理', sign: '本人簽名', void: '作廢'
+  withdraw: '撤回', handle: '承辦處理', sign: '本人簽名', void: '作廢', unpaid: '取消已匯款'
 };
 
 const THUMB = 'width:72px;height:72px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--line);background:var(--bg);cursor:pointer';
@@ -67,6 +67,13 @@ export function bodyHtml(form, esc) {
   if (form.type === 'expense') {
     return `<table class="table"><tbody>${row('支出日', esc(b.spend_date), esc)}${row('類別', esc(CATEGORY[b.category] || b.category), esc)}${row('金額', `NT$ ${esc(money(b.amount))}`, esc)}${row('說明', esc(b.desc), esc)}
       ${row('付款對象', b.payee === 'vendor' ? `廠商：${esc(b.vendor_name || '')}` : '還代墊的同仁（自己）', esc)}${b.purchase_id ? row('對應請購單', esc(b.purchase_id), esc) : ''}</tbody></table>`;
+  }
+  if (form.type === 'advance') {
+    return `<table class="table"><tbody>${row('支出日', esc(b.spend_date), esc)}${row('類別', esc(CATEGORY[b.category] || b.category), esc)}${row('金額', `NT$ ${esc(money(b.amount))}`, esc)}${row('說明', esc(b.desc), esc)}
+      ${row('付款對象', '還代墊的同仁（送件人）', esc)}</tbody></table>`;
+  }
+  if (form.type === 'unitpay') {
+    return `<table class="table"><tbody>${row('希望付款日', esc(b.pay_date), esc)}${row('類別', esc(CATEGORY[b.category] || b.category), esc)}${row('金額', `NT$ ${esc(money(b.amount))}`, esc)}${row('廠商', esc(b.vendor_name || ''), esc)}${row('說明', esc(b.desc), esc)}</tbody></table>`;
   }
   if (form.type === 'personnel') {
     const side = (o) => o ? [o.unit, o.title, o.pay !== undefined && o.pay !== null && o.pay !== '' ? `薪資 ${money(Number(o.pay))}` : ''].filter(Boolean).join('／') : '';
