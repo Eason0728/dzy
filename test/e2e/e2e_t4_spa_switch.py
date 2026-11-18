@@ -10,7 +10,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import MockBackend, check, finish, login, start_server
+from common import MockBackend, check, finish, login, registry_modules, start_server
 
 from playwright.sync_api import sync_playwright
 
@@ -46,7 +46,7 @@ def main():
             page.click('[data-role="nav-desktop"] [data-nav="__home__"]')
             page.wait_for_selector('[data-role="module-card"]')
             check(page.evaluate("() => window.__e2eSameDocument") == 'yes', '回首頁後記號還在')
-            check(page.locator('[data-role="module-card"]').count() == 20, '回首頁二十組卡片重畫完成')
+            check(page.locator('[data-role="module-card"]').count() == len(registry_modules()), '回首頁全部模組卡片（%d 組，依 registry）重畫完成' % len(registry_modules()))
 
             # 網址列 hash 正確跟著走（spec §4.9 路由字串）
             page.click('[data-role="nav-desktop"] [data-nav="dorm"]')

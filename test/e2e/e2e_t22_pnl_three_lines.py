@@ -10,11 +10,11 @@ import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import USERS, MockBackend, check, finish, start_server
+from common import USERS, MockBackend, check, finish, start_server, pick_port
 
 from playwright.sync_api import sync_playwright
 
-PORT, BPORT = 8836, 18936
+PORT, BPORT = 8836, pick_port(18936)
 KEEP = '[data-keep="pnl"]'
 KEY = 'test-dzy-key-0123456789abcdef'
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

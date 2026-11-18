@@ -14,10 +14,11 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import check, finish
+from common import ROOT, check, dev_copy, finish, skip
 
-DZY = os.path.expanduser('~/dzy')
-MALA_AUDIT = os.path.expanduser('~/mala-audit')
+DZY = ROOT                                    # 前端純函式測試就在本 repo（不靠 ~/dzy）
+# 後端 .gs 測試在稽核系統的開發副本：環境變數 MALA_AUDIT_DIR > ~/mala-audit（MacBook）> ~/dev/mala-audit（mini，見 docs/path-map.md）；都沒有就明確略過
+MALA_AUDIT = dev_copy('MALA_AUDIT_DIR', '~/mala-audit', '~/dev/mala-audit')
 
 SUITE = [
     # (執行目錄, 測試檔, 標籤)
@@ -34,6 +35,9 @@ SUITE = [
 
 def main():
     for cwd, rel, label in SUITE:
+        if cwd is None:
+            skip(label, '找不到稽核系統開發副本（設 MALA_AUDIT_DIR，或放在 ~/mala-audit、~/dev/mala-audit）')
+            continue
         path = os.path.join(cwd, rel)
         if not os.path.exists(path):
             check(False, '%s：檔案不存在 %s' % (label, path))

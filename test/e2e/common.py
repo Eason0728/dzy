@@ -31,10 +31,38 @@ FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fixtures')
 SHOTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'shots')
 
 failures = []
+skipped = []
+_passed = [0]
+
+
+def skip(label, reason):
+    """這台跑不了的項目：明確標 SKIP 並寫原因（不算通過、也不算失敗；finish 結尾會列出略過了幾項）"""
+    skipped.append((label, reason))
+    print('SKIP: %s —— %s' % (label, reason))
+
+
+def no_ui(url):
+    """拿掉新外觀的 &ui=new（管理系統 data-ui=new 時，嵌入子系統的網址會多帶；2026-11-16 起，如 modules/storeops/embed.js）後再比，其餘網址一字不差"""
+    return url[:-len('&ui=new')] if url.endswith('&ui=new') else url
+
+
+def dev_copy(env_name, *candidates):
+    """找外部專案的本機副本：先看環境變數 env_name，再依序試 candidates（~ 會展開）；都沒有回 None。
+    MacBook 路徑 ~/mala-xxx → mini 開發副本 ~/dev/mala-xxx（docs/path-map.md）。"""
+    paths = []
+    if os.environ.get(env_name):
+        paths.append(os.environ[env_name])
+    paths += list(candidates)
+    for c in paths:
+        p = os.path.expanduser(c)
+        if os.path.isdir(p):
+            return p
+    return None
 
 
 def check(cond, label):
     if cond:
+        _passed[0] += 1
         print('PASS: ' + label)
     else:
         failures.append(label)
@@ -47,7 +75,13 @@ def finish():
         for f in failures:
             print('  - ' + f)
         sys.exit(1)
-    print('\n全部通過')
+    if skipped:
+        print('\n略過 %d 項（本機沒有對應資料夾，沒驗、不算通過）：' % len(skipped))
+        for l, r in skipped:
+            print('  - %s：%s' % (l, r))
+        print('其餘 %d 項通過' % _passed[0] if _passed[0] else '沒有任何一項實際驗到（全部略過）')
+    else:
+        print('\n全部通過')
     sys.exit(0)
 
 
@@ -64,7 +98,55 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         pass
 
 
+def registry_modules():
+    """從 platform/registry.js 與各模組 manifest.js 讀出 [(id, name), …]（registry 順序）。
+    首頁卡片數／順序／標題的斷言用這個算，不寫死模組數（加新模組不用回頭改測試）。"""
+    reg = open(os.path.join(ROOT, 'platform', 'registry.js'), encoding='utf-8').read()
+    out = []
+    for line in reg.splitlines():
+        m = re.match(r"\s*\{\s*load:\s*\(\)\s*=>\s*import\('\.\./(modules/[^']+/manifest\.js)'\)", line)
+        if not m:
+            continue
+        src = open(os.path.join(ROOT, 'platform', '..', m.group(1)), encoding='utf-8').read()
+        mid = re.search(r"^\s*id:\s*'([^']+)'", src, re.M).group(1)
+        name = re.search(r"^\s*name:\s*'([^']+)'", src, re.M).group(1)
+        out.append((mid, name))
+    return out
+
+
+_picked_ports = set()
+
+
+def pick_port(preferred):
+    """測試埠選擇：preferred + 環境變數 E2E_PORT_OFFSET（整體偏移，預設 0）；
+    那個埠已被別的程序佔用（例如 mini 上的正式服務 8794／8796／8798／8802／8803…）就自動換一個空埠。
+    只用「能不能 bind」判斷，絕不碰佔用者。"""
+    import socket
+    want = preferred + int(os.environ.get('E2E_PORT_OFFSET') or 0)
+    if want not in _picked_ports:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)   # 同 http.server（剛關掉、還在 TIME_WAIT 的埠算可用；有人在聽的仍會失敗）
+        try:
+            s.bind(('127.0.0.1', want))
+            _picked_ports.add(want)
+            return want
+        except OSError:
+            pass
+        finally:
+            s.close()
+    while True:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(('127.0.0.1', 0))
+        got = s.getsockname()[1]
+        s.close()
+        if got not in _picked_ports:
+            _picked_ports.add(got)
+            print('（測試埠 %d 不可用，改用空埠 %d）' % (want, got))
+            return got
+
+
 def start_server(port):
+    port = pick_port(port)
     os.chdir(ROOT)
     ThreadingHTTPServer.request_queue_size = 128      # 預設 5：瀏覽器一次要上百個模組檔，佇列滿了會 ERR_CONNECTION_RESET（登入頁／模組偶爾載不出來，mini 上既有的不穩）
     httpd = ThreadingHTTPServer(('127.0.0.1', port), NoCacheHandler)

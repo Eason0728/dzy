@@ -21,7 +21,7 @@ import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import check, finish, load_backend_urls, start_server, failures  # noqa: E402
+from common import check, finish, load_backend_urls, start_server, failures, pick_port  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
@@ -30,7 +30,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 ART = os.path.join(ROOT, 'test', 'dd', 'artifacts', 'hr')
 os.makedirs(ART, exist_ok=True)
 PORT = int(os.environ.get('DD_WEB_PORT', '9142'))
-BACKEND_PORT = int(os.environ.get('DD_BE_PORT', '9143'))
+BACKEND_PORT = pick_port(int(os.environ.get('DD_BE_PORT', '9143')))
 SEED = int(os.environ['E2E_SEED']) if os.environ.get('E2E_SEED', '').isdigit() else (int(time.time() * 1000) ^ os.getpid()) & 0xFFFFFFFF
 PW = 'fake-staff-pw-1'
 QUARTER = '2026-Q4'
