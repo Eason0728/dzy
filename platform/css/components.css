@@ -1669,6 +1669,15 @@ textarea.input:disabled {
 .m-card-d { font-size: var(--fs-sm); color: var(--ink); overflow-wrap: anywhere; }
 .m-card-a { display: flex; gap: 8px; margin-top: 8px; }
 .m-card-a .btn { flex: 1; min-height: 42px; }
+/* 同一次送出的兩段併成一張卡（2026-11-18）：兩段各一列、各自核准／退回，底下一顆「兩筆一起核准」 */
+.g-seg { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; border-top: 1px dashed var(--line); padding: 8px 0 2px; font-size: var(--fs-sm); }
+.g-seg .a { display: flex; gap: 6px; }
+.g-seg .btn { min-height: 36px; padding: 0 14px; font-size: var(--fs-sm); }
+.g-tag { font-size: var(--fs-xs); font-weight: var(--fw-bold); color: var(--warn); background: var(--warn-light); border-radius: 6px; padding: 0 6px; }
+.g-note { font-weight: var(--fw-bold); }
+.g-note.ok { color: var(--ok); }
+.g-note.bad { color: var(--danger); }
+.g-note.idle { color: var(--muted); font-weight: normal; }
 
 /* 首頁「常用」編輯（2026-11-06） */
 .m-h-row { display: flex; align-items: center; justify-content: space-between; }

@@ -49,7 +49,55 @@ export function quickItem(it) {
     text: `${it.name || ''} ${what(it)}`.trim(),
     sub: [when(it), it.storeName].filter(Boolean).join('・'),
     detail: [it.reason ? `原因：${it.reason}` : '', it.hasAttach ? '有附證明（到考勤管理看）' : ''].filter(Boolean).join('　'),
-    view: 'request'
+    view: 'request',
+    // 一次填兩段（2026-11-18）：同一次送出的兩張單，營運系統帶同一個 group（舊資料／單張＝空）。
+    // 殼只看 group（店|組別|姓名|日期，四個都一樣才併成一張卡）；其餘 g* 欄位給 groupCard 組標題與兩段各一列用
+    group: groupKeyOf(it),
+    gSeg: Number.isInteger(it.seg) && it.seg >= 1 ? it.seg : 0,
+    gWho: it.name || '', gLabel: it.label || '申請', gDate: it.date || '', gStoreName: it.storeName || '',
+    gFrom: it.from || '', gTo: it.to || '', gHours: typeof it.hours === 'number' && isFinite(it.hours) ? it.hours : null,
+    gReason: it.reason || '', gAttach: !!it.hasAttach
+  };
+}
+
+function groupKeyOf(it) {
+  const g = typeof it.group === 'string' ? it.group.trim() : '';
+  return g ? [it.store || '', g, it.name || '', it.date || ''].join('|') : '';
+}
+
+const WORD = ['零', '一', '兩', '三', '四', '五', '六', '七', '八', '九'];
+const hm = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+function segOrder(a, b) {
+  if (a.gSeg && b.gSeg && a.gSeg !== b.gSeg) return a.gSeg - b.gSeg;
+  const ta = hm(a.gFrom), tb = hm(b.gFrom);
+  if (ta !== null && tb !== null && ta !== tb) return ta - tb;
+  return a.id < b.id ? -1 : (a.id === b.id ? 0 : 1);
+}
+const hoursText = (h) => `${Math.round(h * 100) / 100} 小時`;
+
+/**
+ * 同一次送出的幾張待核單（quickItem 的結果，已確認 group 相同）→ 一張組卡要顯示的內容。純函式，不碰網路。
+ * 回 { text, sub, detail, segs:[{ id, tag, text }] }；segs 依第幾段（沒有 seg 就依開始時間）排好。
+ * 標題「姓名 加班兩段 共 7 小時」；每張都有小時數才寫「共 N 小時」。
+ */
+export function groupCard(items) {
+  const its = items.slice().sort(segOrder);
+  const first = its[0];
+  const n = its.length;
+  let total = 0, all = true;
+  for (const x of its) { if (x.gHours === null) all = false; else total += x.gHours; }
+  const segWord = (n < 10 ? (n === 2 ? '兩' : WORD[n]) : String(n)) + '段';
+  const reasons = [];
+  for (const x of its) if (x.gReason && !reasons.includes(x.gReason)) reasons.push(x.gReason);
+  return {
+    text: `${first.gWho} ${first.gLabel}${segWord}${all ? ` 共 ${hoursText(total)}` : ''}`.trim(),
+    sub: [first.gDate, first.gStoreName].filter(Boolean).join('・'),
+    detail: [reasons.length ? `原因：${reasons.join('、')}` : '', its.some((x) => x.gAttach) ? '有附證明（到考勤管理看）' : ''].filter(Boolean).join('　'),
+    segs: its.map((x, i) => ({
+      id: x.id,
+      tag: `第 ${x.gSeg || i + 1} 段`,
+      text: [x.gFrom && x.gTo ? `${x.gFrom}–${x.gTo}` : '', x.gHours !== null ? hoursText(x.gHours) : ''].filter(Boolean).join('　')
+    }))
   };
 }
 
@@ -87,17 +135,36 @@ async function mine(ctx) {
   return d ? d.items.map(mineItem) : null;
 }
 
+// 核准或退回一張（decide 與 decideGroup 共用）
+async function decideOne(ctx, id, decision, reason) {
+  const k = splitId(id);
+  if (!k || (decision !== 'approve' && decision !== 'reject')) return { ok: false, error: '這張單的資料不完整，請到考勤管理處理' };
+  const r = await ctx.api.call('attendance', 'reqDecide', { store: k.store, id: k.id, decision, reason: reason || '' });
+  const inner = r && r.data && r.data.data;
+  // 那天已經核定過（Eason 2026-11-13 紅燈 a2 選 A）：照常核准，帶提醒給畫面（營運系統 reqDecide 回 warn／message）
+  if (r && r.ok && (!inner || inner.ok !== false)) return inner && inner.warn ? { ok: true, warn: String(inner.warn), message: String(inner.message || '那天已經核定過，請重新核定一次') } : { ok: true };
+  return { ok: false, error: errOf(r) };
+}
+
 export const mobileHooks = {
   mine,
   decided: (ctx) => list(ctx, 'reqDecided', decidedItem),
   quick: (ctx) => list(ctx, 'reqPending', quickItem),
-  async decide(ctx, id, decision, reason) {
-    const k = splitId(id);
-    if (!k || (decision !== 'approve' && decision !== 'reject')) return { ok: false, error: '這張單的資料不完整，請到考勤管理處理' };
-    const r = await ctx.api.call('attendance', 'reqDecide', { store: k.store, id: k.id, decision, reason: reason || '' });
-    const inner = r && r.data && r.data.data;
-    // 那天已經核定過（Eason 2026-11-13 紅燈 a2 選 A）：照常核准，帶提醒給畫面（營運系統 reqDecide 回 warn／message）
-    if (r && r.ok && (!inner || inner.ok !== false)) return inner && inner.warn ? { ok: true, warn: String(inner.warn), message: String(inner.message || '那天已經核定過，請重新核定一次') } : { ok: true };
-    return { ok: false, error: errOf(r) };
+  decide: (ctx, id, decision, reason) => decideOne(ctx, id, decision, reason),
+  groupCard,
+  /**
+   * 「兩筆一起核准」（2026-11-18）：依序把每張各送一次既有的核准動作（管理系統後端沒有批次動作，這裡不新增）。
+   * 任何一張失敗就停（後面的不送）。回 { results: [{ id, ok, error?, warn?, message? }] }，只含有送出的；沒出現的＝沒送。
+   * 兩張本來就各自獨立：第 1 張已核准、第 2 張失敗，第 1 張不會退回，畫面照實顯示、第 2 張留著可以再按。
+   */
+  async decideGroup(ctx, ids) {
+    const results = [];
+    for (const id of Array.isArray(ids) ? ids : []) {
+      let r;
+      try { r = await decideOne(ctx, id, 'approve', ''); } catch (e) { r = { ok: false, error: '送出失敗，請稍後再試' }; }
+      results.push(Object.assign({ id }, r));
+      if (!r.ok) break;
+    }
+    return { results };
   }
 };

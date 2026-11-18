@@ -66,6 +66,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
 
 def start_server(port):
     os.chdir(ROOT)
+    ThreadingHTTPServer.request_queue_size = 128      # 預設 5：瀏覽器一次要上百個模組檔，佇列滿了會 ERR_CONNECTION_RESET（登入頁／模組偶爾載不出來，mini 上既有的不穩）
     httpd = ThreadingHTTPServer(('127.0.0.1', port), NoCacheHandler)
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()
@@ -251,6 +252,9 @@ class MockBackend:
                 pl = body.get('payload') or {}
                 if pl.get('decision') == 'reject' and not str(pl.get('reason') or '').strip():
                     return 200, {'ok': True, 'data': {'ok': False, 'error': '退回要寫原因'}}
+                fail = getattr(self, 'att_decide_fail', {})      # 測試設 {單號: 錯誤訊息}：那張核准失敗（沒寫入）；清掉就恢復正常
+                if pl.get('id') in fail:
+                    return 200, {'ok': True, 'data': {'ok': False, 'error': fail[pl.get('id')]}}
                 self.att_decides = getattr(self, 'att_decides', []) + [pl]
                 req['reqPending'] = [x for x in req.get('reqPending', []) if not (x['store'] == pl.get('store') and x['id'] == pl.get('id'))]
                 return 200, {'ok': True, 'data': {'store': pl.get('store'), 'id': pl.get('id'), 'decision': pl.get('decision'), 'status': 'approved' if pl.get('decision') == 'approve' else 'rejected'}}

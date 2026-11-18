@@ -1371,7 +1371,9 @@ function cleanSegItem(m, it, open) {
     detail: typeof it.detail === 'string' ? it.detail : '',
     state,
     stateText: typeof it.stateText === 'string' && it.stateText ? it.stateText : (ITEM_STATES[state] || ''),
-    target: view && !open ? alertTarget(m, { view, params: it.params }) : null
+    target: view && !open ? alertTarget(m, { view, params: it.params }) : null,
+    group: typeof it.group === 'string' ? it.group : '',      // 一次填兩段：同一次送出的兩張待核單同一個 group（只有「可以直接核准」用）
+    src: it
   };
 }
 
@@ -1411,6 +1413,33 @@ async function fillSegList(box, fnName, emptyText) {
   if (failed) box.appendChild(el('div', { class: 'm-note', text: `${failed} 個功能暫時讀不到` }));
 }
 
+/**
+ * 把同一個模組的待核項目分組：同 group（模組給的鍵，空＝沒有）且有 2 張以上，而且模組提供 groupCard／decideGroup → 一組；其餘單張。
+ * 回 [{ items:[c], view:null } | { items:[c,c], view:{text,sub,detail,segs} }]，順序照原清單（組放在它第一張的位置）。
+ * 模組沒提供 groupCard／decideGroup 或 groupCard 出錯 → 一律單張（同以前）。
+ */
+function splitQuickGroups(cs, body) {
+  const can = typeof body.groupCard === 'function' && typeof body.decideGroup === 'function';
+  const byKey = new Map();
+  if (can) for (const c of cs) if (c.group) { if (!byKey.has(c.group)) byKey.set(c.group, []); byKey.get(c.group).push(c); }
+  const out = [], done = new Set();
+  for (const c of cs) {
+    const mem = can && c.group ? byKey.get(c.group) : null;
+    if (!mem || mem.length < 2) { out.push({ items: [c], view: null }); continue; }
+    if (done.has(c.group)) continue;
+    done.add(c.group);
+    let view = null;
+    try { view = body.groupCard(mem.map((x) => x.src)); } catch (e) { view = null; }
+    if (view && Array.isArray(view.segs) && view.segs.length === mem.length && typeof view.text === 'string') {
+      // segs 的順序是模組排好的（第幾段）；c 也照這個順序排，下面用 id 對
+      const order = new Map(view.segs.map((sg, i) => [sg.id, i]));
+      mem.sort((a, b) => order.get(a.id) - order.get(b.id));
+      out.push({ items: mem, view });
+    } else for (const x of mem) out.push({ items: [x], view: null });
+  }
+  return out;
+}
+
 /** 「可以直接核准」卡片：核准一按就送；退回要填原因 */
 async function fillQuick(box) {
   const tok = ++segToken;
@@ -1418,17 +1447,144 @@ async function fillQuick(box) {
   if (tok !== segToken || !box.parentNode) return;
   clearChildren(box);
   const cards = [];
+  let count = 0;
   for (const r of res) {
     if (!r.items || typeof r.body.decide !== 'function') continue;
+    const cs = [];
     for (const it of r.items) {
       const c = cleanSegItem(r.m, it);
       if (!c || !c.id) continue;
-      cards.push(quickCard(c, r.body, box));
+      cs.push(c);
+    }
+    for (const part of splitQuickGroups(cs, r.body)) {
+      count += part.items.length;
+      cards.push(part.view ? quickGroupCard(part.items, part.view, r.body, box) : quickCard(part.items[0], r.body, box));
     }
   }
   if (!cards.length) return;
-  box.appendChild(el('div', { class: 'm-grp g-today', text: `可以直接核准（${cards.length}）` }));
+  box.appendChild(el('div', { class: 'm-grp g-today', text: `可以直接核准（${count}）` }));
   for (const card of cards) box.appendChild(card);
+}
+
+/** 退回要先問原因：回原因字串；取消、沒寫都回 null（沒寫會提醒） */
+async function askRejectReason() {
+  const ta = el('textarea', { class: 'input', id: 'm-quick-reason', rows: '3', placeholder: '請寫退回原因（申請人會看到）' });
+  const v = await ui.dialog({ title: '退回原因', body: el('div', null, [ta]), actions: [{ label: '取消', value: null }, { label: '確定退回', value: 'go', variant: 'danger' }] });
+  if (v !== 'go') return null;
+  const reason = String(ta.value || '').trim();
+  if (!reason) { ui.toast('請寫退回原因', 'warn'); return null; }
+  return reason;
+}
+
+/** 組卡標頭的件數：目前畫面上還沒處理的單（單張卡片＋組卡裡的每一段）。只有組卡動到時才更新 */
+function syncQuickCount(box) {
+  const n = box.querySelectorAll('[data-role="quick-card"], [data-role="quick-seg"]').length;
+  const head = box.querySelector('.m-grp.g-today');
+  if (!head) return;
+  if (n > 0) head.textContent = `可以直接核准（${n}）`;
+  else head.parentNode.removeChild(head);
+}
+
+/**
+ * 同一次送出的兩段併成一張卡（2026-11-18）：兩段各一列、各自核准／退回（跟單張卡片的按鈕同一套），底下「兩筆一起核准」。
+ * 一起核准＝依序送兩次既有的核准動作（decideGroup）；任何一次失敗就停，照實顯示哪段成功、哪段沒成功，沒成功的那段留著可以再按。
+ * 各自處理掉一段後，只剩一段 → 變回一般卡片（跟以前單張的畫面一樣）。
+ */
+function quickGroupCard(items, view, body, box) {
+  const segView = new Map(view.segs.map((sg) => [sg.id, sg]));
+  const live = items.slice();                                // 還沒處理掉的段（照段序）
+  const rows = new Map();                                    // id → { row, ok, no }
+  const m = items[0].m;
+  const all = el('button', { type: 'button', class: 'btn btn-ok', 'data-role': 'quick-group-ok', text: `${items.length === 2 ? '兩筆' : items.length + ' 筆'}一起核准` });
+  const notes = el('div', { 'data-role': 'quick-group-notes' });
+  const segBox = el('div', { 'data-role': 'quick-segs' });
+  const actions = el('div', { class: 'm-card-a' }, [all]);
+  const card = el('div', { class: 'm-card', 'data-role': 'quick-group', 'data-module': m.id, 'data-group': items[0].group }, [
+    el('div', { class: 'm-card-h' }, [el('img', { class: 'm-ic', src: `assets/icons/${m.icon}.png`, alt: '' }), el('b', { text: view.text })]),
+    view.sub ? el('small', { text: view.sub }) : null,
+    view.detail ? el('div', { class: 'm-card-d', text: view.detail }) : null,
+    notes, segBox, actions
+  ]);
+  for (const c of items) {
+    const sg = segView.get(c.id);
+    const ok = el('button', { type: 'button', class: 'btn', text: '核准' });
+    const no = el('button', { type: 'button', class: 'btn', text: '退回' });
+    const row = el('div', { class: 'g-seg', 'data-role': 'quick-seg', 'data-id': c.id }, [
+      el('span', {}, [el('span', { class: 'g-tag', text: sg.tag }), el('span', { text: ' ' + sg.text })]),
+      el('span', { class: 'a' }, [ok, no])
+    ]);
+    rows.set(c.id, { row, ok, no });
+    segBox.appendChild(row);
+    ok.addEventListener('click', () => runOne(c, 'approve'));
+    no.addEventListener('click', () => runOne(c, 'reject'));
+  }
+  const busy = (b) => { all.disabled = b; for (const x of rows.values()) { x.ok.disabled = b; x.no.disabled = b; } };
+  const note = (kind, text) => notes.appendChild(el('div', { class: 'm-card-d g-note ' + kind, 'data-role': 'quick-group-note', text }));
+  const drop = (id) => { const x = rows.get(id); if (x && x.row.parentNode) x.row.parentNode.removeChild(x.row); const i = live.findIndex((c) => c.id === id); if (i >= 0) live.splice(i, 1); };
+  const warnDialog = (msgs) => {
+    const uniq = msgs.filter((t, i) => t && msgs.indexOf(t) === i);
+    if (uniq.length) ui.dialog({ title: '已核准，還要重新核定', body: el('p', { id: 'm-quick-warn', text: uniq.join('　') }), actions: [{ label: '知道了', value: 'ok' }] });      // 2026-11-13 a2：那天已核定過
+  };
+  const settle = () => {                                     // 處理完一輪後整理畫面
+    if (!live.length) { if (card.parentNode) card.parentNode.removeChild(card); }
+    else if (live.length === 1 && !notes.firstChild) card.replaceWith(quickCard(live[0], body, box));      // 另一段處理掉了、沒有留下結果訊息 → 變回一般卡片
+    else if (live.length < 2 && all.parentNode) actions.removeChild(all);
+    syncQuickCount(box);
+    refreshAlerts();
+  };
+
+  async function runOne(c, decision) {
+    let reason = '';
+    if (decision === 'reject') { reason = await askRejectReason(); if (reason === null) return; }
+    busy(true);
+    let r;
+    try { r = await body.decide(buildCtx(c.m, null, {}), c.id, decision, reason); } catch (e) { r = { ok: false, error: '送出失敗，請稍後再試' }; }
+    if (r && r.ok) {
+      if (r.warn) warnDialog([r.message]);
+      else ui.toast(decision === 'approve' ? '已核准' : '已退回', 'ok');
+      drop(c.id);
+      settle();
+    } else {
+      ui.toast((r && r.error) || '送出失敗，請稍後再試', 'warn');
+      busy(false);
+    }
+  }
+
+  all.addEventListener('click', async () => {
+    const ids = live.map((c) => c.id);
+    busy(true);
+    while (notes.firstChild) notes.removeChild(notes.firstChild);
+    let out;
+    try { out = await body.decideGroup(buildCtx(m, null, {}), ids); } catch (e) { out = null; }
+    const results = out && Array.isArray(out.results) ? out.results : [{ id: ids[0], ok: false, error: '送出失敗，請稍後再試' }];
+    const sent = new Map(results.map((r) => [r.id, r]));
+    const okIds = results.filter((r) => r && r.ok).map((r) => r.id);
+    const bad = results.find((r) => r && !r.ok);
+    if (!bad && okIds.length === ids.length) {
+      warnDialogOrToast(results);
+      for (const id of ids) drop(id);
+      settle();
+      return;
+    }
+    // 有失敗：成功的段照實寫「已核准」，失敗的寫原因，沒送出的寫「沒有送出」；沒成功的段留著可以再按
+    for (const id of ids) {
+      const sg = segView.get(id), r = sent.get(id);
+      if (r && r.ok) { note('ok', `✓ ${sg.tag} ${sg.text.split('　')[0]} 已核准`); drop(id); }
+      else if (r) note('bad', `✕ ${sg.tag}沒有成功：${r.error || '送出失敗，請稍後再試'}`);
+      else note('idle', `${sg.tag}沒有送出`);
+    }
+    warnDialog(results.filter((r) => r && r.ok && r.warn).map((r) => r.message));
+    busy(false);
+    if (live.length < 2 && all.parentNode) actions.removeChild(all);
+    syncQuickCount(box);
+    if (okIds.length) refreshAlerts();
+  });
+  function warnDialogOrToast(results) {
+    const w = results.filter((r) => r && r.ok && r.warn).map((r) => r.message);
+    if (w.length) warnDialog(w);
+    else ui.toast(`已核准${results.length === 2 ? '兩' : results.length}筆`, 'ok');
+  }
+  return card;
 }
 
 function quickCard(c, body, box) {
@@ -1442,13 +1598,7 @@ function quickCard(c, body, box) {
   ]);
   const run = async (decision) => {
     let reason = '';
-    if (decision === 'reject') {
-      const ta = el('textarea', { class: 'input', id: 'm-quick-reason', rows: '3', placeholder: '請寫退回原因（申請人會看到）' });
-      const v = await ui.dialog({ title: '退回原因', body: el('div', null, [ta]), actions: [{ label: '取消', value: null }, { label: '確定退回', value: 'go', variant: 'danger' }] });
-      if (v !== 'go') return;
-      reason = String(ta.value || '').trim();
-      if (!reason) { ui.toast('請寫退回原因', 'warn'); return; }
-    }
+    if (decision === 'reject') { reason = await askRejectReason(); if (reason === null) return; }
     ok.disabled = true; no.disabled = true;
     let r;
     try { r = await body.decide(buildCtx(c.m, null, {}), c.id, decision, reason); } catch (e) { r = { ok: false, error: '送出失敗，請稍後再試' }; }
