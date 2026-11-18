@@ -14,12 +14,13 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const HOME = os.homedir();
 const KIT = path.join(HOME, 'dzy-minikit');
-const PNL = path.join(HOME, 'mala-pnl-auto');
+// 損益系統開發副本：環境變數 PNL_AUTO_DIR > ~/mala-pnl-auto（MacBook）> ~/dev/mala-pnl-auto（mini，docs/path-map.md）
+const PNL = [process.env.PNL_AUTO_DIR, path.join(HOME, 'mala-pnl-auto'), path.join(HOME, 'dev', 'mala-pnl-auto')].filter(Boolean).find((d) => fs.existsSync(path.join(d, 'gas'))) || path.join(HOME, 'mala-pnl-auto');
 const KEY = 'test-dzy-key-0123456789abcdef';
 const port = Number(process.argv[2] || 18804);
 
 const real = JSON.parse(fs.readFileSync(path.join(KIT, 'apps/pnl/app.json'), 'utf8'));
-const gas = real.gasSource.map((p) => path.join(HOME, p.replace(/^~\//, '')));
+const gas = real.gasSource.map((p) => (/^~\/mala-pnl-auto\//.test(p) ? path.join(PNL, p.replace(/^~\/mala-pnl-auto\//, '')) : path.join(HOME, p.replace(/^~\//, ''))));
 gas.push(path.join(KIT, 'test/apps/pnl-fixtures/TestHelpers.js'));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pnl-e2e-app-'));
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'pnl-e2e-data-'));
