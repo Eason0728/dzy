@@ -1,6 +1,6 @@
 #!/bin/bash
 # e2e 十九支總跑（task.md T4-1）：一次跑一支、間隔 20 秒——port 進 TIME_WAIT 會衝突，
-# 不要圖快改成平行。任何一支失敗立刻停（set -e），Errno 48 是 port 沒釋放不是測試失敗。
+# 不要圖快改成平行（間隔秒數可用 E2E_GAP 改）。埠：被佔用就自動換空埠（common.py pick_port），也可用 E2E_PORT_OFFSET 整體偏移。任何一支失敗立刻停（set -e），Errno 48 是 port 沒釋放不是測試失敗。
 set -e
 cd "$(dirname "$0")"
 
@@ -40,7 +40,7 @@ for i in "${!TESTS[@]}"; do
   echo "════════ ${t} ════════"
   python3 "$t"
   if [ "$i" -lt "$((${#TESTS[@]} - 1))" ]; then
-    sleep 20
+    sleep "${E2E_GAP:-20}"
   fi
 done
 

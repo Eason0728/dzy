@@ -25,12 +25,12 @@ import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import ROOT, check, finish, load_backend_urls, start_server
+from common import ROOT, check, finish, load_backend_urls, start_server, pick_port
 
 from playwright.sync_api import sync_playwright
 
 PORT = int(os.environ.get('E2E_PORT', '9100'))
-BACKEND_PORT = int(os.environ.get('E2E_BACKEND_PORT', '9101'))
+BACKEND_PORT = pick_port(int(os.environ.get('E2E_BACKEND_PORT', '9101')))
 PW = 'fake-staff-pw-1'
 ADMIN = ('BOSS', 'fake-admin-pw-01')
 HERE = os.path.dirname(os.path.abspath(__file__))

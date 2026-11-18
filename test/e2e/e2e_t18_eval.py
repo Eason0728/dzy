@@ -17,12 +17,12 @@ import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import check, finish, load_backend_urls, start_server
+from common import check, finish, load_backend_urls, start_server, pick_port
 
 from playwright.sync_api import sync_playwright
 
 PORT = 8775
-BACKEND_PORT = 8771
+BACKEND_PORT = pick_port(8771)
 PW = 'fake-staff-pw-1'
 HERE = os.path.dirname(os.path.abspath(__file__))
 

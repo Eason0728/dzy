@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import SHOTS, USERS, MockBackend, check, finish, start_server
+from common import SHOTS, USERS, MockBackend, check, finish, no_ui, start_server
 
 from playwright.sync_api import sync_playwright
 
@@ -120,7 +120,7 @@ def main():
                         pass
                 pl.wait_for_timeout(100)
             check(fr is not None, '門市營運：iframe 載入營運系統網址（?embed=dzy）：%s' % [f.url for f in pl.frames])
-            check(fr is not None and fr.url == STORE + '/dzy-store/?embed=dzy', 'iframe 網址正確：%s' % (fr.url if fr else None))
+            check(fr is not None and no_ui(fr.url) == STORE + '/dzy-store/?embed=dzy', 'iframe 網址正確：%s' % (fr.url if fr else None))
             got = fr.evaluate("() => window.__got") if fr else []
             check(len(got) == 1 and got[0]['data'] == {'type': 'dzy-store-sso', 'v': 1, 'ticket': TICKET},
                   '收到 {dzy-store-sso, v:1, ticket}：%s' % got)
@@ -269,7 +269,7 @@ def main():
                     except Exception:
                         pass
                 at.wait_for_timeout(100)
-            check(fa is not None and fa.url == STORE + '/dzy-store/?embed=dzy&only=duty', '考勤管理 iframe 網址帶 &only=duty：%s' % (fa.url if fa else None))
+            check(fa is not None and no_ui(fa.url) == STORE + '/dzy-store/?embed=dzy&only=duty', '考勤管理 iframe 網址帶 &only=duty：%s' % (fa.url if fa else None))
             ga = fa.evaluate("() => window.__got") if fa else []
             check(len(ga) == 1 and ga[0]['data']['type'] == 'dzy-store-sso' and ga[0]['data']['ticket'] == TICKET and len(mock.sso_calls) == before + 1, '考勤管理握手拿到券：%s' % ga)
             # ⑤b 考勤管理頁頂分頁（2026-10-20）：出勤核定子分頁（核定工時／申請審核帶數字）畫在頁頂、點了送 go、重新整理停在原分頁
@@ -329,7 +329,7 @@ def main():
                     except Exception:
                         pass
                 at.wait_for_timeout(100)
-            check(fs is not None and fs.url == STORE + '/dzy-store/?embed=dzy&only=schedule', '排班管理 iframe 網址帶 &only=schedule：%s' % (fs.url if fs else None))
+            check(fs is not None and no_ui(fs.url) == STORE + '/dzy-store/?embed=dzy&only=schedule', '排班管理 iframe 網址帶 &only=schedule：%s' % (fs.url if fs else None))
             SNAV = "(cur) => parent.postMessage({ type: 'dzy-store-nav', v: 1, cur: cur, items: [{ id: 'board', label: '班表', badge: 0 }, { id: 'needs', label: '指定與需求', badge: 0 }, { id: 'staff', label: '同仁', badge: 0 }, { id: 'shifts', label: '班別與設定', badge: 0 }] }, '*')"
             fs.evaluate(SNAV, 'board')
             at.wait_for_function("() => document.querySelectorAll('[data-role=\"view-nav\"] .nav-item').length === 4")

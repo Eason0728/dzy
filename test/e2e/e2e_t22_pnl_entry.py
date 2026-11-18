@@ -22,12 +22,12 @@ import tempfile
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import USERS, MockBackend, check, finish, start_server
+from common import USERS, MockBackend, check, finish, start_server, pick_port
 
 from playwright.sync_api import sync_playwright
 
 PORT = 8832
-BPORT = 18922
+BPORT = pick_port(18922)
 KEY = 'test-dzy-key-0123456789abcdef'
 KEEP = '[data-keep="pnl"]'
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')

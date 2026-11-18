@@ -20,7 +20,9 @@ from playwright.sync_api import sync_playwright
 
 PORT = 8802
 
-LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin']   # 2026-10-19 加薪酬管理；2026-10-27 收支管理改回不鎖（＝後端 PERM_LOCKED）
+LOCKED = ['platform.users', 'platform.permmap', 'audit.write', 'platform.staff', 'payroll.write', 'pnl.admin', 'platform.aihelp']   # 2026-10-19 加薪酬管理；2026-10-27 收支管理改回不鎖；2026-11-02 加 AI 小幫手（＝後端 Perms.gs PERM_LOCKED）
+MOCK_GRANTABLE = ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'att.void', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void', 'platform.remit', 'platform.aihelp']   # ＝後端 Perms.gs PERM_GRANTABLE（2026-11-13 加 att.void、2026-11-18 加 remit；aihelp 固定最後）
+HR_EX = ('store.void', 'att.extra', 'att.void', 'platform.bulletin')   # ＝後端 StoreOps.gs STORE_HR_GRANTABLE
 # 預設規則（Perms.gs PERM_DEFAULT_RULES，20 條）
 DEFAULT_RULES = (
     [('store', '', 'sm', 'audit.read.own')]
@@ -121,7 +123,7 @@ class Mock11(MockBackend):
             # 2026-10-18：人資主管（有 platform.permmap）也能用個別例外，但只限 store.void／att.extra／platform.bulletin（2026-10-26 加公告管理；PermActions.gs permAcExAuth_）
             if not (is_admin or has_map):
                 return no_perm
-            if not is_admin and action == 'permExSave' and p.get('perm') not in ('store.void', 'att.extra', 'platform.bulletin'):
+            if not is_admin and action == 'permExSave' and p.get('perm') not in HR_EX:
                 return no_perm
         elif action in ('permStoreSave', 'permAuditList', 'permAuditSeen') and not is_admin:
             return no_perm
@@ -130,7 +132,7 @@ class Mock11(MockBackend):
                 return {'ok': True, 'data': {'inited': False}}
             return {'ok': True, 'data': {
                 'inited': True, 'rules': list(self.rules),
-                'grantable': ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void', 'platform.remit'],
+                'grantable': list(MOCK_GRANTABLE),
                 'locked': LOCKED, 'names': {},
                 'counts': self.counts(),
                 'ladders': [{'code': 'store', 'name': '門市'}, {'code': 'office', 'name': '品牌辦公室'}, {'code': 'hq', 'name': '總部'}],
@@ -175,7 +177,7 @@ class Mock11(MockBackend):
                                'detail': {'rules_added': added, 'rules_removed': list(rem), 'affected': 3, 'people': [{'emp_no': 'DZY002', 'name': '李大華', 'added': ['dorm.write'], 'removed': []}]}})
             return {'ok': True, 'data': {'added': added, 'removed': list(rem), 'affected': 3}}
         if action == 'permExList':
-            data = {'inited': True, 'items': [dict(x) for x in self.exs if is_admin or x['perm'] in ('store.void', 'att.extra', 'platform.bulletin')]}
+            data = {'inited': True, 'items': [dict(x) for x in self.exs if is_admin or x['perm'] in HR_EX]}
             if is_admin:   # 2026-10-26 指定門市只看考勤：只有 admin 拿到可選門市（PermActions.gs permAcAttViewUnits_）
                 data['att_view_units'] = [{'code': 'mala-gf', 'name': '麻的小辛辣 新竹光復'}, {'code': 'mzt-gf', 'name': '墨竹亭 新竹光復'}, {'code': 'ck', 'name': '中央工廠（央廚）'}]
             return {'ok': True, 'data': data}
@@ -306,14 +308,14 @@ def main():
             check('3 人' in role('店長').inner_text(), '身分顯示人數（店長 3 人）：%s' % role('店長').inner_text().replace('\n', ' '))
             role('店長').click()
             perms_order = [r.get_attribute('data-perm') for r in ad.locator('[data-role="feature-row"]').all()]
-            check(perms_order == ['audit.read.own', 'audit.read.brand', 'audit.read', 'audit.write', 'dorm.read', 'dorm.write', 'platform.staff', 'platform.users', 'platform.permmap', 'store.void', 'att.extra', 'payroll.write', 'cashbook.write', 'platform.bulletin', 'platform.purchase', 'pnl.read', 'pnl.write', 'pnl.admin', 'transfer.write', 'platform.eval-manage', 'platform.eval-brand', 'platform.eval-all', 'platform.eval-admin', 'platform.insp-do', 'platform.insp-own', 'platform.insp-brand', 'platform.insp-all', 'platform.insp-bank', 'platform.insp-void', 'platform.remit'],
-                  '★右側 29 個功能列（＝後端 grantable；2026-10-30 作廢巡檢 insp-void）、順序正確：%s' % perms_order)
+            check(perms_order == MOCK_GRANTABLE,
+                  '★右側功能列（＝後端 grantable，共 %d 列；2026-10-30 作廢巡檢 insp-void、2026-11-13 att.void）、順序正確：%s' % (len(MOCK_GRANTABLE), perms_order))
             sw = lambda pg, perm: pg.locator('[data-role="feature-row"][data-perm="%s"] [data-act="toggle"]' % perm)
             on = lambda pg, perm: sw(pg, perm).get_attribute('aria-checked') == 'true'
             check(on(ad, 'audit.read.own') and not on(ad, 'dorm.read') and not on(ad, 'audit.read'), '店長：看自己店稽核＝開，其餘關')
             check('看自己那家店的盤點與稽核結果' in ad.inner_text('[data-perm="audit.read.own"]'), '每個功能有一句白話說明')
-            check(ad.locator('[data-role="feature-row"][data-locked="1"]').count() == 6 and ad.locator('[data-role="feature-row"][data-locked="1"] [data-act="toggle"]:not([disabled])').count() == 6,
-                  '鎖碼六列標記（含薪酬管理、損益定稿；收支管理 2026-10-27 改回不鎖）；admin 的開關不灰掉')
+            check(ad.locator('[data-role="feature-row"][data-locked="1"]').count() == len(LOCKED) and ad.locator('[data-role="feature-row"][data-locked="1"] [data-act="toggle"]:not([disabled])').count() == len(LOCKED),
+                  '鎖碼 %d 列標記（含薪酬管理、損益定稿、AI 小幫手；收支管理 2026-10-27 改回不鎖）；admin 的開關不灰掉' % len(LOCKED))
             check(ad.inner_text('[data-role="bar-msg"]').strip() == '沒有未儲存的變更' and ad.locator('[data-act="save"][disabled]').count() == 1, '沒有變更：儲存鈕 disabled')
             # 「也從…拿到」：人資主管同時命中「人資部・全部職稱」
             role('人資部・總監').click()
@@ -520,10 +522,10 @@ def main():
             check(tabs(hr) == ['對照表', '個別例外'], '★人資主管有「對照表」「個別例外」兩個分頁（沒有店別對照、權限異動），實際：%s' % tabs(hr))
             hr.locator('.pm-role', has=hr.locator('span', has_text='店長')).first.click()
             lk = hr.locator('[data-role="feature-row"][data-locked="1"]')
-            check(lk.count() == 6, '鎖住的六列仍顯示（含薪酬管理、損益定稿）')
-            check(lk.locator('[data-act="toggle"][disabled]').count() == 6, '★鎖碼六列對非 admin：開關 disabled（含薪酬管理、損益定稿）')
-            check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == 6, '鎖列標示「只有系統管理員能改」')
-            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == 23, '其餘 23 列可開關（含收支作廢、額外考勤核定、公告管理、貨單核對、調撥管理、收支管理（2026-10-27 改回不鎖）、績效評核四碼、營運巡檢六碼、看損益、填損益）')
+            check(lk.count() == len(LOCKED), '鎖住的 %d 列仍顯示（含薪酬管理、損益定稿）' % len(LOCKED))
+            check(lk.locator('[data-act="toggle"][disabled]').count() == len(LOCKED), '★鎖碼 %d 列對非 admin：開關 disabled（含薪酬管理、損益定稿）' % len(LOCKED))
+            check(all('只有系統管理員能改' in t for t in lk.locator('[data-role="lock-note"]').all_inner_texts()) and lk.locator('[data-role="lock-note"]').count() == len(LOCKED), '鎖列標示「只有系統管理員能改」')
+            check(hr.locator('[data-role="feature-row"]:not([data-locked]) [data-act="toggle"]:not([disabled])').count() == len(MOCK_GRANTABLE) - len(LOCKED), '其餘 %d 列可開關（含收支作廢、額外考勤核定、人資考勤代理、公告管理、貨單核對、調撥管理、收支管理（2026-10-27 改回不鎖）、績效評核四碼、營運巡檢六碼、看損益、填損益、匯款清單）' % (len(MOCK_GRANTABLE) - len(LOCKED)))
             # 2026-10-27 Eason：權限設定移到資訊部門；收支管理人資也能開
             check(hr.locator('[data-dept="it"] [data-nav="perms"]').count() == 1 and hr.locator('[data-dept="hr"] [data-nav="perms"]').count() == 0, '★權限設定在左側「資訊部門」底下（不在人資部門）')
             cbt = hr.locator('[data-perm="cashbook.write"]:not([data-locked]) [data-act="toggle"]:not([disabled])')
@@ -562,7 +564,7 @@ def main():
             hr.evaluate("() => { window.location.hash = '#/perms/ex'; }")
             hr.wait_for_selector('[data-role="ex-perm"]')
             opts = hr.locator('[data-role="ex-perm"] option').all_inner_texts()
-            check(opts == ['收支作廢', '額外考勤核定', '公告管理'], '★人資主管個別例外只能選三碼（含公告管理）：%s' % opts)
+            check(opts == ['收支作廢', '額外考勤核定', '人資考勤代理', '公告管理'], '★人資主管個別例外只能選四碼（含人資考勤代理 att.void、公告管理＝後端 STORE_HR_GRANTABLE）：%s' % opts)
             check(hr.locator('[data-role="ex-unit-field"]').count() == 0, '★人資主管沒有「指定門市只看考勤」（也沒有門市下拉）')
             check(hr.locator('[data-role="ex-item"]').count() == 0 and hr.locator('[data-role="ex-empty"]').count() == 1, '人資主管看不到別的碼的例外（照後端回傳顯示）')
             hr.evaluate("() => { window.location.hash = '#/perms/stores'; }")

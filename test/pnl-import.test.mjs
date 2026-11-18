@@ -16,7 +16,16 @@ let n = 0;
 const t = (name, fn) => { fn(); n++; console.log('PASS ' + name); };
 
 // ---- 載入舊檔（vm）----
-const html = fs.readFileSync(path.join(os.homedir(), 'mala-pnl-auto/gas/importLogic.html'), 'utf8');
+// 舊檔位置：環境變數 PNL_AUTO_DIR > ~/mala-pnl-auto（MacBook）> ~/dev/mala-pnl-auto（mini 開發副本，docs/path-map.md）；
+// 都找不到＝這台沒有舊檔可比對：明確印 SKIP 與原因後離開（exit 0，但不印「項通過」，不假裝驗過）
+const OLD_CANDIDATES = [process.env.PNL_AUTO_DIR, path.join(os.homedir(), 'mala-pnl-auto'), path.join(os.homedir(), 'dev', 'mala-pnl-auto')]
+  .filter(Boolean).map((d) => path.join(d, 'gas', 'importLogic.html'));
+const OLD_FILE = OLD_CANDIDATES.find((p) => fs.existsSync(p));
+if (!OLD_FILE) {
+  console.log('SKIP pnl-import：找不到舊檔 gas/importLogic.html（試過：' + OLD_CANDIDATES.join('、') + '）；設 PNL_AUTO_DIR 指到損益系統開發副本才會跑。這支沒有驗到任何東西。');
+  process.exit(0);
+}
+const html = fs.readFileSync(OLD_FILE, 'utf8');
 const code = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
 const sandbox = {};
 vm.createContext(sandbox);

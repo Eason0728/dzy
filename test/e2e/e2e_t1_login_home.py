@@ -9,7 +9,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import MockBackend, SHOTS, check, finish, login, start_server
+from common import MockBackend, SHOTS, check, finish, login, registry_modules, start_server
 
 from playwright.sync_api import sync_playwright
 
@@ -31,22 +31,22 @@ def main():
 
             page.wait_for_selector('[data-role="module-card"]')
             cards = page.locator('[data-role="module-card"]')
-            check(cards.count() == 20, 'admin 首頁有二十組模組（11-02 加小幫手管理；10-27 加營運巡檢；2026-10-11 加同仁名單、我的資料；10-16 加公告專區；10-17 加權限設定；10-18 加表單簽核；10-19 加薪酬管理；10-24 加收支管理、排班管理、貨單核對、損益試算；10-26 加績效評核）')
+            reg = registry_modules()      # [(id, name)]：從 registry.js＋各 manifest 算，加新模組不用回頭改這支
+            N = len(reg)
+            check(N >= 20 and cards.count() == N, 'admin 首頁模組卡片數＝registry 模組數（%d 組；admin 全權限，每組都該出現）' % N)
 
             ids = [cards.nth(i).get_attribute('data-module') for i in range(cards.count())]
-            check(ids == ['users', 'perms', 'audit-stock', 'audit-ops', 'dorm', 'staff', 'me', 'bulletin', 'approvals', 'storeops', 'inspection', 'attendance', 'schedule', 'payroll', 'eval', 'purchase', 'ai-help', 'cashbook', 'transfer-fin', 'pnl'],
-                  '卡片順序＝registry 順序，實際：%s' % ids)
+            check(ids == [m[0] for m in reg], '卡片順序＝registry 順序，實際：%s' % ids)
 
             titles = page.locator('[data-role="module-card"] .card-title').all_inner_texts()
-            check(titles == ['人員管理', '權限設定', '盤點抽查', '營運稽核', '宿舍合約', '同仁名單', '我的資料', '公告專區', '表單簽核', '門市營運', '營運巡檢', '考勤管理', '排班管理', '薪酬計算', '績效評核', '貨單核對', '小幫手管理', '收支管理', '調撥管理', '損益試算'],
-                  '卡片標題顯示 manifest.name，實際：%s' % titles)
+            check(titles == [m[1] for m in reg], '卡片標題顯示 manifest.name，實際：%s' % titles)
 
             # 圖示真的載入（不是 404 的裂圖）
             icons_ok = page.evaluate(
                 """() => [...document.querySelectorAll('.module-icon')]
                        .map(img => img.complete && img.naturalWidth > 0)"""
             )
-            check(len(icons_ok) == 20 and all(icons_ok), '二十顆模組圖示全部載入成功（naturalWidth > 0）：%s' % icons_ok)
+            check(len(icons_ok) == N and all(icons_ok), '%d 顆模組圖示全部載入成功（naturalWidth > 0）：%s' % (N, icons_ok))
 
             # 待辦數字：fixture 只到 2026-07，本月（依系統日期）五店皆未稽核 → 盤點 badge = 5
             page.wait_for_function(

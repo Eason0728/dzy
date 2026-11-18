@@ -38,7 +38,7 @@ import zipfile
 from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import USERS, MockBackend, check, finish, start_server
+from common import USERS, MockBackend, check, dev_copy, finish, no_ui, skip, start_server
 
 from playwright.sync_api import sync_playwright
 
@@ -47,7 +47,8 @@ SITE = 'https://dzy.mozhuting.com'                       # 管理系統正式網
 CHILD = 'https://eason0728.github.io/mala-transfer/'     # 調撥會計頁正式網址（同上）
 KEEP = '[data-keep="transfer-fin"]'
 UPSTREAM_PIN = 'E2E-ACCT-PIN-0000'                       # 上游假環境自己的會計密碼，只在 mock「mini」那一側
-TRANSFER_WT = os.path.expanduser(os.environ.get('TRANSFER_WT', '~/mala-transfer-wt-fin'))
+# 調撥系統本機複本：環境變數 TRANSFER_WT > ~/mala-transfer-wt-fin（MacBook 的 worktree）> ~/dev/mala-transfer（mini 開發副本，docs/path-map.md）；都沒有（或缺 mock／report.html）就明確略過
+TRANSFER_WT = dev_copy('TRANSFER_WT', '~/mala-transfer-wt-fin', '~/dev/mala-transfer')
 
 READ_ACTIONS = ('bootstrap', 'adminData', 'adminOverview', 'getDoc')
 WRITE_ACTIONS = ('buildMonthlyReport', 'adminUpdate')
@@ -97,8 +98,6 @@ class Upstream:
     def __init__(self):
         mock_dir = os.path.join(TRANSFER_WT, 'mock')
         src_dir = os.path.join(TRANSFER_WT, 'src')
-        if not os.path.exists(os.path.join(mock_dir, 'gas-mock.js')) or not os.path.exists(os.path.join(src_dir, 'report.html')):
-            raise SystemExit('找不到調撥系統本機複本（要有 mock/gas-mock.js 與 src/report.html）：%s；可用 env TRANSFER_WT 指定' % TRANSFER_WT)
         self.src = src_dir
         self.tmp = tempfile.mkdtemp(prefix='transfer-e2e-')
         shutil.copytree(mock_dir, os.path.join(self.tmp, 'mock'), ignore=shutil.ignore_patterns('db.json'))
@@ -180,7 +179,14 @@ class MockT16(MockBackend):
         return 200, json.loads(json.dumps(resp).replace(UPSTREAM_PIN, '[REDACTED]'))
 
 
+def transfer_copy_ok():
+    return bool(TRANSFER_WT) and os.path.exists(os.path.join(TRANSFER_WT, 'mock', 'gas-mock.js')) and os.path.exists(os.path.join(TRANSFER_WT, 'src', 'report.html'))
+
+
 def main():
+    if not transfer_copy_ok():
+        skip('調撥會計頁 e2e', '找不到調撥系統本機複本（要有 mock/gas-mock.js 與 src/report.html；設 TRANSFER_WT，或放 ~/mala-transfer-wt-fin、~/dev/mala-transfer）：%s' % TRANSFER_WT)
+        finish()
     httpd, base = start_server(PORT)
     up = Upstream()
     mock = MockT16(base, up)
@@ -262,7 +268,7 @@ def main():
             fin.wait_for_selector(KEEP + ' iframe[data-role="transfer-frame"]', timeout=10000)
             fr = child_frame(fin)
             check(fr is not None, 'iframe 載入調撥會計頁（%s…?embed=dzy）' % (CHILD + 'report.html'))
-            check(fr.url == CHILD + 'report.html?embed=dzy', 'iframe 網址正確：%s' % fr.url)
+            check(no_ui(fr.url) == CHILD + 'report.html?embed=dzy', 'iframe 網址正確：%s' % fr.url)
             check(tab_names(fin)[:3] == ['月報', '品項記憶', '卡關總覽'], '頁頂三個分頁：月報｜品項記憶｜卡關總覽，實際：%s' % tab_names(fin))
             fr.wait_for_selector('#rptCard:not(.hide)', timeout=15000)
             check(not fr.locator('#gate').is_visible(), '嵌入模式：沒有會計密碼閘')

@@ -159,7 +159,7 @@ def main():
             # 送單：請款含照片
             goto_tab(ad, '送單')
             ad.wait_for_selector('[data-type]')
-            ad.click('[data-type="expense"]')
+            ad.click('[data-type="advance"]')   # 2026-11-18 送單改成個人代墊／單位請款／人事異動（舊「費用請款」只剩退回再送）
             ad.fill('#f-amount', '8600')
             ad.fill('#f-desc', '測試維修')
             ad.click('[data-act="send"]')
@@ -167,14 +167,14 @@ def main():
             ad.set_input_files('[data-role="photo-file"]', {'name': 'r.jpg', 'mimeType': 'image/jpeg', 'buffer': TINY_JPEG})
             ad.wait_for_selector('[data-role="photo-picker"] img[alt="照片 1"]', timeout=8000)
             check(ad.inner_text('[data-role="photo-count"]').strip() == '1/5 張', '照片 1/5 張')
-            shot(ad, 'submit-expense-1280')
+            shot(ad, 'submit-advance-1280')
             ad.click('[data-act="send"]')
             ad.wait_for_selector('.dialog-actions')
             check('測試總監' in ad.inner_text('.dialog-body') and '8,600' in ad.inner_text('.dialog-body'), '送出前顯示金額與簽核路線')
             dlg(ad, '確定送出')
             ad.wait_for_selector('[data-role="apv-card"]', timeout=8000)   # 送完導到「我的單」
             sub = calls(mock, 'apvSubmit')[-1][1]
-            check(re.match(r'^[0-9a-f-]{36}$', sub['client_id']) and sub['type'] == 'expense' and sub['body']['amount'] == 8600 and isinstance(sub['body']['amount'], int)
+            check(re.match(r'^[0-9a-f-]{36}$', sub['client_id']) and sub['type'] == 'advance' and sub['body']['amount'] == 8600 and isinstance(sub['body']['amount'], int)
                   and len(sub['files']) == 1 and sub['files'][0].startswith('F') and 'sender' not in sub and 'unit' not in sub, '★送出 payload：client_id UUID、金額整數、檔號 1 個、不帶 sender：%s' % json.dumps(sub, ensure_ascii=False))
             check('receipt' in mock.apv_state['svc_calls'], '照片走 svc 上傳（kind=receipt）')
 
@@ -203,25 +203,26 @@ def main():
             ls = ad.evaluate("Object.keys(localStorage).filter(k => k.indexOf('apv_draft') !== -1)")
             check(not any(k.endswith('personnel') for k in ls), '★人事單沒有存草稿：%s' % ls)
 
-            # 2026-11-02 請購停用：送單只剩「費用請款」與「人事異動」，預設停在費用請款
+            # 2026-11-02 請購停用；2026-11-18 費用請款拆成個人代墊、單位請款：送單只剩三種，預設停在個人代墊
             ad.evaluate("location.hash = '#/approvals/submit'")
-            ad.wait_for_selector('[data-type="expense"]')
+            ad.wait_for_selector('[data-type="advance"]')
             types = [t.strip() for t in ad.locator('[data-role="type-tabs"] [data-type]').all_inner_texts()]
-            check(types == ['費用請款', '人事異動'], '★送單種類只剩費用請款、人事異動：%s' % types)
-            ad.click('[data-type="expense"]')   # 同一次登入會記得上次選的種類（剛送完人事單），先切回費用請款
+            check(types == ['個人代墊', '單位請款', '人事異動'], '★送單種類只剩個人代墊、單位請款、人事異動（沒有舊費用請款）：%s' % types)
+            check(ad.locator('[data-type="expense"]').count() == 0, '★舊「費用請款」不能再新送（產品 2026-11-18 的規則）')
+            ad.click('[data-type="advance"]')   # 同一次登入會記得上次選的種類（剛送完人事單），先切回個人代墊
             check(ad.locator('#f-pid').count() == 0, '★「對應請購單號」欄位已拿掉')
             check(ad.locator('[data-role="sys-acct-note"]').count() == 1, '★系統管理者帳號（非同仁）送單頁有說明：要用同仁帳號才能送單、傳收據')
-            # 費用請款草稿：打字 → 重新整理 → 還原
+            # 個人代墊草稿：打字 → 重新整理 → 還原
             ad.fill('#f-desc', '補備料計程車')
             ad.fill('#f-amount', '320')
             ad.wait_for_timeout(700)
             keys = ad.evaluate("Object.keys(localStorage).filter(k => k.indexOf('apv_draft') !== -1)")
-            check(keys == ['dzy.u.u-admin.apv_draft_expense'], '★草稿 key：%s' % keys)
+            check(keys == ['dzy.u.u-admin.apv_draft_advance'], '★草稿 key：%s' % keys)
             ad.reload()
             ad.wait_for_selector('[data-role="view-nav"] .nav-item')
             ad.wait_for_selector('#f-desc')
             check(ad.input_value('#f-desc') == '補備料計程車' and ad.input_value('#f-amount') == '320', '★重新整理後草稿還原')
-            shot(ad, 'submit-expense-1280')
+            shot(ad, 'submit-advance-draft-1280')
             ad.close()
 
             # ── ② 店長 375 ──────────────────────────────────
@@ -239,10 +240,10 @@ def main():
             ld.wait_for_timeout(600)
             check(ld.locator('[data-role="thr-row"]').count() == 0 and ld.evaluate('location.hash') in ('#/home', ''), '直打 #/approvals/thr 被導回首頁')
             ld.evaluate("location.hash = '#/approvals/submit'")
-            ld.wait_for_selector('[data-type="expense"]')
-            check(overflow(ld) <= 375, '送單（費用請款）375 寬沒有橫向捲軸：%d' % overflow(ld))
-            check(ld.locator('[data-type="expense"][aria-pressed="true"]').count() == 1, '★新登入打開送單，預設選費用請款')
-            shot(ld, 'submit-expense-375')
+            ld.wait_for_selector('[data-type="advance"]')
+            check(overflow(ld) <= 375, '送單（個人代墊）375 寬沒有橫向捲軸：%d' % overflow(ld))
+            check(ld.locator('[data-type="advance"][aria-pressed="true"]').count() == 1, '★新登入打開送單，預設選個人代墊')
+            shot(ld, 'submit-advance-375')
             ld.click('[data-type="personnel"]')
             check(overflow(ld) <= 375, '送單（人事）375：%d' % overflow(ld))
             shot(ld, 'submit-personnel-375')
@@ -272,7 +273,7 @@ def main():
             r = calls(mock, 'apvResubmit')[-1][1]
             check(r['id'] == 'APV-261016-903' and r['rev'] == 1 and r['body']['desc'] == '文具（已補拍）' and r['files'] == ['F002'], '★改完再送 payload（id／rev／body／原照片檔號）：%s' % json.dumps(r, ensure_ascii=False))
             # 撤回
-            wid = [f['id'] for f in mock.apv_state['forms'] if f['type'] == 'expense' and f['status'] == 'signing' and f['id'] not in ('APV-261018-901', 'APV-261016-903')][0]   # 管理者剛送的那張請款（簽核中）
+            wid = [f['id'] for f in mock.apv_state['forms'] if f['type'] == 'advance' and f['status'] == 'signing' and f['id'] not in ('APV-261018-901', 'APV-261016-903')][0]   # 管理者剛送的那張請款（簽核中）
             ld.evaluate("location.hash = '#/approvals/sign'")
             ld.evaluate("location.hash = '#/approvals/mine'")
             ld.wait_for_selector('[data-role="apv-card"][data-id="%s"]' % wid)

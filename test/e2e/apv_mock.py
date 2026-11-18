@@ -101,7 +101,7 @@ def dispatch(st, action, payload, who):
         steps = [{'role': 'brand_dir', 'scope': 'brand', 'status': 'pending', 'candidates': [{'emp': 'DZY902', 'name': '測試總監'}]}]
         if payload.get('type') == 'personnel' and payload.get('kind') == 'leave':
             steps = [{'role': 'self_sign', 'scope': 'self', 'status': 'pending', 'candidates': []}, {'role': 'direct', 'scope': 'unit', 'status': 'pending', 'candidates': [{'emp': 'DZY903', 'name': '測試主管'}]}]
-        return {'ok': True, 'data': {'steps': steps, 'handler': {'purchase': 'purchase', 'expense': 'fin', 'personnel': 'hr'}[payload.get('type', 'expense')]}}
+        return {'ok': True, 'data': {'steps': steps, 'handler': {'purchase': 'purchase', 'expense': 'fin', 'advance': 'fin', 'unitpay': 'fin', 'personnel': 'hr'}[payload.get('type', 'expense')]}}
     if action == 'apvMine':
         mine = [f for f in forms if (f['sender']['emp'] == 'DZY901' and who == 'lead') or (who == 'admin' and f['sender']['emp'] == 'DZY903')]
         if payload.get('status'):
@@ -147,9 +147,9 @@ def dispatch(st, action, payload, who):
             return {'ok': True, 'data': {'id': f['id'], 'status': f['status'], 'route': f['route']}}
         t = payload.get('type')
         body = payload.get('body') or {}
-        if t == 'expense' and not payload.get('files'):
+        if t in ('expense', 'advance', 'unitpay') and not payload.get('files'):
             return _err('no_files')
-        amount = body.get('amount') if t == 'expense' else (sum(round(i['qty'] * i['price']) for i in body.get('items', [])) if t == 'purchase' else None)
+        amount = body.get('amount') if t in ('expense', 'advance', 'unitpay') else (sum(round(i['qty'] * i['price']) for i in body.get('items', [])) if t == 'purchase' else None)
         st['seq'] += 1
         f = {'id': 'APV-261018-%03d' % st['seq'], 'type': t, 'status': 'signing', 'rev': 1, 'step': 0, 'sender': SENDER, 'amount': amount, 'body': body,
              'files': [{'id': i, 'kind': 'receipt', 'bytes': 1} for i in payload.get('files', [])], 'route': _route('brand_dir', '測試總監'),

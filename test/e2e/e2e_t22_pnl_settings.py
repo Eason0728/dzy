@@ -13,11 +13,11 @@ import tempfile
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import USERS, MockBackend, check, finish, start_server
+from common import USERS, MockBackend, check, finish, start_server, pick_port
 
 from playwright.sync_api import sync_playwright
 
-PORT, BPORT = 8834, 18924
+PORT, BPORT = 8834, pick_port(18924)
 KEY = 'test-dzy-key-0123456789abcdef'
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SET = '[data-role="pnl-settings"]'
