@@ -54,6 +54,15 @@ const who = (app, list) => ['DZY042', 'DZY001', 'DZY020', 'DZY014', 'U:a001'].fi
   ok(who(a8).length === 0, '2-8 離職第 8 天：誰的名單都沒有', who(a8));
   const a0 = build(TODAY);
   ok(JSON.stringify(who(a0)) === JSON.stringify(['DZY042', 'DZY020', 'U:a001']), '2-9 當天被提前停用（離職日＝今天）：也列，只能核到今天', who(a0));
+  // 現行行為（2026-11-20 驗收員指出沒有測試；只記錄、不改判定規則）：停用、但離職日在未來（例如預約離職日、帳號先被停用）
+  //   判定只比「離職日 ≥ 台北今天往前 7 天」，沒有「離職日 ≤ 今天」的下限 → 照列在工時名單（同離職第 1 天的那幾個人），那一筆 last_day＝那個未來的日期。
+  //   營運系統後端是「只准核到 last_day（含）以前」，所以今天以前的日子（含今天）都核得到，不會因為還沒到離職日就被擋；申請名單、只看名單照樣不列。
+  //   若要改成「離職日還沒到＝不列」是改判定規則，要 Eason 決定，這裡只守現行。
+  const aFut = build(daysAgo(-3));
+  ok(JSON.stringify(who(aFut)) === JSON.stringify(['DZY042', 'DZY020', 'U:a001']), '2-9b 停用但離職日在未來（3 天後）：照列（現行行為）', who(aFut));
+  const rf = rowOf(aFut, 'DZY042');
+  ok(!!rf && rf.last_day === daysAgo(-3) && rf.last_day > TODAY, '2-9c 那一筆 last_day＝未來的離職日（營運系統據此准核到今天、不是被擋）', rf);
+  ok(who(aFut, 'req_people').length === 0 && who(aFut, 'view_people').length === 0, '2-9d 離職日在未來：申請名單、只看名單照樣不列', [who(aFut, 'req_people'), who(aFut, 'view_people')]);
 }
 
 // ── 離職日來源：沒有 last_day 用停用紀錄 ──
