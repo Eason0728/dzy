@@ -247,6 +247,11 @@
 - 區督導 osv 加進考勤管理選單（`STORE_ATT_GATE_TITLES`），區經理、研發總監保留。
 - 契約 `dzy-store-contract-v2.json` 的 ident 加 `att.req_people`（與 people 同形狀、同排序）；營運系統收到沒有 req_people 的舊 ident 時申請審核沿用 people，所以部署順序不會壞（先管理系統後營運系統）。
 
+#### 15.1a 有待辦卻沒人核得到的三個補洞（Eason 2026-11-19；考勤驗收 11-10 不符 2、5、6）
+- **離職 7 天內**：停用（離職）的同仁，台北今天減離職日 ≤ 7 天（離職日＝staff last_day，沒有就用 staff_log 最近一次 disable 那天），照原本會核他工時的人（打卡店店長／廠長、人資主管、admin、att.extra…）列進**工時名單**，那一筆多 `last_day`；名冊已停用的打卡帳號也列（最後打卡在離職日前 62 天內）。申請名單、只看名單不列。營運系統後端只准核到離職日（含）。實作 `StoreOps.gs storeLeftCut_／storeLeftDay_／storeLeftFill_`，只有 `storeAttLists_`（ident）給 leftCut，其他呼叫端（缺核定人提醒、打卡保護名單）照舊不列停用的人。
+- **推算不出單位的人（orphan）**：單位／職稱空白或停用、又推算不出主店的同仁，一律進**人資主管與 admin** 的工時＋申請名單（主店單位或這個打卡帳號的店在試點才列）；取代 2026-11-15 C1-1 只補「有單位沒職稱」。其他人不因此多看到。
+- **月初列上個月**：每月 1～5 號（台北），打卡端 `mgr_pending_approvals` 帶 `ym`＝上個月（Requests.gs，Code.gs 不動）、營運系統併進待核定清單與首頁；首頁文字「11 月還有 N 天沒核定」（`modules/attendance/alerts.js`，營運系統 att-alerts 回 `{kind:'approve', prev:true, ym}`）。
+
 ## 16. 名稱調整（Eason 2026-10-23，對照總部組織圖；只改顯示名稱，覆蓋前文所有名稱字樣）
 
 只動名稱，**代碼、職級、階梯、審核、權限、核決一律不變**。

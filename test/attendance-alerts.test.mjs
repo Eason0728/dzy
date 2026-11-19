@@ -45,6 +45,17 @@ await t('形狀不對回 null', () => {
   assert.equal(toAlerts(null), null); assert.equal(toAlerts({ items: 'x' }), null); assert.equal(toAlerts(undefined), null);
   assert.equal(toBadge(null), null); assert.equal(toBadge({ items: 5 }), null);
 });
+await t('★上個月沒核定（2026-11-19 不符 5）：prev:true＋ym 標「11 月還有 N 天沒核定」排在本月前面；側邊欄數字兩筆都算', () => {
+  const items = [{ kind: 'approve', count: 1, ym: '2026-12' }, { kind: 'approve', count: 2, ym: '2026-11', prev: true }, { kind: 'request', count: 1 }];
+  assert.deepEqual(toAlerts({ items }).map((x) => x.text), ['11 月還有 2 天沒核定', '本月還有 1 天沒核定', '1 筆加班請假申請待審']);
+  assert.deepEqual(toAlerts({ items })[0], { level: 'warn', text: '11 月還有 2 天沒核定', view: 'approve', when: 'overdue' });
+  assert.equal(toBadge({ items }), 4);
+  // 只有上個月、本月 0 天：只有一句
+  assert.deepEqual(toAlerts({ items: [{ kind: 'approve', count: 3, ym: '2025-12', prev: true }] }).map((x) => x.text), ['12 月還有 3 天沒核定']);
+  // ym 格式不對（或沒有 prev）：照舊算本月，不吞掉件數
+  assert.deepEqual(toAlerts({ items: [{ kind: 'approve', count: 2, ym: '2026-13', prev: true }] }).map((x) => x.text), ['本月還有 2 天沒核定']);
+  assert.deepEqual(toAlerts({ items: [{ kind: 'approve', count: 2, ym: '2026-11' }] }).map((x) => x.text), ['本月還有 2 天沒核定']);
+});
 await t('badge＝approve＋request', () => {
   assert.equal(toBadge({ items: items3 }), 5);
   assert.equal(toBadge({ items: [], pending: true }), null);

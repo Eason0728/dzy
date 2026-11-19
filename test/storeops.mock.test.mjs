@@ -1027,7 +1027,9 @@ function noDirSched(id) {
   ok(has(hr, 'DZY102') && has(adm, 'DZY102') && has(hr, 'DZY105') && has(adm, 'DZY105'), '7c 人資主管與管理員也看得到推算出的人');
   ok(!has(hr, 'DZY108') && !has(adm, 'DZY108') && !has(hr, 'DZY109') && !has(adm, 'DZY109'), '7c 責任制職稱、離職不因為沒單位就被帶進全部名單');
   ok(!has(app.subs('DZY122'), 'DZY103') && !has(app.subs('DZY121'), 'DZY103') && !has(app.subs('DZY101'), 'DZY103'), '7c 主店 hq 的無職稱同仁不在總監、部門主管、店長名單');
-  ok(!has(hr, 'DZY106') && !has(adm, 'DZY106'), '7c 沒有主店打卡（只有支援）的人不推算也沒有可列的主店帳號');
+  // 2026-11-19 Eason（考勤驗收 11-10 不符 6b）：沒單位、只有支援打卡帳號的人一律給人資主管與 admin（工時＋申請），其他人照舊不列
+  ok(has(hr, 'DZY106') && has(adm, 'DZY106') && !has(sm, 'DZY106'), '7c 沒有主店打卡（只有支援）的無單位同仁：不推算；人資主管與管理員列他的支援帳號、店長不列', { hr, adm, sm });
+  ok(has(app.ident('DZY120').att.req_people.map((x) => x.sub), 'DZY106') && has(app.ident('U:a001').att.req_people.map((x) => x.sub), 'DZY103'), '7c （2026-11-19）申請名單也列：只有支援的 DZY106、主店 hq 的 DZY103');
   // 補上正式單位＋職稱後完全用正式資料：DZY102 改成 mzt-gf 正職 → 不再出現在光復名單
   const row = app.sheets.staff._data.find((r) => r[0] === 'DZY102');
   row[3] = 'active'; row[5] = 'mzt-gf'; row[7] = 'ft';
@@ -1135,7 +1137,8 @@ function noDirSched(id) {
     const tag = '7c3（區域' + (regions ? '開' : '關') + '）';
     const app = build(PERMS_ALL_PILOT, regions);
     ok(app.ident('DZY004').units_managed.indexOf('mala-gf') !== -1 && app.ident('DZY042').units_managed.indexOf('mzt-gf') !== -1, tag + ' 前提：兩位兼任店長有生效');
-    ['DZY057', 'DZY058'].forEach((e) => {
+    // 2026-11-19 Eason（不符 6）：沒填單位／單位已停用（DZY059、DZY062）也一樣給人資主管與 admin，取代 C1-1「照舊不列」
+    TARGETS.forEach((e) => {
       const h = holders(app, e);
       ok(eq(h.people, ['DZY020', 'U:a001']), tag + ' ★' + e + '：工時名單只有人資主管與 admin 有他', h);
       ok(eq(h.req_people, ['DZY020', 'U:a001']), tag + ' ★' + e + '：申請名單只有人資主管與 admin 有他', h);
@@ -1143,10 +1146,6 @@ function noDirSched(id) {
       ok(eq(h.void_hours, ['DZY021']) && eq(h.void_req, ['DZY021']), tag + ' ' + e + '：考勤作廢（att.void）照人資主管同一份名單，持有人看得到、只能作廢', h);
       const row = app.ident('DZY020').att.people.find((x) => x.sub === e);
       ok(eq(row, { clock: 'mztgf', emp_id: 'MZTGF' + e.slice(3), sub: e, name: cast.find((p) => p[0] === e)[1] }), tag + ' ' + e + '：列的是他在打卡店的帳號，不標支援', row);
-    });
-    ['DZY059', 'DZY062'].forEach((e) => {
-      const h = holders(app, e);
-      ok(KEYS.every((k) => h[k].length === 0), tag + ' ' + e + '（沒填單位／單位已停用）照舊不列：每日同步會把對照改成主店、走推算', h);
     });
   });
   // 打卡店不在試點 → 營運系統讀不到那家店的資料，人資主管與 admin 也不列
