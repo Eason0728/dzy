@@ -13,6 +13,11 @@ const TEXT = {
   wait: (n) => `${n} 筆在等同仁補單，結薪前要處理`                 // 等同仁補單（2026-11-15，營運系統 docs/duty-timeline 第 4 題）：營運系統只在月底前 3 天回這項
 };
 const ORDER = ['rejected', 'approve', 'wait', 'request', 'device'];
+// 上個月還沒核定（2026-11-19 Eason，考勤驗收 11-10 不符 5）：營運系統每月 1～5 號（台北）另回一筆 {kind:'approve', prev:true, ym:'YYYY-MM'}，
+//   這裡標成「11 月還有 N 天沒核定」排在本月那句前面；舊版營運系統沒有 prev＝照舊全算本月。側邊欄數字（toBadge）兩筆都算。
+const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const isPrev = (it) => !!it && it.kind === 'approve' && it.prev === true && typeof it.ym === 'string' && YM_RE.test(it.ym);
+const prevText = (ym, n) => `${Number(ym.slice(5, 7))} 月還有 ${n} 天沒核定`;
 /** 手機「待處理」分段（platform/todo.js）：沒核定的天都已過去＝已逾期；申請、新手機、被退回＝今天 */
 const WHEN = { approve: 'overdue', request: 'today', device: 'today', rejected: 'today', wait: 'today' };
 /** 點了進哪個分頁：被退回的在核定工時頁頂列出；等同仁補單也在核定工時 */
@@ -32,10 +37,10 @@ export function unwrap(r) {
   return null;
 }
 
-function countOf(items, kind) {
+function countOf(items, kind, pick) {
   let sum = 0;
   for (const it of items) {
-    if (it && it.kind === kind && Number.isFinite(it.count) && it.count > 0) sum += it.count;
+    if (it && it.kind === kind && Number.isFinite(it.count) && it.count > 0 && (!pick || pick(it))) sum += it.count;
   }
   return sum;
 }
@@ -46,7 +51,14 @@ export function toAlerts(data) {
   if (data.pending === true) return [{ level: 'info', text: '出勤待辦統計中，稍後回首頁就會看到' }];
   const out = [];
   for (const kind of ORDER) {
-    const c = countOf(data.items, kind);
+    if (kind === 'approve') {
+      const prevYms = [...new Set(data.items.filter(isPrev).map((it) => it.ym))].sort();
+      for (const ym of prevYms) {
+        const p = countOf(data.items, kind, (it) => isPrev(it) && it.ym === ym);
+        if (p > 0) out.push({ level: 'warn', text: prevText(ym, p), view: VIEW[kind], when: WHEN[kind] });
+      }
+    }
+    const c = countOf(data.items, kind, kind === 'approve' ? (it) => !isPrev(it) : null);
     if (c > 0) out.push({ level: 'warn', text: TEXT[kind](c), view: VIEW[kind], when: WHEN[kind] });
   }
   if (data.partial === true) out.push({ level: 'warn', text: '部分門市暫時讀不到' });

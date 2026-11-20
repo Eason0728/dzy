@@ -32,6 +32,15 @@ var STORE_NO_ATT_TITLES = ['odir', 'hm', 'ceo', 'gm', 'chair'];
 var STORE_ATT_HEAD_TITLES = ['sm', 'fm', 'am', 'rdd'];
 // 被核者要列入考勤名單的帳號狀態（2026-10-29 Eason 選 A）：在職同仁都要被核，跟有沒有開通管理系統帳號無關；只有停用（離職）不列
 var STORE_ATT_LIST_STATUSES = ['active', 'unclaimed', 'pending', 'rejected'];
+// 離職後還能核工時的天數（2026-11-19 Eason，考勤驗收 11-10 不符 2）：停用（離職）後第 1～7 天，原本核他工時的人（打卡店店長／廠長、人資主管、admin…）
+//   工時名單仍列他（那一筆多 last_day），營運系統只准核離職日（含）以前；申請名單、只看名單不列。離職日＝staff last_day，沒有就用 staff_log 最近一次停用那天。
+var STORE_LEFT_GRACE_DAYS = 7;
+// 離職者的打卡帳號：名冊已停用（roster_active=FALSE，離職連動）也照列，但最後一次打卡要在離職日前這麼多天內（很久以前就停掉的支援帳號不列）
+var STORE_LEFT_PUNCH_BACK_DAYS = 62;
+// 人還在職、但某個打卡帳號被店端設成離職（名冊 roster_active=FALSE；店端「同仁異動→設為離職」、或管理系統復職時沒勾那家）：
+//   每晚 00:10 名冊同步後，原本核他工時的人工時名單照列這個帳號（不帶 last_day），營運系統「同仁異動」才找得到、能按「恢復在職」。
+//   只列名冊停用約這麼多天內的帳號（帳號列 updated_at 或最後打卡在台北今天往前這麼多天內），很久以前停掉的舊帳號不列（2026-11-20 Eason「要改」）。
+var STORE_OFF_SHOW_DAYS = 62;
 
 // ── 誰核誰（Eason 2026-10-21，docs/org/spec.md 第 15.1 節）：分「核定工時 hours」與「加班單／請假單／忘刷單 req」兩張表 ──
 // 核定工時：門市／中央工廠所有打卡的人（pt ft sm fm am rdd）都由本單位店長／廠長核；店長／廠長可核自己的工時
@@ -306,15 +315,21 @@ function storeInferFromHome_(t, org, home) {
  * 不完整且能推算 → unit／title 換成推算值、status 視為 active、inferred＝true；
  * 不完整又推算不出 → orphan＝true（只有人資主管與 admin 看得到，pilotUnits＝主店對到的全部單位）。
  * 只處理 STORE_ATT_LIST_STATUSES（停用不列）；責任制職稱（只在有填職稱時判斷）一律不列。
+ * 例外：leftCut（'yyyy-MM-dd'，storeLeftCut_；只有 storeAttLists_ 會給）＝停用但離職日 ≥ leftCut 的人照上面規則列入，多 left＝離職日。
  */
-function storeEffectiveTarget_(t0, org, home) {
+function storeEffectiveTarget_(t0, org, home, leftCut) {
   var st = stfStr_(t0.status);
   var e = {};
   Object.keys(t0).forEach(function (k) { e[k] = t0[k]; });
-  if (STORE_ATT_LIST_STATUSES.indexOf(st) === -1) return null;
+  // 離職 7 天內（只有 storeAttLists_ 給 leftCut）：停用的人照原身分算、status 視為 active、e.left＝離職日（2026-11-19）
+  var left = st === 'disabled' && leftCut ? storeLeftDay_(t0) : '';
+  // 停用優先（2026-11-20 Eason「要改」）：離職日比台北今天還晚＝沒經過 storeLeftFill_ 換成停用那天，一律不列（不能拿未來的日子當離職日一路列下去）
+  if (left && left > clkAddDays_(leftCut, STORE_LEFT_GRACE_DAYS)) left = '';
+  if (left && left >= leftCut) { e.status = 'active'; e.left = left; }
+  else if (STORE_ATT_LIST_STATUSES.indexOf(st) === -1) return null;
   if (!storeOrgIncomplete_(t0, org)) {
     // 還沒開通（未認領、待審、被退回）但人資已填好單位職稱：照正式資料列入、status 視為 active（同推算分支），本單位店長／廠長才核得到
-    if (st !== 'active') { e.status = 'active'; e.notClaimed = st; }
+    if (st !== 'active' && !e.left) { e.status = 'active'; e.notClaimed = st; }
     e.pilotUnits = [stfStr_(t0.unit)];
     return e;
   }
@@ -329,19 +344,71 @@ function storeEffectiveTarget_(t0, org, home) {
   return e;
 }
 
+/** 台北今天往前 STORE_LEFT_GRACE_DAYS 天：離職日 ≥ 這天的停用同仁還列在工時名單（離職隔天＝第 1 天、第 7 天還在、第 8 天不在）。today 選填 'yyyy-MM-dd' */
+function storeLeftCut_(today) {
+  return clkAddDays_(today || clkTodayOf_(new Date()), -STORE_LEFT_GRACE_DAYS);
+}
+
+/** 停用同仁的離職日：left_on（storeLeftFill_ 補的）＞ last（staff last_day）；都沒有＝''（不列）。
+ *  離職日在未來的停用同仁一定要先跑過 storeLeftFill_（left_on＝停用那天與離職日取早），不然會被當成還沒離職的日子一路列到離職日後 7 天。 */
+function storeLeftDay_(p) {
+  if (p.left_none) return '';
+  var d = storeDatePart_(p.left_on) || storeDatePart_(p.last);
+  return d || '';
+}
+
+/**
+ * 停用同仁的「離職日」寫進 p.left_on（同一批 people 只讀一次 staff_log）：
+ *  ‧last_day ≤ 台北今天 → left_on＝last_day（照舊）。
+ *  ‧沒有 last_day → 用 staff_log 最近一次 disable 的日期（照舊）。
+ *  ‧last_day 在未來（預約離職日、帳號先被停用）→ 停用優先：left_on＝min(last_day, 最近一次 disable 的日期)（2026-11-20 Eason「要改」：
+ *    改前照列到「未來的離職日」後 7 天、那一筆 last_day 是未來的日子；改後跟沒有 last_day 一樣，從停用那天算 7 天、只准核到停用那天）。
+ *    找不到停用紀錄＝不列（同「停用、沒有離職日也沒有停用紀錄」）。
+ * 給了 leftCut 時，staff 列 updated_at（停用會寫）早於 leftCut 的人一定在 7 天外，不為他讀 log（left_on 直接給 updated_at 那天＝不列）；
+ * 沒有需要的人就整個不讀。回 people（原陣列）。
+ */
+function storeLeftFill_(people, leftCut) {
+  var today = leftCut ? clkAddDays_(leftCut, STORE_LEFT_GRACE_DAYS) : clkTodayOf_(new Date());
+  var need = [];
+  (people || []).forEach(function (p) {
+    if (stfStr_(p.status) !== 'disabled') return;
+    var last = storeDatePart_(p.last);
+    if (last && last <= today) { p.left_on = last; return; }
+    var upd = p.values ? storeDatePart_(p.values[STF_COL.updated_at]) : '';
+    if (leftCut && upd && upd < leftCut) { if (last) p.left_on = upd; return; }   // 停用在 7 天以前：未來離職日的人 left_on＝那天（不列）；沒離職日的照舊不讀
+    need.push(p);
+  });
+  if (!need.length) return people;
+  var map = {};
+  try {
+    stfReadRows_(STF_SHEET_LOG, STF_LOG_HEADERS.length).forEach(function (r) {
+      if (stfStr_(r[2]) !== 'disable') return;
+      var emp = stfNormEmp_(r[1]), d = storeDatePart_(r[0]);
+      if (emp && d && (!map[emp] || d > map[emp])) map[emp] = d;
+    });
+  } catch (e) { map = {}; }
+  need.forEach(function (p) {
+    if (p.left_on) return;
+    var last = storeDatePart_(p.last), off = map[p.emp] || '';
+    if (off) p.left_on = off;                 // 未來的離職日：停用那天（一定早於離職日）
+    else if (last) p.left_none = true;        // 未來的離職日、找不到停用紀錄：不列（storeLeftDay_ 不退回去用未來的 last）
+  });
+  return people;
+}
+
 /**
  * 這個人能核的人（尚未換成打卡帳號）。
  * me＝{emp, status, unit, dept, title}（admin 沒有同仁編號時 emp 為空）；flags＝{admin, hrHead, attExtra}；
  * people＝全部同仁物件陣列；home＝選填，emp → {units}（主店打卡推算用，見 storeInferFromHome_）；mode 同 attNeedOf_；rctx 同 attApproverOf_。回符合的 target 陣列。
  * 推算出來的人當作單位 rank 1 一般同仁；推算不出的 orphan 只有 admin／人資主管看得到。
  */
-function storeAttTargets_(me, flags, people, org, home, mode, rctx) {
+function storeAttTargets_(me, flags, people, org, home, mode, rctx, leftCut) {
   mode = storeAttMode_(mode);
   var out = [];
   // admin／人資主管：全部要考勤的人、不含自己；核定工時的店長／廠長例外（含自己，同 attApproverOf_）；申請一律不含自己
   var selfOk = mode === 'hours' && STORE_HOURS_UNIT_HEAD_TITLES.indexOf(stfStr_(me.title)) !== -1;
   people.forEach(function (t0) {
-    var t = storeEffectiveTarget_(t0, org, home);
+    var t = storeEffectiveTarget_(t0, org, home, leftCut);
     if (!t) return;
     if (!t.orphan && !attNeedOf_(t, org, mode)) return;
     var notSelf = !(stfStr_(me.emp) && stfStr_(me.emp) === stfStr_(t.emp));
@@ -476,19 +543,30 @@ function storeUnitLabel_(unit, org) {
 /**
  * 全部打卡帳號（staff_clock state=confirmed、roster_active 不是 FALSE），依 people 順序、maps 順序：
  * [{t, m, units, support, homeUnit?, homeName?}]（homeUnit／homeName 只在支援帳號：本人單位代碼與顯示名稱，2026-10-26 營運系統「支援」標示）；t＝storeEffectiveTarget_（null 的人整個略過），units＝打卡店的單位清單（storeUnits[store_code]，沒有＝[]）。
+ * leftCut（選填，storeAttLists_ 才給）：離職 7 天內的人也列（t.left），他名冊已停用的帳號也算（最後打卡在離職日前 62 天內）；
+ *   人還在職、帳號被店端設成離職（名冊停用）的也列，標 off＝true（帳號列 updated_at 或最後打卡在台北今天往前 STORE_OFF_SHOW_DAYS 天內；2026-11-20）。
  */
-function storeAttAccounts_(people, org, home, maps, storeUnits) {
+function storeAttAccounts_(people, org, home, maps, storeUnits, leftCut) {
   var pilot = null;   // 推算者的支援判斷才需要，延後讀
   var byEmp = {};
+  var offCut = leftCut ? clkAddDays_(leftCut, STORE_LEFT_GRACE_DAYS - STORE_OFF_SHOW_DAYS) : '';   // 台北今天往前 STORE_OFF_SHOW_DAYS 天
   (maps || []).forEach(function (m) {
-    if (m.state !== 'confirmed' || m.roster_active === 'FALSE') return;
+    if (m.state !== 'confirmed') return;
+    if (m.roster_active === 'FALSE' && !leftCut) return;   // 名冊停用的帳號只有離職 7 天內的人、或在職者被店端設離職的帳號可能用到（下面再看）
     (byEmp[m.emp_no] = byEmp[m.emp_no] || []).push(m);
   });
   var out = [];
   people.forEach(function (t0) {
-    var t = storeEffectiveTarget_(t0, org, home);
+    var t = storeEffectiveTarget_(t0, org, home, leftCut);
     if (!t) return;
     (byEmp[t.emp] || []).forEach(function (m) {
+      // 名冊已停用（roster_active=FALSE）：只有離職 7 天內的人、而且最後一次打卡在離職日前 STORE_LEFT_PUNCH_BACK_DAYS 天內（或沒紀錄）才列（2026-11-19）
+      var off = false;
+      if (m.roster_active === 'FALSE') {
+        if (t.left) { if (m.last_punch && m.last_punch < clkAddDays_(t.left, -STORE_LEFT_PUNCH_BACK_DAYS)) return; }
+        else if (offCut && ((m.last_punch && m.last_punch >= offCut) || storeDatePart_(m.updated_at) >= offCut)) off = true;   // 在職、帳號被店端設離職（2026-11-20）
+        else return;
+      }
       // 只認 org 裡 active 的 store 階梯單位（2026-10-26 Fable 審查 1：打錯或停用的 unit_code 當成沒填＝不算支援，免得沒有店端核定人、原主管又被降成只看）
       var units = ((storeUnits && storeUnits[m.store_code]) || []).filter(function (c) {
         var u = org.unit[c]; return !!(u && u.active && (u.ladder || 'store') === 'store');
@@ -496,7 +574,7 @@ function storeAttAccounts_(people, org, home, maps, storeUnits) {
       var support = storeAttIsSupport_(t, m.store_code, units, org);
       // 推算者（inferred）：只有打卡店在試點才走支援規則（2026-10-30 對抗驗證）；非試點店維持改規則前的行為（不當支援，主店店長靠 pilotUnits 照舊核、人資主管／admin 看得到）
       if (support && t.inferred) { if (pilot === null) pilot = storePilotUnits_(); support = storeAnyIn_(units, pilot); }
-      var a = { t: t, m: m, units: units, support: support,
+      var a = { t: t, m: m, units: units, support: support, off: off,
                 ex: (STORE_NOT_SUPPORT_EX[stfStr_(t.emp)] || []).indexOf(stfStr_(m.store_code)) !== -1 };   // 個人例外（不算支援）
       // 不在本人單位打卡（2026-11-04）：支援帳號，或品牌辦公室同仁在門市打卡——工時跟打卡店、申請回原單位；營運系統標「支援（原單位）」
       a.away = !a.ex && !t.orphan && units.length > 0 && units.indexOf(stfStr_(t.unit)) === -1;
@@ -584,6 +662,7 @@ function storeAttListAdd_(list, a) {
   if (list.seen[k]) return;
   list.seen[k] = true;
   var row = { clock: a.m.store_code, emp_id: a.m.emp_id, sub: a.t.emp, name: a.t.name };
+  if (a.t.left) row.last_day = a.t.left;   // 離職 7 天內（2026-11-19）：營運系統只准核到這天
   if (a.support || a.away) { row.support = true; row.home_unit = a.homeUnit || ''; row.home_unit_name = a.homeName || ''; }
   if (a.homeTag) { row.home_tag = a.homeTag; if (a.homeClock) row.home_clock = a.homeClock; }
   list.rows.push(row);
@@ -607,6 +686,7 @@ function storeAttListOut_(list) {
  *   不核自己的支援帳號，唯一例外：兼任店長自己在兼任店的支援帳號，工時可以自己核（2026-10-30 Eason 選 A；申請照舊不行）；
  *   原本（以人為單位）能核這個人、但核不到這個帳號的人 → 只看；督導／總監只看看打卡店單位。
  * 指定門市只看（exViewUnits）：打卡店單位在清單內、且在試點的全部帳號（帳號主人要核工時、非 orphan、非本人）。
+ * opt.leftCut（storeLeftCut_）：停用、離職日 ≥ leftCut 的人照原本會核他的人列進工時名單（那一筆多 last_day），申請、只看名單不列（2026-11-19）。
  */
 function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pilot, opt) {
   opt = opt || {};
@@ -618,15 +698,16 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
   var exViewUnits = opt.exViewUnits || [];
   var origView = opt.origView !== false;
   var empSet = function (arr) { var o = {}; arr.forEach(function (t) { o[t.emp] = true; }); return o; };
-  var hrsT = empSet(storeAttTargets_(me, flags, people, org, home, 'hours', rctx));
-  var reqT = empSet(storeAttTargets_(me, flags, people, org, home, 'req', rctx));
+  var leftCut = opt.leftCut || '';   // 離職 7 天內（2026-11-19）：只進工時名單（apprH），申請、只看都不列
+  var hrsT = empSet(storeAttTargets_(me, flags, people, org, home, 'hours', rctx, leftCut));
+  var reqT = empSet(storeAttTargets_(me, flags, people, org, home, 'req', rctx, leftCut));
   var myEmp = stfStr_(me.emp), myUnit = stfStr_(me.unit);
   var headCache = {};
-  storeAttAccounts_(people, org, home, maps, storeUnits).forEach(function (a) {
+  storeAttAccounts_(people, org, home, maps, storeUnits, leftCut).forEach(function (a) {
     var t = a.t;
     var self = !!myEmp && myEmp === stfStr_(t.emp);
     var needH = !t.orphan && !!attNeedOf_(t, org, 'hours');
-    var viewable = needH && !self;   // 只看名單的共同條件（同 storeAttViewTargets_）
+    var viewable = needH && !self && !t.left && !a.off;   // 只看名單的共同條件（同 storeAttViewTargets_）；離職的人、被設離職的帳號不進只看
     // 2026-11-04 Eason：在門市／央廚打卡（打卡店有 store 階梯單位）＝工時與忘刷單一律由打卡單位的店長／廠長／兼任店長核（薪資跟打卡門市請款），
     //   不管本人職稱；店長本人也核自己的。總部打卡、個人例外（STORE_NOT_SUPPORT_EX）照原身分（attApproverOf_ hours）。
     //   加班單、假單、出差單一律照本人原單位的上層（reqT＝attApproverOf_ req），不看在哪裡打卡。忘刷單跟工時名單走（營運系統依申請種類分）。
@@ -634,14 +715,13 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
     // 推算不出的人（orphan）照舊只給人資主管／admin；打卡店不在試點時，非支援帳號（推算者、品牌辦公室同仁）照原身分（同 10-30 對抗驗證：不讓帳號從所有人名單消失）
     var byClock = a.units.length > 0 && !a.ex && !t.orphan && (pClock || a.support);
     var pHome = storeAnyIn_(t.pilotUnits || [t.unit], pilot) || (a.ex && pClock);   // 個人例外的帳號：打卡店在試點也算（2026-10-29 審查低 3）
-    // 2026-11-15 驗收 C1-1：有單位、沒職稱（或職稱代碼已停用）、又沒有主店可推算的人（orphan 且 pilotUnits 空；例：唯一的打卡對照在別家店）
-    //   pHome 永遠不成立 → 連人資主管／admin 的工時、申請名單都沒有他。只補這一種、只給人資主管／admin：改看打卡店單位在不在試點。
-    //   沒填單位（或單位已停用）的人照舊不列（每日同步會把他的對照改成主店、走推算）；其他身分不受影響（orphan 本來就不在他們的 hrsT／reqT）。
+    // 推算不出單位的人（orphan：單位或職稱空白／停用、又沒有可推算的主店）一律給人資主管與 admin 核工時＋申請（2026-11-19 Eason，考勤驗收 11-10 不符 6；
+    //   取代 2026-11-15 C1-1 只補「有單位沒職稱」那一種）：主店對到的單位在試點（pHome），或這個打卡帳號的店（門市、央廚或總部）在試點就列。
+    //   包含「單位空白、主店打卡在總部」（原本申請名單沒有）與「單位空白、只有支援打卡帳號」（原本兩份都沒有）。其他身分不受影響（orphan 不在他們的 hrsT／reqT）。
     var hrOrphan = false;
-    if (t.orphan && (flags.admin || flags.hrHead) && !(t.pilotUnits || []).length) {
-      var ou = org.unit[stfStr_(t.unit)];
+    if (t.orphan && (flags.admin || flags.hrHead)) {
       var cu = ((storeUnits && storeUnits[a.m.store_code]) || []).filter(function (c) { var u = org.unit[c]; return !!(u && u.active && ((u.ladder || 'store') === 'store' || u.ladder === 'hq')); });
-      hrOrphan = !!(ou && ou.active) && storeAnyIn_(cu, pilot);
+      hrOrphan = pHome || storeAnyIn_(cu, pilot);
     }
     var apprH;
     if (byClock) {
@@ -657,8 +737,9 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
     if (apprH) storeAttListAdd_(L.hours, a);
     // 申請資料存在打卡店那邊：門市／央廚打卡要打卡店在試點才列（營運系統才讀得到），總部打卡與個人例外看本人
     var pAcct = byClock ? pClock : pHome;
-    if (pAcct && reqT[t.emp] && !t.orphan && attNeedOf_(t, org, 'req')) storeAttListAdd_(L.req, a);
-    else if (hrOrphan && reqT[t.emp]) storeAttListAdd_(L.req, a);   // C1-1：這種人的申請也只有人資主管／admin 核得到（reqT 已不含本人）
+    if (t.left || a.off) { /* 離職 7 天內：只補核工時，申請不列（2026-11-19）；在職者被店端設離職的帳號同（2026-11-20：只為了同仁異動找得到、能恢復） */ }
+    else if (pAcct && reqT[t.emp] && !t.orphan && attNeedOf_(t, org, 'req')) storeAttListAdd_(L.req, a);
+    else if (hrOrphan && reqT[t.emp]) storeAttListAdd_(L.req, a);   // orphan 的申請只有人資主管／admin 核得到（reqT 已不含本人）
     if (viewable && pAcct) {
       // 督導／總監只看：在本人單位打卡看本人單位、不在本人單位看打卡店單位（同舊規則）；
       // 原本照身分能核工時、改規則後核不到這個帳號的人（例：督導到門市打卡時的總監、支援同仁的原單位店長）→ 只看
@@ -837,7 +918,7 @@ function storePeople_() {
     return {
       duty_units: dutyMap[s.emp] || [],
       acting_units: (typeof permActingUnitsOf_ === 'function' && stfStr_(v[STF_COL.status]) === 'active') ? permActingUnitsOf_(s.emp) : [],   // 兼任店長（docs/att-hr-acting）
-      emp: s.emp, name: stfStr_(v[STF_COL.name]), status: stfStr_(v[STF_COL.status]),
+      emp: s.emp, name: stfStr_(v[STF_COL.name]), status: stfStr_(v[STF_COL.status]), last: s.last,   // last＝last_day（離職 7 天內補核工時用，2026-11-19）
       unit: stfStr_(v[STF_COL.unit]), dept: stfStr_(v[STF_COL.dept]), title: stfStr_(v[STF_COL.title]),
       userId: stfStr_(v[STF_COL.user_id]), hire: s.hire, confirmedAt: storeDatePart_(v[STF_COL.confirmed_at]),
       values: v, extra: stfSplitCodes_(extraMap[s.emp]),
@@ -1038,14 +1119,17 @@ function storeIdent_(sub) {
   var dirSched = p ? storeSchedDirector_(p, org, pilot) : { units: [], hqShift: false };   // 總監排班（2026-10-30）
   var schedEx = p && typeof permSchedAdminUnitsOf_ === 'function' ? permSchedAdminUnitsOf_(p.emp).filter(function (u) { return pilot.indexOf(u) !== -1; }) : [];   // 排班管理（指定門市）（2026-11-15，docs/sched-admin-ex）
   var attMaps = clkSheetsReady_() ? clkMaps_() : [], attStoreUnits = storeClockUnits_();
+  var leftCut = storeLeftCut_();
+  storeLeftFill_(people, leftCut);   // 停用同仁的離職日（2026-11-19；last_day，沒有就用停用紀錄）
   var lists = storeAttLists_(me, flags, people, org, home, attMaps, attStoreUnits, rctx, pilot, {
     viewUnits: viewUnits,
-    exViewUnits: (p && !admin && !hrHead) ? storeAttViewExUnits_(perms, org) : []
+    exViewUnits: (p && !admin && !hrHead) ? storeAttViewExUnits_(perms, org) : [],
+    leftCut: leftCut
   });
   // 考勤作廢 att.void：照人資主管的名單算（flags 換成 hrHead），只給作廢與讀取用；admin／人資主管本來就能作廢 → 不另給
   var voidLists = { people: [], req_people: [] };
   if (p && valid && !admin && !hrHead && perms.indexOf(STORE_PERM_ATT_VOID) !== -1) {
-    voidLists = storeAttLists_(me, { admin: false, hrHead: true, attExtra: false }, people, org, home, attMaps, attStoreUnits, rctx, pilot, {});
+    voidLists = storeAttLists_(me, { admin: false, hrHead: true, attExtra: false }, people, org, home, attMaps, attStoreUnits, rctx, pilot, { leftCut: leftCut });
     // 人資主管本人的單不給屬下作廢（2026-11-13 審查 1：人資主管自己的名單本來就不含自己，持有人不能比他寬）
     var hrHeadSubs = {};
     people.forEach(function (x) { if (stfIsHrHead_(x)) hrHeadSubs[stfStr_(x.emp)] = true; });
