@@ -54,15 +54,35 @@ const who = (app, list) => ['DZY042', 'DZY001', 'DZY020', 'DZY014', 'U:a001'].fi
   ok(who(a8).length === 0, '2-8 離職第 8 天：誰的名單都沒有', who(a8));
   const a0 = build(TODAY);
   ok(JSON.stringify(who(a0)) === JSON.stringify(['DZY042', 'DZY020', 'U:a001']), '2-9 當天被提前停用（離職日＝今天）：也列，只能核到今天', who(a0));
-  // 現行行為（2026-11-20 驗收員指出沒有測試；只記錄、不改判定規則）：停用、但離職日在未來（例如預約離職日、帳號先被停用）
-  //   判定只比「離職日 ≥ 台北今天往前 7 天」，沒有「離職日 ≤ 今天」的下限 → 照列在工時名單（同離職第 1 天的那幾個人），那一筆 last_day＝那個未來的日期。
-  //   營運系統後端是「只准核到 last_day（含）以前」，所以今天以前的日子（含今天）都核得到，不會因為還沒到離職日就被擋；申請名單、只看名單照樣不列。
-  //   若要改成「離職日還沒到＝不列」是改判定規則，要 Eason 決定，這裡只守現行。
-  const aFut = build(daysAgo(-3));
-  ok(JSON.stringify(who(aFut)) === JSON.stringify(['DZY042', 'DZY020', 'U:a001']), '2-9b 停用但離職日在未來（3 天後）：照列（現行行為）', who(aFut));
+  // 停用、但離職日在未來（預約離職日、帳號先被停用）：2026-11-20 Eason「要改」→ 停用優先。
+  //   改前（03ac40c 記錄的現行）：照列到「未來的離職日」後 7 天、那一筆 last_day＝未來的日子（工時名單有、申請／只看／排班核准沒有）。
+  //   改後：離職日＝min(last_day, 最近一次停用那天)，跟「沒有 last_day」一樣從停用那天算 7 天、只准核到停用那天；找不到停用紀錄＝不列。
+  //   手算：今天 T；離職日 T+3。停用紀錄 T → 列、last_day＝T｜T−3 → 列、last_day＝T−3｜T−8 → 不列｜沒紀錄 → 不列｜updated_at T−10（不讀 log）→ 不列
+  const aFut = build(daysAgo(-3), { log: TODAY });
+  ok(JSON.stringify(who(aFut)) === JSON.stringify(['DZY042', 'DZY020', 'U:a001']), '2-9b 停用（今天）、離職日在 3 天後：照列（停用那天起算第 0 天）', who(aFut));
   const rf = rowOf(aFut, 'DZY042');
-  ok(!!rf && rf.last_day === daysAgo(-3) && rf.last_day > TODAY, '2-9c 那一筆 last_day＝未來的離職日（營運系統據此准核到今天、不是被擋）', rf);
-  ok(who(aFut, 'req_people').length === 0 && who(aFut, 'view_people').length === 0, '2-9d 離職日在未來：申請名單、只看名單照樣不列', [who(aFut, 'req_people'), who(aFut, 'view_people')]);
+  ok(!!rf && rf.last_day === TODAY, '2-9c 那一筆 last_day＝停用那天（不是未來的離職日）', rf);
+  ok(who(aFut, 'req_people').length === 0 && who(aFut, 'view_people').length === 0, '2-9d 離職日在未來：申請名單、只看名單照樣不列（各份名單同一個判斷）', [who(aFut, 'req_people'), who(aFut, 'view_people')]);
+  const aF3 = build(daysAgo(-3), { log: daysAgo(3) });
+  ok((rowOf(aF3, 'DZY042') || {}).last_day === daysAgo(3), '2-9e 3 天前停用、離職日在 3 天後：列，last_day＝停用那天（3 天前）', rowOf(aF3, 'DZY042'));
+  const aF8 = build(daysAgo(-3), { log: daysAgo(8) });
+  ok(who(aF8).length === 0, '2-9f 8 天前停用、離職日在 3 天後：不列（改前會一路列到離職日後 7 天）', who(aF8));
+  const aFn = build(daysAgo(-3));
+  ok(who(aFn).length === 0, '2-9g 離職日在未來、找不到停用紀錄：不列', who(aFn));
+  const aFu = build(daysAgo(-30), { log: daysAgo(3) });
+  aFu.sheets.staff._data.find((r) => r[0] === 'DZY070')[20] = daysAgo(10) + ' 00:10:00';
+  ok(who(aFu).length === 0, '2-9h 離職日在 30 天後、staff 最後更新在 10 天前（停用一定更早）：不讀紀錄、不列', who(aFu));
+  const aPast = build(daysAgo(2), { log: TODAY });
+  ok((rowOf(aPast, 'DZY042') || {}).last_day === daysAgo(2), '2-9i 離職日已過（2 天前）、今天才停用：照舊用離職日', rowOf(aPast, 'DZY042'));
+  // 在職（沒停用）、離職日在未來：完全照在職算（不帶 last_day，申請名單也有）——只改停用的人
+  const aAct = build(daysAgo(-3));
+  const rowAct = aAct.sheets.staff._data.find((r) => r[0] === 'DZY070'); rowAct[3] = 'active';
+  aAct.sheets.users._data.forEach((u) => { if (u[1] === 'DZY070') u[7] = 'TRUE'; });
+  const ra = rowOf(aAct, 'DZY042'), rq = rowOf(aAct, 'DZY042', 'req_people');
+  ok(!!ra && ra.last_day === undefined && !!rq, '2-9j 在職、離職日在未來：照在職列（工時＋申請、不帶 last_day）', { ra, rq });
+  const org = aFut.sb.stfReadOrg_();
+  const pf = aFut.sb.storePeople_().find((x) => x.emp === 'DZY070');   // 沒經過 storeLeftFill_ 的未來離職日
+  ok(aFut.sb.storeEffectiveTarget_(pf, org, null, aFut.sb.storeLeftCut_()) === null, '2-9k 純函式防呆：沒換成停用那天的未來離職日一律不列');
 }
 
 // ── 離職日來源：沒有 last_day 用停用紀錄 ──
