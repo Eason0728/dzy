@@ -89,7 +89,7 @@ export const WRITE_ACTIONS = {
   dorm: ['create', 'terminate', 'handoverCreate', 'handoverSign', 'handoverPdf'],
   payroll: ['payroll_calc', 'payroll_finalize', 'payroll_bootstrap', 'payroll_master_set', 'payroll_config_set', 'payroll_holiday_sync',
     'payroll_input_set', 'payroll_bonus_set', 'payroll_store_set', 'payroll_leave_type_set', 'payroll_leave_event_set',
-    'payroll_xmap_set', 'payroll_support_decide'],
+    'payroll_xmap_set', 'payroll_support_decide', 'payroll_hol_emp_set'],   // 2026-11-22 選舉假名單（mala-clock-in#209）
   cashbook: ['adminSave', 'adminVoid', 'adminLock', 'adminUnlock'],
   attendance: ['reqDecide'],   // 2026-11-06 手機「待處理」清單直接核准／退回
   pnl: ['addEntry', 'voidEntry', 'importEntries', 'uploadAttachment', 'confirmZero', 'finalize', 'unlock', 'saveSettings', 'createDraft',

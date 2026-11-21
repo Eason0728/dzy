@@ -510,6 +510,9 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   const w = sb.proxyAuthorize_(boss, 'payroll', 'payroll_finalize');
   ok(w.ok && w.isWrite === true && w.operator, '13f: admin 鎖定本月 → 寫入、帶操作人', w);
   ok(sb.proxyAuthorize_(boss, 'payroll', 'payroll_migrate_store').code === 'FORBIDDEN', '13g: 不在白名單的維運 action（payroll_migrate_store）→ FORBIDDEN');
+  // 選舉假名單（2026-11-22，mala-clock-in#209）：寫入，要 payroll.write；兩邊清單都有
+  ok(WRITE_ACTIONS.payroll.includes('payroll_hol_emp_set') && sb.PROXY_WRITE_ACTIONS.payroll.indexOf('payroll_hol_emp_set') !== -1, '13g2: payroll_hol_emp_set 列在寫入清單（Auth.gs＝dryrun.js）');
+  { const hw = sb.proxyAuthorize_(boss, 'payroll', 'payroll_hol_emp_set'); ok(hw.ok === true && hw.isWrite === true, '13g3: 有 payroll.write 的人存選舉假名單 → 放行、算寫入', hw); }
   ok(sb.proxyAuthorize_(boss, 'audit', 'getAll').operator === undefined, '13h: 其他系統不帶 operator（舊後端不認）');
 
   for (const [u, pw] of [['acc1', PW.acc], ['lead1', PW.lead], ['mgr1', PW.mgr], ['viewer1', PW.viewer]]) {
