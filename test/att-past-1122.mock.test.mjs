@@ -208,7 +208,26 @@ WHO.forEach((s) => { ON[s] = identRaw(app, s); });
   const pf = app.sb.storeLeftPastFill_(people, lc);
   ok(J(people) === before && pf.people !== people && pf.people.length === people.length, 'P-1 storeLeftPastFill_ 不改原 people（回新陣列、同長度）');
   ok(pf.n === 8 && J(pf.people.filter((x) => x.past_left).map((x) => x.emp).sort()) === J(['DZY070', 'DZY072', 'DZY073', 'DZY075', 'DZY076', 'DZY077', 'DZY078', 'DZY079']), 'P-2 離職超過 7 天的候選 8 人（不含 7 天內的 DZY071、查無離職日的 DZY030／DZY074、已復職的 DZY080）（之後再由打卡帳號、組織判斷篩）', pf.people.filter((x) => x.past_left).map((x) => x.emp));
+  // 界線直接看 storeLeftPastFill_ 的結果（不經過後面的去重）：第 7 天不帶 past_left、照放原物件；第 8 天帶 past_left、left_on＝T−8
+  const c7 = pf.people.find((x) => x.emp === 'DZY071');
+  ok(!!c7 && c7.past_left === undefined && c7 === people.find((x) => x.emp === 'DZY071'), 'P-2b 離職第 7 天（T−7＝界線那天）：不是 past 候選（沒有 past_left、照放原物件）', c7 && { past_left: c7.past_left, left_on: c7.left_on });
+  const c8 = pf.people.find((x) => x.emp === 'DZY070');
+  ok(!!c8 && c8.past_left === true && c8.left_on === daysAgo(8), 'P-2c 離職第 8 天（T−8）：是 past 候選（past_left、left_on＝T−8）', c8 && { past_left: c8.past_left, left_on: c8.left_on });
   const org = app.sb.stfReadOrg_();
+  // opt.pastOnly 的原始結果（storeAttPastRows_ 去重之前）只能有 past 候選，不能有在職或 7 天內的人
+  const pastSet = new Set(pf.people.filter((x) => x.past_left).map((x) => x.emp));
+  const args = [org, app.sb.storeHomeFn_(), app.sb.clkMaps_(), app.sb.storeClockUnits_(), app.sb.regionCtx_(), app.sb.storePilotUnits_(), { leftCut: lc, pastOnly: true }];
+  const raw = (me, flags) => app.sb.storeAttLists_(me, flags, pf.people, ...args);
+  const RAW = [
+    ['店長', people.find((x) => x.emp === 'DZY042'), { admin: false, hrHead: false, attExtra: false }],
+    ['人資主管', people.find((x) => x.emp === 'DZY020'), { admin: false, hrHead: true, attExtra: false }],
+    ['管理員', { emp: '', status: 'active', unit: '', dept: '', title: '' }, { admin: true, hrHead: false, attExtra: false }]
+  ];
+  RAW.forEach(([label, me, flags]) => {
+    const L = raw(me, flags);
+    const leak = L.people.filter((r) => !pastSet.has(r.sub));
+    ok(L.people.length > 0 && leak.length === 0 && L.req_people.length === 0 && L.view_people.length === 0, 'P-7 ' + label + '：storeAttLists_(opt.pastOnly) 原始結果只有 past 候選（' + L.people.length + ' 筆；在職、7 天內的人 0 筆；申請、只看 0 筆）', leak.map((r) => r.sub));
+  });
   const c = pf.people.find((x) => x.emp === 'DZY070');
   ok(app.sb.storeEffectiveTarget_(c, org, null) === null, 'P-3 不給 leftCut（缺核定人提醒、打卡保護名單…）：複本照舊不列');
   const t = app.sb.storeEffectiveTarget_(c, org, null, lc);
