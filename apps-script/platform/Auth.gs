@@ -350,7 +350,8 @@ var PROXY_READ_ACTIONS = {
   // 分讀寫只為了試跑模式能照常讀。⚠ payroll_month 在「該月沒有 run」時會自動試算並寫入（mala-payroll skill），仍列讀取＝試跑時翻月份照舊可用
   payroll: ['payroll_month', 'payroll_get', 'payroll_group', 'payroll_trend', 'payroll_inputs', 'payroll_punch',
     'payroll_master_get', 'payroll_store_get', 'payroll_leave_type_get', 'payroll_leave_event_get', 'payroll_leave_options',
-    'payroll_attendance_export', 'payroll_attach_get', 'payroll_audit_get', 'payroll_xmap_get'],   // payroll_attach_get（2026-10-30）：出勤紀錄表上已核准申請的證明，純讀取；payroll_xmap_get（2026-11-05）：打卡對照快照（除錯用）
+    'payroll_attendance_export', 'payroll_attach_get', 'payroll_audit_get', 'payroll_xmap_get',
+    'payroll_status'],   // payroll_status（2026-11-22，mala-clock-in 待辦 10）：鎖定逾時後確認有沒有鎖成功，純讀取（不重算、不寫表）；payroll_attach_get（2026-10-30）：出勤紀錄表上已核准申請的證明，純讀取；payroll_xmap_get（2026-11-05）：打卡對照快照（除錯用）
   // 考勤管理首頁待辦（2026-10-24，營運系統 spec §17.5）：與 platform/dryrun.js READ_ACTIONS.attendance 一致
   // reqMine／reqDecided／reqPending（2026-11-06 手機「待處理」：我送出的、已處理、清單核准）：與 dryrun.js 一致
   attendance: ['attAlerts', 'reqMine', 'reqDecided', 'reqPending'],

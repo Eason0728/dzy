@@ -513,11 +513,14 @@ const turnOn = (sb) => sb.PropertiesService.getScriptProperties().setProperty('P
   // 選舉假名單（2026-11-22，mala-clock-in#209）：寫入，要 payroll.write；兩邊清單都有
   ok(WRITE_ACTIONS.payroll.includes('payroll_hol_emp_set') && sb.PROXY_WRITE_ACTIONS.payroll.indexOf('payroll_hol_emp_set') !== -1, '13g2: payroll_hol_emp_set 列在寫入清單（Auth.gs＝dryrun.js）');
   { const hw = sb.proxyAuthorize_(boss, 'payroll', 'payroll_hol_emp_set'); ok(hw.ok === true && hw.isWrite === true, '13g3: 有 payroll.write 的人存選舉假名單 → 放行、算寫入', hw); }
+  // 月結狀態唯讀查詢（2026-11-22，mala-clock-in 待辦 10）：讀取清單（試跑也能用）、權限同 payroll_month（要 payroll.write）
+  ok(READ_ACTIONS.payroll.includes('payroll_status') && sb.PROXY_READ_ACTIONS.payroll.indexOf('payroll_status') !== -1 && sb.PROXY_WRITE_ACTIONS.payroll.indexOf('payroll_status') === -1, '13g4: payroll_status 只列在讀取清單（Auth.gs＝dryrun.js）');
+  { const ps = sb.proxyAuthorize_(boss, 'payroll', 'payroll_status'); ok(ps.ok === true && ps.isWrite === false && ps.secret === PAY, '13g5: 有 payroll.write 的人查月結狀態 → 放行、算讀取', ps); }
   ok(sb.proxyAuthorize_(boss, 'audit', 'getAll').operator === undefined, '13h: 其他系統不帶 operator（舊後端不認）');
 
   for (const [u, pw] of [['acc1', PW.acc], ['lead1', PW.lead], ['mgr1', PW.mgr], ['viewer1', PW.viewer]]) {
     const t = tokenOf(sb, u, pw);
-    for (const act of ['payroll_month', 'payroll_calc']) {
+    for (const act of ['payroll_month', 'payroll_calc', 'payroll_status']) {
       const r = sb.proxyAuthorize_(t, 'payroll', act);
       ok(r.ok === false && r.code === 'FORBIDDEN' && !hasPay(r), '13i: 沒有 payroll.write 的 ' + u + ' ' + act + ' → FORBIDDEN、不含金鑰', r);
     }
