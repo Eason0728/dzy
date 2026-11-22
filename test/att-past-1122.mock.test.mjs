@@ -134,12 +134,15 @@ WHO.forEach((s) => { ON[s] = identRaw(app, s); });
   const p = ON.DZY042.att.past_people;
   ok(Array.isArray(p), '3-0 開關開：店長 ident 有 past_people 陣列');
   ok(J(subsOf(p)) === J(['DZY070', 'DZY073', 'DZY075', 'DZY077']), '3-1 店長：自己店離職超過 7 天的 4 人（八天、沒填離職日、預約離職日、很久以前）', subsOf(p));
-  ok(J(p.find((x) => x.sub === 'DZY070')) === J({ clock: 'gf', emp_id: 'GF070', sub: 'DZY070', name: '離職八天', last_day: daysAgo(8) }), '3-2 那一筆形狀＝{clock, emp_id, sub, name, last_day}、last_day＝離職日（T−8）', p.find((x) => x.sub === 'DZY070'));
+  ok(J(p.find((x) => x.sub === 'DZY070')) === J({ clock: 'gf', emp_id: 'GF070', sub: 'DZY070', name: '離職八天', last_day: daysAgo(8), can_approve: true }), '3-2 那一筆形狀＝{clock, emp_id, sub, name, last_day, can_approve:true}、last_day＝離職日（T−8）；店長本來就核他工時＝can_approve（2026-11-23 方案 A）', p.find((x) => x.sub === 'DZY070'));
   const want = ['DZY070', 'DZY073', 'DZY075', 'DZY077', 'DZY079'];
   ok(J(subsOf(ON.DZY020.att.past_people)) === J(want), '3-3 人資主管：兩家店的離職超過 7 天的人都有', subsOf(ON.DZY020.att.past_people));
   ok(J(subsOf(ON['U:a001'].att.past_people)) === J(want), '3-4 管理員（沒有同仁編號）：同人資主管', subsOf(ON['U:a001'].att.past_people));
   ok(J(subsOf(ON.DZY021.att.past_people)) === J(want), '3-5 考勤作廢持有人（人資同仁）：照人資主管那份拿到', subsOf(ON.DZY021.att.past_people));
-  ok(J(ON.DZY021.att.past_people) === J(ON.DZY020.att.past_people), '3-6 作廢持有人的 past_people 跟人資主管逐筆相同（含 last_day）');
+  const noCan = (rows) => rows.map((x) => { const c = Object.assign({}, x); delete c.can_approve; return c; });
+  ok(J(ON.DZY021.att.past_people) === J(noCan(ON.DZY020.att.past_people)), '3-6 作廢持有人的 past_people 跟人資主管逐筆相同（含 last_day），但不帶 can_approve（只能看）', ON.DZY021.att.past_people);
+  ok(ON.DZY020.att.past_people.every((x) => x.can_approve === true) && ON['U:a001'].att.past_people.every((x) => x.can_approve === true), '3-7 人資主管、管理員（apprH）每一筆都 can_approve');
+  ok(ON.DZY021.att.past_people.every((x) => !('can_approve' in x)), '3-8 作廢持有人每一筆都沒有 can_approve');
 }
 // (4) 督導、總監、別店店長沒有
 {
@@ -176,11 +179,33 @@ WHO.forEach((s) => { ON[s] = identRaw(app, s); });
 {
   const rows = WHO.flatMap((s) => ON[s].att.past_people);
   ok(!rows.some((x) => x.sub === 'DZY072' || x.sub === 'DZY076'), '7-1 沒有打卡帳號、打卡對照被退回的停用同仁：誰的 past_people 都沒有');
-  const KEYS = J(['clock', 'emp_id', 'sub', 'name', 'last_day']);
-  const bad = rows.filter((x) => J(Object.keys(x)) !== KEYS || !/^\d{4}-\d{2}-\d{2}$/.test(x.last_day) || !(x.last_day < CUT) || !x.clock || !x.emp_id || !/^DZY\d{3,}$/.test(x.sub) || typeof x.name !== 'string');
+  const KEYS = J(['clock', 'emp_id', 'sub', 'name', 'last_day']), KEYS_C = J(['clock', 'emp_id', 'sub', 'name', 'last_day', 'can_approve']);
+  const bad = rows.filter((x) => (J(Object.keys(x)) !== KEYS && !(J(Object.keys(x)) === KEYS_C && x.can_approve === true)) || !/^\d{4}-\d{2}-\d{2}$/.test(x.last_day) || !(x.last_day < CUT) || !x.clock || !x.emp_id || !/^DZY\d{3,}$/.test(x.sub) || typeof x.name !== 'string');
   ok(rows.length > 0 && bad.length === 0, '7-2 每一筆欄位齊全、last_day 是 YYYY-MM-DD 且早於界線（' + rows.length + ' 筆）', bad);
   const sorted = WHO.every((s) => { const p = ON[s].att.past_people; return p.every((x, i) => i === 0 || (p[i - 1].clock < x.clock || (p[i - 1].clock === x.clock && p[i - 1].emp_id < x.emp_id))); });
   ok(sorted, '7-3 依 clock、emp_id 排序且不重複');
+}
+// (7b) 交叉審查擋項 1（2026-11-23 Eason 裁示「打卡帳號停用超過二個月的人在系統也要顯示」）：離職超過 62 天、打卡帳號早已停用的人照樣列。
+//   界線是「最後打卡在離職日前 62 天內」（STORE_LEFT_PUNCH_BACK_DAYS，對離職日算），不是「台北今天往前 62 天」：
+//   同一個帳號狀態，假如他還在職（帳號被店端設離職、updated_at／最後打卡都在 62 天以前）就不列——這是刻意比在職時寬（只放寬「看」與核「還沒核定」的日子）。
+{
+  const cast = CAST.concat([['DZY081', '停用很久', 'mala-gf', '', 'pt', 'disabled', '2024-02-01']]);
+  const mk = (status) => {
+    const a = world(cast.map((r) => (r[0] === 'DZY081' ? r.slice(0, 5).concat([status, r[6]]) : r)), {});
+    const st = a.sheets.staff._data.find((r) => r[0] === 'DZY081'), sc = a.sheets.staff_clock._data.find((r) => r[0] === 'DZY081');
+    if (status === 'disabled') st[25] = daysAgo(100);                                   // 離職 100 天
+    sc[6] = 'FALSE'; sc[7] = daysAgo(101); sc[10] = daysAgo(100) + ' 00:10:00';          // 名冊停用（離職連動）、最後打卡在離職前一天
+    a.props.ATT_PAST_ON = '1';
+    return a;
+  };
+  const a1 = mk('disabled');
+  const head = identRaw(a1, 'DZY042'), hr = identRaw(a1, 'DZY020');
+  const row = (head.att.past_people || []).find((x) => x.sub === 'DZY081');
+  ok(!!row && row.last_day === daysAgo(100) && row.can_approve === true, '7b-1 離職 100 天、打卡帳號 100 天前就停用：店長 past_people 照列（last_day＝T−100、can_approve）', head.att.past_people);
+  ok((hr.att.past_people || []).some((x) => x.sub === 'DZY081'), '7b-2 人資主管也有');
+  ok(!head.att.people.some((x) => x.sub === 'DZY081'), '7b-3 不在工時名單（只在 past_people）');
+  const a2 = mk('active');      // 對照：同一個帳號狀態，假如他還在職
+  ok(!identRaw(a2, 'DZY042').att.people.some((x) => x.sub === 'DZY081'), '7b-4 對照：同一帳號狀態、人還在職時店長看不到（在職者被設離職只列 62 天內）——past 比在職寬是 11/23 裁示的刻意規則');
 }
 // (8) 開著時，原有各欄跟關著時完全相同（只多 past_people）
 {

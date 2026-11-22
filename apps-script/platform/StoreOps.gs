@@ -612,6 +612,10 @@ function storeAttAccounts_(people, org, home, maps, storeUnits, leftCut) {
     if (!t) return;
     (byEmp[t.emp] || []).forEach(function (m) {
       // 名冊已停用（roster_active=FALSE）：只有離職 7 天內的人、而且最後一次打卡在離職日前 STORE_LEFT_PUNCH_BACK_DAYS 天內（或沒紀錄）才列（2026-11-19）
+      //   att.past_people（離職超過 7 天，t.left＋t.past）也走這一行：界線是「離職日往前 62 天」，不是「台北今天往前 62 天」（在職者被設離職的 offCut），
+      //   所以離職很久、打卡帳號早就停用的人照樣列（只看他離職前那段的帳號）。這比「假設他還在職」看得寬，是刻意的：
+      //   2026-11-23 Eason 裁示「打卡帳號停用超過二個月的人在系統也要顯示，同仁端在 LINE 上面不顯示」（交叉審查擋項 1 的答案）。
+      //   只影響「看」：past_people 在營運系統只放行讀取，寫入只有 can_approve 的人核「還沒核定」的日子（見 storeIdent_）。
       var off = false;
       if (m.roster_active === 'FALSE') {
         if (t.left) { if (m.last_punch && m.last_punch < clkAddDays_(t.left, -STORE_LEFT_PUNCH_BACK_DAYS)) return; }
@@ -1214,7 +1218,11 @@ function storeIdent_(sub) {
     var pf = storeLeftPastFill_(people, leftCut);
     if (pf.n) {
       var pastOpt = { leftCut: leftCut, pastOnly: true };
-      pastRows = storeAttLists_(me, flags, pf.people, org, home, attMaps, attStoreUnits, rctx, pilot, pastOpt).people;
+      // can_approve（2026-11-23 Eason 方案 A「可以，核到完」）：照今天的組織本來就核他工時的人（apprH）那幾筆標 true，營運系統只准他們核「離職日（含）以前、還沒核定」的日子；
+      //   作廢持有人那份（下一行）不標＝只能看。去重先到先留，所以同一帳號兩份都有時留標 true 的這筆。
+      pastRows = storeAttLists_(me, flags, pf.people, org, home, attMaps, attStoreUnits, rctx, pilot, pastOpt).people.map(function (r) {
+        var c = {}; Object.keys(r).forEach(function (k) { c[k] = r[k]; }); c.can_approve = true; return c;
+      });
       if (voidHolder) pastRows = pastRows.concat(dropHr(storeAttLists_(me, voidFlags, pf.people, org, home, attMaps, attStoreUnits, rctx, pilot, pastOpt).people));
     }
     att.past_people = storeAttPastRows_(pastRows, [att.people, att.void_hours]);
