@@ -790,6 +790,20 @@ function storeUpperGaps_(people, org, rctx, maps, storeUnits) {
 }
 
 /**
+ * 目前持有 att.extra（額外考勤核定）的在職同仁（2026-11-22）：跟 ident（storeIdent_ 的 flags.attExtra）用同一個來源 storePermsOf_（permComputeRow_），
+ * 所以 perm_map 規則（例：hq／ceo、office／odir、store／rdd）、個別例外 perm_ex（add、remove、到期）、兼任部門（staff.extra_depts）都算進去。
+ * 只留在職且身分有效（storeOrgOf_）的人。回 people 的子集。Perms.gs 沒載入或讀不到＝[]。
+ */
+function storeAttExtraHolders_(people, org) {
+  var ctx = null;
+  try { ctx = permLoadCtx_(false); } catch (e) { return []; }
+  return (people || []).filter(function (p) {
+    if (stfStr_(p.status) !== 'active' || !stfStr_(p.emp) || !storeOrgOf_(p, org)) return false;
+    return storePermsOf_(p, ctx).indexOf(STORE_PERM_ATT_EXTRA) !== -1;
+  });
+}
+
+/**
  * 工時找不到核定人的同仁（2026-10-30 Eason 照推薦；attUpperGaps.hours_items）：在職、身分有效（storeOrgOf_）、要核工時（attNeedOf_ hours 非 null、非 hr_only）、
  * 有生效打卡帳號；非支援帳號看表上有沒有人能核（attApproverOf_ hours，店長核自己算有），支援帳號看打卡店四層（storeSupportApprovers_）有沒有人。
  * 除人資主管／admin 外沒人能核就列（例：共用打卡店的另一單位沒店長、沒總監的辦公室）。推算／orphan 的人不算（另有「沒有對照」提醒）。
@@ -799,9 +813,10 @@ function storeHoursGaps_(people, org, rctx, maps, storeUnits) {
   var out = [];
   var acct = {};
   storeAttAccounts_(people, org, null, maps || [], storeUnits || {}).forEach(function (a) { (acct[a.t.emp] = acct[a.t.emp] || []).push(a); });
-  // att.extra（額外考勤核定，只走個別例外）持有人：在職、身分有效，核「被核者單位＝自己單位」（支援帳號看打卡店單位），不核自己（對抗驗證 2026-10-30）
-  var extraEmps = typeof permAttExtraEmps_ === 'function' ? permAttExtraEmps_() : {};
-  var extraHolders = people.filter(function (p) { return extraEmps[stfStr_(p.emp).toUpperCase()] && stfStr_(p.status) === 'active' && !!storeOrgOf_(p, org); });
+  // att.extra（額外考勤核定）持有人：在職、身分有效，核「被核者單位＝自己單位」（支援帳號看打卡店單位），不核自己（對抗驗證 2026-10-30）
+  // 2026-11-22：持有人名單改用 ident 同一個來源（storeAttExtraHolders_＝storePermsOf_：perm_map 規則、個別例外、兼任部門都算），
+  //   以前只看 perm_ex 個別例外，靠 perm_map 規則拿到 att.extra 的人（例：執行長、辦公室總監）核得到的人會被誤報成「沒人核」
+  var extraHolders = storeAttExtraHolders_(people, org);
   var pilotG = storePilotUnits_();
   var extraCovers = function (units, selfEmp) { return extraHolders.some(function (h) { return stfStr_(h.emp) !== selfEmp && units.indexOf(stfStr_(h.unit)) !== -1; }); };
   people.forEach(function (t) {
@@ -1013,9 +1028,9 @@ function storeOwnClocks_(p) {
 }
 
 /** 某位同仁現在的第二期權限（不看 PERMS_ON 開關；perm 表沒建＝沒有規則） */
-function storePermsOf_(p) {
+function storePermsOf_(p, ctxIn) {
   try {
-    var ctx = permLoadCtx_(false);
+    var ctx = ctxIn || permLoadCtx_(false);   // ctxIn：整批算時只讀一次權限表（storeAttExtraHolders_）
     return permComputeRow_(ctx, p.values, p.extra).perms;
   } catch (e) {
     return [];

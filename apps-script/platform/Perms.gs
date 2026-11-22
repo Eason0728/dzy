@@ -275,7 +275,7 @@ function permStaffIdentityOk_(org, values) {
   return !(org.unitRules && typeof stfTitleUnitOk_ === 'function' && !stfTitleUnitOk_(org.unitRules, title, permStr_(values[STF_COL.unit])));
 }
 /** 某人兼任店長的單位（[]＝沒有） */
-/** 目前持有 att.extra（額外考勤核定）的同仁編號（大寫）→ true：只走個別例外（add、active、未到期）。StoreOps.gs storeHoursGaps_ 用（2026-10-30）。 */
+/** 目前持有 att.extra（額外考勤核定）的同仁編號（大寫）→ true：只走個別例外（add、active、未到期）。2026-11-22 起 storeHoursGaps_ 改用 StoreOps.gs storeAttExtraHolders_（跟 ident 同來源，含 perm_map 規則）；本函式不再被呼叫，留著不刪。 */
 function permAttExtraEmps_() {
   var out = {};
   try {
