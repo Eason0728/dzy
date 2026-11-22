@@ -254,6 +254,12 @@
 - **推算不出單位的人（orphan）**：單位／職稱空白或停用、又推算不出主店的同仁，一律進**人資主管與 admin** 的工時＋申請名單（主店單位或這個打卡帳號的店在試點才列）；取代 2026-11-15 C1-1 只補「有單位沒職稱」。其他人不因此多看到。
 - **月初列上個月**：每月 1～5 號（台北），打卡端 `mgr_pending_approvals` 帶 `ym`＝上個月（Requests.gs，Code.gs 不動）、營運系統併進待核定清單與首頁；首頁文字「11 月還有 N 天沒核定」（`modules/attendance/alerts.js`，營運系統 att-alerts 回 `{kind:'approve', prev:true, ym}`）。
 
+#### 15.1b 離職超過 7 天的已核定紀錄「只能看」（Eason 2026-11-22 裁示）
+- 原話：「核定過的人紀錄都要顯示在當天，跟有沒有離職應該不影響」。四題全照推薦（只顯示離職日〔含〕以前真的有核定的日子；申請單彙整、手機「已處理」也留；照今天的組織；新畫面文字照預覽）、**不設期限**。15.1a 的 7 天規則與天數（`STORE_LEFT_GRACE_DAYS=7`）、62 天回溯、所有寫入檢查一律不變。設計 `~/加盟名單平台/_brain_out/left-approved-view/design.md`。
+- **平台**：ident 的 `att` 最後多一欄 `past_people`（形狀同 `people`、每筆一定帶 `last_day`）＝停用、離職日早於 `storeLeftCut_()`（第 8 天起）的人，由照今天的組織**本來會核他工時**的人拿到（同 `people` 的 apprH：打卡店店長／廠長／兼任店長、人資主管、admin、att.extra；本人的兼任部門主管也算），考勤作廢 att.void 持有人照 `void_hours` 的算法（扣人資主管本人）也拿到。申請名單、只看名單（督導、總監、原單位主管看支援帳號）、別店店長不給。離職日同 15.1a（last_day ≤ 台北今天；沒有或在未來＝最近一次停用紀錄那天；都沒有＝不列），差別只在不用 updated_at 省讀紀錄。`people`／`req_people`／`view_people`／`void_hours`／`void_req` 一筆都不因此改變；同一個 clock|emp_id 已在 `people`／`void_hours` 就不列進 `past_people`。實作 `StoreOps.gs storeAttPastOn_／storeLeftPastFill_／storeAttPastRows_`、`storeAttLists_` 的 `opt.pastOnly`；原本的 people 物件不改（複本才帶 `past_left`），其他呼叫端（缺核定人提醒、打卡保護名單）照舊不列停用的人。
+- **開關（放寬性）**：Script Property `ATT_PAST_ON`（mini＝`apps/dzy-platform/.env` 的 `GAS_PROP_ATT_PAST_ON`）**恰好是字串 `'1'`** 才開；沒設、空白、`on`、`true`、全形１、前後帶空白一律當關。關著時 ident 沒有 `past_people` 這一欄，整份跟改前逐位元組相同。退回＝開關改掉或刪掉＋重啟 dzy-platform。
+- **營運系統**：只在 `mgr_day`、`mgr_req_day`、`mgr_req_month` 放行 date ≤ `last_day` 的已核定／已核准資料並標只能看；所有寫入一律不看這份名單（`pastDays` 不併進任何寫入名單），也不拿它增加可進入的店。契約 `rules.att_past`、範例 `responses.ident_past`。上線順序：營運系統先上 → 平台上（開關關）→ 開開關。測試 `test/att-past-1122.mock.test.mjs`。
+
 ## 16. 名稱調整（Eason 2026-10-23，對照總部組織圖；只改顯示名稱，覆蓋前文所有名稱字樣）
 
 只動名稱，**代碼、職級、階梯、審核、權限、核決一律不變**。
