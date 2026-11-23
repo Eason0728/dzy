@@ -776,6 +776,21 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
   storeAttAccounts_(people, org, home, maps, storeUnits, leftCut).forEach(function (a) {
     var t = a.t;
     if (opt.pastOnly && !t.past) return;   // att.past_people（2026-11-22）：只收離職超過 7 天的人；他們 t.left 有值，下面申請、只看本來就不列，只會進工時那份
+    // att.left_req（2026-11-23 Eason「離職前送出、還沒審的單，原本有權審的主管可以繼續審」）：只收離職的人（t.left，含 7 天內與 past），
+    //   照在職時同一條申請名單判斷（reqT／attNeedOf_ req／orphan 給人資主管與 admin）放進 L.req；工時、只看照常算但呼叫端不用。被店端設離職的帳號（a.off）不收。
+    if (opt.leftReqOnly) {
+      if (!t.left || a.off) return;
+      var lrClock = storeAnyIn_(a.units, pilot), lrPHome = storeAnyIn_(t.pilotUnits || [t.unit], pilot) || (a.ex && lrClock);
+      var lrByClock = a.units.length > 0 && !a.ex && !t.orphan && (lrClock || a.support);
+      var lrAcct = lrByClock ? lrClock : lrPHome;
+      var lrOrphan = false;
+      if (t.orphan && (flags.admin || flags.hrHead)) {
+        var lrCu = ((storeUnits && storeUnits[a.m.store_code]) || []).filter(function (c) { var u = org.unit[c]; return !!(u && u.active && ((u.ladder || 'store') === 'store' || u.ladder === 'hq')); });
+        lrOrphan = lrPHome || storeAnyIn_(lrCu, pilot);
+      }
+      if ((lrAcct && reqT[t.emp] && !t.orphan && attNeedOf_(t, org, 'req')) || (lrOrphan && reqT[t.emp])) storeAttListAdd_(L.req, a);
+      return;
+    }
     var self = !!myEmp && myEmp === stfStr_(t.emp);
     var needH = !t.orphan && !!attNeedOf_(t, org, 'hours');
     var viewable = needH && !self && !t.left && !a.off;   // 只看名單的共同條件（同 storeAttViewTargets_）；離職的人、被設離職的帳號不進只看
@@ -1226,6 +1241,10 @@ function storeIdent_(sub) {
       if (voidHolder) pastRows = pastRows.concat(dropHr(storeAttLists_(me, voidFlags, pf.people, org, home, attMaps, attStoreUnits, rctx, pilot, pastOpt).people));
     }
     att.past_people = storeAttPastRows_(pastRows, [att.people, att.void_hours]);
+    // att.left_req（2026-11-23 Eason「全照推薦」第 1 題）：離職同仁（7 天內與 past 都算）裡，照在職時的申請名單這個人本來就審得到加班／請假／出差單的那幾個帳號。
+    //   營運系統只拿來放行審核（核准、退回）離職日（含）以前、還在待審的申請單；忘刷單照工時那份（people 的 last_day、past_people 的 can_approve）。考勤作廢持有人那份不給。
+    var lrPeople = pf.n ? pf.people : people;
+    att.left_req = storeAttPastRows_(storeAttLists_(me, flags, lrPeople, org, home, attMaps, attStoreUnits, rctx, pilot, { leftCut: leftCut, leftReqOnly: true }).req_people, []);
   }
   return {
     sub: sub, active: true,

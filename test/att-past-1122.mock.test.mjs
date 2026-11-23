@@ -212,11 +212,24 @@ WHO.forEach((s) => { ON[s] = identRaw(app, s); });
   WHO.forEach((s) => {
     const o = JSON.parse(J(ON[s]));
     const keys = Object.keys(o.att);
-    delete o.att.past_people;
-    ok(J(o) === OFF[s] && keys[keys.length - 1] === 'past_people', '8 ' + s + '：拿掉 past_people 後跟關著逐位元組相同（people／req_people／view_people／void_*／其他欄都沒變），past_people 在 att 最後');
+    delete o.att.past_people; delete o.att.left_req;
+    ok(J(o) === OFF[s] && keys[keys.length - 2] === 'past_people' && keys[keys.length - 1] === 'left_req', '8 ' + s + '：拿掉 past_people、left_req 後跟關著逐位元組相同（people／req_people／view_people／void_*／其他欄都沒變），兩欄在 att 最後');
   });
   const adm = identRaw(app, 'U:a001');
-  ok(Array.isArray(adm.att.past_people) && J(Object.keys(adm.att)) === J(['people', 'req_people', 'view_people', 'void_hours', 'void_req', 'past_people']), '8-x att 欄位順序', Object.keys(adm.att));
+  ok(Array.isArray(adm.att.past_people) && J(Object.keys(adm.att)) === J(['people', 'req_people', 'view_people', 'void_hours', 'void_req', 'past_people', 'left_req']), '8-x att 欄位順序', Object.keys(adm.att));
+}
+// (8b) left_req（2026-11-23 Eason「離職前送出、還沒審的單，原本有權審的主管可以繼續審」）：離職同仁（7 天內＋past）裡，照在職時的申請名單本來就審得到的帳號
+{
+  const lr = (s) => (ON[s].att.left_req || []).map((x) => x.sub).sort();
+  const LEAVERS_GF = ['DZY070', 'DZY071', 'DZY073', 'DZY075', 'DZY077'];      // 小辛辣光復的離職計時（7 天內＋past；DZY078 名冊老早停、62 天外不列，同 past_people）
+  ok(WHO.every((s) => Array.isArray(ON[s].att.left_req)), '8b-1 開著：每份 ident 都有 left_req（可能是 []）');
+  ok(WHO.every((s) => !('left_req' in (JSON.parse(OFF[s]).att || {}))), '8b-2 關著：沒有 left_req');
+  ok(J(lr('DZY042')) === J(LEAVERS_GF), '8b-3 店長：本店離職計時都在（在職時計時的申請由店長審，同 req_people 有 DZY041）', lr('DZY042'));
+  ok(J(lr('DZY001')) === J(['DZY079']), '8b-4 別店店長：只有他那店的離職者', lr('DZY001'));
+  ok(J(lr('DZY020')) === J(LEAVERS_GF.concat(['DZY079']).sort()) && J(lr('U:a001')) === J(lr('DZY020')), '8b-5 人資主管、admin：全部離職者', [lr('DZY020'), lr('U:a001')]);
+  ok(lr('DZY021').length === 0, '8b-6 考勤作廢持有人：不給（只能看）', lr('DZY021'));
+  ok(lr('DZY014').length === 0 && lr('DZY016').length === 0, '8b-7 總監、督導：在職時本來就不審計時的申請 → 沒有', [lr('DZY014'), lr('DZY016')]);
+  ok(WHO.every((s) => (ON[s].att.left_req || []).every((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.last_day))), '8b-8 每筆都帶 last_day');
 }
 // (9) 可進入的店／管理單位不因此改變（營運系統 attStoresFor 不讀 past_people；平台這邊所有店別欄位不變）
 {
