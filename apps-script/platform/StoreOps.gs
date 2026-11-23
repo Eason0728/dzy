@@ -780,6 +780,11 @@ function storeAttLists_(me, flags, people, org, home, maps, storeUnits, rctx, pi
     //   照在職時同一條申請名單判斷（reqT／attNeedOf_ req／orphan 給人資主管與 admin）放進 L.req；工時、只看照常算但呼叫端不用。被店端設離職的帳號（a.off）不收。
     if (opt.leftReqOnly) {
       if (!t.left || a.off) return;
+      // 2026-11-23 Codex 第三輪擋項 B：left_req 不能比在職時的申請名單寬。在職時名冊停用（roster_active=FALSE）的帳號一律不在申請名單（近期停用標 off、更早的整個不列），
+      //   storeAttAccounts_ 對離職的人卻照「最後打卡在離職日前 62 天內」放回來（那是工時那兩份 people／past_people 的規則：主管裁示停用也顯示、可核，不收緊）。
+      //   這裡只對 left_req 再擋一次：名冊停用、而且對照列 updated_at（停用時寫入，同 off 判斷用的欄位）的日期早於離職日或空白＝在職時就停用＝不列；
+      //   updated_at 在離職日（含）以後＝離職時／之後才停用（每晚對帳的停用單、名冊同步）＝照列。名冊在職（TRUE／空白）照舊。
+      if (a.m.roster_active === 'FALSE' && !(storeDatePart_(a.m.updated_at) >= t.left)) return;
       var lrClock = storeAnyIn_(a.units, pilot), lrPHome = storeAnyIn_(t.pilotUnits || [t.unit], pilot) || (a.ex && lrClock);
       var lrByClock = a.units.length > 0 && !a.ex && !t.orphan && (lrClock || a.support);
       var lrAcct = lrByClock ? lrClock : lrPHome;
