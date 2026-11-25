@@ -1369,6 +1369,7 @@ function cleanSegItem(m, it, open) {
     text: it.text,
     sub: typeof it.sub === 'string' ? it.sub : '',
     detail: typeof it.detail === 'string' ? it.detail : '',
+    ...(typeof it.ot === 'string' && it.ot ? { ot: it.ot } : {}),      // 審單出勤試算那一行（營運系統 ot-review-hint）；沒有＝跟以前一樣
     state,
     stateText: typeof it.stateText === 'string' && it.stateText ? it.stateText : (ITEM_STATES[state] || ''),
     target: view && !open ? alertTarget(m, { view, params: it.params }) : null,
@@ -1503,6 +1504,7 @@ function quickGroupCard(items, view, body, box) {
     el('div', { class: 'm-card-h' }, [el('img', { class: 'm-ic', src: `assets/icons/${m.icon}.png`, alt: '' }), el('b', { text: view.text })]),
     view.sub ? el('small', { text: view.sub }) : null,
     view.detail ? el('div', { class: 'm-card-d', text: view.detail }) : null,
+    view.ot ? el('div', { class: 'm-card-ot', 'data-role': 'quick-ot', text: view.ot }) : null,
     notes, segBox, actions
   ]);
   for (const c of items) {
@@ -1594,6 +1596,7 @@ function quickCard(c, body, box) {
     el('div', { class: 'm-card-h' }, [el('img', { class: 'm-ic', src: `assets/icons/${c.m.icon}.png`, alt: '' }), el('b', { text: c.text })]),
     c.sub ? el('small', { text: c.sub }) : null,
     c.detail ? el('div', { class: 'm-card-d', text: c.detail }) : null,
+    c.ot ? el('div', { class: 'm-card-ot', 'data-role': 'quick-ot', text: c.ot }) : null,
     el('div', { class: 'm-card-a' }, [ok, no])
   ]);
   const run = async (decision) => {

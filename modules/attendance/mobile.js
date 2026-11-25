@@ -54,16 +54,14 @@ export function otLine(it) {
   return `出勤試算：應有加班 ${f(o.need)} 小時，這張 ${f(o.n)} 小時（多 ${f(o.over)} 小時）`;
 }
 
-// 試算那一行自己一行（.m-card-d 換行照顯示）；沒有就原樣
-const withOt = (detail, ot) => (ot ? (detail ? detail + '\n' : '') + ot : detail);
-
 /** 待核一筆 → 可以直接核准的卡片（id＝「店|單號」，decide 再拆） */
 export function quickItem(it) {
   return {
     id: `${it.store}|${it.id}`,
     text: `${it.name || ''} ${what(it)}`.trim(),
     sub: [when(it), it.storeName].filter(Boolean).join('・'),
-    detail: withOt([it.reason ? `原因：${it.reason}` : '', it.hasAttach ? '有附證明（到考勤管理看）' : ''].filter(Boolean).join('　'), otLine(it)),
+    detail: [it.reason ? `原因：${it.reason}` : '', it.hasAttach ? '有附證明（到考勤管理看）' : ''].filter(Boolean).join('　'),
+    ...(otLine(it) ? { ot: otLine(it) } : {}),      // 試算那一行：殼另外畫一列（.m-card-ot），沒有＝卡片跟以前一樣
     view: 'request',
     // 一次填兩段（2026-11-18）：同一次送出的兩張單，營運系統帶同一個 group（舊資料／單張＝空）。
     // 殼只看 group（店|組別|姓名|日期，四個都一樣才併成一張卡）；其餘 g* 欄位給 groupCard 組標題與兩段各一列用
@@ -108,7 +106,8 @@ export function groupCard(items) {
   return {
     text: `${first.gWho} ${first.gLabel}${segWord}${all ? ` 共 ${hoursText(total)}` : ''}`.trim(),
     sub: [first.gDate, first.gStoreName].filter(Boolean).join('・'),
-    detail: withOt([reasons.length ? `原因：${reasons.join('、')}` : '', its.some((x) => x.gAttach) ? '有附證明（到考勤管理看）' : ''].filter(Boolean).join('　'), (its.find((x) => x.gOt) || {}).gOt || ''),
+    detail: [reasons.length ? `原因：${reasons.join('、')}` : '', its.some((x) => x.gAttach) ? '有附證明（到考勤管理看）' : ''].filter(Boolean).join('　'),
+    ...(its.some((x) => x.gOt) ? { ot: its.find((x) => x.gOt).gOt } : {}),
     segs: its.map((x, i) => ({
       id: x.id,
       tag: `第 ${x.gSeg || i + 1} 段`,
