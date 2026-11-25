@@ -42,13 +42,28 @@ export function decidedItem(it) {
   };
 }
 
+/**
+ * 審單出勤試算（2026-11-25 營運系統 ot-review-hint 第 7 題 A）：加班單比照核定規則試算「多了」時，手機只多這一行。
+ * 營運系統開關（DUTY_REQ_OT_CHECK）關著、或不是「多了」＝不帶 otCheck＝''（卡片跟以前逐字相同）。只提示，核准照常。
+ */
+export function otLine(it) {
+  const o = it && it.otCheck;
+  const ok = (v) => typeof v === 'number' && isFinite(v);
+  if (!o || typeof o !== 'object' || !ok(o.need) || !ok(o.n) || !ok(o.over)) return '';
+  const f = (x) => String(Math.round(x * 100) / 100);
+  return `出勤試算：應有加班 ${f(o.need)} 小時，這張 ${f(o.n)} 小時（多 ${f(o.over)} 小時）`;
+}
+
+// 試算那一行自己一行（.m-card-d 換行照顯示）；沒有就原樣
+const withOt = (detail, ot) => (ot ? (detail ? detail + '\n' : '') + ot : detail);
+
 /** 待核一筆 → 可以直接核准的卡片（id＝「店|單號」，decide 再拆） */
 export function quickItem(it) {
   return {
     id: `${it.store}|${it.id}`,
     text: `${it.name || ''} ${what(it)}`.trim(),
     sub: [when(it), it.storeName].filter(Boolean).join('・'),
-    detail: [it.reason ? `原因：${it.reason}` : '', it.hasAttach ? '有附證明（到考勤管理看）' : ''].filter(Boolean).join('　'),
+    detail: withOt([it.reason ? `原因：${it.reason}` : '', it.hasAttach ? '有附證明（到考勤管理看）' : ''].filter(Boolean).join('　'), otLine(it)),
     view: 'request',
     // 一次填兩段（2026-11-18）：同一次送出的兩張單，營運系統帶同一個 group（舊資料／單張＝空）。
     // 殼只看 group（店|組別|姓名|日期，四個都一樣才併成一張卡）；其餘 g* 欄位給 groupCard 組標題與兩段各一列用
@@ -56,7 +71,8 @@ export function quickItem(it) {
     gSeg: Number.isInteger(it.seg) && it.seg >= 1 ? it.seg : 0,
     gWho: it.name || '', gLabel: it.label || '申請', gDate: it.date || '', gStoreName: it.storeName || '',
     gFrom: it.from || '', gTo: it.to || '', gHours: typeof it.hours === 'number' && isFinite(it.hours) ? it.hours : null,
-    gReason: it.reason || '', gAttach: !!it.hasAttach
+    gReason: it.reason || '', gAttach: !!it.hasAttach,
+    ...(otLine(it) ? { gOt: otLine(it) } : {})
   };
 }
 
@@ -92,7 +108,7 @@ export function groupCard(items) {
   return {
     text: `${first.gWho} ${first.gLabel}${segWord}${all ? ` 共 ${hoursText(total)}` : ''}`.trim(),
     sub: [first.gDate, first.gStoreName].filter(Boolean).join('・'),
-    detail: [reasons.length ? `原因：${reasons.join('、')}` : '', its.some((x) => x.gAttach) ? '有附證明（到考勤管理看）' : ''].filter(Boolean).join('　'),
+    detail: withOt([reasons.length ? `原因：${reasons.join('、')}` : '', its.some((x) => x.gAttach) ? '有附證明（到考勤管理看）' : ''].filter(Boolean).join('　'), (its.find((x) => x.gOt) || {}).gOt || ''),
     segs: its.map((x, i) => ({
       id: x.id,
       tag: `第 ${x.gSeg || i + 1} 段`,

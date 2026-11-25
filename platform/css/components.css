@@ -1666,7 +1666,7 @@ textarea.input:disabled {
 .m-card-h { display: flex; align-items: center; gap: 10px; }
 .m-card-h .m-ic { width: 26px; height: 26px; border-radius: 7px; }
 .m-card small { color: var(--muted); }
-.m-card-d { font-size: var(--fs-sm); color: var(--ink); overflow-wrap: anywhere; }
+.m-card-d { font-size: var(--fs-sm); color: var(--ink); overflow-wrap: anywhere; white-space: pre-line; }   /* pre-line：審單出勤試算那一行換行（2026-11-25）；其他說明沒有換行字元，顯示不變 */
 .m-card-a { display: flex; gap: 8px; margin-top: 8px; }
 .m-card-a .btn { flex: 1; min-height: 42px; }
 /* 同一次送出的兩段併成一張卡（2026-11-18）：兩段各一列、各自核准／退回，底下一顆「兩筆一起核准」 */
