@@ -33,6 +33,7 @@ TESTS=(
   e2e_t25_nav_badge.py
   e2e_t26_alert_prefs.py
   e2e_t27_mobile_group.py
+  e2e_t28_mobile_otline.py
 )
 
 for i in "${!TESTS[@]}"; do
